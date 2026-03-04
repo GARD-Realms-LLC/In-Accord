@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { MemberRole } from "@prisma/client";
+import { MemberRole } from "@/lib/db";
+import { and, eq, inArray, ne } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
-import { db } from "@/lib/db";
+import { channel, db, member, server } from "@/lib/db";
 
 export async function DELETE(
   req: Request,
@@ -26,31 +27,31 @@ export async function DELETE(
       return new NextResponse("Channel ID missing", { status: 400 });
     }
 
-    const server = await db.server.update({
-      where: {
-        id: serverId,
-        members: {
-          some: {
-            profileId: profile.id,
-            role: {
-              in: [MemberRole.ADMIN, MemberRole.MODERATOR],
-            },
-          },
-        },
-      },
-      data: {
-        channels: {
-          delete: {
-            id: params.channelId,
-            name: {
-              not: "general",
-            },
-          },
-        },
-      },
+    const authorizedMember = await db.query.member.findFirst({
+      where: and(
+        eq(member.serverId, serverId),
+        eq(member.profileId, profile.id),
+        inArray(member.role, [MemberRole.ADMIN, MemberRole.MODERATOR])
+      ),
     });
 
-    return NextResponse.json(server);
+    if (!authorizedMember) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
+
+    await db.delete(channel).where(
+      and(
+        eq(channel.id, params.channelId),
+        eq(channel.serverId, serverId),
+        ne(channel.name, "general")
+      )
+    );
+
+    const currentServer = await db.query.server.findFirst({
+      where: eq(server.id, serverId),
+    });
+
+    return NextResponse.json(currentServer);
   } catch (error) {
     console.log("[CHANNEL_ID_DELETE]", error);
     return new NextResponse("Internal Error", { status: 500 });
@@ -84,37 +85,35 @@ export async function PATCH(
       return new NextResponse("Name cannot be 'general'", { status: 400 });
     }
 
-    const server = await db.server.update({
-      where: {
-        id: serverId,
-        members: {
-          some: {
-            profileId: profile.id,
-            role: {
-              in: [MemberRole.ADMIN, MemberRole.MODERATOR],
-            },
-          },
-        },
-      },
-      data: {
-        channels: {
-          update: {
-            where: {
-              id: params.channelId,
-              NOT: {
-                name: "general",
-              },
-            },
-            data: {
-              name,
-              type,
-            },
-          },
-        },
-      },
+    const authorizedMember = await db.query.member.findFirst({
+      where: and(
+        eq(member.serverId, serverId),
+        eq(member.profileId, profile.id),
+        inArray(member.role, [MemberRole.ADMIN, MemberRole.MODERATOR])
+      ),
     });
 
-    return NextResponse.json(server);
+    if (!authorizedMember) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
+
+    await db.update(channel).set({
+      name,
+      type,
+      updatedAt: new Date(),
+    }).where(
+      and(
+        eq(channel.id, params.channelId),
+        eq(channel.serverId, serverId),
+        ne(channel.name, "general")
+      )
+    );
+
+    const currentServer = await db.query.server.findFirst({
+      where: eq(server.id, serverId),
+    });
+
+    return NextResponse.json(currentServer);
   } catch (error) {
     console.log("[CHANNEL_ID_PATCH]", error);
     return new NextResponse("Internal Error", { status: 500 });

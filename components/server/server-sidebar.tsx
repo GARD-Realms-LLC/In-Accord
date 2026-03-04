@@ -1,11 +1,12 @@
-import { ChannelType, MemberRole } from "@prisma/client";
+import { ChannelType, MemberRole } from "@/lib/db/types";
 import { redirect } from "next/navigation";
 import { Hash, Mic, ShieldAlert, ShieldCheck, Video } from "lucide-react";
+import { eq } from "drizzle-orm";
 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { currentProfile } from "@/lib/current-profile";
-import { db } from "@/lib/db";
+import { db, server } from "@/lib/db";
 
 import { ServerHeader } from "./server-header";
 import { ServerSearch } from "./server-search";
@@ -38,51 +39,45 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
     return redirect("/");
   }
 
-  const server = await db.server.findUnique({
-    where: {
-      id: serverId,
-    },
-    include: {
+  const currentServer = await db.query.server.findFirst({
+    where: eq(server.id, serverId),
+    with: {
       channels: {
-        orderBy: {
-          createdAt: "asc",
-        },
+        orderBy: (channels, { asc }) => [asc(channels.createdAt)],
       },
       members: {
-        include: {
+        with: {
           profile: true,
         },
-        orderBy: {
-          role: "asc",
-        },
+        orderBy: (members, { asc }) => [asc(members.role)],
       },
     },
   });
 
-  const textChannels = server?.channels.filter(
+  const textChannels = currentServer?.channels.filter(
     (channel) => channel.type === ChannelType.TEXT
   );
-  const audioChannels = server?.channels.filter(
+  const audioChannels = currentServer?.channels.filter(
     (channel) => channel.type === ChannelType.AUDIO
   );
-  const videoChannels = server?.channels.filter(
+  const videoChannels = currentServer?.channels.filter(
     (channel) => channel.type === ChannelType.VIDEO
   );
-  const members = server?.members.filter(
+  const members = currentServer?.members.filter(
     (member) => member.profileId !== profile.id
   );
 
-  if (!server) {
+  if (!currentServer) {
     return redirect("/");
   }
 
-  const role = server.members.find(
+  const role = currentServer.members.find(
     (member) => member.profileId === profile.id
   )?.role;
 
   return (
     <div className="flex flex-col h-full text-primary w-full dark:bg-[#2B2D31] bg-[#F2F3F5]">
-      <ServerHeader server={server} role={role} />
+      <ServerHeader server={currentServer} role={role} />
       <ScrollArea className="flex-1 px-3">
         <div className="mt-2">
           <ServerSearch
@@ -141,7 +136,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
                   key={channel.id}
                   channel={channel}
                   role={role}
-                  server={server}
+                  server={currentServer}
                 />
               ))}
             </div>
@@ -161,7 +156,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
                   key={channel.id}
                   channel={channel}
                   role={role}
-                  server={server}
+                  server={currentServer}
                 />
               ))}
             </div>
@@ -181,7 +176,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
                   key={channel.id}
                   channel={channel}
                   role={role}
-                  server={server}
+                  server={currentServer}
                 />
               ))}
             </div>
@@ -193,11 +188,11 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
               sectionType="members"
               role={role}
               label="Members"
-              server={server}
+              server={currentServer}
             />
             <div className="space-y-[2px]">
               {members.map((member) => (
-                <ServerMember key={member.id} member={member} server={server} />
+                <ServerMember key={member.id} member={member} server={currentServer} />
               ))}
             </div>
           </div>

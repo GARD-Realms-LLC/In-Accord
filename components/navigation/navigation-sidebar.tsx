@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
+import { and, eq } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
-import { db } from "@/lib/db";
+import { db, member, server } from "@/lib/db";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { NavigationAction } from "@/components/navigation/navigation-action";
@@ -16,15 +17,17 @@ export const NavigationSidebar = async () => {
     return redirect("/");
   }
 
-  const servers = await db.server.findMany({
-    where: {
-      members: {
-        some: {
-          profileId: profile.id,
-        },
-      },
-    },
-  });
+  const servers = await db
+    .select({
+      id: server.id,
+      name: server.name,
+      imageUrl: server.imageUrl,
+    })
+    .from(server)
+    .innerJoin(
+      member,
+      and(eq(member.serverId, server.id), eq(member.profileId, profile.id))
+    );
 
   return (
     <div
@@ -34,12 +37,12 @@ export const NavigationSidebar = async () => {
       <NavigationAction />
       <Separator className="h-[2px] bg-zinc-300 dark:bg-zinc-700 rounded-md w-10 mx-auto" />
       <ScrollArea className="flex-1 w-full">
-        {servers.map((server) => (
-          <div key={server.id} className="mb-4">
+        {servers.map(({ id, name, imageUrl }) => (
+          <div key={id} className="mb-4">
             <NavigationItem
-              id={server.id}
-              name={server.name}
-              imageUrl={server.imageUrl}
+              id={id}
+              name={name}
+              imageUrl={imageUrl}
             />
           </div>
         ))}

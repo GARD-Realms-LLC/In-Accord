@@ -74,6 +74,11 @@
     ajv "^6.12.0"
     ajv-keywords "^3.4.1"
 
+"@drizzle-team/brocli@^0.10.2":
+  version "0.10.2"
+  resolved "https://registry.npmjs.org/@drizzle-team/brocli/-/brocli-0.10.2.tgz"
+  integrity sha512-z33Il7l5dKjUgGULTqBsQBQwckHh5AbIuxhdsIxDDiZAzBOrZO6q9ogcWC65kU382AfynTfgNumVcNIjuIua6w==
+
 "@effect/platform@0.61.2":
   version "0.61.2"
   resolved "https://registry.npmjs.org/@effect/platform/-/platform-0.61.2.tgz"
@@ -189,6 +194,32 @@
     fs-extra "^11.1.1"
     minimatch "^9.0.3"
     plist "^3.1.0"
+
+"@esbuild-kit/core-utils@^3.3.2":
+  version "3.3.2"
+  resolved "https://registry.npmjs.org/@esbuild-kit/core-utils/-/core-utils-3.3.2.tgz"
+  integrity sha512-sPRAnw9CdSsRmEtnsl2WXWdyquogVpB3yZ3dgwJfe8zrOzTsV7cJvmwrKVa+0ma5BoiGJ+BoqkMvawbayKUsqQ==
+  dependencies:
+    esbuild "~0.18.20"
+    source-map-support "^0.5.21"
+
+"@esbuild-kit/esm-loader@^2.5.5":
+  version "2.6.5"
+  resolved "https://registry.npmjs.org/@esbuild-kit/esm-loader/-/esm-loader-2.6.5.tgz"
+  integrity sha512-FxEMIkJKnodyA1OaCUoEvbYRkoZlLZ4d/eXFu9Fh8CbBBgP5EmZxrfTRyN0qpXZ4vOvqnE5YdRdcrmUUXuU+dA==
+  dependencies:
+    "@esbuild-kit/core-utils" "^3.3.2"
+    get-tsconfig "^4.7.0"
+
+"@esbuild/win32-x64@0.18.20":
+  version "0.18.20"
+  resolved "https://registry.npmjs.org/@esbuild/win32-x64/-/win32-x64-0.18.20.tgz"
+  integrity sha512-kTdfRcSiDfQca/y9QIkng02avJ+NCaQvrMejlsB3RRv5sE9rRoeBPISaZpKxHELzRxZyLvNts1P27W3wV+8geQ==
+
+"@esbuild/win32-x64@0.25.12":
+  version "0.25.12"
+  resolved "https://registry.npmjs.org/@esbuild/win32-x64/-/win32-x64-0.25.12.tgz"
+  integrity sha512-alJC0uCZpTFrSL0CCDjcgleBXPnCrEAhTBILpeAp7M/OFgoqtAetfBzX0xM00MUsVVPpVjlPuMbREqnZCXaTnA==
 
 "@eslint-community/eslint-utils@^4.2.0":
   version "4.4.0"
@@ -484,47 +515,6 @@
   version "0.11.0"
   resolved "https://registry.npmjs.org/@pkgjs/parseargs/-/parseargs-0.11.0.tgz"
   integrity sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==
-
-"@prisma/client@5.19.0":
-  version "5.19.0"
-  resolved "https://registry.npmjs.org/@prisma/client/-/client-5.19.0.tgz"
-  integrity sha512-CzOpau+q1kEWQyoQMvlnXIHqPvwmWbh48xZ4n8KWbAql0p8PC0BIgSTYW5ncxXa4JSEff0tcoxSZB874wDstdg==
-
-"@prisma/debug@5.20.0-integration-engines-5-20-0-2-integration-nested-transactions-70e4e8eaa9b1ca0ec042fa831bc2c81f668215a7.2":
-  version "5.20.0-integration-engines-5-20-0-2-integration-nested-transactions-70e4e8eaa9b1ca0ec042fa831bc2c81f668215a7.2"
-  resolved "https://registry.npmjs.org/@prisma/debug/-/debug-5.20.0-integration-engines-5-20-0-2-integration-nested-transactions-70e4e8eaa9b1ca0ec042fa831bc2c81f668215a7.2.tgz"
-  integrity sha512-KFyJLC+78Kh9BW1QcVBCHP5fcBsv8E/gxzbqG/NCVJHBykb5ke0C5ZRFwWkN8/ZG1Ci/e5UK7qU4pIpVfPNTew==
-
-"@prisma/engines-version@5.20.0-2.integration-nested-transactions-70e4e8eaa9b1ca0ec042fa831bc2c81f668215a7":
-  version "5.20.0-2.integration-nested-transactions-70e4e8eaa9b1ca0ec042fa831bc2c81f668215a7"
-  resolved "https://registry.npmjs.org/@prisma/engines-version/-/engines-version-5.20.0-2.integration-nested-transactions-70e4e8eaa9b1ca0ec042fa831bc2c81f668215a7.tgz"
-  integrity sha512-LVF4Qunw4yQg9T5w7qwc7GkSyezhPDLt95Qq7hd1r71zv4xLN/t4UDuyt7UYp9fkzSjRkIj6d6TlOeYZDLsU/g==
-
-"@prisma/engines@5.20.0-integration-engines-5-20-0-2-integration-nested-transactions-70e4e8eaa9b1ca0ec042fa831bc2c81f668215a7.2":
-  version "5.20.0-integration-engines-5-20-0-2-integration-nested-transactions-70e4e8eaa9b1ca0ec042fa831bc2c81f668215a7.2"
-  resolved "https://registry.npmjs.org/@prisma/engines/-/engines-5.20.0-integration-engines-5-20-0-2-integration-nested-transactions-70e4e8eaa9b1ca0ec042fa831bc2c81f668215a7.2.tgz"
-  integrity sha512-P4wfuX8w3n9fm/17UNEZwrDkM2D4lWqLZEhQPJmQa/sK/XxLFHNroLOP/ErXmOto/0Gl1wt9mziV2hybIskASg==
-  dependencies:
-    "@prisma/debug" "5.20.0-integration-engines-5-20-0-2-integration-nested-transactions-70e4e8eaa9b1ca0ec042fa831bc2c81f668215a7.2"
-    "@prisma/engines-version" "5.20.0-2.integration-nested-transactions-70e4e8eaa9b1ca0ec042fa831bc2c81f668215a7"
-    "@prisma/fetch-engine" "5.20.0-integration-engines-5-20-0-2-integration-nested-transactions-70e4e8eaa9b1ca0ec042fa831bc2c81f668215a7.2"
-    "@prisma/get-platform" "5.20.0-integration-engines-5-20-0-2-integration-nested-transactions-70e4e8eaa9b1ca0ec042fa831bc2c81f668215a7.2"
-
-"@prisma/fetch-engine@5.20.0-integration-engines-5-20-0-2-integration-nested-transactions-70e4e8eaa9b1ca0ec042fa831bc2c81f668215a7.2":
-  version "5.20.0-integration-engines-5-20-0-2-integration-nested-transactions-70e4e8eaa9b1ca0ec042fa831bc2c81f668215a7.2"
-  resolved "https://registry.npmjs.org/@prisma/fetch-engine/-/fetch-engine-5.20.0-integration-engines-5-20-0-2-integration-nested-transactions-70e4e8eaa9b1ca0ec042fa831bc2c81f668215a7.2.tgz"
-  integrity sha512-dOwXxydISr9FJXpwAk1xEmBgtegd2BLA4oBA3sB0yDlcfg1ucoF/MyUDgv5J5SvbN6zxeGe69ONBp/FHYrxOyA==
-  dependencies:
-    "@prisma/debug" "5.20.0-integration-engines-5-20-0-2-integration-nested-transactions-70e4e8eaa9b1ca0ec042fa831bc2c81f668215a7.2"
-    "@prisma/engines-version" "5.20.0-2.integration-nested-transactions-70e4e8eaa9b1ca0ec042fa831bc2c81f668215a7"
-    "@prisma/get-platform" "5.20.0-integration-engines-5-20-0-2-integration-nested-transactions-70e4e8eaa9b1ca0ec042fa831bc2c81f668215a7.2"
-
-"@prisma/get-platform@5.20.0-integration-engines-5-20-0-2-integration-nested-transactions-70e4e8eaa9b1ca0ec042fa831bc2c81f668215a7.2":
-  version "5.20.0-integration-engines-5-20-0-2-integration-nested-transactions-70e4e8eaa9b1ca0ec042fa831bc2c81f668215a7.2"
-  resolved "https://registry.npmjs.org/@prisma/get-platform/-/get-platform-5.20.0-integration-engines-5-20-0-2-integration-nested-transactions-70e4e8eaa9b1ca0ec042fa831bc2c81f668215a7.2.tgz"
-  integrity sha512-AAJV0SmmMf6ozqvNslYqsXY2aNddkBT+dpCCjNgZw7LtZ624nHNJE4YWzdW+vfsBozDi1tWx28uoSukDJqL6gw==
-  dependencies:
-    "@prisma/debug" "5.20.0-integration-engines-5-20-0-2-integration-nested-transactions-70e4e8eaa9b1ca0ec042fa831bc2c81f668215a7.2"
 
 "@radix-ui/number@1.1.0":
   version "1.1.0"
@@ -1158,6 +1148,13 @@
   resolved "https://registry.npmjs.org/@types/scheduler/-/scheduler-0.23.0.tgz"
   integrity sha512-YIoDCTH3Af6XM5VuwGG/QL/CJqga1Zm3NkU3HZ4ZHK2fRMPYP1VczsTUqtsf43PH/iJNVlPHAo2oWX7BSdB2Hw==
 
+"@types/socket.io@^3.0.1":
+  version "3.0.1"
+  resolved "https://registry.npmjs.org/@types/socket.io/-/socket.io-3.0.1.tgz"
+  integrity sha512-XSma2FhVD78ymvoxYV4xGXrIH/0EKQ93rR+YR0Y+Kw1xbPzLDCip/UWSejZ08FpxYeYNci/PZPQS9anrvJRqMA==
+  dependencies:
+    socket.io "*"
+
 "@types/uuid@10.0.0":
   version "10.0.0"
   resolved "https://registry.npmjs.org/@types/uuid/-/uuid-10.0.0.tgz"
@@ -1556,6 +1553,11 @@ available-typed-arrays@^1.0.7:
   integrity sha512-wvUjBtSGN7+7SjNpq/9M2Tg350UZD3q62IFZLbRAR1bSMlCo1ZaeW+BJ+D090e4hIIZLBcTDWe4Mh4jvUDajzQ==
   dependencies:
     possible-typed-array-names "^1.0.0"
+
+aws-ssl-profiles@^1.1.2:
+  version "1.1.2"
+  resolved "https://registry.npmjs.org/aws-ssl-profiles/-/aws-ssl-profiles-1.1.2.tgz"
+  integrity sha512-NZKeq9AfyQvEeNlN0zSYAaWrmBffJh3IELMZfRpJVWgrpEbtEpnjvzqBPf+mxoI287JohRDoa+/nsfqqiZmF6g==
 
 axe-core@^4.9.1:
   version "4.10.0"
@@ -2173,6 +2175,11 @@ delayed-stream@~1.0.0:
   resolved "https://registry.npmjs.org/delayed-stream/-/delayed-stream-1.0.0.tgz"
   integrity sha512-ZySD7Nf91aLB0RxL4KGrKHBXl7Eds1DAmEdcoVawXnLD7SDhpNgtuII2aAkg7a7QS41jxPSZ17p4VdGnMHk3MQ==
 
+denque@^2.1.0:
+  version "2.1.0"
+  resolved "https://registry.npmjs.org/denque/-/denque-2.1.0.tgz"
+  integrity sha512-HVQE3AAb/pxF8fQAoiqpvg9i3evqug3hoiwakOyZAwJm+6vZehbkYXZ0l4JxS+I3QxM97v5aaRNhj8v5oBhekw==
+
 detect-libc@^2.0.1, detect-libc@^2.0.3:
   version "2.0.3"
   resolved "https://registry.npmjs.org/detect-libc/-/detect-libc-2.0.3.tgz"
@@ -2259,6 +2266,21 @@ dotenv@^16.4.5:
   version "16.6.1"
   resolved "https://registry.npmjs.org/dotenv/-/dotenv-16.6.1.tgz"
   integrity sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow==
+
+drizzle-kit@^0.31.5:
+  version "0.31.9"
+  resolved "https://registry.npmjs.org/drizzle-kit/-/drizzle-kit-0.31.9.tgz"
+  integrity sha512-GViD3IgsXn7trFyBUUHyTFBpH/FsHTxYJ66qdbVggxef4UBPHRYxQaRzYLTuekYnk9i5FIEL9pbBIwMqX/Uwrg==
+  dependencies:
+    "@drizzle-team/brocli" "^0.10.2"
+    "@esbuild-kit/esm-loader" "^2.5.5"
+    esbuild "^0.25.4"
+    esbuild-register "^3.5.0"
+
+drizzle-orm@^0.44.5:
+  version "0.44.7"
+  resolved "https://registry.npmjs.org/drizzle-orm/-/drizzle-orm-0.44.7.tgz"
+  integrity sha512-quIpnYznjU9lHshEOAYLoZ9s3jweleHlZIAWR/jX9gAWNg/JhQ1wj0KGRf7/Zm+obRrYd9GjPVJg790QY9N5AQ==
 
 dunder-proto@^1.0.1:
   version "1.0.1"
@@ -2567,6 +2589,73 @@ es6-error@^4.1.1:
   version "4.1.1"
   resolved "https://registry.npmjs.org/es6-error/-/es6-error-4.1.1.tgz"
   integrity sha512-Um/+FxMr9CISWh0bi5Zv0iOD+4cFh5qLeks1qhAopKVAJw3drgKbKySikp7wGhDL0HPeaja0P5ULZrxLkniUVg==
+
+esbuild-register@^3.5.0:
+  version "3.6.0"
+  resolved "https://registry.npmjs.org/esbuild-register/-/esbuild-register-3.6.0.tgz"
+  integrity sha512-H2/S7Pm8a9CL1uhp9OvjwrBh5Pvx0H8qVOxNu8Wed9Y7qv56MPtq+GGM8RJpq6glYJn9Wspr8uw7l55uyinNeg==
+  dependencies:
+    debug "^4.3.4"
+
+esbuild@^0.25.4:
+  version "0.25.12"
+  resolved "https://registry.npmjs.org/esbuild/-/esbuild-0.25.12.tgz"
+  integrity sha512-bbPBYYrtZbkt6Os6FiTLCTFxvq4tt3JKall1vRwshA3fdVztsLAatFaZobhkBC8/BrPetoa0oksYoKXoG4ryJg==
+  optionalDependencies:
+    "@esbuild/aix-ppc64" "0.25.12"
+    "@esbuild/android-arm" "0.25.12"
+    "@esbuild/android-arm64" "0.25.12"
+    "@esbuild/android-x64" "0.25.12"
+    "@esbuild/darwin-arm64" "0.25.12"
+    "@esbuild/darwin-x64" "0.25.12"
+    "@esbuild/freebsd-arm64" "0.25.12"
+    "@esbuild/freebsd-x64" "0.25.12"
+    "@esbuild/linux-arm" "0.25.12"
+    "@esbuild/linux-arm64" "0.25.12"
+    "@esbuild/linux-ia32" "0.25.12"
+    "@esbuild/linux-loong64" "0.25.12"
+    "@esbuild/linux-mips64el" "0.25.12"
+    "@esbuild/linux-ppc64" "0.25.12"
+    "@esbuild/linux-riscv64" "0.25.12"
+    "@esbuild/linux-s390x" "0.25.12"
+    "@esbuild/linux-x64" "0.25.12"
+    "@esbuild/netbsd-arm64" "0.25.12"
+    "@esbuild/netbsd-x64" "0.25.12"
+    "@esbuild/openbsd-arm64" "0.25.12"
+    "@esbuild/openbsd-x64" "0.25.12"
+    "@esbuild/openharmony-arm64" "0.25.12"
+    "@esbuild/sunos-x64" "0.25.12"
+    "@esbuild/win32-arm64" "0.25.12"
+    "@esbuild/win32-ia32" "0.25.12"
+    "@esbuild/win32-x64" "0.25.12"
+
+esbuild@~0.18.20:
+  version "0.18.20"
+  resolved "https://registry.npmjs.org/esbuild/-/esbuild-0.18.20.tgz"
+  integrity sha512-ceqxoedUrcayh7Y7ZX6NdbbDzGROiyVBgC4PriJThBKSVPWnnFHZAkfI1lJT8QFkOwH4qOS2SJkS4wvpGl8BpA==
+  optionalDependencies:
+    "@esbuild/android-arm" "0.18.20"
+    "@esbuild/android-arm64" "0.18.20"
+    "@esbuild/android-x64" "0.18.20"
+    "@esbuild/darwin-arm64" "0.18.20"
+    "@esbuild/darwin-x64" "0.18.20"
+    "@esbuild/freebsd-arm64" "0.18.20"
+    "@esbuild/freebsd-x64" "0.18.20"
+    "@esbuild/linux-arm" "0.18.20"
+    "@esbuild/linux-arm64" "0.18.20"
+    "@esbuild/linux-ia32" "0.18.20"
+    "@esbuild/linux-loong64" "0.18.20"
+    "@esbuild/linux-mips64el" "0.18.20"
+    "@esbuild/linux-ppc64" "0.18.20"
+    "@esbuild/linux-riscv64" "0.18.20"
+    "@esbuild/linux-s390x" "0.18.20"
+    "@esbuild/linux-x64" "0.18.20"
+    "@esbuild/netbsd-x64" "0.18.20"
+    "@esbuild/openbsd-x64" "0.18.20"
+    "@esbuild/sunos-x64" "0.18.20"
+    "@esbuild/win32-arm64" "0.18.20"
+    "@esbuild/win32-ia32" "0.18.20"
+    "@esbuild/win32-x64" "0.18.20"
 
 escalade@^3.1.1, escalade@^3.1.2:
   version "3.2.0"
@@ -3038,6 +3127,13 @@ functions-have-names@^1.2.3:
   resolved "https://registry.npmjs.org/functions-have-names/-/functions-have-names-1.2.3.tgz"
   integrity sha512-xckBUXyTIqT97tq2x2AMb+g163b5JFysYk0x4qxNFwbfQkmNZoiRHb6sPzI9/QV33WeuvVYBUIiD4NzNIyqaRQ==
 
+generate-function@^2.3.1:
+  version "2.3.1"
+  resolved "https://registry.npmjs.org/generate-function/-/generate-function-2.3.1.tgz"
+  integrity sha512-eeB5GfMNeevm/GRYq20ShmsaGcmI81kIX2K9XQx5miC8KdHaC6Jm0qQ8ZNeGOi7wYB8OsdxKs+Y2oVuTFuVwKQ==
+  dependencies:
+    is-property "^1.0.2"
+
 get-caller-file@^2.0.5:
   version "2.0.5"
   resolved "https://registry.npmjs.org/get-caller-file/-/get-caller-file-2.0.5.tgz"
@@ -3088,7 +3184,7 @@ get-symbol-description@^1.0.2:
     es-errors "^1.3.0"
     get-intrinsic "^1.2.4"
 
-get-tsconfig@^4.7.5:
+get-tsconfig@^4.7.0, get-tsconfig@^4.7.5:
   version "4.8.0"
   resolved "https://registry.npmjs.org/get-tsconfig/-/get-tsconfig-4.8.0.tgz"
   integrity sha512-Pgba6TExTZ0FJAn1qkJAjIeKoDJ3CsI2ChuLohJnZl/tTU8MVrq3b+2t5UOPfRa4RMsorClBjJALkJUMjG1PAw==
@@ -3329,6 +3425,13 @@ iconv-lite@^0.6.2:
   dependencies:
     safer-buffer ">= 2.1.2 < 3.0.0"
 
+iconv-lite@^0.7.2:
+  version "0.7.2"
+  resolved "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.7.2.tgz"
+  integrity sha512-im9DjEDQ55s9fL4EYzOAv0yMqmMBSZp6G0VvFyTMPKWxiSBHUj9NW/qqLmXUwXrrM7AvqSlTCfvqRb0cM8yYqw==
+  dependencies:
+    safer-buffer ">= 2.1.2 < 3.0.0"
+
 ieee754@^1.1.13:
   version "1.2.1"
   resolved "https://registry.npmjs.org/ieee754/-/ieee754-1.2.1.tgz"
@@ -3546,6 +3649,11 @@ is-path-inside@^3.0.3:
   version "3.0.3"
   resolved "https://registry.npmjs.org/is-path-inside/-/is-path-inside-3.0.3.tgz"
   integrity sha512-Fd4gABb+ycGAmKou8eMftCupSir5lRxqf4aD/vd0cD2qc4HL07OjCeuHMr8Ro4CoMaeCKDB0/ECBOVWjTwUvPQ==
+
+is-property@^1.0.2:
+  version "1.0.2"
+  resolved "https://registry.npmjs.org/is-property/-/is-property-1.0.2.tgz"
+  integrity sha512-Ks/IoX00TtClbGQr4TWXemAnktAQvYB7HzcCxDGqEZU6oCmb2INHuOoKxbtR+HFkmYWBKv/dOZtGRiAjDhj92g==
 
 is-regex@^1.1.4:
   version "1.1.4"
@@ -3842,6 +3950,11 @@ log-symbols@^4.1.0:
     chalk "^4.1.0"
     is-unicode-supported "^0.1.0"
 
+long@^5.3.2:
+  version "5.3.2"
+  resolved "https://registry.npmjs.org/long/-/long-5.3.2.tgz"
+  integrity sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA==
+
 loose-envify@^1.0.0, loose-envify@^1.4.0:
   version "1.4.0"
   resolved "https://registry.npmjs.org/loose-envify/-/loose-envify-1.4.0.tgz"
@@ -3872,6 +3985,11 @@ lru-cache@^6.0.0:
   integrity sha512-Jo6dJ04CmSjuznwJSS3pUeWmd/H0ffTlkXXgwZi+eq1UCmqQwCh+eLsYOYCwY991i2Fah4h1BEMCx4qThGbsiA==
   dependencies:
     yallist "^4.0.0"
+
+lru.min@^1.1.0, lru.min@^1.1.4:
+  version "1.1.4"
+  resolved "https://registry.npmjs.org/lru.min/-/lru.min-1.1.4.tgz"
+  integrity sha512-DqC6n3QQ77zdFpCMASA1a3Jlb64Hv2N2DciFGkO/4L9+q/IpIAuRlKOvCXabtRW6cQf8usbmM6BE/TOPysCdIA==
 
 lucide-react@0.438.0:
   version "0.438.0"
@@ -4082,6 +4200,20 @@ multipasta@^0.2.2:
   resolved "https://registry.npmjs.org/multipasta/-/multipasta-0.2.5.tgz"
   integrity sha512-c8eMDb1WwZcE02WVjHoOmUVk7fnKU/RmUcosHACglrWAuPQsEJv+E8430sXj6jNc1jHw0zrS16aCjQh4BcEb4A==
 
+mysql2@^3.15.1:
+  version "3.18.2"
+  resolved "https://registry.npmjs.org/mysql2/-/mysql2-3.18.2.tgz"
+  integrity sha512-UfEShBFAZZEAKjySnTUuE7BgqkYT4mx+RjoJ5aqtmwSSvNcJ/QxQPXz/y3jSxNiVRedPfgccmuBtiPCSiEEytw==
+  dependencies:
+    aws-ssl-profiles "^1.1.2"
+    denque "^2.1.0"
+    generate-function "^2.3.1"
+    iconv-lite "^0.7.2"
+    long "^5.3.2"
+    lru.min "^1.1.4"
+    named-placeholders "^1.1.6"
+    sql-escaper "^1.3.3"
+
 mz@^2.7.0:
   version "2.7.0"
   resolved "https://registry.npmjs.org/mz/-/mz-2.7.0.tgz"
@@ -4090,6 +4222,13 @@ mz@^2.7.0:
     any-promise "^1.0.0"
     object-assign "^4.0.1"
     thenify-all "^1.0.0"
+
+named-placeholders@^1.1.6:
+  version "1.1.6"
+  resolved "https://registry.npmjs.org/named-placeholders/-/named-placeholders-1.1.6.tgz"
+  integrity sha512-Tz09sEL2EEuv5fFowm419c1+a/jSMiBjI9gHxVLrVdbUkkNUUfjsVYs9pVZu5oCon/kmRh9TfLEObFtkVxmY0w==
+  dependencies:
+    lru.min "^1.1.0"
 
 nanoid@^3.3.6, nanoid@^3.3.7:
   version "3.3.7"
@@ -4539,15 +4678,6 @@ prelude-ls@^1.2.1:
   version "1.2.1"
   resolved "https://registry.npmjs.org/prelude-ls/-/prelude-ls-1.2.1.tgz"
   integrity sha512-vkcDPrRZo1QZLbn5RLGPpg/WmIQ65qoWWhcGKf/b5eplkkarX0m9z8ppCat4mlOqUsWpyNuYgO3VRyrYHSzX5g==
-
-prisma@5.20.0-integration-engines-5-20-0-2-integration-nested-transactions-70e4e8eaa9b1ca0ec042fa831bc2c81f668215a7.2:
-  version "5.20.0-integration-engines-5-20-0-2-integration-nested-transactions-70e4e8eaa9b1ca0ec042fa831bc2c81f668215a7.2"
-  resolved "https://registry.npmjs.org/prisma/-/prisma-5.20.0-integration-engines-5-20-0-2-integration-nested-transactions-70e4e8eaa9b1ca0ec042fa831bc2c81f668215a7.2.tgz"
-  integrity sha512-S8xOltGvTlM6/hAnMAR0Bs1GZVd+Y3BYGIjt+n385atYtlM9wDDjrFjVIylnZTIcmgfeb0gQM4Uy35m87D+t1Q==
-  dependencies:
-    "@prisma/engines" "5.20.0-integration-engines-5-20-0-2-integration-nested-transactions-70e4e8eaa9b1ca0ec042fa831bc2c81f668215a7.2"
-  optionalDependencies:
-    fsevents "2.3.3"
 
 proc-log@^5.0.0:
   version "5.0.0"
@@ -5133,7 +5263,7 @@ socket.io-parser@~4.2.4:
     "@socket.io/component-emitter" "~3.1.0"
     debug "~4.3.1"
 
-socket.io@2.5.1:
+socket.io@*, socket.io@2.5.1:
   version "2.5.1"
   resolved "https://registry.npmjs.org/socket.io/-/socket.io-2.5.1.tgz"
   integrity sha512-eaTE4tBKRD6RFoetquMbxgvcpvoDtRyIlkIMI/SMK2bsKvbENTsDeeu4GJ/z9c90yOWxB7b/eC+yKLPbHnH6bA==
@@ -5167,7 +5297,7 @@ source-map-js@^1.0.2, source-map-js@^1.2.0:
   resolved "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.0.tgz"
   integrity sha512-itJW8lvSA0TXEphiRoawsCksnlf8SyvmFzIhltqAHluXd88pkCd+cXJVHTDwdCr0IzwptSm035IHQktUu1QUMg==
 
-source-map-support@^0.5.19:
+source-map-support@^0.5.19, source-map-support@^0.5.21:
   version "0.5.21"
   resolved "https://registry.npmjs.org/source-map-support/-/source-map-support-0.5.21.tgz"
   integrity sha512-uBHU3L3czsIyYXKX88fdrGovxdSCoTGDRZ6SYXtSRxLZUzHg5P/66Ht6uoUlHu9EZod+inXhKo3qQgwXUT/y1w==
@@ -5194,6 +5324,11 @@ sqids@^0.3.0:
   version "0.3.0"
   resolved "https://registry.npmjs.org/sqids/-/sqids-0.3.0.tgz"
   integrity sha512-lOQK1ucVg+W6n3FhRwwSeUijxe93b51Bfz5PMRMihVf1iVkl82ePQG7V5vwrhzB11v0NtsR25PSZRGiSomJaJw==
+
+sql-escaper@^1.3.3:
+  version "1.3.3"
+  resolved "https://registry.npmjs.org/sql-escaper/-/sql-escaper-1.3.3.tgz"
+  integrity sha512-BsTCV265VpTp8tm1wyIm1xqQCS+Q9NHx2Sr+WcnUrgLrQ6yiDIvHYJV5gHxsj1lMBy2zm5twLaZao8Jd+S8JJw==
 
 ssri@^12.0.0:
   version "12.0.0"

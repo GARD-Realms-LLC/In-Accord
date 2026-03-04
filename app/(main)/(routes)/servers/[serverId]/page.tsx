@@ -1,8 +1,9 @@
 import { redirectToSignIn } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import { and, asc, eq } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
-import { db } from "@/lib/db";
+import { channel, db, member, server } from "@/lib/db";
 
 interface ServerIdPageProps {
   params: {
@@ -17,34 +18,35 @@ const ServerIdPage = async ({ params }: ServerIdPageProps) => {
     return redirectToSignIn();
   }
 
-  const server = await db.server.findUnique({
-    where: {
-      id: params.serverId,
-      members: {
-        some: {
-          profileId: profile.id
-        }
-      }
-    },
-    include: {
-      channels: {
-        where: {
-          name: "general"
-        },
-        orderBy: {
-          createdAt: "asc"
-        }
-      }
-    }
-  });
+  const access = await db
+    .select({ id: server.id })
+    .from(server)
+    .innerJoin(
+      member,
+      and(
+        eq(member.serverId, server.id),
+        eq(member.profileId, profile.id),
+        eq(server.id, params.serverId)
+      )
+    )
+    .limit(1);
 
-  const initialChannel = server?.channels[0];
+  if (!access[0]) {
+    return redirect("/");
+  }
 
-  if (initialChannel?.name !== "general") {
+  const initialChannel = await db
+    .select({ id: channel.id, name: channel.name })
+    .from(channel)
+    .where(and(eq(channel.serverId, params.serverId), eq(channel.name, "general")))
+    .orderBy(asc(channel.createdAt))
+    .limit(1);
+
+  if (initialChannel[0]?.name !== "general") {
     return null;
   }
 
-  return redirect(`/servers/${params.serverId}/channels/${initialChannel?.id}`);
+  return redirect(`/servers/${params.serverId}/channels/${initialChannel[0]?.id}`);
 }
  
 export default ServerIdPage;

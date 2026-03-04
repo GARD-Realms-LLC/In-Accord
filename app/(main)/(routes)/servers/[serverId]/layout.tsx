@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
-import { redirectToSignIn } from "@clerk/nextjs";
+import { redirectToSignIn } from "@clerk/nextjs/server";
+import { and, eq } from "drizzle-orm";
 
-import { db } from "@/lib/db";
+import { db, member, server } from "@/lib/db";
 import { currentProfile } from "@/lib/current-profile";
 import { ServerSidebar } from "@/components/server/server-sidebar";
 
@@ -17,18 +18,20 @@ const ServerIdLayout = async ({
     return redirectToSignIn();
   }
 
-  const server = await db.server.findUnique({
-    where: {
-      id: params.serverId,
-      members: {
-        some: {
-          profileId: profile.id,
-        },
-      },
-    },
-  });
+  const hasAccess = await db
+    .select({ id: server.id })
+    .from(server)
+    .innerJoin(
+      member,
+      and(
+        eq(member.serverId, server.id),
+        eq(member.profileId, profile.id),
+        eq(server.id, params.serverId)
+      )
+    )
+    .limit(1);
 
-  if (!server) {
+  if (!hasAccess[0]) {
     return redirect("/");
   }
 

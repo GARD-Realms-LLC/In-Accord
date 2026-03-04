@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
+import { and, eq } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
-import { db } from "@/lib/db";
+import { db, server } from "@/lib/db";
 
 export async function DELETE(
   req: Request,
@@ -18,14 +19,19 @@ export async function DELETE(
       return new NextResponse("Server ID missing", { status: 400 });
     }
 
-    const server = await db.server.delete({
-      where: {
-        id: params.serverId,
-        profileId: profile.id,
-      },
+    const target = await db.query.server.findFirst({
+      where: and(eq(server.id, params.serverId), eq(server.profileId, profile.id)),
     });
 
-    return NextResponse.json(server);
+    if (!target) {
+      return new NextResponse("Server not found", { status: 404 });
+    }
+
+    await db.delete(server).where(
+      and(eq(server.id, params.serverId), eq(server.profileId, profile.id))
+    );
+
+    return NextResponse.json(target);
   } catch (error) {
     console.log("[SERVER_ID_DELETE]", error);
     return new NextResponse("Internal Error", { status: 500 });
@@ -48,18 +54,17 @@ export async function PATCH(
       return new NextResponse("Server ID missing", { status: 400 });
     }
 
-    const server = await db.server.update({
-      where: {
-        id: params.serverId,
-        profileId: profile.id,
-      },
-      data: {
+    await db.update(server).set({
         name,
         imageUrl,
-      },
+        updatedAt: new Date(),
+      }).where(and(eq(server.id, params.serverId), eq(server.profileId, profile.id)));
+
+    const updatedServer = await db.query.server.findFirst({
+      where: and(eq(server.id, params.serverId), eq(server.profileId, profile.id)),
     });
 
-    return NextResponse.json(server);
+    return NextResponse.json(updatedServer);
   } catch (error) {
     console.log("[SERVER_ID_PATCH]", error);
     return new NextResponse("Internal Error", { status: 500 });

@@ -1,13 +1,14 @@
-import { redirectToSignIn } from "@clerk/nextjs";
+import { redirectToSignIn } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import { ChannelType } from "@prisma/client";
+import { ChannelType } from "@/lib/db";
+import { and, eq } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { ChatHeader } from "@/components/chat/chat-header";
 import { ChatInput } from "@/components/chat/chat-input";
 // import { ChatMessages } from "@/components/chat/chat-messages";
 // import { MediaRoom } from "@/components/media-room";
-import { db } from "@/lib/db";
+import { channel, db, member } from "@/lib/db";
 
 interface ChannelIdPageProps {
   params: {
@@ -23,28 +24,26 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
     return redirectToSignIn();
   }
 
-  const channel = await db.channel.findUnique({
-    where: {
-      id: params.channelId,
-    },
+  const currentChannel = await db.query.channel.findFirst({
+    where: eq(channel.id, params.channelId),
   });
 
-  const member = await db.member.findFirst({
-    where: {
-      serverId: params.serverId,
-      profileId: profile.id,
-    },
+  const currentMember = await db.query.member.findFirst({
+    where: and(
+      eq(member.serverId, params.serverId),
+      eq(member.profileId, profile.id)
+    ),
   });
 
-  if (!channel || !member) {
+  if (!currentChannel || !currentMember) {
     redirect("/");
   }
 
   return (
     <div className="bg-white dark:bg-[#313338] flex flex-col h-full">
       <ChatHeader
-        name={channel.name}
-        serverId={channel.serverId}
+        name={currentChannel.name}
+        serverId={currentChannel.serverId}
         type="channel"
       />
       {/* {channel.type === ChannelType.TEXT && (

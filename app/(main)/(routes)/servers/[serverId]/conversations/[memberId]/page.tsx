@@ -1,7 +1,8 @@
-import { redirectToSignIn } from "@clerk/nextjs";
+import { redirectToSignIn } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import { and, eq } from "drizzle-orm";
 
-import { db } from "@/lib/db";
+import { db, member } from "@/lib/db";
 import { getOrCreateConversation } from "@/lib/conversation";
 import { currentProfile } from "@/lib/current-profile";
 import { ChatHeader } from "@/components/chat/chat-header";
@@ -29,12 +30,12 @@ const MemberIdPage = async ({
     return redirectToSignIn();
   }
 
-  const currentMember = await db.member.findFirst({
-    where: {
-      serverId: params.serverId,
-      profileId: profile.id,
-    },
-    include: {
+  const currentMember = await db.query.member.findFirst({
+    where: and(
+      eq(member.serverId, params.serverId),
+      eq(member.profileId, profile.id)
+    ),
+    with: {
       profile: true,
     },
   });

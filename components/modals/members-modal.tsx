@@ -37,7 +37,7 @@ import {
 import { ServerWithMembersWithProfiles } from "@/types";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { UserAvatar } from "@/components/user-avatar";
-import { MemberRole } from "@prisma/client";
+import { MemberRole } from "@/lib/db/types";
 
 const roleIconMap = {
   GUEST: null,
@@ -134,14 +134,14 @@ export const MembersModal = () => {
                           </DropdownMenuSubTrigger>
                           <DropdownMenuPortal>
                             <DropdownMenuSubContent>
-                              <DropdownMenuItem onClick={() => onRoleChange(member.id, "GUEST")}>
+                              <DropdownMenuItem onClick={() => onRoleChange(member.id, MemberRole.GUEST)}>
                                 <Shield className="h-4 w-4 mr-2" />
                                 Guest
                                 {member.role == "GUEST" && (
                                   <Check className="h-4 w-4 ml-auto" />
                                 )}
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => onRoleChange(member.id, "MODERATOR")}>
+                              <DropdownMenuItem onClick={() => onRoleChange(member.id, MemberRole.MODERATOR)}>
                                 <ShieldCheck className="h-4 w-4 mr-2" />
                                 Moderator
                                 {member.role == "MODERATOR" && (

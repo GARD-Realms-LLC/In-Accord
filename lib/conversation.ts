@@ -1,4 +1,8 @@
 import { db } from "@/lib/db";
+import { and, eq, or } from "drizzle-orm";
+import { v4 as uuidv4 } from "uuid";
+
+import { conversation } from "@/lib/db";
 
 export const getOrCreateConversation = async (
   memberOneId: string,
@@ -15,25 +19,25 @@ export const getOrCreateConversation = async (
 
 const findConversation = async (memberOneId: string, memberTwoId: string) => {
   try {
-    return await db.conversation.findFirst({
-      where: {
-        OR: [
-          {
-            AND: [{ memberOneId: memberOneId }, { memberTwoId: memberTwoId }],
-          },
-          {
-            AND: [{ memberOneId: memberTwoId }, { memberTwoId: memberOneId }],
-          },
-        ],
-      },
-      include: {
+    return await db.query.conversation.findFirst({
+      where: or(
+        and(
+          eq(conversation.memberOneId, memberOneId),
+          eq(conversation.memberTwoId, memberTwoId)
+        ),
+        and(
+          eq(conversation.memberOneId, memberTwoId),
+          eq(conversation.memberTwoId, memberOneId)
+        )
+      ),
+      with: {
         memberOne: {
-          include: {
+          with: {
             profile: true,
           },
         },
         memberTwo: {
-          include: {
+          with: {
             profile: true,
           },
         },
@@ -46,19 +50,24 @@ const findConversation = async (memberOneId: string, memberTwoId: string) => {
 
 const createConversation = async (memberOneId: string, memberTwoId: string) => {
   try {
-    return await db.conversation.create({
-      data: {
+    const nowId = uuidv4();
+
+    await db.insert(conversation).values({
+        id: nowId,
         memberOneId,
         memberTwoId,
-      },
-      include: {
+    });
+
+    return await db.query.conversation.findFirst({
+      where: eq(conversation.id, nowId),
+      with: {
         memberOne: {
-          include: {
+          with: {
             profile: true,
           },
         },
         memberTwo: {
-          include: {
+          with: {
             profile: true,
           },
         },

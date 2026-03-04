@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
+import { and, asc, eq, ne } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
-import { db } from "@/lib/db";
+import { db, member, server } from "@/lib/db";
 
 export async function DELETE(
   req: Request,
@@ -25,34 +26,35 @@ export async function DELETE(
       return new NextResponse("Member ID missing", { status: 400 });
     }
 
-    const server = await db.server.update({
-      where: {
-        id: serverId,
-        profileId: profile.id,
-      },
-      data: {
-        members: {
-          deleteMany: {
-            id: params.memberId,
-            profileId: {
-              not: profile.id,
-            },
-          },
-        },
-      },
-      include: {
-        members: {
-          include: {
-            profile: true,
-          },
-          orderBy: {
-            role: 'asc'
-          }
-        }
-      }
+    const ownerServer = await db.query.server.findFirst({
+      where: and(eq(server.id, serverId), eq(server.profileId, profile.id)),
     });
 
-    return NextResponse.json(server);
+    if (!ownerServer) {
+      return new NextResponse("Server not found", { status: 404 });
+    }
+
+    await db.delete(member).where(
+      and(
+        eq(member.id, params.memberId),
+        eq(member.serverId, serverId),
+        ne(member.profileId, profile.id)
+      )
+    );
+
+    const updatedServer = await db.query.server.findFirst({
+      where: eq(server.id, serverId),
+      with: {
+        members: {
+          with: {
+            profile: true,
+          },
+          orderBy: (members, { asc }) => [asc(members.role)],
+        },
+      },
+    });
+
+    return NextResponse.json(updatedServer);
   } catch (error) {
     console.log("[MEMBERS_ID_DELETE]", error);
     return new NextResponse("Internal Error", { status: 500 });
@@ -82,39 +84,38 @@ export async function PATCH(
       return new NextResponse("Member ID missing", { status: 400 });
     }
 
-    const server = await db.server.update({
-      where: {
-        id: serverId,
-        profileId: profile.id,
-      },
-      data: {
-        members: {
-          update: {
-            where: {
-              id: params.memberId,
-              profileId: {
-                not: profile.id,
-              },
-            },
-            data: {
-              role,
-            },
-          },
-        },
-      },
-      include: {
-        members: {
-          include: {
-            profile: true,
-          },
-          orderBy: {
-            role: 'asc'
-          }
-        }
-      }
+    const ownerServer = await db.query.server.findFirst({
+      where: and(eq(server.id, serverId), eq(server.profileId, profile.id)),
     });
 
-    return NextResponse.json(server);
+    if (!ownerServer) {
+      return new NextResponse("Server not found", { status: 404 });
+    }
+
+    await db.update(member).set({
+      role,
+      updatedAt: new Date(),
+    }).where(
+      and(
+        eq(member.id, params.memberId),
+        eq(member.serverId, serverId),
+        ne(member.profileId, profile.id)
+      )
+    );
+
+    const updatedServer = await db.query.server.findFirst({
+      where: eq(server.id, serverId),
+      with: {
+        members: {
+          with: {
+            profile: true,
+          },
+          orderBy: (members, { asc }) => [asc(members.role)],
+        },
+      },
+    });
+
+    return NextResponse.json(updatedServer);
   } catch (error) {
     console.log("[MEMBERS_ID_PATCH]", error);
     return new NextResponse("Internal Error", { status: 500 });

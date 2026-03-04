@@ -21,6 +21,8 @@ This project now includes an Electron shell around the existing Next.js app.
 - `npm run electron:dev` starts Next.js in development mode and opens Electron.
 - `npm run build` builds the Next.js app.
 - `npm run electron:start` starts the production Next.js server and opens Electron.
+- `npm run electron:pack` creates an unpacked desktop build in `dist/`.
+- `npm run electron:dist` creates a Windows NSIS installer in `dist/`.
 
 Electron loads `http://localhost:3000` by default. To override this, set `ELECTRON_START_URL`.
 

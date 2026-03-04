@@ -11,7 +11,6 @@ import {
 } from "lucide-react";
 
 import { ServerWithMembersWithProfiles } from "@/types";
-import { MemberRole } from "@prisma/client";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,7 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useModal } from "@/hooks/use-modal-store";
-
+import { MemberRole } from "@/lib/db/types";
 interface ServerHeaderProps {
   server: ServerWithMembersWithProfiles;
   role?: MemberRole;

@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
+import { and, eq, inArray } from "drizzle-orm";
+import { v4 as uuidv4 } from "uuid";
 
 import { currentProfile } from "@/lib/current-profile";
-import { db } from "@/lib/db";
-import { MemberRole } from "@prisma/client";
+import { channel, db, MemberRole, member, server } from "@/lib/db";
 
 export async function POST(req: Request) {
   try {
@@ -24,31 +25,37 @@ export async function POST(req: Request) {
       return new NextResponse("Name cannot be 'general'", { status: 400 })
     }
 
-    const server = await db.server.update({
-      where: {
-        id: serverId,
-        profileId: profile.id,
-        members: {
-          some: {
-            profileId: profile.id,
-            role: {
-              in: [MemberRole.ADMIN, MemberRole.MODERATOR]
-            }
-          }
-        }
-      },
-      data: {
-        channels: {
-          create: {
-            profileId: profile.id,
-            name, 
-            type
-          }
-        },
-      }
+    const authorizedMember = await db.query.member.findFirst({
+      where: and(
+        eq(member.serverId, serverId),
+        eq(member.profileId, profile.id),
+        inArray(member.role, [MemberRole.ADMIN, MemberRole.MODERATOR])
+      ),
     });
 
-    return NextResponse.json(server)
+    if (!authorizedMember) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
+
+    const now = new Date();
+    await db.insert(channel).values({
+      id: uuidv4(),
+      profileId: profile.id,
+      serverId,
+      name,
+      type,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const updatedServer = await db.query.server.findFirst({
+      where: eq(server.id, serverId),
+      with: {
+        channels: true,
+      },
+    });
+
+    return NextResponse.json(updatedServer)
 
   } catch (error) {
     console.log("[CHANNEL_POST]", error);
