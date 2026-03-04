@@ -1,0 +1,50 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"window.title": "e:\\In-Accord\\In-Accord.code-workspace",
+		"workbench.colorCustomizations": {
+			"statusBarItem.warningBackground": "#1af4d0",
+			"statusBarItem.warningForeground": "#000000",
+			"statusBarItem.warningHoverBackground": "#1af4d0",
+			"statusBarItem.warningHoverForeground": "#00000090",
+			"statusBarItem.remoteBackground": "#27ffdd",
+			"statusBarItem.remoteForeground": "#000000",
+			"statusBarItem.remoteHoverBackground": "#34ffea",
+			"statusBarItem.remoteHoverForeground": "#00000090",
+			"statusBar.background": "#1af4d0",
+			"statusBar.foreground": "#000000",
+			"statusBar.border": "#1af4d0",
+			"statusBar.debuggingBackground": "#1af4d0",
+			"statusBar.debuggingForeground": "#000000",
+			"statusBar.debuggingBorder": "#1af4d0",
+			"statusBar.noFolderBackground": "#1af4d0",
+			"statusBar.noFolderForeground": "#000000",
+			"statusBar.noFolderBorder": "#1af4d0",
+			"statusBar.prominentBackground": "#1af4d0",
+			"statusBar.prominentForeground": "#000000",
+			"statusBar.prominentHoverBackground": "#1af4d0",
+			"statusBar.prominentHoverForeground": "#00000090",
+			"focusBorder": "#1af4d099",
+			"progressBar.background": "#1af4d0",
+			"textLink.foreground": "#5affff",
+			"textLink.activeForeground": "#67ffff",
+			"selection.background": "#0de7c3",
+			"list.highlightForeground": "#1af4d0",
+			"list.focusAndSelectionOutline": "#1af4d099",
+			"button.background": "#1af4d0",
+			"button.foreground": "#000000",
+			"button.hoverBackground": "#27ffdd",
+			"tab.activeBorderTop": "#27ffdd",
+			"pickerGroup.foreground": "#27ffdd",
+			"list.activeSelectionBackground": "#1af4d04d",
+			"panelTitle.activeBorder": "#27ffdd",
+			"activityBar.activeBorder": "#1af4d0",
+			"activityBarBadge.foreground": "#000000",
+			"activityBarBadge.background": "#1af4d0"
+		}
+	}
+}

@@ -14,6 +14,16 @@ pnpm dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Run as a desktop app (Electron)
+
+This project now includes an Electron shell around the existing Next.js app.
+
+- `npm run electron:dev` starts Next.js in development mode and opens Electron.
+- `npm run build` builds the Next.js app.
+- `npm run electron:start` starts the production Next.js server and opens Electron.
+
+Electron loads `http://localhost:3000` by default. To override this, set `ELECTRON_START_URL`.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
