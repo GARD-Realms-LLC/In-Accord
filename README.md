@@ -1,3 +1,5 @@
+![In-Accord Logo](./Images/in-accord-steampunk-logo.png)
+
 ## In-Accord — Social Your Way!
 
 In-Accord is a desktop-ready, real-time social platform built with:
