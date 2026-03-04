@@ -4,11 +4,14 @@ const path = require("path");
 const DEFAULT_URL = "http://localhost:3000";
 
 function createWindow() {
+  const appIcon = path.join(__dirname, "..", "public", "in-accord-steampunk-logo.png");
+
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 1000,
     minHeight: 700,
+    icon: appIcon,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),

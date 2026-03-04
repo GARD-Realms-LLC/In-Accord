@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="In-Accord steampunk icon">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#131a24"/>
+      <stop offset="100%" stop-color="#243245"/>
+    </linearGradient>
+    <linearGradient id="brass" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f5cf78"/>
+      <stop offset="50%" stop-color="#ba8d3f"/>
+      <stop offset="100%" stop-color="#7b5a24"/>
+    </linearGradient>
+    <linearGradient id="steel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#d8dee7"/>
+      <stop offset="100%" stop-color="#5d6878"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#000" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+
+  <circle cx="512" cy="512" r="468" fill="url(#bg)" stroke="#8b6327" stroke-width="12"/>
+
+  <g transform="translate(512 478)" filter="url(#shadow)">
+    <path d="M-300,25 C-286,-60 -205,-87 -120,-82 C-58,-78 -19,-52 0,-28 C19,-52 58,-78 120,-82 C205,-87 286,-60 300,25 C310,96 270,140 215,143 C160,146 135,112 114,81 C95,52 72,42 0,42 C-72,42 -95,52 -114,81 C-135,112 -160,146 -215,143 C-270,140 -310,96 -300,25 Z"
+          fill="#121922" stroke="url(#steel)" stroke-width="12"/>
+
+    <g transform="translate(-155,18)">
+      <circle r="50" fill="#0f141d" stroke="#7f8c9f" stroke-width="7"/>
+      <rect x="-8" y="-30" width="16" height="60" rx="4" fill="url(#brass)"/>
+      <rect x="-30" y="-8" width="60" height="16" rx="4" fill="url(#brass)"/>
+    </g>
+
+    <g transform="translate(155,18)">
+      <circle r="50" fill="#0f141d" stroke="#7f8c9f" stroke-width="7"/>
+      <circle cx="-17" cy="-17" r="9" fill="url(#brass)"/>
+      <circle cx="17" cy="-17" r="9" fill="url(#brass)"/>
+      <circle cx="-17" cy="17" r="9" fill="url(#brass)"/>
+      <circle cx="17" cy="17" r="9" fill="url(#brass)"/>
+    </g>
+
+    <g transform="translate(0,-34)">
+      <circle r="34" fill="#121922" stroke="#6e7b90" stroke-width="5"/>
+      <circle r="12" fill="url(#brass)"/>
+    </g>
+
+    <g fill="url(#brass)" stroke="#5a3f17" stroke-width="3">
+      <circle cx="-225" cy="-28" r="30"/>
+      <circle cx="225" cy="-28" r="30"/>
+    </g>
+  </g>
+
+  <text x="512" y="845" text-anchor="middle" font-family="Cinzel, Garamond, serif" font-size="74" letter-spacing="3" fill="url(#brass)">In-Accord</text>
+  <text x="512" y="886" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="22" letter-spacing="2" fill="#9fb0c6">Social Your Way!</text>
+</svg>

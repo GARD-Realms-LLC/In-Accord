@@ -1,46 +1,82 @@
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+## In-Accord — Social Your Way!
 
-## Getting Started
+In-Accord is a desktop-ready, real-time social platform built with:
 
-First, run the development server:
+- Next.js (App Router) + TypeScript
+- Electron (desktop shell)
+- Clerk (authentication)
+- Socket.IO (real-time updates)
+- Drizzle ORM + MySQL
+- UploadThing (file uploads)
+
+## Prerequisites
+
+- Node.js 20+
+- npm 10+
+- MySQL database
+
+## Environment setup
+
+Create or update `.env` in the project root with at least:
+
+- `DATABASE_URL`
+- `NEXT_PUBLIC_SITE_URL`
+- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
+- `CLERK_SECRET_KEY`
+- `UPLOADTHING_SECRET`
+- `UPLOADTHING_APP_ID`
+
+Optional:
+
+- `ELECTRON_START_URL` (override Electron target URL)
+
+## Install
+
+```bash
+npm install
+```
+
+## Database (Drizzle)
+
+```bash
+npm run db:generate
+npm run db:push
+```
+
+## Run (web)
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`.
 
-## Run as a desktop app (Electron)
+## Run (desktop / Electron)
 
-This project now includes an Electron shell around the existing Next.js app.
+```bash
+npm run electron:dev
+```
 
-- `npm run electron:dev` starts Next.js in development mode and opens Electron.
-- `npm run build` builds the Next.js app.
-- `npm run electron:start` starts the production Next.js server and opens Electron.
-- `npm run electron:pack` creates an unpacked desktop build in `dist/`.
-- `npm run electron:dist` creates a Windows NSIS installer in `dist/`.
+## Production build
 
-Electron loads `http://localhost:3000` by default. To override this, set `ELECTRON_START_URL`.
+```bash
+npm run build
+npm run electron:pack
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+For a Windows installer:
 
-This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
+```bash
+npm run electron:dist
+```
 
-## Learn More
+> Note: Windows installer creation may require elevated permissions depending on your local machine policy.
 
-To learn more about Next.js, take a look at the following resources:
+## Branding assets
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Core brand image and icon outputs live under `Images/`, including:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
+- `in-accord-steampunk-logo.png`
+- `fav.ico`
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+The app favicon/logo is wired to these assets via `app/favicon.ico` and public image references.

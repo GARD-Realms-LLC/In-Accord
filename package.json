@@ -98,6 +98,7 @@
       "output": "dist"
     },
     "win": {
+      "icon": "app/favicon.ico",
       "signAndEditExecutable": false,
       "target": [
         "nsis"
