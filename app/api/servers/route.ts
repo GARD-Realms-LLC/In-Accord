@@ -4,10 +4,11 @@ import { eq } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { channel, ChannelType, db, MemberRole, member, server } from "@/lib/db";
+import { getServerBannerConfig, setServerBannerConfig } from "@/lib/server-banner-store";
 
 export async function POST(req: Request) {
   try {
-    const { name, imageUrl } = await req.json();
+    const { name, imageUrl, bannerUrl, bannerFit, bannerScale } = await req.json();
     const profile = await currentProfile();
 
     if (!profile) {
@@ -18,11 +19,16 @@ export async function POST(req: Request) {
     const now = new Date();
 
     await db.transaction(async (tx) => {
+      const resolvedImageUrl =
+        typeof imageUrl === "string" && imageUrl.trim().length > 0
+          ? imageUrl
+          : "/in-accord-steampunk-logo.png";
+
       await tx.insert(server).values({
         id: serverId,
         profileId: profile.id,
         name,
-        imageUrl,
+        imageUrl: resolvedImageUrl,
         inviteCode: uuidv4(),
         createdAt: now,
         updatedAt: now,
@@ -46,13 +52,30 @@ export async function POST(req: Request) {
         createdAt: now,
         updatedAt: now,
       });
+
+      await setServerBannerConfig(serverId, {
+        url: bannerUrl,
+        fit: bannerFit,
+        scale: typeof bannerScale === "number" ? bannerScale : Number(bannerScale),
+      });
     });
 
     const createdServer = await db.query.server.findFirst({
       where: eq(server.id, serverId),
     });
 
-    return NextResponse.json(createdServer)
+    const resolvedBanner = await getServerBannerConfig(serverId);
+
+    return NextResponse.json(
+      createdServer
+        ? {
+            ...createdServer,
+            bannerUrl: resolvedBanner?.url ?? null,
+            bannerFit: resolvedBanner?.fit ?? "cover",
+            bannerScale: resolvedBanner?.scale ?? 1,
+          }
+        : createdServer
+    )
 
   } catch (error) {
     console.log("[SERVERS_POST]", error);

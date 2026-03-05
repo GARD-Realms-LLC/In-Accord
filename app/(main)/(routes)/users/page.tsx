@@ -1,12 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { and, eq, sql } from "drizzle-orm";
-import { Hash, Headphones, MessageCircle, Mic, MoreVertical, Phone, Search, UserPlus, Video } from "lucide-react";
+import { and, eq } from "drizzle-orm";
+import { Hash, MessageCircle, MoreVertical, Phone, Search, UserPlus, Video } from "lucide-react";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db, member, server } from "@/lib/db";
-import { SettingsButton } from "@/components/settings/settings-button";
-import { UserAvatar } from "@/components/user-avatar";
 
 const UsersPage = async () => {
   const profile = await currentProfile();
@@ -31,30 +29,9 @@ const UsersPage = async () => {
 
   const allServers = [...servers];
 
-  const credentialResult = await db.execute(sql`
-    select "createdAt", "updatedAt"
-    from "LocalCredential"
-    where "userId" = ${profile.id}
-    limit 1
-  `);
-
-  const credentialRow = (credentialResult as unknown as {
-    rows: Array<{
-      createdAt: Date | string | null;
-      updatedAt: Date | string | null;
-    }>;
-  }).rows?.[0];
-
-  const profileJoinedAt = credentialRow?.createdAt
-    ? new Date(credentialRow.createdAt).toISOString()
-    : null;
-  const profileLastLogonAt = credentialRow?.updatedAt
-    ? new Date(credentialRow.updatedAt).toISOString()
-    : null;
-
   return (
     <div className="h-full bg-[#313338] text-[#dbdee1]">
-      <div className="grid h-full w-full grid-cols-[240px_1fr_260px] grid-rows-[1fr_auto] gap-2 p-2">
+      <div className="grid h-full w-full grid-cols-[240px_1fr_260px] gap-2 p-2">
 
         <aside className="rounded-2xl border border-black/20 bg-[#2b2d31] p-2.5 shadow-xl shadow-black/35">
           <div className="flex h-full flex-col">
@@ -94,36 +71,7 @@ const UsersPage = async () => {
           </div>
         </aside>
 
-        <div className="row-start-2 relative overflow-visible">
-          <div className="relative z-[80] left-[calc(-88px-0.5rem)] w-[328px] rounded-[24px] border border-black/20 bg-[#232428] px-2 py-2 shadow-xl shadow-black/35">
-          <div className="flex items-center justify-start rounded-[20px] bg-[#1e1f22] px-2 py-1.5">
-            <div className="flex min-w-0 items-center gap-4">
-              <UserAvatar src={profile.imageUrl ?? undefined} className="h-10 w-10" />
-              <div className="min-w-0">
-                <p className="truncate text-[10px] uppercase tracking-[0.08em] text-[#949ba4]">
-                  Users ID: {profile.id}
-                </p>
-                <p className="truncate text-xs font-semibold text-white">{profile.name || "User"}</p>
-                <p className="truncate text-[10px] text-[#b5bac1]">Online</p>
-              </div>
-            </div>
-            <div className="ml-auto flex items-center gap-1 text-[#b5bac1]">
-              <button title="Mute" className="rounded p-1 hover:bg-[#3f4248]"><Mic className="h-3.5 w-3.5" /></button>
-              <button title="Deafen" className="rounded p-1 hover:bg-[#3f4248]"><Headphones className="h-3.5 w-3.5" /></button>
-              <SettingsButton
-                profileId={profile.id}
-                profileName={profile.name}
-                profileEmail={profile.email}
-                profileImageUrl={profile.imageUrl}
-                profileJoinedAt={profileJoinedAt}
-                profileLastLogonAt={profileLastLogonAt}
-              />
-            </div>
-          </div>
-          </div>
-        </div>
-
-        <main className="row-span-2 flex h-full flex-col rounded-2xl border border-black/20 bg-[#313338] overflow-hidden shadow-xl shadow-black/35">
+        <main className="flex h-full flex-col rounded-2xl border border-black/20 bg-[#313338] overflow-hidden shadow-xl shadow-black/35">
           <header className="flex h-12 items-center justify-between border-b border-black/20 px-4">
             <div className="flex items-center gap-3">
               <MessageCircle className="h-5 w-5 text-[#b5bac1]" />
@@ -187,7 +135,7 @@ const UsersPage = async () => {
           </section>
         </main>
 
-        <aside className="row-span-2 rounded-2xl border border-black/20 bg-[#2b2d31] p-4 shadow-xl shadow-black/35">
+        <aside className="rounded-2xl border border-black/20 bg-[#2b2d31] p-4 shadow-xl shadow-black/35">
           <h3 className="text-xs font-bold uppercase tracking-[0.08em] text-[#949ba4]">Active Now</h3>
           <div className="mt-4 rounded-lg bg-[#1e1f22] p-4 text-center">
             <p className="text-sm font-semibold text-white">It&apos;s quiet for now...</p>

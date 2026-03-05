@@ -51,7 +51,7 @@ export const InviteModal = () => {
 
   return (
     <Dialog open={isModalOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-white text-black p-0 overflow-hidden">
+      <DialogContent className="overflow-hidden bg-white p-0 text-black dark:bg-[#313338] dark:text-white">
         <DialogHeader className="pt-8 px-6">
           <DialogTitle className="text-2xl text-center font-bold">
             Invite friends
@@ -68,7 +68,7 @@ export const InviteModal = () => {
             <Input
               disabled={isLoading}
               className="bg-zinc-300/50 border-0 focus-visible:ring-0 
-              text-black focus-visible:ring-offset-0"
+              text-black focus-visible:ring-offset-0 dark:bg-zinc-700/50 dark:text-zinc-100"
               value={initeUrl}
             />
             <Button disabled={isLoading} onClick={onCopy} size="icon">
@@ -84,7 +84,7 @@ export const InviteModal = () => {
             disabled={isLoading}
             variant="link"
             size="sm"
-            className="text-xs text-zinc-500 mt-4"
+            className="mt-4 text-xs text-zinc-500 dark:text-zinc-300"
           >
             Generate a new link
             <RefreshCw className="h-4 w-4 ml-2" />

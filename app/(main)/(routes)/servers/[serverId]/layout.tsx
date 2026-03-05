@@ -1,9 +1,27 @@
 import { redirect } from "next/navigation";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { db, member, server } from "@/lib/db";
 import { currentProfile } from "@/lib/current-profile";
 import { ServerSidebar } from "@/components/server/server-sidebar";
+import { ServerUserRolesRail } from "@/components/server/server-user-roles-rail";
+import { UserLocalTime } from "@/components/server/user-local-time";
+import { ServerRouteShell } from "@/components/server/server-route-shell";
+import { ChannelType, MemberRole } from "@/lib/db/types";
+
+type ChannelRow = {
+  id: string;
+  name: string;
+  type: ChannelType;
+};
+
+type MemberRow = {
+  id: string;
+  role: MemberRole;
+  profileId: string;
+  name: string | null;
+  email: string | null;
+};
 
 const ServerIdLayout = async ({
   children,
@@ -18,7 +36,7 @@ const ServerIdLayout = async ({
   }
 
   const hasAccess = await db
-    .select({ id: server.id })
+    .select({ id: server.id, name: server.name })
     .from(server)
     .innerJoin(
       member,
@@ -34,13 +52,67 @@ const ServerIdLayout = async ({
     return redirect("/");
   }
 
+  const currentServerName = hasAccess[0].name;
+
+  const channelsResult = await db.execute(sql`
+    select
+      c."id" as "id",
+      c."name" as "name",
+      c."type" as "type"
+    from "Channel" c
+    where c."serverId" = ${params.serverId}
+    order by c."createdAt" asc
+  `);
+
+  const membersResult = await db.execute(sql`
+    select
+      m."id" as "id",
+      m."role" as "role",
+      m."profileId" as "profileId",
+      u."name" as "name",
+      u."email" as "email"
+    from "Member" m
+    left join "Users" u on u."userId" = m."profileId"
+    where m."serverId" = ${params.serverId}
+    order by
+      case m."role"
+        when 'ADMIN' then 1
+        when 'MODERATOR' then 2
+        else 3
+      end,
+      coalesce(u."name", u."email", m."profileId") asc
+  `);
+
+  const channelRows = (channelsResult as unknown as { rows: ChannelRow[] }).rows;
+  const memberRows = (membersResult as unknown as { rows: MemberRow[] }).rows;
+
+  const textChannels = channelRows.filter((row) => row.type === ChannelType.TEXT);
+  const voiceChannels = channelRows.filter((row) => row.type === ChannelType.AUDIO);
+  const videoChannels = channelRows.filter((row) => row.type === ChannelType.VIDEO);
+
+  const onlineUsers = memberRows.map((row) => ({
+    ...row,
+    displayName: row.name || row.email || row.profileId,
+  }));
+
   return (
-    <div className="h-full">
-      <aside className="fixed inset-y-0 left-[88px] w-60 z-40">
-        <ServerSidebar serverId={params.serverId} />
-      </aside>
-      <main className="h-full pl-[328px]">{children}</main>
-    </div>
+    <ServerRouteShell
+      serverName={currentServerName}
+      serverId={params.serverId}
+      textChannels={textChannels.map((channel) => ({ id: channel.id, name: channel.name }))}
+      voiceChannels={voiceChannels.map((channel) => ({ id: channel.id, name: channel.name }))}
+      videoChannels={videoChannels.map((channel) => ({ id: channel.id, name: channel.name }))}
+      onlineUsers={onlineUsers.map((member) => ({
+        id: member.id,
+        name: member.displayName,
+        role: member.role,
+      }))}
+      leftSidebar={<ServerSidebar serverId={params.serverId} />}
+      rightSidebar={<ServerUserRolesRail serverId={params.serverId} />}
+      rightFooter={<UserLocalTime />}
+    >
+      {children}
+    </ServerRouteShell>
   );
 };
 

@@ -287,7 +287,7 @@ export const SettingsModal = () => {
     if (displaySection === "myAccount") {
       return (
         <div className="space-y-12">
-          <div className="mx-auto mt-8 w-[clamp(24rem,84vw,36rem)] max-w-[98%] rounded-[2.5rem] border border-black/20 bg-[#1e1f22] p-4 shadow-xl shadow-black/35">
+          <div className="mx-auto mt-8 h-[80vh] w-[80%] max-w-none rounded-[2.5rem] border border-black/20 bg-[#1e1f22] p-4 shadow-xl shadow-black/35">
             <p className="text-center text-sm font-medium text-white">Account Actions</p>
 
             <div className="mx-auto mt-8 w-full max-w-[28rem] space-y-3 rounded-3xl border border-white/10 bg-[#232428] p-4">
@@ -482,7 +482,7 @@ export const SettingsModal = () => {
 
   return (
     <Dialog open={isModalOpen} onOpenChange={onClose}>
-      <DialogContent className="flex h-[85vh] w-[85vw] max-w-none flex-col overflow-hidden rounded-3xl border-black/30 bg-[#2b2d31] p-0 text-[#dbdee1]">
+      <DialogContent className="flex h-[80vh] w-[80%] max-w-none flex-col overflow-hidden rounded-3xl border-black/30 bg-[#2b2d31] p-0 text-[#dbdee1]">
         <DialogTitle className="sr-only">User Settings</DialogTitle>
         <DialogDescription className="sr-only">
           Edit account, appearance, notification, and privacy settings.

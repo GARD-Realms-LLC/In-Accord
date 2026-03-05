@@ -3,6 +3,7 @@ import { create } from "zustand";
 
 export type ModalType =
   | "createServer"
+  | "settings"
   | "invite"
   | "editServer"
   | "members"
@@ -18,6 +19,12 @@ interface ModalData {
   server?: Server;
   channel?: Channel;
   channelType?: ChannelType;
+  profileId?: string | null;
+  profileName?: string | null;
+  profileEmail?: string | null;
+  profileImageUrl?: string | null;
+  profileJoinedAt?: string | null;
+  profileLastLogonAt?: string | null;
   apiUrl?: string;
   query?: Record<string, any>;
 }

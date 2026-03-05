@@ -51,7 +51,7 @@ const MemberIdPage = async ({
   const otherMember = memberOne.profileId === profile.id ? memberTwo : memberOne;
 
   return ( 
-    <div className="bg-white dark:bg-[#313338] flex flex-col h-full">
+    <div className="flex h-full flex-col overflow-hidden rounded-3xl border border-black/20 bg-white shadow-xl shadow-black/35 dark:bg-[#313338]">
       <ChatHeader
         imageUrl={otherMember.profile.imageUrl}
         name={otherMember.profile.name}

@@ -19,6 +19,7 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1002.0",
     "@hookform/resolvers": "3.9.0",
     "@radix-ui/react-avatar": "1.1.1-rc.5",
     "@radix-ui/react-dialog": "1.1.1",

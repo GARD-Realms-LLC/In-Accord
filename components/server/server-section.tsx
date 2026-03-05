@@ -1,7 +1,7 @@
 "use client";
 
 import { ChannelType, MemberRole } from "@/lib/db/types";
-import { Plus, Settings } from "lucide-react";
+import { Plus, Settings, Users } from "lucide-react";
 
 import { ServerWithMembersWithProfiles } from "@/types";
 import { ActionTooltip } from "@/components/action-tooltip";
@@ -30,14 +30,26 @@ export const ServerSection = ({
         {label}
       </p>
       {role !== MemberRole.GUEST && sectionType === "channels" && (
-        <ActionTooltip label="Create Channel" side="top" align="center">
-          <button
-            onClick={() => onOpen("createChannel", { channelType })}
-            className="text-zinc-500 hover:text-zinc-600 dark:text-zinc-400 dark:hover:text-zinc-300 transition"
-          >
-            <Plus className="h-4 w-4" />
-          </button>
-        </ActionTooltip>
+        <div className="flex items-center gap-2">
+          {label === "Channels" && (
+            <ActionTooltip label="Add Group" side="top" align="center">
+              <button
+                onClick={() => onOpen("createChannel", { channelType })}
+                className="text-zinc-500 hover:text-zinc-600 dark:text-zinc-400 dark:hover:text-zinc-300 transition"
+              >
+                <Users className="h-4 w-4" />
+              </button>
+            </ActionTooltip>
+          )}
+          <ActionTooltip label="Create Channel" side="top" align="center">
+            <button
+              onClick={() => onOpen("createChannel", { channelType })}
+              className="text-zinc-500 hover:text-zinc-600 dark:text-zinc-400 dark:hover:text-zinc-300 transition"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </ActionTooltip>
+        </div>
       )}
       {role === MemberRole.ADMIN && sectionType === "members" && (
         <ActionTooltip label="Manage Members" side="top" align="center">

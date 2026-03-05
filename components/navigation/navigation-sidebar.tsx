@@ -27,7 +27,8 @@ export const NavigationSidebar = async () => {
       s."name" as "name",
       s."imageUrl" as "imageUrl",
       s."profileId" as "profileId",
-      s."createdAt" as "createdAt"
+      s."createdAt" as "createdAt",
+      s."updatedAt" as "updatedAt"
     from "Member" m
     inner join "Server" s on s."id" = m."serverId"
     where m."profileId" = ${profile.id}
@@ -42,6 +43,7 @@ export const NavigationSidebar = async () => {
         imageUrl: string | null;
         profileId: string;
         createdAt: Date | string;
+        updatedAt?: Date | string;
       }>;
     }
   ).rows;
@@ -82,12 +84,13 @@ export const NavigationSidebar = async () => {
         My Servers
       </div>
       <ScrollArea className="flex-1 w-full">
-        {myServers.map(({ id, name, imageUrl }) => (
+        {myServers.map(({ id, name, imageUrl, updatedAt }) => (
           <div key={id} className="mb-4 flex justify-center">
             <NavigationItem
               id={id}
               name={name}
               imageUrl={imageUrl}
+              updatedAt={updatedAt}
             />
           </div>
         ))}
@@ -97,12 +100,13 @@ export const NavigationSidebar = async () => {
         <div className="mb-2 text-center text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-700 dark:text-zinc-300">
           Joined Servers
         </div>
-        {joinedServers.map(({ id, name, imageUrl }) => (
+        {joinedServers.map(({ id, name, imageUrl, updatedAt }) => (
           <div key={`joined-${id}`} className="mb-4 flex justify-center">
             <NavigationItem
               id={id}
               name={name}
               imageUrl={imageUrl}
+              updatedAt={updatedAt}
             />
           </div>
         ))}

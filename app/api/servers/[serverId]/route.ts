@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db, server } from "@/lib/db";
+import { getServerBannerConfig, setServerBannerConfig } from "@/lib/server-banner-store";
 
 export async function DELETE(
   req: Request,
@@ -44,7 +45,7 @@ export async function PATCH(
 ) {
   try {
     const profile = await currentProfile();
-    const { name, imageUrl } = await req.json();
+    const { name, imageUrl, bannerUrl, bannerFit, bannerScale } = await req.json();
 
     if (!profile) {
       return new NextResponse("Unauthorized", { status: 401 });
@@ -60,11 +61,28 @@ export async function PATCH(
         updatedAt: new Date(),
       }).where(and(eq(server.id, params.serverId), eq(server.profileId, profile.id)));
 
+    await setServerBannerConfig(params.serverId, {
+      url: bannerUrl,
+      fit: bannerFit,
+      scale: typeof bannerScale === "number" ? bannerScale : Number(bannerScale),
+    });
+
     const updatedServer = await db.query.server.findFirst({
       where: and(eq(server.id, params.serverId), eq(server.profileId, profile.id)),
     });
 
-    return NextResponse.json(updatedServer);
+    const resolvedBanner = await getServerBannerConfig(params.serverId);
+
+    return NextResponse.json(
+      updatedServer
+        ? {
+            ...updatedServer,
+            bannerUrl: resolvedBanner?.url ?? null,
+            bannerFit: resolvedBanner?.fit ?? "cover",
+            bannerScale: resolvedBanner?.scale ?? 1,
+          }
+        : updatedServer
+    );
   } catch (error) {
     console.log("[SERVER_ID_PATCH]", error);
     return new NextResponse("Internal Error", { status: 500 });

@@ -15,9 +15,10 @@ import {
 
 interface ServerSearchProps {
   serverId: string;
+  serverName: string;
   data: {
     label: string;
-    type: "channel" | "member";
+    type: "channel" | "member" | "server";
     data:
       | {
           icon: React.ReactNode;
@@ -28,7 +29,7 @@ interface ServerSearchProps {
   }[];
 }
 
-export const ServerSearch = ({ serverId, data }: ServerSearchProps) => {
+export const ServerSearch = ({ serverId, serverName, data }: ServerSearchProps) => {
   const [open, setOpen] = useState(false);
   const router = useRouter();
 
@@ -37,9 +38,13 @@ export const ServerSearch = ({ serverId, data }: ServerSearchProps) => {
     type,
   }: {
     id: string;
-    type: "channel" | "member";
+    type: "channel" | "member" | "server";
   }) => {
     setOpen(false);
+
+    if (type === "server") {
+      return router.push(`/servers/${id}`);
+    }
 
     if (type === "member") {
       return router.push(`/servers/${serverId}/conversations/${id}`);
@@ -76,7 +81,7 @@ export const ServerSearch = ({ serverId, data }: ServerSearchProps) => {
         dark:text-zinc-400 group-hover:text-zinc-600 
         dark:group-hover:text-zinc-300 transition"
         >
-          Search
+          {serverName}
         </p>
         <kbd
           className="pointer-events-none inline-flex h-5 
@@ -88,7 +93,7 @@ export const ServerSearch = ({ serverId, data }: ServerSearchProps) => {
         </kbd>
       </button>
       <CommandDialog open={open} onOpenChange={setOpen}>
-        <CommandInput placeholder="Search all channels and members" />
+        <CommandInput placeholder="Search server name, channels, and members" />
         <CommandList>
           <CommandEmpty>No Results found</CommandEmpty>
           {data.map(({ label, type, data }) => {

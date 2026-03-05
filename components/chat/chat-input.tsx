@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -27,6 +28,7 @@ const formSchema = z.object({
 export const ChatInput = ({ apiUrl, query, name, type }: ChatInputProps) => {
   const { onOpen } = useModal();
   const router = useRouter();
+  const [sendError, setSendError] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -39,6 +41,8 @@ export const ChatInput = ({ apiUrl, query, name, type }: ChatInputProps) => {
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
+      setSendError(null);
+
       const url = qs.stringifyUrl({
         url: apiUrl,
         query,
@@ -48,8 +52,19 @@ export const ChatInput = ({ apiUrl, query, name, type }: ChatInputProps) => {
 
       form.reset();
       router.refresh();
-    } catch (error) {
-      console.log(error);
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error)) {
+        const dataMessage =
+          typeof error.response?.data === "string"
+            ? error.response.data
+            : error.response?.data?.message;
+
+        setSendError(dataMessage || "Failed to send message.");
+      } else {
+        setSendError("Failed to send message.");
+      }
+
+      console.error("[CHAT_INPUT_SEND]", error);
     }
   };
 
@@ -62,7 +77,7 @@ export const ChatInput = ({ apiUrl, query, name, type }: ChatInputProps) => {
           render={({ field }) => (
             <FormItem>
               <FormControl>
-                <div className="relative p-4 pb-6">
+                <div className="relative w-full p-4 pb-6">
                   <button
                     type="button"
                     onClick={() => onOpen("messageFile", { apiUrl, query })}
@@ -85,6 +100,9 @@ export const ChatInput = ({ apiUrl, query, name, type }: ChatInputProps) => {
                       }
                     />
                   </div>
+                  {sendError ? (
+                    <p className="mt-2 px-2 text-xs font-medium text-rose-500">Send error: {sendError}</p>
+                  ) : null}
                 </div>
               </FormControl>
             </FormItem>

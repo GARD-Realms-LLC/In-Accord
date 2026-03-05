@@ -1,13 +1,13 @@
 import { redirect } from "next/navigation";
 import { ChannelType } from "@/lib/db";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { ChatHeader } from "@/components/chat/chat-header";
 import { ChatInput } from "@/components/chat/chat-input";
-// import { ChatMessages } from "@/components/chat/chat-messages";
+import { ChatItem } from "@/components/chat/chat-item";
 // import { MediaRoom } from "@/components/media-room";
-import { channel, db, member } from "@/lib/db";
+import { channel, db, member, message } from "@/lib/db";
 
 interface ChannelIdPageProps {
   params: {
@@ -38,46 +38,74 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
     redirect("/");
   }
 
+  const channelMessages = await db.query.message.findMany({
+    where: eq(message.channelId, currentChannel.id),
+    orderBy: [asc(message.createdAt)],
+    with: {
+      member: {
+        with: {
+          profile: true,
+        },
+      },
+    },
+  });
+
   return (
-    <div className="bg-white dark:bg-[#313338] flex flex-col h-full">
-      <ChatHeader
-        name={currentChannel.name}
-        serverId={currentChannel.serverId}
-        type="channel"
-      />
-      {/* {channel.type === ChannelType.TEXT && (
-        <>
-          <ChatMessages
-            member={member}
-            name={channel.name}
-            chatId={channel.id}
-            type="channel"
-            apiUrl="/api/messages"
-            socketUrl="/api/socket/messages"
-            socketQuery={{
-              channelId: channel.id,
-              serverId: channel.serverId,
-            }}
-            paramKey="channelId"
-            paramValue={channel.id}
-          />
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-black/20 bg-white shadow-xl shadow-black/35 dark:bg-[#313338]">
+        <ChatHeader
+          name={currentChannel.name}
+          serverId={currentChannel.serverId}
+          type="channel"
+        />
+
+        {currentChannel.type === ChannelType.TEXT ? (
+          <div className="flex-1 overflow-y-auto">
+            {channelMessages.length === 0 ? (
+              <div className="p-6 text-sm text-zinc-500 dark:text-zinc-400">
+                No messages yet. Start the conversation in #{currentChannel.name}.
+              </div>
+            ) : (
+              channelMessages.map((item) => (
+                <ChatItem
+                  key={item.id}
+                  id={item.id}
+                  content={item.content}
+                  member={item.member}
+                  timestamp={new Date(item.createdAt).toLocaleString()}
+                  fileUrl={item.fileUrl}
+                  deleted={item.deleted}
+                  currentMember={currentMember}
+                  isUpdated={new Date(item.updatedAt).getTime() !== new Date(item.createdAt).getTime()}
+                  socketUrl="/api/socket/messages"
+                  socketQuery={{
+                    channelId: currentChannel.id,
+                    serverId: currentChannel.serverId,
+                  }}
+                />
+              ))
+            )}
+          </div>
+        ) : (
+          <div className="flex h-full items-center justify-center text-sm text-zinc-500 dark:text-zinc-400">
+            This channel type does not use text chat.
+          </div>
+        )}
+      </div>
+
+      {currentChannel.type === ChannelType.TEXT ? (
+        <div className="w-[calc(100vw-584px)] max-w-full rounded-2xl border border-black/20 bg-white shadow-lg shadow-black/25 dark:bg-[#313338]">
           <ChatInput
-            name={channel.name}
+            name={currentChannel.name}
             type="channel"
             apiUrl="/api/socket/messages"
             query={{
-              channelId: channel.id,
-              serverId: channel.serverId,
+              channelId: currentChannel.id,
+              serverId: currentChannel.serverId,
             }}
           />
-        </>
-      )}
-      {channel.type === ChannelType.AUDIO && (
-        <MediaRoom chatId={channel.id} video={false} audio={true} />
-      )}
-      {channel.type === ChannelType.VIDEO && (
-        <MediaRoom chatId={channel.id} video={true} audio={true} />
-      )} */}
+        </div>
+      ) : null}
     </div>
   );
 };

@@ -49,20 +49,20 @@ export const DeleteChannelModal = () => {
 
   return (
     <Dialog open={isModalOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-white text-black p-0 overflow-hidden">
+      <DialogContent className="overflow-hidden bg-white p-0 text-black dark:bg-[#313338] dark:text-white">
         <DialogHeader className="pt-8 px-6">
           <DialogTitle className="text-2xl text-center font-bold">
             Delete Channel
           </DialogTitle>
         </DialogHeader>
-        <DialogDescription className="text-center text-zinc-500">
+        <DialogDescription className="text-center text-zinc-500 dark:text-zinc-300">
           Are you sure you want to do this? <br />
           <span className="font-semibold text-indigo-500">
             #{channel?.name}
           </span>{" "}
           will be permanently deleted.
         </DialogDescription>
-        <DialogFooter className="bg-gray-100 px-6 py-4">
+        <DialogFooter className="bg-gray-100 px-6 py-4 dark:bg-zinc-800/60">
           <div className="flex items-center justify-between w-full">
             <Button disabled={isLoading} onClick={onClose} variant="ghost">
               Cancel

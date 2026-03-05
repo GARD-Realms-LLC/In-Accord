@@ -9,10 +9,11 @@ import { ActionTooltip } from "@/components/action-tooltip";
 interface NavigationItemProps {
   id: string;
   imageUrl?: string | null;
+  updatedAt?: string | Date | null;
   name: string;
 }
 
-export const NavigationItem = ({ id, imageUrl, name }: NavigationItemProps) => {
+export const NavigationItem = ({ id, imageUrl, updatedAt, name }: NavigationItemProps) => {
   const params = useParams();
   const router = useRouter();
   const [imageFailed, setImageFailed] = useState(false);
@@ -22,14 +23,30 @@ export const NavigationItem = ({ id, imageUrl, name }: NavigationItemProps) => {
     if (!candidate) {
       return "";
     }
+    // Avoid showing the global app logo for every server button.
+    if (candidate === "/in-accord-steampunk-logo.png") {
+      return "";
+    }
     if (candidate.startsWith("/") || /^https?:\/\//i.test(candidate)) {
       return candidate;
     }
     return "";
   }, [imageUrl]);
 
+  const resolvedImageSrc = useMemo(() => {
+    if (!normalizedImageUrl) {
+      return "";
+    }
+
+    const updatedAtKey = updatedAt ? new Date(updatedAt).getTime() : 0;
+    const cacheKey = `${id}-${Number.isFinite(updatedAtKey) ? updatedAtKey : 0}`;
+    const joiner = normalizedImageUrl.includes("?") ? "&" : "?";
+
+    return `${normalizedImageUrl}${joiner}sv=${encodeURIComponent(cacheKey)}`;
+  }, [normalizedImageUrl, id, updatedAt]);
+
   const initials = (name?.trim()?.[0] ?? "S").toUpperCase();
-  const showImage = !!normalizedImageUrl && !imageFailed;
+  const showImage = !!resolvedImageSrc && !imageFailed;
 
   const onClick = () => {
     router.push(`/servers/${id}`);
@@ -57,7 +74,7 @@ export const NavigationItem = ({ id, imageUrl, name }: NavigationItemProps) => {
         >
           {showImage ? (
             <img
-              src={normalizedImageUrl}
+              src={resolvedImageSrc}
               alt={name}
               className="h-full w-full object-cover"
               onError={() => setImageFailed(true)}
