@@ -12,6 +12,7 @@ import { DeleteServerModal } from "@/components/modals/delete-server-modal";
 import { DeleteChannelModal } from "@/components/modals/delete-channel-modal";
 import { EditChannelModal } from "@/components/modals/edit-channel-modal";
 import { SettingsModal } from "@/components/modals/settings-modal";
+import { InAccordAdminModal } from "@/components/modals/in-accord-admin-modal";
 
 export const ModalProvider = () => {
   const [isMounted, setIsMounted] = useState(false);
@@ -36,6 +37,7 @@ export const ModalProvider = () => {
       <DeleteChannelModal />
       <EditChannelModal />
       <SettingsModal />
+      <InAccordAdminModal />
     </>
   );
 };

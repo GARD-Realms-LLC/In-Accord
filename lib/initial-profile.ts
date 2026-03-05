@@ -28,6 +28,7 @@ export const initialProfile = async () => {
       select
         "userId",
         "name",
+        "role",
         "email",
         coalesce("avatarUrl", "avatar", "icon") as "imageUrl",
         "account.created" as "accountCreated",
@@ -41,6 +42,7 @@ export const initialProfile = async () => {
       rows: Array<{
         userId: string;
         name: string | null;
+        role: string | null;
         email: string | null;
         imageUrl: string | null;
         accountCreated: Date | string | null;
@@ -54,6 +56,7 @@ export const initialProfile = async () => {
           id: user.userId,
           userId: user.userId,
           name: user.name ?? user.email ?? "User",
+          role: user.role ?? null,
           imageUrl: user.imageUrl ?? "/in-accord-steampunk-logo.png",
           email: user.email ?? "",
           createdAt: user.accountCreated ? new Date(user.accountCreated) : new Date(0),

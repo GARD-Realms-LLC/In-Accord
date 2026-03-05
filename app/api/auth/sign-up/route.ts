@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { ensureLocalAuthSchema } from "@/lib/local-auth";
 import { hashPassword } from "@/lib/password";
 import { setSessionUserId } from "@/lib/session";
+import { ensureUserProfileSchema } from "@/lib/user-profile";
 
 export async function POST(request: Request) {
   try {
@@ -73,6 +74,15 @@ export async function POST(request: Request) {
         ${now},
         ${now}
       )
+    `);
+
+    await ensureUserProfileSchema();
+    await db.execute(sql`
+      insert into "UserProfile" ("userId", "profileName", "createdAt", "updatedAt")
+      values (${userId}, ${name}, ${now}, ${now})
+      on conflict ("userId") do update
+      set "profileName" = excluded."profileName",
+          "updatedAt" = excluded."updatedAt"
     `);
 
     const passwordHash = await hashPassword(password);

@@ -4,6 +4,7 @@ import { create } from "zustand";
 export type ModalType =
   | "createServer"
   | "settings"
+  | "inAccordAdmin"
   | "invite"
   | "editServer"
   | "members"
@@ -20,7 +21,9 @@ interface ModalData {
   channel?: Channel;
   channelType?: ChannelType;
   profileId?: string | null;
+  profileRealName?: string | null;
   profileName?: string | null;
+  profileRole?: string | null;
   profileEmail?: string | null;
   profileImageUrl?: string | null;
   profileJoinedAt?: string | null;

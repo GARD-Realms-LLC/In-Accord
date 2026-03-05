@@ -13,6 +13,8 @@ export async function GET() {
     return NextResponse.json({
       id: profile.id,
       name: profile.name,
+      realName: profile.realName ?? null,
+      profileName: profile.profileName ?? null,
       email: profile.email,
       imageUrl: profile.imageUrl,
     });

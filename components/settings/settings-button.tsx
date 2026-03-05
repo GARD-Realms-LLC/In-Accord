@@ -6,6 +6,7 @@ import { useModal } from "@/hooks/use-modal-store";
 
 interface SettingsButtonProps {
   profileId?: string | null;
+  profileRealName?: string | null;
   profileName?: string | null;
   profileEmail?: string | null;
   profileImageUrl?: string | null;
@@ -15,6 +16,7 @@ interface SettingsButtonProps {
 
 export const SettingsButton = ({
   profileId,
+  profileRealName,
   profileName,
   profileEmail,
   profileImageUrl,
@@ -30,6 +32,7 @@ export const SettingsButton = ({
       onClick={() =>
         onOpen("settings", {
           profileId,
+          profileRealName,
           profileName,
           profileEmail,
           profileImageUrl,

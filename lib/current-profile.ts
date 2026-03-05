@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { getSessionUserId } from "@/lib/session";
+import { ensureUserProfileSchema } from "@/lib/user-profile";
 
 export const currentProfile = async () => {
   const userId = await getSessionUserId();
@@ -22,23 +23,30 @@ export const currentProfile = async () => {
   }
 
   try {
+    await ensureUserProfileSchema();
+
     const userResult = await db.execute(sql`
       select
-        "userId",
-        "name",
-        "email",
-        coalesce("avatarUrl", "avatar", "icon") as "imageUrl",
-        "account.created" as "accountCreated",
-        "lastLogin"
-      from "Users"
-      where "userId" = ${userId}
+        u."userId" as "userId",
+        u."name" as "realName",
+        up."profileName" as "profileName",
+        u."role" as "role",
+        u."email" as "email",
+        coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
+        u."account.created" as "accountCreated",
+        u."lastLogin" as "lastLogin"
+      from "Users" u
+      left join "UserProfile" up on up."userId" = u."userId"
+      where u."userId" = ${userId}
       limit 1
     `);
 
     const rows = (userResult as unknown as {
       rows: Array<{
         userId: string;
-        name: string | null;
+        realName: string | null;
+        profileName: string | null;
+        role: string | null;
         email: string | null;
         imageUrl: string | null;
         accountCreated: Date | string | null;
@@ -51,7 +59,10 @@ export const currentProfile = async () => {
       ? {
           id: user.userId,
           userId: user.userId,
-          name: user.name ?? user.email ?? "User",
+          name: user.profileName ?? user.realName ?? user.email ?? "User",
+          realName: user.realName ?? user.email ?? "User",
+          profileName: user.profileName ?? null,
+          role: user.role ?? null,
           imageUrl: user.imageUrl ?? "/in-accord-steampunk-logo.png",
           email: user.email ?? "",
           createdAt: user.accountCreated ? new Date(user.accountCreated) : new Date(0),

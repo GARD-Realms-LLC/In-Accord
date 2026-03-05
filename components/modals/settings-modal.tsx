@@ -39,7 +39,7 @@ const sectionLabelMap: Record<SettingsSection, string> = {
 };
 
 const sectionDescriptionMap: Record<SettingsSection, string> = {
-  myAccount: "Manage your profile information and account actions.",
+  myAccount: "Manage your In-Accord profile information and account actions.",
   appearance: "Customize how In-Accord looks and feels.",
   notifications: "Control when and how you get notified.",
   privacy: "Adjust privacy controls and account safety options.",
@@ -61,9 +61,14 @@ export const SettingsModal = () => {
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [isSavingProfileName, setIsSavingProfileName] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [realName, setRealName] = useState(data.profileRealName ?? "");
+  const [profileName, setProfileName] = useState("");
+  const [profileNameError, setProfileNameError] = useState<string | null>(null);
+  const [profileNameSuccess, setProfileNameSuccess] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(data.profileImageUrl ?? null);
@@ -82,11 +87,18 @@ export const SettingsModal = () => {
   }, [data.profileImageUrl]);
 
   useEffect(() => {
+    setRealName(data.profileRealName ?? "");
+    setProfileName("");
+    setProfileNameError(null);
+    setProfileNameSuccess(null);
+  }, [data.profileName, data.profileRealName, isModalOpen]);
+
+  useEffect(() => {
     setResolvedProfileId(data.profileId ?? null);
   }, [data.profileId]);
 
   useEffect(() => {
-    if (!isModalOpen || resolvedProfileId) {
+    if (!isModalOpen) {
       return;
     }
 
@@ -94,9 +106,16 @@ export const SettingsModal = () => {
 
     const resolveProfileId = async () => {
       try {
-        const response = await axios.get<{ id?: string }>("/api/profile/me");
+        const response = await axios.get<{
+          id?: string;
+          name?: string;
+          realName?: string;
+          profileName?: string | null;
+        }>("/api/profile/me");
         if (!cancelled) {
           setResolvedProfileId(response.data?.id ?? null);
+          setRealName(response.data?.realName ?? response.data?.name ?? "");
+          setProfileName(response.data?.profileName ?? "");
         }
       } catch (error) {
         if (!cancelled) {
@@ -110,7 +129,56 @@ export const SettingsModal = () => {
     return () => {
       cancelled = true;
     };
-  }, [isModalOpen, resolvedProfileId]);
+  }, [isModalOpen]);
+
+  const onSaveProfileName = async () => {
+    const trimmedName = profileName.trim();
+
+    setProfileNameError(null);
+    setProfileNameSuccess(null);
+
+    if (!trimmedName) {
+      setProfileNameError("Profile Name is required.");
+      return;
+    }
+
+    if (trimmedName.length > 80) {
+      setProfileNameError("Profile Name must be 80 characters or fewer.");
+      return;
+    }
+
+    try {
+      setIsSavingProfileName(true);
+
+      const response = await axios.patch<{ ok: boolean; profileName: string }>("/api/profile/name", {
+        profileName: trimmedName,
+      });
+
+      const savedName = response.data?.profileName ?? trimmedName;
+      setProfileName(savedName);
+      setProfileNameSuccess("Profile Name updated.");
+      window.dispatchEvent(
+        new CustomEvent("inaccord:profile-updated", {
+          detail: {
+            profileName: savedName,
+          },
+        })
+      );
+      router.refresh();
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          error.message ||
+          "Failed to update Profile Name";
+        setProfileNameError(message);
+      } else {
+        setProfileNameError("Failed to update Profile Name");
+      }
+    } finally {
+      setIsSavingProfileName(false);
+    }
+  };
 
   useEffect(() => {
     if (activeSection === displaySection) {
@@ -590,7 +658,7 @@ export const SettingsModal = () => {
                     </div>
 
                     <div className="mx-auto w-full max-w-[24rem] rounded-3xl border border-black/20 bg-[#1e1f22] p-4 shadow-xl shadow-black/35">
-                      <p className="text-xs uppercase tracking-[0.08em] text-[#949ba4]">Profile</p>
+                      <p className="text-xs uppercase tracking-[0.08em] text-[#949ba4]">In-Accord Profile</p>
                       <div className="mt-3 space-y-2 text-sm">
                         <p>
                           <span className="text-[#949ba4]">Users ID:</span>{" "}
@@ -598,7 +666,11 @@ export const SettingsModal = () => {
                         </p>
                         <p>
                           <span className="text-[#949ba4]">Name:</span>{" "}
-                          <span className="text-white">{data.profileName || "Unknown User"}</span>
+                          <span className="text-white">{realName || "Unknown User"}</span>
+                        </p>
+                        <p>
+                          <span className="text-[#949ba4]">In-Accord Profile Name:</span>{" "}
+                          <span className="text-white">{profileName || "Not set"}</span>
                         </p>
                         <p>
                           <span className="text-[#949ba4]">Email:</span>{" "}
@@ -616,6 +688,49 @@ export const SettingsModal = () => {
                           <span className="text-[#949ba4]">Created:</span>{" "}
                           <span className="text-white">{joinedDisplay}</span>
                         </p>
+                      </div>
+
+                      <div className="mt-4 space-y-2 rounded-2xl border border-black/20 bg-[#16171a] p-3">
+                        <p className="text-xs uppercase tracking-[0.08em] text-[#949ba4]">In-Accord Profile Name</p>
+                        <input
+                          type="text"
+                          value={profileName}
+                          onChange={(event) => {
+                            setProfileName(event.target.value);
+                            setProfileNameError(null);
+                            setProfileNameSuccess(null);
+                          }}
+                          placeholder="Enter In-Accord Profile Name"
+                          className="w-full rounded-xl border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                        />
+
+                        {profileNameError ? (
+                          <p className="rounded-xl border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+                            {profileNameError}
+                          </p>
+                        ) : null}
+
+                        {profileNameSuccess ? (
+                          <p className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+                            {profileNameSuccess}
+                          </p>
+                        ) : null}
+
+                        <Button
+                          type="button"
+                          onClick={onSaveProfileName}
+                          disabled={isSavingProfileName}
+                          className="w-full bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isSavingProfileName ? (
+                            <span className="inline-flex items-center gap-2">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Saving...
+                            </span>
+                          ) : (
+                            "Save In-Accord Profile Name"
+                          )}
+                        </Button>
                       </div>
                     </div>
                   </div>

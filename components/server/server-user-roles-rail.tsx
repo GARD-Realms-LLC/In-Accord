@@ -1,8 +1,8 @@
 import { sql } from "drizzle-orm";
-import { ShieldAlert, ShieldCheck } from "lucide-react";
 
 import { db } from "@/lib/db";
 import { MemberRole } from "@/lib/db/types";
+import { OnlineUsersList } from "@/components/server/online-users-list";
 
 interface ServerUserRolesRailProps {
   serverId: string;
@@ -12,8 +12,12 @@ type RoleRow = {
   id: string;
   role: MemberRole;
   profileId: string;
-  name: string | null;
+  realName: string | null;
+  profileName: string | null;
   email: string | null;
+  imageUrl: string | null;
+  joinedAt: Date | string | null;
+  lastLogonAt: Date | string | null;
 };
 
 export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps) => {
@@ -22,10 +26,15 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
       m."id" as "id",
       m."role" as "role",
       m."profileId" as "profileId",
-      u."name" as "name",
-      u."email" as "email"
+      u."name" as "realName",
+      up."profileName" as "profileName",
+      u."email" as "email",
+      coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
+      u."account.created" as "joinedAt",
+      u."lastLogin" as "lastLogonAt"
     from "Member" m
     left join "Users" u on u."userId" = m."profileId"
+    left join "UserProfile" up on up."userId" = m."profileId"
     where m."serverId" = ${serverId}
     order by
       case m."role"
@@ -40,14 +49,10 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
 
   const onlineUsers = rows.map((row) => ({
     ...row,
-    displayName: row.name || row.email || row.profileId,
+    displayName: row.profileName || row.realName || row.email || row.profileId,
+    joinedAt: row.joinedAt ? new Date(row.joinedAt).toISOString() : null,
+    lastLogonAt: row.lastLogonAt ? new Date(row.lastLogonAt).toISOString() : null,
   }));
-
-  const roleIconMap = {
-    [MemberRole.GUEST]: null,
-    [MemberRole.MODERATOR]: <ShieldCheck className="h-4 w-4 mr-2 text-indigo-500" />,
-    [MemberRole.ADMIN]: <ShieldAlert className="h-4 w-4 mr-2 text-rose-500" />,
-  };
 
   return (
     <aside className="flex h-full w-full flex-col overflow-hidden rounded-2xl border border-black/20 bg-[#2b2d31] text-primary shadow-xl shadow-black/35">
@@ -66,14 +71,7 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
           {onlineUsers.length === 0 ? (
             <p className="text-xs text-[#6f7680]">N/A</p>
           ) : (
-            <div className="space-y-1">
-              {onlineUsers.map((member) => (
-                <div key={`online-${member.profileId}`} className="flex items-center gap-2 rounded px-1 py-1 hover:bg-[#2a2b2f]">
-                  <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true" />
-                  <p className="truncate text-xs text-[#dbdee1]">{member.displayName}</p>
-                </div>
-              ))}
-            </div>
+            <OnlineUsersList users={onlineUsers} />
           )}
         </div>
       </div>

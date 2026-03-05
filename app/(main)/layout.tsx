@@ -18,7 +18,9 @@ const MainLayout = async ({ children }: { children: React.ReactNode }) => {
           <div className="flex items-center justify-start rounded-[20px] bg-[#1e1f22] px-2 py-1.5">
             <UserStatusMenu
               profileId={profile.id}
-              profileName={profile.name}
+              profileRealName={profile.realName ?? null}
+              profileName={profile.profileName ?? null}
+              profileRole={profile.role}
               profileEmail={profile.email}
               profileImageUrl={profile.imageUrl}
               profileJoinedAt={profile.createdAt ? profile.createdAt.toISOString() : null}
@@ -29,9 +31,12 @@ const MainLayout = async ({ children }: { children: React.ReactNode }) => {
               <button title="Deafen" className="rounded p-1 hover:bg-[#3f4248]"><Headphones className="h-3.5 w-3.5" /></button>
               <SettingsButton
                 profileId={profile.id}
-                profileName={profile.name}
+                profileRealName={profile.realName ?? null}
+                profileName={profile.profileName ?? null}
                 profileEmail={profile.email}
                 profileImageUrl={profile.imageUrl}
+                profileJoinedAt={profile.createdAt ? profile.createdAt.toISOString() : null}
+                profileLastLogonAt={profile.updatedAt ? profile.updatedAt.toISOString() : null}
               />
             </div>
           </div>
