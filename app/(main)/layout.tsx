@@ -23,6 +23,7 @@ const MainLayout = async ({ children }: { children: React.ReactNode }) => {
               profileRole={profile.role}
               profileEmail={profile.email}
               profileImageUrl={profile.imageUrl}
+              profileBannerUrl={profile.bannerUrl ?? null}
               profileJoinedAt={profile.createdAt ? profile.createdAt.toISOString() : null}
               profileLastLogonAt={profile.updatedAt ? profile.updatedAt.toISOString() : null}
             />
@@ -35,6 +36,7 @@ const MainLayout = async ({ children }: { children: React.ReactNode }) => {
                 profileName={profile.profileName ?? null}
                 profileEmail={profile.email}
                 profileImageUrl={profile.imageUrl}
+                profileBannerUrl={profile.bannerUrl ?? null}
                 profileJoinedAt={profile.createdAt ? profile.createdAt.toISOString() : null}
                 profileLastLogonAt={profile.updatedAt ? profile.updatedAt.toISOString() : null}
               />

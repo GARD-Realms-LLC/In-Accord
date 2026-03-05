@@ -14,6 +14,7 @@ type RoleRow = {
   profileId: string;
   realName: string | null;
   profileName: string | null;
+  bannerUrl: string | null;
   email: string | null;
   imageUrl: string | null;
   joinedAt: Date | string | null;
@@ -28,6 +29,7 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
       m."profileId" as "profileId",
       u."name" as "realName",
       up."profileName" as "profileName",
+      up."bannerUrl" as "bannerUrl",
       u."email" as "email",
       coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
       u."account.created" as "joinedAt",

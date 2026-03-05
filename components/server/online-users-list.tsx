@@ -1,6 +1,7 @@
 "use client";
 
 import { ShieldAlert, ShieldCheck } from "lucide-react";
+import Image from "next/image";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { UserAvatar } from "@/components/user-avatar";
@@ -13,6 +14,7 @@ type OnlineRailUser = {
   displayName: string;
   realName: string;
   profileName: string | null;
+  bannerUrl: string | null;
   email: string | null;
   imageUrl: string | null;
   joinedAt: string | null;
@@ -61,28 +63,42 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
           <PopoverContent
             side="left"
             align="start"
-            className="w-72 rounded-xl border border-black/30 bg-[#111214] p-3 text-[#dbdee1] shadow-2xl shadow-black/50"
+            className="w-[320px] overflow-hidden rounded-xl border border-black/30 bg-[#111214] p-0 text-[#dbdee1] shadow-2xl shadow-black/50"
           >
-            <div className="mb-3 rounded-lg border border-white/10 bg-[#1a1b1e] p-3">
-              <div className="mb-2 flex items-center gap-2">
-                <UserAvatar src={member.imageUrl ?? undefined} className="h-8 w-8" />
-                <p className="truncate text-sm font-semibold text-white">{member.profileName || member.realName || member.displayName}</p>
+            <div className="relative h-24 bg-gradient-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
+              {member.bannerUrl ? (
+                <Image
+                  src={member.bannerUrl}
+                  alt="User banner"
+                  fill
+                  className="object-cover"
+                  unoptimized
+                />
+              ) : null}
+            </div>
+
+            <div className="relative p-3 pt-7">
+              <div className="absolute -top-5 left-3 rounded-full border-4 border-[#111214]">
+                <UserAvatar src={member.imageUrl ?? undefined} className="h-10 w-10" />
               </div>
 
-              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">In-Accord Profile</p>
+              <p className="truncate text-base font-bold text-white">{member.profileName || member.realName || member.displayName}</p>
+              <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">In-Accord Profile</p>
 
-              <div className="space-y-1 text-xs text-[#dbdee1]">
-                <p>Users ID: {member.profileId}</p>
-                <p>Name: {member.realName || "Unknown User"}</p>
-                <p>In-Accord Profile Name: {member.profileName || "Not set"}</p>
-                <p>Email: {member.email || "N/A"}</p>
-                <p>Role: {member.role}</p>
-                <p>Last logon: {formatDate(member.lastLogonAt)}</p>
-                <p>Created: {formatDate(member.joinedAt)}</p>
+              <div className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] p-3 text-xs">
+                <div className="space-y-1 text-[#dbdee1]">
+                  <p>Users ID: {member.profileId}</p>
+                  <p>Name: {member.realName || "Unknown User"}</p>
+                  <p>In-Accord Profile Name: {member.profileName || "Not set"}</p>
+                  <p>Email: {member.email || "N/A"}</p>
+                  <p>Role: {member.role}</p>
+                  <p>Last logon: {formatDate(member.lastLogonAt)}</p>
+                  <p>Created: {formatDate(member.joinedAt)}</p>
+                </div>
               </div>
             </div>
 
-            <div className="flex items-center text-xs text-[#b5bac1]">
+            <div className="flex items-center border-t border-white/10 p-3 pt-2 text-xs text-[#b5bac1]">
               {roleIconMap[member.role]}
               Online member
             </div>

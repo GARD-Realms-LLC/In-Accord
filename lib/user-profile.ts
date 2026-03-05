@@ -13,9 +13,15 @@ export const ensureUserProfileSchema = async () => {
     create table if not exists "UserProfile" (
       "userId" varchar(191) primary key,
       "profileName" varchar(80) not null,
+      "bannerUrl" text,
       "createdAt" timestamp not null,
       "updatedAt" timestamp not null
     )
+  `);
+
+  await db.execute(sql`
+    alter table "UserProfile"
+    add column if not exists "bannerUrl" text
   `);
 
   const now = new Date();

@@ -9,6 +9,7 @@ type UserRow = {
   userId: string;
   realName: string | null;
   profileName: string | null;
+  bannerUrl: string | null;
   email: string | null;
   role: string | null;
   imageUrl: string | null;
@@ -47,6 +48,7 @@ export async function GET() {
         u."userId" as "userId",
         u."name" as "realName",
         up."profileName" as "profileName",
+        up."bannerUrl" as "bannerUrl",
         u."email" as "email",
         u."role" as "role",
         coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
@@ -81,6 +83,7 @@ export async function GET() {
       userId: row.userId,
       name: row.realName ?? row.email ?? "User",
       profileName: row.profileName ?? null,
+      bannerUrl: row.bannerUrl ?? null,
       email: row.email ?? "",
       role: row.role ?? "USER",
       imageUrl: row.imageUrl ?? "/in-accord-steampunk-logo.png",

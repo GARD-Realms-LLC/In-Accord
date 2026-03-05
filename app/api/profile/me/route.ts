@@ -15,6 +15,7 @@ export async function GET() {
       name: profile.name,
       realName: profile.realName ?? null,
       profileName: profile.profileName ?? null,
+      bannerUrl: profile.bannerUrl ?? null,
       email: profile.email,
       imageUrl: profile.imageUrl,
     });

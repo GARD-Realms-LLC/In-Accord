@@ -12,6 +12,7 @@ import {
   User,
 } from "lucide-react";
 import axios from "axios";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 
 import { ModeToggle } from "@/components/mode-toggle";
@@ -59,6 +60,7 @@ export const SettingsModal = () => {
   const [displaySection, setDisplaySection] = useState<SettingsSection>("myAccount");
   const [isSectionVisible, setIsSectionVisible] = useState(true);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [isUploadingBanner, setIsUploadingBanner] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [isSavingProfileName, setIsSavingProfileName] = useState(false);
@@ -72,8 +74,10 @@ export const SettingsModal = () => {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(data.profileImageUrl ?? null);
+  const [bannerUrl, setBannerUrl] = useState<string | null>(data.profileBannerUrl ?? null);
   const [resolvedProfileId, setResolvedProfileId] = useState<string | null>(data.profileId ?? null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
+  const bannerInputRef = useRef<HTMLInputElement | null>(null);
 
   const isModalOpen = isOpen && type === "settings";
 
@@ -85,6 +89,10 @@ export const SettingsModal = () => {
   useEffect(() => {
     setAvatarUrl(data.profileImageUrl ?? null);
   }, [data.profileImageUrl]);
+
+  useEffect(() => {
+    setBannerUrl(data.profileBannerUrl ?? null);
+  }, [data.profileBannerUrl]);
 
   useEffect(() => {
     setRealName(data.profileRealName ?? "");
@@ -111,11 +119,13 @@ export const SettingsModal = () => {
           name?: string;
           realName?: string;
           profileName?: string | null;
+          bannerUrl?: string | null;
         }>("/api/profile/me");
         if (!cancelled) {
           setResolvedProfileId(response.data?.id ?? null);
           setRealName(response.data?.realName ?? response.data?.name ?? "");
           setProfileName(response.data?.profileName ?? "");
+          setBannerUrl(response.data?.bannerUrl ?? null);
         }
       } catch (error) {
         if (!cancelled) {
@@ -200,7 +210,7 @@ export const SettingsModal = () => {
       return;
     }
 
-    fileInputRef.current?.click();
+    avatarInputRef.current?.click();
   };
 
   const onAvatarChange = async (file?: File) => {
@@ -242,9 +252,101 @@ export const SettingsModal = () => {
       }
     } finally {
       setIsUploadingAvatar(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
+      if (avatarInputRef.current) {
+        avatarInputRef.current.value = "";
       }
+    }
+  };
+
+  const onPickBanner = () => {
+    if (isUploadingBanner) {
+      return;
+    }
+
+    bannerInputRef.current?.click();
+  };
+
+  const onBannerChange = async (file?: File) => {
+    if (!file) {
+      return;
+    }
+
+    try {
+      setIsUploadingBanner(true);
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const upload = await axios.post<{ url: string }>(
+        "/api/r2/upload?type=userBanner",
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        }
+      );
+
+      await axios.patch("/api/profile/banner", {
+        bannerUrl: upload.data.url,
+      });
+
+      setBannerUrl(upload.data.url);
+      window.dispatchEvent(
+        new CustomEvent("inaccord:profile-updated", {
+          detail: {
+            bannerUrl: upload.data.url,
+          },
+        })
+      );
+      router.refresh();
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          error.message ||
+          "Banner upload failed";
+        console.error("[SETTINGS_BANNER_UPLOAD]", error.response?.data ?? error.message);
+        window.alert(message);
+      } else {
+        console.error("[SETTINGS_BANNER_UPLOAD]", error);
+        window.alert("Banner upload failed");
+      }
+    } finally {
+      setIsUploadingBanner(false);
+      if (bannerInputRef.current) {
+        bannerInputRef.current.value = "";
+      }
+    }
+  };
+
+  const onRemoveBanner = async () => {
+    try {
+      setIsUploadingBanner(true);
+      await axios.patch("/api/profile/banner", {
+        bannerUrl: null,
+      });
+      setBannerUrl(null);
+      window.dispatchEvent(
+        new CustomEvent("inaccord:profile-updated", {
+          detail: {
+            bannerUrl: null,
+          },
+        })
+      );
+      router.refresh();
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          error.message ||
+          "Failed to remove banner";
+        console.error("[SETTINGS_BANNER_REMOVE]", error.response?.data ?? error.message);
+        window.alert(message);
+      } else {
+        console.error("[SETTINGS_BANNER_REMOVE]", error);
+        window.alert("Failed to remove banner");
+      }
+    } finally {
+      setIsUploadingBanner(false);
     }
   };
 
@@ -550,7 +652,7 @@ export const SettingsModal = () => {
 
   return (
     <Dialog open={isModalOpen} onOpenChange={onClose}>
-      <DialogContent className="flex h-[80vh] w-[80%] max-w-none flex-col overflow-hidden rounded-3xl border-black/30 bg-[#2b2d31] p-0 text-[#dbdee1]">
+      <DialogContent className="flex h-[85vh] max-h-[85vh] w-[85vw] max-w-[85vw] flex-col overflow-hidden rounded-3xl border-black/30 bg-[#2b2d31] p-0 text-[#dbdee1]">
         <DialogTitle className="sr-only">User Settings</DialogTitle>
         <DialogDescription className="sr-only">
           Edit account, appearance, notification, and privacy settings.
@@ -622,6 +724,66 @@ export const SettingsModal = () => {
               <div className="px-6 py-5">
                 {displaySection === "myAccount" ? (
                   <div className="mx-auto mb-6 w-full max-w-[28rem] overflow-hidden rounded-[2.5rem] border border-white/15 bg-[#1f2024] p-4 shadow-2xl shadow-black/45">
+                    <div className="mb-4 overflow-hidden rounded-2xl border border-black/25 bg-[#141518]">
+                      <div className="relative h-40 w-full bg-[#2a2d33]">
+                        {bannerUrl ? (
+                          <Image
+                            src={bannerUrl}
+                            alt="User banner"
+                            fill
+                            className="object-cover"
+                            unoptimized
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center bg-gradient-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
+                            <span className="text-xs font-semibold uppercase tracking-[0.08em] text-white/85">
+                              No banner
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="absolute inset-x-0 bottom-0 flex items-center justify-end gap-2 bg-black/30 px-3 py-2 backdrop-blur-sm">
+                          <Button
+                            type="button"
+                            onClick={onPickBanner}
+                            disabled={isUploadingBanner}
+                            className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {isUploadingBanner ? (
+                              <span className="inline-flex items-center gap-1.5">
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                Uploading...
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5">
+                                <Camera className="h-3.5 w-3.5" />
+                                {bannerUrl ? "Change banner" : "Upload banner"}
+                              </span>
+                            )}
+                          </Button>
+
+                          {bannerUrl ? (
+                            <Button
+                              type="button"
+                              onClick={onRemoveBanner}
+                              disabled={isUploadingBanner}
+                              className="h-8 border border-rose-500/35 bg-rose-500/15 px-3 text-xs text-rose-200 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Remove
+                            </Button>
+                          ) : null}
+                        </div>
+
+                        <input
+                          ref={bannerInputRef}
+                          className="hidden"
+                          type="file"
+                          accept="image/*"
+                          onChange={(event) => onBannerChange(event.target.files?.[0])}
+                        />
+                      </div>
+                    </div>
+
                     <div className="mb-5 flex justify-center">
                       <div className="relative">
                         <button
@@ -648,7 +810,7 @@ export const SettingsModal = () => {
                         </button>
 
                         <input
-                          ref={fileInputRef}
+                          ref={avatarInputRef}
                           className="hidden"
                           type="file"
                           accept="image/*"

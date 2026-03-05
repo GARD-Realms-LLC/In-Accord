@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { ShieldAlert, ShieldCheck } from "lucide-react";
+import Image from "next/image";
 
 import {
   Dialog,
@@ -22,6 +23,7 @@ type AdminUser = {
   userId: string;
   name: string;
   profileName: string | null;
+  bannerUrl: string | null;
   email: string;
   role: string;
   imageUrl: string;
@@ -371,28 +373,40 @@ export const InAccordAdminModal = () => {
                                   <PopoverContent
                                     side="right"
                                     align="start"
-                                    className="w-72 rounded-xl border border-black/20 bg-white p-3 text-zinc-900 shadow-xl dark:border-zinc-700 dark:bg-[#1f2023] dark:text-zinc-100"
+                                    className="w-[320px] overflow-hidden rounded-xl border border-black/30 bg-[#111214] p-0 text-[#dbdee1] shadow-2xl shadow-black/50"
                                   >
-                                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                                      In-Accord Profile
-                                    </p>
-                                    <div className="mb-2 flex items-center gap-2">
-                                      <UserAvatar src={user.imageUrl} className="h-9 w-9" />
-                                      <div className="min-w-0">
-                                        <p className="truncate text-sm font-semibold">{user.name}</p>
-                                        <p className="truncate text-xs text-zinc-600 dark:text-zinc-300">{user.email || user.userId}</p>
-                                      </div>
+                                    <div className="relative h-24 bg-gradient-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
+                                      {user.bannerUrl ? (
+                                        <Image
+                                          src={user.bannerUrl}
+                                          alt="User banner"
+                                          fill
+                                          className="object-cover"
+                                          unoptimized
+                                        />
+                                      ) : null}
                                     </div>
 
-                                    <div className="space-y-1 text-xs text-zinc-700 dark:text-zinc-200">
-                                      <p>In-Accord User ID: {user.userId}</p>
-                                      <p>Name: {user.name}</p>
-                                      <p>Profile Name: {user.profileName || "Not set"}</p>
-                                      <p>Role: {user.role || "USER"}</p>
-                                      <p>Joined: {formatDateTime(user.joinedAt)}</p>
-                                      <p>Last Login: {formatDateTime(user.lastLogin)}</p>
-                                      <p>Owned Servers: {user.ownedServerCount}</p>
-                                      <p>Joined Servers: {user.joinedServerCount}</p>
+                                    <div className="relative p-3 pt-7">
+                                      <div className="absolute -top-5 left-3 rounded-full border-4 border-[#111214]">
+                                        <UserAvatar src={user.imageUrl} className="h-10 w-10" />
+                                      </div>
+
+                                      <p className="truncate text-base font-bold text-white">{user.profileName || user.name}</p>
+                                      <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">In-Accord Profile</p>
+
+                                      <div className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] p-3 text-xs">
+                                        <div className="space-y-1 text-[#dbdee1]">
+                                          <p>In-Accord User ID: {user.userId}</p>
+                                          <p>Name: {user.name}</p>
+                                          <p>Profile Name: {user.profileName || "Not set"}</p>
+                                          <p>Role: {user.role || "USER"}</p>
+                                          <p>Joined: {formatDateTime(user.joinedAt)}</p>
+                                          <p>Last Login: {formatDateTime(user.lastLogin)}</p>
+                                          <p>Owned Servers: {user.ownedServerCount}</p>
+                                          <p>Joined Servers: {user.joinedServerCount}</p>
+                                        </div>
+                                      </div>
                                     </div>
                                   </PopoverContent>
                                 </Popover>

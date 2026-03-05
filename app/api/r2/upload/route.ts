@@ -36,6 +36,7 @@ const r2Client =
 const prefixMap = {
   serverImage: "Client/Server Icons/",
   userImage: "Client/User Icons/",
+  userBanner: "Client/User Banners/",
 } as const;
 
 function getFileExtension(filename: string) {
@@ -77,7 +78,12 @@ export async function POST(req: Request) {
     const key = `${prefix}${fileName}`;
 
     if (!r2Client) {
-      const localSubDir = type === "userImage" ? "user-icons" : "server-icons";
+      const localSubDir =
+        type === "userImage"
+          ? "user-icons"
+          : type === "userBanner"
+            ? "user-banners"
+            : "server-icons";
       const localDir = path.join(process.cwd(), "public", "uploads", localSubDir);
 
       await mkdir(localDir, { recursive: true });

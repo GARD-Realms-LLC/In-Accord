@@ -26,6 +26,7 @@ interface ModalData {
   profileRole?: string | null;
   profileEmail?: string | null;
   profileImageUrl?: string | null;
+  profileBannerUrl?: string | null;
   profileJoinedAt?: string | null;
   profileLastLogonAt?: string | null;
   apiUrl?: string;

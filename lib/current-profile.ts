@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { getSessionUserId } from "@/lib/session";
+import { getUserBanner } from "@/lib/user-banner-store";
 import { ensureUserProfileSchema } from "@/lib/user-profile";
 
 export const currentProfile = async () => {
@@ -30,6 +31,7 @@ export const currentProfile = async () => {
         u."userId" as "userId",
         u."name" as "realName",
         up."profileName" as "profileName",
+        up."bannerUrl" as "bannerUrl",
         u."role" as "role",
         u."email" as "email",
         coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
@@ -46,6 +48,7 @@ export const currentProfile = async () => {
         userId: string;
         realName: string | null;
         profileName: string | null;
+        bannerUrl: string | null;
         role: string | null;
         email: string | null;
         imageUrl: string | null;
@@ -55,6 +58,10 @@ export const currentProfile = async () => {
     }).rows;
     const user = rows?.[0];
 
+    const resolvedBannerUrl = user
+      ? user.bannerUrl ?? (await getUserBanner(user.userId))
+      : null;
+
     const current = user
       ? {
           id: user.userId,
@@ -62,6 +69,7 @@ export const currentProfile = async () => {
           name: user.profileName ?? user.realName ?? user.email ?? "User",
           realName: user.realName ?? user.email ?? "User",
           profileName: user.profileName ?? null,
+          bannerUrl: resolvedBannerUrl,
           role: user.role ?? null,
           imageUrl: user.imageUrl ?? "/in-accord-steampunk-logo.png",
           email: user.email ?? "",

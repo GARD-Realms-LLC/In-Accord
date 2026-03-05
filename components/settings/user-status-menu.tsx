@@ -1,9 +1,11 @@
 "use client";
 
 import { Copy, Settings, ShieldAlert, UserCircle2 } from "lucide-react";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { UserAvatar } from "@/components/user-avatar";
 import { useModal } from "@/hooks/use-modal-store";
 
@@ -14,6 +16,7 @@ interface UserStatusMenuProps {
   profileRole?: string | null;
   profileEmail?: string | null;
   profileImageUrl?: string | null;
+  profileBannerUrl?: string | null;
   profileJoinedAt?: string | null;
   profileLastLogonAt?: string | null;
 }
@@ -25,19 +28,23 @@ export const UserStatusMenu = ({
   profileRole,
   profileEmail,
   profileImageUrl,
+  profileBannerUrl,
   profileJoinedAt,
   profileLastLogonAt,
 }: UserStatusMenuProps) => {
   const { onOpen } = useModal();
   const [copied, setCopied] = useState(false);
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
+  const [isProfileCardOpen, setIsProfileCardOpen] = useState(false);
   const [menuRealName, setMenuRealName] = useState(profileRealName ?? "Unknown User");
   const [menuProfileName, setMenuProfileName] = useState<string | null>(profileName ?? null);
+  const [menuBannerUrl, setMenuBannerUrl] = useState<string | null>(profileBannerUrl ?? null);
 
   useEffect(() => {
     setMenuRealName(profileRealName ?? "Unknown User");
     setMenuProfileName(profileName ?? null);
-  }, [profileName, profileRealName]);
+    setMenuBannerUrl(profileBannerUrl ?? null);
+  }, [profileBannerUrl, profileName, profileRealName]);
 
   useEffect(() => {
     if (!isPopoverOpen) {
@@ -60,11 +67,13 @@ export const UserStatusMenu = ({
         const payload = (await response.json()) as {
           realName?: string | null;
           profileName?: string | null;
+          bannerUrl?: string | null;
         };
 
         if (!cancelled) {
           setMenuRealName(payload.realName?.trim() || "Unknown User");
           setMenuProfileName(payload.profileName ?? null);
+          setMenuBannerUrl(payload.bannerUrl ?? null);
         }
       } catch (error) {
         console.error("[USER_STATUS_PROFILE_REFRESH]", error);
@@ -83,6 +92,7 @@ export const UserStatusMenu = ({
       const customEvent = event as CustomEvent<{
         realName?: string;
         profileName?: string;
+        bannerUrl?: string | null;
       }>;
 
       if (typeof customEvent.detail?.realName === "string") {
@@ -91,6 +101,10 @@ export const UserStatusMenu = ({
 
       if (typeof customEvent.detail?.profileName === "string") {
         setMenuProfileName(customEvent.detail.profileName || null);
+      }
+
+      if (customEvent.detail?.bannerUrl === null || typeof customEvent.detail?.bannerUrl === "string") {
+        setMenuBannerUrl(customEvent.detail.bannerUrl ?? null);
       }
     };
 
@@ -123,6 +137,7 @@ export const UserStatusMenu = ({
       profileRole,
       profileEmail,
       profileImageUrl,
+      profileBannerUrl,
       profileJoinedAt,
       profileLastLogonAt,
     });
@@ -136,9 +151,15 @@ export const UserStatusMenu = ({
       profileRole,
       profileEmail,
       profileImageUrl,
+      profileBannerUrl: menuBannerUrl,
       profileJoinedAt,
       profileLastLogonAt,
     });
+  };
+
+  const openProfileCardPopup = () => {
+    setIsPopoverOpen(false);
+    setIsProfileCardOpen(true);
   };
 
   const formatDate = (value?: string | null) => {
@@ -187,28 +208,42 @@ export const UserStatusMenu = ({
         side="top"
         align="start"
         sideOffset={10}
-        className="w-[280px] rounded-xl border border-black/30 bg-[#111214] p-3 text-[#dbdee1] shadow-2xl shadow-black/50"
+        className="w-[320px] overflow-hidden rounded-xl border border-black/30 bg-[#111214] p-0 text-[#dbdee1] shadow-2xl shadow-black/50"
       >
-        <div className="mb-3 rounded-lg border border-white/10 bg-[#1a1b1e] p-3">
-          <div className="mb-2 flex items-center gap-2">
-            <UserAvatar src={profileImageUrl ?? undefined} className="h-8 w-8" />
-            <p className="truncate text-sm font-semibold text-white">{displayStatusName}</p>
+        <div className="relative h-24 bg-gradient-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
+          {menuBannerUrl ? (
+            <Image
+              src={menuBannerUrl}
+              alt="User banner"
+              fill
+              className="object-cover"
+              unoptimized
+            />
+          ) : null}
+        </div>
+
+        <div className="relative p-3 pt-7">
+          <div className="absolute -top-5 left-3 rounded-full border-4 border-[#111214]">
+            <UserAvatar src={profileImageUrl ?? undefined} className="h-10 w-10" />
           </div>
 
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">In-Accord Profile</p>
+          <p className="truncate text-base font-bold text-white">{displayStatusName}</p>
+          <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">In-Accord Profile</p>
 
-          <div className="space-y-1 text-xs text-[#dbdee1]">
-            <p>Users ID: {profileId || ""}</p>
-            <p>Name: {menuRealName || "Unknown User"}</p>
-            <p>Profile Name: {menuProfileName || "Not set"}</p>
-            <p>Email: {profileEmail || ""}</p>
-            <p>Status: Online</p>
-            <p>Last logon: {lastLogon}</p>
-            <p>Created: {created}</p>
+          <div className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] p-3 text-xs">
+            <div className="space-y-1 text-[#dbdee1]">
+              <p>Users ID: {profileId || ""}</p>
+              <p>Name: {menuRealName || "Unknown User"}</p>
+              <p>Profile Name: {menuProfileName || "Not set"}</p>
+              <p>Email: {profileEmail || ""}</p>
+              <p>Status: Online</p>
+              <p>Last logon: {lastLogon}</p>
+              <p>Created: {created}</p>
+            </div>
           </div>
         </div>
 
-        <div className="space-y-1">
+        <div className="space-y-1 border-t border-white/10 p-3 pt-2">
           {isInAccordAdministrator ? (
             <button
               type="button"
@@ -238,12 +273,55 @@ export const UserStatusMenu = ({
             {copied ? "Copied User ID" : "Copy User ID"}
           </button>
 
-          <div className="flex items-center gap-2 rounded-md px-2 py-2 text-sm text-[#b5bac1]">
+          <button
+            type="button"
+            onClick={openProfileCardPopup}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-[#dbdee1] transition hover:bg-[#2f3136]"
+          >
             <UserCircle2 className="h-4 w-4" />
             View In-Accord profile card
-          </div>
+          </button>
         </div>
       </PopoverContent>
+
+      <Dialog open={isProfileCardOpen} onOpenChange={setIsProfileCardOpen}>
+        <DialogContent className="w-[360px] overflow-hidden rounded-xl border border-black/30 bg-[#111214] p-0 text-[#dbdee1] shadow-2xl shadow-black/50">
+          <DialogTitle className="sr-only">In-Accord Profile Card</DialogTitle>
+
+          <div className="relative h-24 bg-gradient-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
+            {menuBannerUrl ? (
+              <Image
+                src={menuBannerUrl}
+                alt="User banner"
+                fill
+                className="object-cover"
+                unoptimized
+              />
+            ) : null}
+          </div>
+
+          <div className="relative p-4 pt-8">
+            <div className="absolute -top-6 left-4 rounded-full border-4 border-[#111214]">
+              <UserAvatar src={profileImageUrl ?? undefined} className="h-12 w-12" />
+            </div>
+
+            <p className="truncate text-base font-bold text-white">{displayStatusName}</p>
+            <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">In-Accord Profile</p>
+
+            <div className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] p-3 text-xs">
+              <div className="space-y-1 text-[#dbdee1]">
+                <p>Users ID: {profileId || ""}</p>
+                <p>Name: {menuRealName || "Unknown User"}</p>
+                <p>Profile Name: {menuProfileName || "Not set"}</p>
+                <p>Email: {profileEmail || ""}</p>
+                <p>Status: Online</p>
+                <p>Last logon: {lastLogon}</p>
+                <p>Created: {created}</p>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Popover>
   );
 };
