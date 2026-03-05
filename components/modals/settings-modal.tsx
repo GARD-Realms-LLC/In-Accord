@@ -3,14 +3,36 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRef } from "react";
 import {
+  Accessibility,
+  Activity,
+  Baby,
   Bell,
+  CreditCard,
   Camera,
   Crown,
+  Gamepad2,
+  Gift,
+  IdCard,
+  ImageIcon,
+  Keyboard,
+  Languages,
   Loader2,
+  Link2,
   LogOut,
+  Mic,
+  Monitor,
   Palette,
+  Puzzle,
+  Radio,
+  Receipt,
+  Rocket,
   Shield,
+  SlidersHorizontal,
+  Smartphone,
+  Sparkles,
   User,
+  UserPlus,
+  LockKeyhole,
 } from "lucide-react";
 import axios from "axios";
 import Image from "next/image";
@@ -31,29 +53,161 @@ import { normalizePresenceStatus, presenceStatusLabelMap } from "@/lib/presence-
 
 type SettingsSection =
   | "myAccount"
+  | "profiles"
+  | "contentSocial"
+  | "dataPrivacy"
+  | "familyCenter"
+  | "authorizedApps"
+  | "devices"
+  | "connections"
+  | "friendRequests"
+  | "nitro"
+  | "serverBoost"
+  | "subscriptions"
+  | "giftInventory"
+  | "billing"
   | "appearance"
+  | "accessibility"
+  | "voiceVideo"
+  | "textImages"
   | "notifications"
-  | "privacy";
+  | "keybinds"
+  | "language"
+  | "streamerMode"
+  | "advanced"
+  | "activityPrivacy"
+  | "registeredGames"
+  | "gameOverlay";
+
+type SectionGroup = {
+  label: string;
+  sections: SettingsSection[];
+};
+
+const sectionGroups: SectionGroup[] = [
+  {
+    label: "User Settings",
+    sections: [
+      "myAccount",
+      "profiles",
+      "contentSocial",
+      "dataPrivacy",
+      "familyCenter",
+      "authorizedApps",
+      "devices",
+      "connections",
+      "friendRequests",
+    ],
+  },
+  {
+    label: "Billing Settings",
+    sections: ["nitro", "serverBoost", "subscriptions", "giftInventory", "billing"],
+  },
+  {
+    label: "App Settings",
+    sections: [
+      "appearance",
+      "accessibility",
+      "voiceVideo",
+      "textImages",
+      "notifications",
+      "keybinds",
+      "language",
+      "streamerMode",
+      "advanced",
+    ],
+  },
+  {
+    label: "Activity Settings",
+    sections: ["activityPrivacy", "registeredGames", "gameOverlay"],
+  },
+];
 
 const sectionLabelMap: Record<SettingsSection, string> = {
   myAccount: "My Account",
+  profiles: "Profiles",
+  contentSocial: "Content & Social",
+  dataPrivacy: "Data & Privacy",
+  familyCenter: "Family Center",
+  authorizedApps: "Authorized Apps",
+  devices: "Devices",
+  connections: "Connections",
+  friendRequests: "Friend Requests",
+  nitro: "Nitro",
+  serverBoost: "Server Boost",
+  subscriptions: "Subscriptions",
+  giftInventory: "Gift Inventory",
+  billing: "Billing",
   appearance: "Appearance",
+  accessibility: "Accessibility",
+  voiceVideo: "Voice & Video",
+  textImages: "Text & Images",
   notifications: "Notifications",
-  privacy: "Privacy & Safety",
+  keybinds: "Keybinds",
+  language: "Language",
+  streamerMode: "Streamer Mode",
+  advanced: "Advanced",
+  activityPrivacy: "Activity Privacy",
+  registeredGames: "Registered Games",
+  gameOverlay: "Game Overlay",
 };
 
 const sectionDescriptionMap: Record<SettingsSection, string> = {
   myAccount: "Manage your In-Accord profile information and account actions.",
+  profiles: "Set profile customization per identity and server context.",
+  contentSocial: "Control content display and social discovery preferences.",
+  dataPrivacy: "Review data, privacy, and safety controls.",
+  familyCenter: "Family and supervised account controls.",
+  authorizedApps: "Manage third-party apps connected to your account.",
+  devices: "Review and manage signed-in devices.",
+  connections: "Connect and manage linked external accounts.",
+  friendRequests: "Set who can send friend requests and contact you.",
+  nitro: "Manage premium perks and benefits.",
+  serverBoost: "Manage boost perks and active boosts.",
+  subscriptions: "Review and manage recurring subscriptions.",
+  giftInventory: "View and redeem your gift inventory.",
+  billing: "Manage payment methods and billing details.",
   appearance: "Customize how In-Accord looks and feels.",
+  accessibility: "Accessibility preferences for contrast, motion, and readability.",
+  voiceVideo: "Configure input/output devices and voice processing.",
+  textImages: "Choose how text and media are displayed.",
   notifications: "Control when and how you get notified.",
-  privacy: "Adjust privacy controls and account safety options.",
+  keybinds: "Customize keyboard shortcuts and hotkeys.",
+  language: "Set language and regional preferences.",
+  streamerMode: "Configure streamer-safe and privacy-focused options.",
+  advanced: "Advanced application behavior and diagnostics options.",
+  activityPrivacy: "Control how your activity is shared.",
+  registeredGames: "Manage detected and manually-added games.",
+  gameOverlay: "Configure in-game overlay behavior.",
 };
 
 const sectionIconMap: Record<SettingsSection, React.ComponentType<{ className?: string }>> = {
   myAccount: User,
+  profiles: IdCard,
+  contentSocial: ImageIcon,
+  dataPrivacy: Shield,
+  familyCenter: Baby,
+  authorizedApps: Puzzle,
+  devices: Smartphone,
+  connections: Link2,
+  friendRequests: UserPlus,
+  nitro: Sparkles,
+  serverBoost: Rocket,
+  subscriptions: Receipt,
+  giftInventory: Gift,
+  billing: CreditCard,
   appearance: Palette,
+  accessibility: Accessibility,
+  voiceVideo: Mic,
+  textImages: ImageIcon,
   notifications: Bell,
-  privacy: Shield,
+  keybinds: Keyboard,
+  language: Languages,
+  streamerMode: Radio,
+  advanced: SlidersHorizontal,
+  activityPrivacy: LockKeyhole,
+  registeredGames: Gamepad2,
+  gameOverlay: Monitor,
 };
 
 export const SettingsModal = () => {
@@ -88,10 +242,7 @@ export const SettingsModal = () => {
 
   const isModalOpen = isOpen && type === "settings";
 
-  const sections = useMemo<SettingsSection[]>(
-    () => ["myAccount", "appearance", "notifications", "privacy"],
-    []
-  );
+  const sections = useMemo<SettingsSection[]>(() => sectionGroups.flatMap((group) => group.sections), []);
 
   useEffect(() => {
     setAvatarUrl(data.profileImageUrl ?? null);
@@ -479,6 +630,20 @@ export const SettingsModal = () => {
 
   const hasAdminCrown = isInAccordAdministrator(profileRole ?? data.profileRole);
 
+  const renderComingSoonSection = (title: string, subtitle: string) => {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
+          <p className="text-sm font-medium text-white">{title}</p>
+          <p className="mt-1 text-xs text-[#949ba4]">{subtitle}</p>
+          <div className="mt-4 rounded-xl border border-[#5865f2]/25 bg-[#5865f2]/10 px-3 py-2 text-xs text-[#cdd2ff]">
+            This section is now available in the menu and ready for feature wiring.
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderSectionContent = () => {
     if (displaySection === "myAccount") {
       return (
@@ -664,16 +829,11 @@ export const SettingsModal = () => {
       );
     }
 
-    return (
-      <div className="space-y-4">
-        <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
-          <p className="text-sm font-medium text-white">Privacy & Safety</p>
-          <p className="mt-1 text-xs text-[#949ba4]">
-            Privacy controls and safety settings can be managed here.
-          </p>
-        </div>
-      </div>
-    );
+    if (displaySection === "dataPrivacy") {
+      return renderComingSoonSection("Data & Privacy", "Privacy controls and account safety settings can be managed here.");
+    }
+
+    return renderComingSoonSection(sectionLabelMap[displaySection], sectionDescriptionMap[displaySection]);
   };
 
   return (
@@ -686,31 +846,35 @@ export const SettingsModal = () => {
 
         <div className="grid min-h-0 flex-1 grid-cols-[260px_1fr] overflow-hidden">
           <aside className="flex h-full flex-col rounded-l-3xl border-r border-black/20 bg-[#232428] p-4 pt-2 shadow-2xl shadow-black/40">
-            <p className="mb-3 text-xs font-bold uppercase tracking-[0.08em] text-[#949ba4]">
-              User Settings
-            </p>
+            <nav className="flex-1 space-y-3 overflow-y-auto pr-1">
+              {sectionGroups.map((group) => (
+                <div key={group.label} className="space-y-1">
+                  <p className="px-3 text-[11px] font-bold uppercase tracking-[0.08em] text-[#949ba4]">
+                    {group.label}
+                  </p>
 
-            <nav className="flex-1 space-y-1">
-              {sections.map((section) => {
-                const isActive = activeSection === section;
-                const SectionIcon = sectionIconMap[section];
+                  {group.sections.map((section) => {
+                    const isActive = activeSection === section;
+                    const SectionIcon = sectionIconMap[section];
 
-                return (
-                  <button
-                    key={section}
-                    type="button"
-                    onClick={() => setActiveSection(section)}
-                    className={`flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-left text-sm transition-colors ${
-                      isActive
-                        ? "bg-[#404249] font-semibold text-white"
-                        : "text-[#b5bac1] hover:bg-[#3f4248] hover:text-[#f2f3f5]"
-                    }`}
-                  >
-                    <SectionIcon className="h-4 w-4 shrink-0" />
-                    {sectionLabelMap[section]}
-                  </button>
-                );
-              })}
+                    return (
+                      <button
+                        key={section}
+                        type="button"
+                        onClick={() => setActiveSection(section)}
+                        className={`flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-left text-sm transition-colors ${
+                          isActive
+                            ? "bg-[#404249] font-semibold text-white"
+                            : "text-[#b5bac1] hover:bg-[#3f4248] hover:text-[#f2f3f5]"
+                        }`}
+                      >
+                        <SectionIcon className="h-4 w-4 shrink-0" />
+                        {sectionLabelMap[section]}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
             </nav>
 
             <p className="mt-4 rounded-2xl border border-black/20 bg-[#1e1f22] px-3 py-2 text-xs leading-5 text-[#949ba4] whitespace-normal break-words shadow-lg shadow-black/35">

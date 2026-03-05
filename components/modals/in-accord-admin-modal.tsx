@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { Crown, ShieldAlert, ShieldCheck } from "lucide-react";
+import { Crown, ShieldAlert, ShieldCheck, Trash2 } from "lucide-react";
 import Image from "next/image";
 
 import {
@@ -69,55 +69,51 @@ export const InAccordAdminModal = () => {
   const [serverOwnerFilter, setServerOwnerFilter] = useState("ALL");
   const [columnWidths, setColumnWidths] = useState([320, 210, 140, 220, 100, 100]);
   const [serverColumnWidths, setServerColumnWidths] = useState([240, 220, 220, 180, 110, 110]);
+  const [newUserName, setNewUserName] = useState("");
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserPassword, setNewUserPassword] = useState("");
+  const [newUserRole, setNewUserRole] = useState("USER");
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
+  const [createUserError, setCreateUserError] = useState<string | null>(null);
+  const [createUserSuccess, setCreateUserSuccess] = useState<string | null>(null);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
   const isModalOpen = isOpen && type === "inAccordAdmin";
+
+  const loadUsers = async () => {
+    try {
+      setIsLoadingUsers(true);
+      setUsersError(null);
+
+      const response = await fetch("/api/admin/users", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load users (${response.status})`);
+      }
+
+      const payload = (await response.json()) as { users?: AdminUser[] };
+      setUsers(payload.users ?? []);
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_USERS_LOAD]", error);
+      setUsersError("Unable to load users right now.");
+      setUsers([]);
+    } finally {
+      setIsLoadingUsers(false);
+    }
+  };
 
   useEffect(() => {
     if (!isModalOpen || activeSection !== "members") {
       return;
     }
 
-    let isCancelled = false;
-
-    const loadUsers = async () => {
-      try {
-        setIsLoadingUsers(true);
-        setUsersError(null);
-
-        const response = await fetch("/api/admin/users", {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          cache: "no-store",
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to load users (${response.status})`);
-        }
-
-        const payload = (await response.json()) as { users?: AdminUser[] };
-        if (!isCancelled) {
-          setUsers(payload.users ?? []);
-        }
-      } catch (error) {
-        if (!isCancelled) {
-          console.error("[IN_ACCORD_ADMIN_USERS_LOAD]", error);
-          setUsersError("Unable to load users right now.");
-          setUsers([]);
-        }
-      } finally {
-        if (!isCancelled) {
-          setIsLoadingUsers(false);
-        }
-      }
-    };
-
     loadUsers();
-
-    return () => {
-      isCancelled = true;
-    };
   }, [activeSection, isModalOpen]);
 
   useEffect(() => {
@@ -183,8 +179,112 @@ export const InAccordAdminModal = () => {
       setServerOwnerFilter("ALL");
       setColumnWidths([320, 210, 140, 220, 100, 100]);
       setServerColumnWidths([240, 220, 220, 180, 110, 110]);
+      setNewUserName("");
+      setNewUserEmail("");
+      setNewUserPassword("");
+      setNewUserRole("USER");
+      setCreateUserError(null);
+      setCreateUserSuccess(null);
+      setIsCreatingUser(false);
+      setDeletingUserId(null);
     }
   }, [isModalOpen]);
+
+  const createUserRoleOptions = [
+    "USER",
+    "ADMIN",
+    "ADMINISTRATOR",
+    "MODERATOR",
+    "IN-ACCORD ADMINISTRATOR",
+  ];
+
+  const onCreateUser = async () => {
+    const name = newUserName.trim();
+    const email = newUserEmail.trim().toLowerCase();
+    const password = newUserPassword;
+    const role = newUserRole.trim().toUpperCase() || "USER";
+
+    setCreateUserError(null);
+    setCreateUserSuccess(null);
+
+    if (!name || !email || !password) {
+      setCreateUserError("Name, email and password are required.");
+      return;
+    }
+
+    if (password.length < 8) {
+      setCreateUserError("Password must be at least 8 characters.");
+      return;
+    }
+
+    try {
+      setIsCreatingUser(true);
+      const response = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name, email, password, role }),
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Failed to create user (${response.status})`;
+        throw new Error(message);
+      }
+
+      setCreateUserSuccess(`User ${email} created.`);
+      setNewUserName("");
+      setNewUserEmail("");
+      setNewUserPassword("");
+      setNewUserRole("USER");
+      await loadUsers();
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_CREATE_USER]", error);
+      setCreateUserError(error instanceof Error ? error.message : "Unable to create user.");
+    } finally {
+      setIsCreatingUser(false);
+    }
+  };
+
+  const onDeleteUser = async (user: AdminUser) => {
+    const confirmed = window.confirm(
+      `Delete user ${user.email || user.userId}? This cannot be undone.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setCreateUserError(null);
+    setCreateUserSuccess(null);
+
+    try {
+      setDeletingUserId(user.userId);
+
+      const response = await fetch(
+        `/api/admin/users?userId=${encodeURIComponent(user.userId)}`,
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Failed to delete user (${response.status})`;
+        throw new Error(message);
+      }
+
+      setCreateUserSuccess(`User ${user.email || user.userId} deleted.`);
+      await loadUsers();
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_DELETE_USER]", error);
+      setCreateUserError(error instanceof Error ? error.message : "Unable to delete user.");
+    } finally {
+      setDeletingUserId(null);
+    }
+  };
 
   const minColumnWidths = [200, 140, 100, 160, 80, 80];
 
@@ -400,6 +500,56 @@ export const InAccordAdminModal = () => {
 
             {activeSection === "members" && (
               <div className="rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
+                <div className="mb-4 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-600 dark:bg-zinc-900/40">
+                  <p className="mb-3 text-sm font-semibold text-zinc-800 dark:text-zinc-100">Create New User</p>
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <input
+                      type="text"
+                      value={newUserName}
+                      onChange={(event) => setNewUserName(event.target.value)}
+                      placeholder="Name"
+                      className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
+                    />
+                    <input
+                      type="email"
+                      value={newUserEmail}
+                      onChange={(event) => setNewUserEmail(event.target.value)}
+                      placeholder="Email"
+                      className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
+                    />
+                    <input
+                      type="password"
+                      value={newUserPassword}
+                      onChange={(event) => setNewUserPassword(event.target.value)}
+                      placeholder="Password"
+                      className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
+                    />
+                    <select
+                      value={newUserRole}
+                      onChange={(event) => setNewUserRole(event.target.value)}
+                      className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                    >
+                      {createUserRoleOptions.map((role) => (
+                        <option key={role} value={role}>
+                          {role}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="mt-3 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void onCreateUser()}
+                      disabled={isCreatingUser}
+                      className="h-9 rounded-md bg-indigo-600 px-3 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isCreatingUser ? "Creating..." : "Create user"}
+                    </button>
+                    {createUserError ? <p className="text-xs text-rose-500">{createUserError}</p> : null}
+                    {createUserSuccess ? <p className="text-xs text-emerald-500">{createUserSuccess}</p> : null}
+                  </div>
+                </div>
+
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Users</p>
                   <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-xs font-medium text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200">
@@ -585,6 +735,16 @@ export const InAccordAdminModal = () => {
                                   </PopoverContent>
                                 </Popover>
                                 <p className="truncate text-[12pt] leading-none" title={user.userId}>{user.userId}</p>
+                                <button
+                                  type="button"
+                                  onClick={() => void onDeleteUser(user)}
+                                  disabled={deletingUserId === user.userId}
+                                  className="ml-auto rounded p-1 text-rose-500 transition hover:bg-rose-500/10 hover:text-rose-400 disabled:cursor-not-allowed disabled:opacity-50"
+                                  aria-label={`Delete ${user.email || user.userId}`}
+                                  title="Delete user"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
                               </div>
                               <div className="flex min-w-0 items-center gap-1.5">
                                 <p className="truncate" title={user.name}>{user.name}</p>

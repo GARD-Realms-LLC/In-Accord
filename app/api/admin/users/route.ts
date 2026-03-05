@@ -4,7 +4,10 @@ import { sql } from "drizzle-orm";
 import { currentProfile } from "@/lib/current-profile";
 import { db } from "@/lib/db";
 import { isInAccordAdministrator } from "@/lib/in-accord-admin";
+import { ensureLocalAuthSchema } from "@/lib/local-auth";
+import { hashPassword } from "@/lib/password";
 import { normalizePresenceStatus } from "@/lib/presence-status";
+import { getNextIncrementalUserId } from "@/lib/user-id";
 import { ensureUserProfileSchema } from "@/lib/user-profile";
 
 type UserRow = {
@@ -62,11 +65,6 @@ export async function GET() {
         ) as "joinedServerCount"
       from "Users" u
       left join "UserProfile" up on up."userId" = u."userId"
-      where exists (
-        select 1
-        from "Member" m
-        where m."profileId" = u."userId"
-      )
       order by coalesce(u."name", u."email", u."userId") asc
     `);
 
@@ -75,7 +73,7 @@ export async function GET() {
     const users = rows.map((row) => ({
       id: row.userId,
       userId: row.userId,
-      name: row.realName ?? row.email ?? "User",
+      name: row.profileName ?? row.realName ?? row.email ?? "User",
       profileName: row.profileName ?? null,
       bannerUrl: row.bannerUrl ?? null,
       presenceStatus: normalizePresenceStatus(row.presenceStatus),
@@ -91,6 +89,200 @@ export async function GET() {
     return NextResponse.json({ users });
   } catch (error) {
     console.error("[ADMIN_USERS_GET]", error);
+    return new NextResponse("Internal Error", { status: 500 });
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const profile = await currentProfile();
+
+    if (!profile) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
+
+    if (!isInAccordAdministrator(profile.role)) {
+      return new NextResponse("Forbidden", { status: 403 });
+    }
+
+    const body = (await request.json().catch(() => null)) as {
+      name?: string;
+      email?: string;
+      password?: string;
+      role?: string;
+    } | null;
+
+    const name = String(body?.name ?? "").trim();
+    const email = String(body?.email ?? "").trim().toLowerCase();
+    const password = String(body?.password ?? "");
+    const role = String(body?.role ?? "USER").trim().toUpperCase() || "USER";
+
+    if (!name || !email || !password) {
+      return new NextResponse("Name, email and password are required", { status: 400 });
+    }
+
+    if (password.length < 8) {
+      return new NextResponse("Password must be at least 8 characters", { status: 400 });
+    }
+
+    await ensureLocalAuthSchema();
+    await ensureUserProfileSchema();
+
+    const existingResult = await db.execute(sql`
+      select "userId"
+      from "Users"
+      where lower(coalesce("email", '')) = ${email}
+      limit 1
+    `);
+    const existingRows = (existingResult as unknown as { rows: Array<{ userId: string }> }).rows;
+    if (existingRows?.[0]) {
+      return new NextResponse("Email already in use", { status: 409 });
+    }
+
+    const userId = await getNextIncrementalUserId();
+    const now = new Date();
+    const normalizedRole = role || "USER";
+
+    await db.execute(sql`
+      insert into "Users" (
+        "userId",
+        "name",
+        "email",
+        "avatarUrl",
+        "role",
+        "account.created",
+        "lastLogin"
+      )
+      values (
+        ${userId},
+        ${null},
+        ${email},
+        ${"/in-accord-steampunk-logo.png"},
+        ${normalizedRole},
+        ${now},
+        ${now}
+      )
+    `);
+
+    await db.execute(sql`
+      insert into "UserProfile" ("userId", "profileName", "presenceStatus", "createdAt", "updatedAt")
+      values (${userId}, ${name}, ${"ONLINE"}, ${now}, ${now})
+      on conflict ("userId") do update
+      set "profileName" = excluded."profileName",
+          "updatedAt" = excluded."updatedAt"
+    `);
+
+    const passwordHash = await hashPassword(password);
+    await db.execute(sql`
+      insert into "LocalCredential" ("userId", "passwordHash", "createdAt", "updatedAt")
+      values (${userId}, ${passwordHash}, ${now}, ${now})
+      on conflict ("userId") do update
+      set "passwordHash" = excluded."passwordHash",
+          "updatedAt" = excluded."updatedAt"
+    `);
+
+    return NextResponse.json({
+      ok: true,
+      user: {
+        id: userId,
+        userId,
+        name,
+        email,
+        role: normalizedRole,
+      },
+    });
+  } catch (error) {
+    console.error("[ADMIN_USERS_POST]", error);
+    return new NextResponse("Internal Error", { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const profile = await currentProfile();
+
+    if (!profile) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
+
+    if (!isInAccordAdministrator(profile.role)) {
+      return new NextResponse("Forbidden", { status: 403 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const userId = String(searchParams.get("userId") ?? "").trim();
+
+    if (!userId) {
+      return new NextResponse("userId is required", { status: 400 });
+    }
+
+    if (userId === profile.id) {
+      return new NextResponse("You cannot delete your own account from admin.", { status: 400 });
+    }
+
+    await ensureLocalAuthSchema();
+    await ensureUserProfileSchema();
+
+    const userCheckResult = await db.execute(sql`
+      select "userId"
+      from "Users"
+      where "userId" = ${userId}
+      limit 1
+    `);
+    const userRows = (userCheckResult as unknown as { rows: Array<{ userId: string }> }).rows;
+    if (!userRows?.[0]) {
+      return new NextResponse("User not found", { status: 404 });
+    }
+
+    const usageResult = await db.execute(sql`
+      select
+        (
+          select count(*)::int
+          from "Server" s
+          where s."profileId" = ${userId}
+        ) as "ownedServerCount",
+        (
+          select count(*)::int
+          from "Member" m
+          where m."profileId" = ${userId}
+        ) as "memberCount"
+    `);
+
+    const usageRow = (usageResult as unknown as {
+      rows: Array<{
+        ownedServerCount: number | string | null;
+        memberCount: number | string | null;
+      }>;
+    }).rows?.[0];
+
+    const ownedServerCount = Number(usageRow?.ownedServerCount ?? 0);
+    const memberCount = Number(usageRow?.memberCount ?? 0);
+
+    if (ownedServerCount > 0 || memberCount > 0) {
+      return new NextResponse(
+        "User cannot be deleted because they are linked to servers or memberships.",
+        { status: 409 }
+      );
+    }
+
+    await db.execute(sql`
+      delete from "LocalCredential"
+      where "userId" = ${userId}
+    `);
+
+    await db.execute(sql`
+      delete from "UserProfile"
+      where "userId" = ${userId}
+    `);
+
+    await db.execute(sql`
+      delete from "Users"
+      where "userId" = ${userId}
+    `);
+
+    return NextResponse.json({ ok: true, userId });
+  } catch (error) {
+    console.error("[ADMIN_USERS_DELETE]", error);
     return new NextResponse("Internal Error", { status: 500 });
   }
 }

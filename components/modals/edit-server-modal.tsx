@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useModal } from "@/hooks/use-modal-store";
 import { useEffect, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
 
 const formSchema = z.object({
   name: z.string().min(1, { message: "Server name is required" }),
@@ -36,9 +37,100 @@ const formSchema = z.object({
   bannerScale: z.number().min(1).max(2).optional(),
 });
 
+type ServerSettingsSection =
+  | "overview"
+  | "roles"
+  | "emoji"
+  | "stickers"
+  | "soundboard"
+  | "moderation"
+  | "auditLog"
+  | "invites"
+  | "bans"
+  | "integrations"
+  | "webhooks"
+  | "appDirectory"
+  | "serverTemplate"
+  | "communityOverview"
+  | "safetySetup"
+  | "onboarding"
+  | "vanityUrl"
+  | "widget"
+  | "deleteServer";
+
+const SETTINGS_SECTIONS: Array<{
+  heading?: string;
+  items: Array<{ key: ServerSettingsSection; label: string }>;
+}> = [
+  {
+    items: [
+      { key: "overview", label: "Overview" },
+      { key: "roles", label: "Roles" },
+      { key: "emoji", label: "Emoji" },
+      { key: "stickers", label: "Stickers" },
+      { key: "soundboard", label: "Soundboard" },
+    ],
+  },
+  {
+    heading: "Moderation",
+    items: [
+      { key: "moderation", label: "Moderation" },
+      { key: "auditLog", label: "Audit Log" },
+      { key: "invites", label: "Invites" },
+      { key: "bans", label: "Bans" },
+    ],
+  },
+  {
+    heading: "Apps",
+    items: [
+      { key: "integrations", label: "Integrations" },
+      { key: "webhooks", label: "Webhooks" },
+      { key: "appDirectory", label: "App Directory" },
+    ],
+  },
+  {
+    heading: "Community",
+    items: [
+      { key: "communityOverview", label: "Community Overview" },
+      { key: "safetySetup", label: "Safety Setup" },
+      { key: "onboarding", label: "Onboarding" },
+      { key: "vanityUrl", label: "Vanity URL" },
+      { key: "widget", label: "Widget" },
+      { key: "serverTemplate", label: "Server Template" },
+    ],
+  },
+  {
+    heading: "Danger Zone",
+    items: [{ key: "deleteServer", label: "Delete Server" }],
+  },
+];
+
+const SECTION_TITLES: Record<ServerSettingsSection, string> = {
+  overview: "Server Overview",
+  roles: "Roles",
+  emoji: "Emoji",
+  stickers: "Stickers",
+  soundboard: "Soundboard",
+  moderation: "Moderation",
+  auditLog: "Audit Log",
+  invites: "Invites",
+  bans: "Bans",
+  integrations: "Integrations",
+  webhooks: "Webhooks",
+  appDirectory: "App Directory",
+  serverTemplate: "Server Template",
+  communityOverview: "Community Overview",
+  safetySetup: "Safety Setup",
+  onboarding: "Onboarding",
+  vanityUrl: "Vanity URL",
+  widget: "Widget",
+  deleteServer: "Delete Server",
+};
+
 export const EditServerModal = () => {
-  const { isOpen, onClose, type, data } = useModal();
+  const { isOpen, onClose, onOpen, type, data } = useModal();
   const router = useRouter();
+  const [activeSection, setActiveSection] = useState<ServerSettingsSection>("overview");
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isUploadingBanner, setIsUploadingBanner] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -80,6 +172,12 @@ export const EditServerModal = () => {
       );
     }
   }, [server, form]);
+
+  useEffect(() => {
+    if (!isModalOpen) {
+      setActiveSection("overview");
+    }
+  }, [isModalOpen]);
 
   const isLoading = form.formState.isSubmitting;
   const imageUrl = form.watch("imageUrl") || "";
@@ -233,47 +331,81 @@ export const EditServerModal = () => {
                   Server settings
                 </p>
 
-                <div className="space-y-1">
-                  <button
-                    type="button"
-                    className="w-full rounded-md bg-[#404249] px-3 py-2 text-left text-sm font-semibold text-white"
-                  >
-                    Overview
-                  </button>
-                  <button
-                    type="button"
-                    disabled
-                    className="w-full rounded-md px-3 py-2 text-left text-sm text-zinc-400"
-                  >
-                    Roles
-                  </button>
-                  <button
-                    type="button"
-                    disabled
-                    className="w-full rounded-md px-3 py-2 text-left text-sm text-zinc-400"
-                  >
-                    Emoji
-                  </button>
-                  <button
-                    type="button"
-                    disabled
-                    className="w-full rounded-md px-3 py-2 text-left text-sm text-zinc-400"
-                  >
-                    Moderation
-                  </button>
+                <div className="space-y-4">
+                  {SETTINGS_SECTIONS.map((section) => (
+                    <div key={section.heading ?? "base"} className="space-y-1">
+                      {section.heading ? (
+                        <p className="px-3 pb-1 pt-1 text-[10px] font-bold uppercase tracking-[0.08em] text-zinc-500">
+                          {section.heading}
+                        </p>
+                      ) : null}
+                      {section.items.map((item) => (
+                        <button
+                          key={item.key}
+                          type="button"
+                          onClick={() => setActiveSection(item.key)}
+                          className={cn(
+                            "w-full rounded-md px-3 py-2 text-left text-sm transition",
+                            activeSection === item.key
+                              ? "bg-[#404249] font-semibold text-white"
+                              : item.key === "deleteServer"
+                                ? "text-rose-300 hover:bg-rose-500/10"
+                                : "text-zinc-300 hover:bg-[#36393f]"
+                          )}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  ))}
                 </div>
               </aside>
 
               <section className="flex h-full flex-col bg-[#313338]">
                 <DialogHeader className="border-b border-black/20 px-8 pb-4 pt-6 text-left">
                   <DialogTitle className="text-xl font-semibold text-white">
-                    Server Overview
+                    {SECTION_TITLES[activeSection]}
                   </DialogTitle>
                   <DialogDescription className="pt-1 text-sm text-zinc-300">
-                    Customize your server&apos;s appearance and identity.
+                    {activeSection === "overview"
+                      ? "Customize your server's appearance and identity."
+                      : "Discord-style menu section scaffolded. Hook up server-side behavior as needed."}
                   </DialogDescription>
                 </DialogHeader>
 
+                {activeSection !== "overview" ? (
+                  <div className="flex-1 space-y-4 px-8 py-6">
+                    {activeSection === "deleteServer" ? (
+                      <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-4">
+                        <p className="text-sm text-zinc-200">
+                          Deleting this server removes channels, groups, and messages associated with it.
+                        </p>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          className="mt-4"
+                          onClick={() => {
+                            if (server) {
+                              onOpen("deleteServer", { server });
+                            }
+                          }}
+                        >
+                          Continue to Delete Server
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-4">
+                        <p className="text-sm text-zinc-200">
+                          {SECTION_TITLES[activeSection]} menu is now available in the settings rail.
+                        </p>
+                        <p className="mt-2 text-xs text-zinc-400">
+                          This section currently uses a placeholder panel and is ready for feature-specific controls.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                <>
                 <div className="flex-1 space-y-7 px-8 py-6">
                   <div className="grid gap-6 md:grid-cols-[120px_1fr] md:items-start">
                     <FormField
@@ -512,6 +644,8 @@ export const EditServerModal = () => {
                     {isLoading ? "Saving..." : "Save Changes"}
                   </Button>
                 </div>
+                </>
+                )}
               </section>
             </div>
           </form>

@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
-import { db, profile } from "@/lib/db";
+import { db } from "@/lib/db";
+import { ensureUserProfileSchema } from "@/lib/user-profile";
 
 export async function PATCH(req: Request) {
   try {
@@ -26,12 +27,16 @@ export async function PATCH(req: Request) {
       );
     }
 
-    await db
-      .update(profile)
-      .set({
-        name: realName,
-      })
-      .where(eq(profile.id, current.id));
+    await ensureUserProfileSchema();
+
+    const now = new Date();
+    await db.execute(sql`
+      insert into "UserProfile" ("userId", "profileName", "createdAt", "updatedAt")
+      values (${current.id}, ${realName}, ${now}, ${now})
+      on conflict ("userId") do update
+      set "profileName" = excluded."profileName",
+          "updatedAt" = excluded."updatedAt"
+    `);
 
     return NextResponse.json({ ok: true, realName });
   } catch (error) {

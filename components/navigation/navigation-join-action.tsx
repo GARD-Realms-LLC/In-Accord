@@ -12,7 +12,7 @@ export const NavigationJoinAction = () => {
     <div className="w-full flex justify-center">
       <ActionTooltip side="right" align="center" label="Join a server">
         <button
-          onClick={() => onOpen("invite")}
+          onClick={() => onOpen("joinServer")}
           className="group flex items-center justify-center rounded-full p-0 m-0 leading-none align-middle border-0 bg-transparent shadow-none ring-0 outline-none"
           style={{ boxShadow: "none", filter: "none", WebkitAppearance: "none", appearance: "none", border: "0", background: "transparent" }}
         >

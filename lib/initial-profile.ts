@@ -55,7 +55,7 @@ export const initialProfile = async () => {
       ? {
           id: user.userId,
           userId: user.userId,
-          name: user.name ?? user.email ?? "User",
+          name: user.name ?? "User",
           role: user.role ?? null,
           imageUrl: user.imageUrl ?? "/in-accord-steampunk-logo.png",
           email: user.email ?? "",

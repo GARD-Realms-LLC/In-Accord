@@ -8,6 +8,8 @@ import { ChatInput } from "@/components/chat/chat-input";
 import { ChatItem } from "@/components/chat/chat-item";
 // import { MediaRoom } from "@/components/media-room";
 import { channel, db, member, message } from "@/lib/db";
+import { computeChannelPermissionForRole } from "@/lib/channel-permissions";
+import { resolveMemberContext } from "@/lib/channel-permissions";
 import { getUserProfileNameMap } from "@/lib/user-profile";
 
 interface ChannelIdPageProps {
@@ -37,6 +39,22 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
 
   if (!currentChannel || !currentMember) {
     redirect("/");
+  }
+
+  const memberContext = await resolveMemberContext({
+    profileId: profile.id,
+    serverId: params.serverId,
+  });
+
+  const channelPermissions = await computeChannelPermissionForRole({
+    serverId: params.serverId,
+    channelId: currentChannel.id,
+    role: currentMember.role,
+    isServerOwner: memberContext?.isServerOwner ?? false,
+  });
+
+  if (!channelPermissions.allowView) {
+    redirect(`/servers/${params.serverId}`);
   }
 
   const channelMessages = await db.query.message.findMany({
@@ -127,6 +145,7 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
               channelId: currentChannel.id,
               serverId: currentChannel.serverId,
             }}
+            disabled={!channelPermissions.allowSend}
           />
         </div>
       ) : null}

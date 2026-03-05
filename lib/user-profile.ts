@@ -41,7 +41,7 @@ export const ensureUserProfileSchema = async () => {
     insert into "UserProfile" ("userId", "profileName", "createdAt", "updatedAt")
     select
       u."userId",
-      left(coalesce(nullif(trim(u."name"), ''), nullif(trim(u."email"), ''), 'User'), 80) as "profileName",
+      left(coalesce(nullif(trim(u."name"), ''), 'User'), 80) as "profileName",
       ${now},
       ${now}
     from "Users" u

@@ -39,6 +39,14 @@ const hasPlausibleSessionToken = (token?: string) => {
 export default function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
 
+  if (
+    pathname.startsWith("/_next") ||
+    pathname === "/favicon.ico" ||
+    /\.[a-z0-9]+$/i.test(pathname)
+  ) {
+    return NextResponse.next();
+  }
+
   if (isPublicPath(pathname)) {
     return NextResponse.next();
   }
@@ -59,8 +67,8 @@ export default function proxy(req: NextRequest) {
 
 export const config = {
   matcher: [
-    // Skip Next.js internals and all static files, unless found in search params
-    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    // Skip common static paths; runtime guard above also bypasses file extensions.
+    "/((?!_next/static|_next/image|favicon.ico).*)",
 
     // Always run for API routes
     "/(api|trpc)(.*)",

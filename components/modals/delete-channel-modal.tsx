@@ -24,9 +24,11 @@ export const DeleteChannelModal = () => {
   const { server, channel } = data;
 
   const [isLoading, setLoading] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const onConfirm = async () => {
     try {
+      setSubmitError(null);
       setLoading(true);
       const url = qs.stringifyUrl({
         url: `/api/channels/${channel?.id}`,
@@ -38,9 +40,23 @@ export const DeleteChannelModal = () => {
       await axios.delete(url);
 
       onClose();
+      if (server?.id) {
+        window.location.assign(`/servers/${server.id}`);
+        return;
+      }
+
       router.refresh();
-      router.push(`/servers/${server?.id}`);
     } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (typeof error.response?.data === "string" ? error.response.data : "") ||
+          (error.response?.data as { error?: string } | undefined)?.error ||
+          error.message ||
+          "Failed to delete channel";
+        setSubmitError(message);
+      } else {
+        setSubmitError("Failed to delete channel");
+      }
       console.log(error);
     } finally {
       setLoading(false);
@@ -62,6 +78,9 @@ export const DeleteChannelModal = () => {
           </span>{" "}
           will be permanently deleted.
         </DialogDescription>
+        {submitError ? (
+          <p className="px-6 text-center text-sm text-rose-500 dark:text-rose-400">{submitError}</p>
+        ) : null}
         <DialogFooter className="bg-gray-100 px-6 py-4 dark:bg-zinc-800/60">
           <div className="flex items-center justify-between w-full">
             <Button disabled={isLoading} onClick={onClose} variant="ghost">

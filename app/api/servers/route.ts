@@ -1,10 +1,11 @@
 import { v4 as uuidv4 } from "uuid";
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { channel, ChannelType, db, MemberRole, member, server } from "@/lib/db";
 import { getServerBannerConfig, setServerBannerConfig } from "@/lib/server-banner-store";
+import { ensureRulesChannelForServer, ensureSystemChannelSchema } from "@/lib/system-channels";
 
 export async function POST(req: Request) {
   try {
@@ -17,6 +18,8 @@ export async function POST(req: Request) {
 
     const serverId = uuidv4();
     const now = new Date();
+
+    await ensureSystemChannelSchema();
 
     await db.transaction(async (tx) => {
       const resolvedImageUrl =
@@ -44,6 +47,36 @@ export async function POST(req: Request) {
         updatedAt: now,
       });
 
+      await tx.execute(sql`
+        update "Channel"
+        set "isSystem" = true
+        where "serverId" = ${serverId}
+          and lower(trim(coalesce("name", ''))) = 'general'
+      `);
+
+      await tx.execute(sql`
+        insert into "Channel" (
+          "id",
+          "name",
+          "type",
+          "profileId",
+          "serverId",
+          "isSystem",
+          "createdAt",
+          "updatedAt"
+        )
+        values (
+          ${uuidv4()},
+          ${"rules"},
+          ${ChannelType.TEXT},
+          ${profile.id},
+          ${serverId},
+          ${true},
+          ${now},
+          ${now}
+        )
+      `);
+
       await tx.insert(member).values({
         id: uuidv4(),
         profileId: profile.id,
@@ -63,6 +96,9 @@ export async function POST(req: Request) {
     const createdServer = await db.query.server.findFirst({
       where: eq(server.id, serverId),
     });
+
+    // Final safety for idempotency/race conditions: ensures exactly one rules channel.
+    await ensureRulesChannelForServer(serverId, profile.id);
 
     const resolvedBanner = await getServerBannerConfig(serverId);
 

@@ -3,7 +3,6 @@ import { and, eq } from "drizzle-orm";
 
 import { initialProfile } from "@/lib/initial-profile";
 import { db, member, server } from "@/lib/db";
-import { InitialModal } from "@/components/modals/initial-modal";
 
 const SetupPage = async () => {
   const profile = await initialProfile();
@@ -25,7 +24,7 @@ const SetupPage = async () => {
     return redirect(`/servers/${firstServer[0].id}`);
   }
 
-  return <InitialModal />;
+  return redirect("/users");
 };
 
 export default SetupPage;

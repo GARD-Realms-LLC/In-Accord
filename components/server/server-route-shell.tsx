@@ -54,6 +54,8 @@ export const ServerRouteShell = ({
   children,
 }: ServerRouteShellProps) => {
   const [isMembersCollapsed, setIsMembersCollapsed] = useState(false);
+  const GLOBAL_SERVERS_RAIL_WIDTH = 108;
+  const CHANNELS_RAIL_WIDTH = 240;
 
   const roleIconMap = {
     [MemberRole.GUEST]: null,
@@ -71,7 +73,10 @@ export const ServerRouteShell = ({
 
   return (
     <div className="h-full overflow-hidden">
-      <header className="fixed left-[328px] right-0 top-0 z-40 h-12 border-b border-black/20 bg-[#2b2d31] px-4 flex items-center rounded-b-xl overflow-hidden">
+      <header
+        className="fixed right-0 top-0 z-40 h-12 border-b border-black/20 bg-[#2b2d31] px-4 flex items-center rounded-b-xl overflow-hidden"
+        style={{ left: `${GLOBAL_SERVERS_RAIL_WIDTH + CHANNELS_RAIL_WIDTH}px` }}
+      >
         <h1
           className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 truncate text-center text-sm font-bold uppercase tracking-[0.08em] text-[#f2f3f5]"
           style={headerTitleStyle}
@@ -168,7 +173,12 @@ export const ServerRouteShell = ({
         </div>
       </header>
 
-      <aside className="fixed top-0 bottom-[84px] left-[88px] w-60 z-40">{leftSidebar}</aside>
+      <aside
+        className="fixed top-0 bottom-[84px] z-40"
+        style={{ left: `${GLOBAL_SERVERS_RAIL_WIDTH}px`, width: `${CHANNELS_RAIL_WIDTH}px` }}
+      >
+        {leftSidebar}
+      </aside>
 
       {!isMembersCollapsed ? (
         <aside className="fixed top-12 bottom-[84px] right-0 w-64 z-30 px-2 py-2">{rightSidebar}</aside>

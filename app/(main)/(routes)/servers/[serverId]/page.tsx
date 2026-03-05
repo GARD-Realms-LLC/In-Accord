@@ -3,6 +3,7 @@ import { and, asc, eq } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { channel, db, member, server } from "@/lib/db";
+import { visibleChannelIdsForRole } from "@/lib/channel-permissions";
 
 interface ServerIdPageProps {
   params: {
@@ -34,18 +35,44 @@ const ServerIdPage = async ({ params }: ServerIdPageProps) => {
     return redirect("/");
   }
 
-  const initialChannel = await db
-    .select({ id: channel.id, name: channel.name })
-    .from(channel)
-    .where(and(eq(channel.serverId, params.serverId), eq(channel.name, "general")))
-    .orderBy(asc(channel.createdAt))
+  const currentMember = await db
+    .select({ role: member.role })
+    .from(member)
+    .where(and(eq(member.serverId, params.serverId), eq(member.profileId, profile.id)))
     .limit(1);
 
-  if (initialChannel[0]?.name !== "general") {
+  if (!currentMember[0]) {
+    return redirect("/");
+  }
+
+  const serverOwner = await db
+    .select({ id: server.id })
+    .from(server)
+    .where(and(eq(server.id, params.serverId), eq(server.profileId, profile.id)))
+    .limit(1);
+
+  const serverChannels = await db
+    .select({ id: channel.id, name: channel.name, createdAt: channel.createdAt })
+    .from(channel)
+    .where(eq(channel.serverId, params.serverId))
+    .orderBy(asc(channel.createdAt));
+
+  const visibleIds = await visibleChannelIdsForRole({
+    serverId: params.serverId,
+    role: currentMember[0].role,
+    isServerOwner: !!serverOwner[0],
+    channelIds: serverChannels.map((item) => item.id),
+  });
+
+  const visibleChannels = serverChannels.filter((item) => visibleIds.has(item.id));
+  const initialChannel =
+    visibleChannels.find((item) => item.name === "general") ?? visibleChannels[0] ?? null;
+
+  if (!initialChannel?.id) {
     return null;
   }
 
-  return redirect(`/servers/${params.serverId}/channels/${initialChannel[0]?.id}`);
+  return redirect(`/servers/${params.serverId}/channels/${initialChannel.id}`);
 }
  
 export default ServerIdPage;

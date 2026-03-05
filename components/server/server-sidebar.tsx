@@ -1,34 +1,47 @@
 import { ChannelType, MemberRole } from "@/lib/db/types";
-import { Hash, Mic, ShieldAlert, ShieldCheck, Video } from "lucide-react";
-import { asc, eq, sql } from "drizzle-orm";
+import { Hash, Mic, Video } from "lucide-react";
+import { eq, sql } from "drizzle-orm";
 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { currentProfile } from "@/lib/current-profile";
-import { channel, db, server } from "@/lib/db";
+import { db, server } from "@/lib/db";
+import { ensureChannelGroupSchema } from "@/lib/channel-groups";
+import { visibleChannelIdsForRole } from "@/lib/channel-permissions";
 import { getServerBannerConfig } from "@/lib/server-banner-store";
+import { ensureRulesChannelForServer } from "@/lib/system-channels";
 
 import { ServerHeader } from "./server-header";
 import { ServerSection } from "./server-section";
 import { ServerChannel } from "./server-channel";
-import { ServerMember } from "./server-member";
+import { ChannelDropZone } from "./channel-drop-zone";
+import { ChannelGroupsList } from "./channel-groups-list";
 
 interface ServerSidebarProps {
   serverId: string;
 }
 
+type ChannelRow = {
+  id: string;
+  name: string;
+  type: ChannelType;
+  profileId: string;
+  serverId: string;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+  channelGroupId: string | null;
+};
+
+type ChannelGroupRow = {
+  id: string;
+  name: string;
+  sortOrder: number | string | null;
+};
+
 const iconMap = {
   [ChannelType.TEXT]: <Hash className="mr-2 h-4 w-4" />,
   [ChannelType.AUDIO]: <Mic className="mr-2 h-4 w-4" />,
   [ChannelType.VIDEO]: <Video className="mr-2 h-4 w-4" />,
-};
-
-const roleIconMap = {
-  [MemberRole.GUEST]: null,
-  [MemberRole.MODERATOR]: (
-    <ShieldCheck className="h-4 w-4 mr-2 text-indigo-500" />
-  ),
-  [MemberRole.ADMIN]: <ShieldAlert className="h-4 w-4 mr-2 text-rose-500" />,
 };
 
 export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
@@ -43,11 +56,49 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
   const currentServer = currentServerResult[0];
   const bannerConfig = currentServer ? await getServerBannerConfig(currentServer.id) : null;
 
-  const channels = await db
-    .select()
-    .from(channel)
-    .where(eq(channel.serverId, serverId))
-    .orderBy(asc(channel.createdAt));
+  if (currentServer) {
+    await ensureRulesChannelForServer(currentServer.id, currentServer.profileId);
+  }
+
+  await ensureChannelGroupSchema();
+
+  const channelsResult = await db.execute(sql`
+    select
+      c."id" as "id",
+      c."name" as "name",
+      c."type" as "type",
+      c."profileId" as "profileId",
+      c."serverId" as "serverId",
+      c."createdAt" as "createdAt",
+      c."updatedAt" as "updatedAt",
+      c."channelGroupId" as "channelGroupId"
+    from "Channel" c
+    where c."serverId" = ${serverId}
+    order by c."createdAt" asc
+  `);
+
+  const channels = ((channelsResult as unknown as { rows: ChannelRow[] }).rows ?? []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    type: row.type,
+    profileId: row.profileId,
+    serverId: row.serverId,
+    createdAt: new Date(row.createdAt),
+    updatedAt: new Date(row.updatedAt),
+    channelGroupId: row.channelGroupId,
+  }));
+
+  const channelGroupsResult = await db.execute(sql`
+    select
+      cg."id" as "id",
+      cg."name" as "name",
+      cg."sortOrder" as "sortOrder"
+    from "ChannelGroup" cg
+    where cg."serverId" = ${serverId}
+    order by cg."sortOrder" asc, cg."createdAt" asc
+  `);
+
+  const channelGroups = (channelGroupsResult as unknown as { rows: ChannelGroupRow[] }).rows ?? [];
 
   const membersResult = await db.execute(sql`
     select
@@ -108,19 +159,6 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
     },
   }));
 
-  const textChannels = channels.filter(
-    (channel) => channel.type === ChannelType.TEXT
-  );
-  const audioChannels = channels.filter(
-    (channel) => channel.type === ChannelType.AUDIO
-  );
-  const videoChannels = channels.filter(
-    (channel) => channel.type === ChannelType.VIDEO
-  );
-  const membersWithoutCurrent = members.filter(
-    (member) => (profile?.id ? member.profileId !== profile.id : true)
-  );
-
   if (!currentServer) {
     return null;
   }
@@ -134,13 +172,47 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
     normalizedGlobalRole === "IN-ACCORD ADMINISTRATOR" ||
     normalizedGlobalRole === "IN_ACCORD_ADMINISTRATOR" ||
     normalizedGlobalRole === "ADMIN";
-  const canSeeInvisibleMembers = isInAccordAdministrator || role === MemberRole.ADMIN;
-  const visibleMembersWithoutCurrent = membersWithoutCurrent.filter((member) => {
-    return canSeeInvisibleMembers || String(member.presenceStatus ?? "ONLINE").toUpperCase() !== "INVISIBLE";
-  });
   const isServerOwner = !!profile?.id && currentServer.profileId === profile.id;
-  const serverWithBanner = {
+
+  const visibleChannelIds = role
+    ? await visibleChannelIdsForRole({
+        serverId,
+        role,
+        isServerOwner,
+        channelIds: channels.map((item) => item.id),
+      })
+    : new Set(channels.map((item) => item.id));
+
+  const visibleChannels = channels.filter((item) => visibleChannelIds.has(item.id));
+
+  const textChannels = visibleChannels.filter(
+    (channel) => channel.type === ChannelType.TEXT
+  );
+  const audioChannels = visibleChannels.filter(
+    (channel) => channel.type === ChannelType.AUDIO
+  );
+  const videoChannels = visibleChannels.filter(
+    (channel) => channel.type === ChannelType.VIDEO
+  );
+  const groupedChannels = channelGroups.map((group) => ({
+    id: group.id,
+    name: group.name,
+    channels: visibleChannels.filter((item) => item.channelGroupId === group.id),
+  }));
+  const groupedChannelIds = new Set(
+    groupedChannels.flatMap((group) => group.channels.map((item) => item.id))
+  );
+
+  const textChannelsUngrouped = textChannels.filter((item) => !groupedChannelIds.has(item.id));
+  const audioChannelsUngrouped = audioChannels.filter((item) => !groupedChannelIds.has(item.id));
+  const videoChannelsUngrouped = videoChannels.filter((item) => !groupedChannelIds.has(item.id));
+  const serverWithMembers = {
     ...currentServer,
+    members,
+  };
+
+  const serverWithBanner = {
+    ...serverWithMembers,
     bannerUrl: bannerConfig?.url ?? null,
     bannerFit: bannerConfig?.fit ?? "cover",
     bannerScale: bannerConfig?.scale ?? 1,
@@ -151,79 +223,88 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
       <ServerHeader server={serverWithBanner} role={role} isServerOwner={isServerOwner} />
       <ScrollArea className="flex-1 px-3">
         <Separator className="bg-zinc-200 dark:bg-zinc-700 rounded-md my-2" />
-        {!!textChannels?.length && (
-          <div className="mb-2">
+        {!!textChannelsUngrouped?.length && (
+          <ChannelDropZone serverId={serverId} targetGroupId={null} className="mb-2">
             <ServerSection
               sectionType="channels"
               channelType={ChannelType.TEXT}
               role={role}
               label="Channels"
+              server={serverWithMembers}
             />
             <div className="space-y-[2px]">
-              {textChannels.map((channel) => (
+              {textChannelsUngrouped.map((channel) => (
                 <ServerChannel
                   key={channel.id}
                   channel={channel}
                   role={role}
-                  server={currentServer}
+                  server={serverWithMembers}
+                  draggable
                 />
               ))}
             </div>
-          </div>
+          </ChannelDropZone>
         )}
-        {!!audioChannels?.length && (
-          <div className="mb-2">
+        {!!audioChannelsUngrouped?.length && (
+          <ChannelDropZone serverId={serverId} targetGroupId={null} className="mb-2">
             <ServerSection
               sectionType="channels"
               channelType={ChannelType.AUDIO}
               role={role}
               label="Voice Channels"
+              server={serverWithMembers}
             />
             <div className="space-y-[2px]">
-              {audioChannels.map((channel) => (
+              {audioChannelsUngrouped.map((channel) => (
                 <ServerChannel
                   key={channel.id}
                   channel={channel}
                   role={role}
-                  server={currentServer}
+                  server={serverWithMembers}
+                  draggable
                 />
               ))}
             </div>
-          </div>
+          </ChannelDropZone>
         )}
-        {!!videoChannels?.length && (
-          <div className="mb-2">
+        {!!videoChannelsUngrouped?.length && (
+          <ChannelDropZone serverId={serverId} targetGroupId={null} className="mb-2">
             <ServerSection
               sectionType="channels"
               channelType={ChannelType.VIDEO}
               role={role}
               label="Video Channels"
+              server={serverWithMembers}
             />
             <div className="space-y-[2px]">
-              {videoChannels.map((channel) => (
+              {videoChannelsUngrouped.map((channel) => (
                 <ServerChannel
                   key={channel.id}
                   channel={channel}
                   role={role}
-                  server={currentServer}
+                  server={serverWithMembers}
+                  draggable
                 />
               ))}
             </div>
-          </div>
+          </ChannelDropZone>
         )}
-        {!!visibleMembersWithoutCurrent?.length && (
+
+        {!!channelGroups.length && (
           <div className="mb-2">
             <ServerSection
-              sectionType="members"
+              sectionType="channels"
+              channelType={ChannelType.TEXT}
               role={role}
-              label="Members"
-              server={currentServer}
+              label="Channel Groups"
+              server={serverWithMembers}
             />
-            <div className="space-y-[2px]">
-              {visibleMembersWithoutCurrent.map((member) => (
-                <ServerMember key={member.id} member={member} server={currentServer} />
-              ))}
-            </div>
+            <ChannelGroupsList
+              serverId={serverId}
+              role={role}
+              server={serverWithMembers}
+              groups={groupedChannels}
+            />
           </div>
         )}
       </ScrollArea>

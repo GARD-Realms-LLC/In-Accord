@@ -34,7 +34,7 @@ export const ServerSection = ({
           {label === "Channels" && (
             <ActionTooltip label="Add Group" side="top" align="center">
               <button
-                onClick={() => onOpen("createChannel", { channelType })}
+                onClick={() => onOpen("createChannelGroup", { server })}
                 className="text-zinc-500 hover:text-zinc-600 dark:text-zinc-400 dark:hover:text-zinc-300 transition"
               >
                 <Users className="h-4 w-4" />

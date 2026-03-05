@@ -33,7 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 const formSchema = z.object({
   name: z
@@ -45,7 +45,13 @@ const formSchema = z.object({
       message: "Channel name cannot be 'general'",
     }),
   type: z.nativeEnum(ChannelType),
+  channelGroupId: z.string().nullable().optional(),
 });
+
+type ChannelGroupItem = {
+  id: string;
+  name: string;
+};
 
 export const CreateChannelModal = () => {
   const { isOpen, onClose, type, data } = useModal();
@@ -54,12 +60,15 @@ export const CreateChannelModal = () => {
 
   const isModalOpen = isOpen && type === "createChannel";
   const { channelType } = data;
+  const [channelGroups, setChannelGroups] = useState<ChannelGroupItem[]>([]);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const form = useForm({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: "",
       type: channelType || ChannelType.TEXT,
+      channelGroupId: null,
     },
   });
 
@@ -69,30 +78,93 @@ export const CreateChannelModal = () => {
     } else {
       form.setValue("type", ChannelType.TEXT);
     }
+    form.setValue("channelGroupId", null);
   }, [channelType, form]);
+
+  useEffect(() => {
+    if (!isModalOpen || !params?.serverId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadGroups = async () => {
+      try {
+        const response = await axios.get<{ groups?: ChannelGroupItem[] }>("/api/channel-groups", {
+          params: { serverId: params.serverId },
+        });
+
+        if (!cancelled) {
+          setChannelGroups(response.data.groups ?? []);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setChannelGroups([]);
+        }
+        console.error("[CREATE_CHANNEL_MODAL_GROUPS]", error);
+      }
+    };
+
+    void loadGroups();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isModalOpen, params?.serverId]);
 
   const isLoading = form.formState.isSubmitting;
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
+      setSubmitError(null);
+
+      const routeServerId =
+        typeof params?.serverId === "string"
+          ? params.serverId
+          : Array.isArray(params?.serverId)
+            ? params.serverId[0]
+            : "";
+
+      if (!routeServerId) {
+        setSubmitError("Unable to determine server context.");
+        return;
+      }
+
       const url = qs.stringifyUrl({
         url: "/api/channels",
         query: {
-          serverId: params?.serverId,
+          serverId: routeServerId,
         },
       });
-      await axios.post(url, values);
+      await axios.post(url, {
+        ...values,
+        channelGroupId:
+          typeof values.channelGroupId === "string" && values.channelGroupId.length > 0
+            ? values.channelGroupId
+            : null,
+      });
 
       form.reset();
       router.refresh();
       onClose();
     } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (typeof error.response?.data === "string" ? error.response.data : "") ||
+          (error.response?.data as { error?: string } | undefined)?.error ||
+          error.message ||
+          "Failed to create channel.";
+        setSubmitError(message);
+      } else {
+        setSubmitError("Failed to create channel.");
+      }
       console.log(error);
     }
   };
 
   const handleClose = () => {
     form.reset();
+    setSubmitError(null);
     onClose();
   };
 
@@ -159,6 +231,38 @@ export const CreateChannelModal = () => {
                   </FormItem>
                 )}
               />
+              <FormField
+                control={form.control}
+                name="channelGroupId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Channel Group</FormLabel>
+                    <Select
+                      disabled={isLoading}
+                      onValueChange={(value) => field.onChange(value === "__none__" ? null : value)}
+                      value={field.value ?? "__none__"}
+                    >
+                      <FormControl>
+                        <SelectTrigger className="border-0 bg-zinc-200/70 text-black outline-none ring-offset-0 focus:ring-0 focus:ring-offset-0 dark:bg-zinc-700/50 dark:text-zinc-100">
+                          <SelectValue placeholder="Select a channel group" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="__none__">No group</SelectItem>
+                        {channelGroups.map((group) => (
+                          <SelectItem key={group.id} value={group.id}>
+                            {group.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              {submitError ? (
+                <p className="text-sm text-rose-500 dark:text-rose-400">{submitError}</p>
+              ) : null}
             </div>
             <DialogFooter className="bg-gray-100 px-6 py-4 dark:bg-zinc-800/60">
               <Button variant="primary" disabled={isLoading}>

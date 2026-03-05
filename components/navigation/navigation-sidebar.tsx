@@ -91,7 +91,7 @@ export const NavigationSidebar = async () => {
       {isInAccordAdministrator ? (
         <>
           <div className="w-full px-2 text-center text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-700 dark:text-zinc-300">
-            <p className="mb-1">TOTAL</p>
+            <p className="mb-1">TOTALs</p>
             <p>Members: {totalMembers}</p>
             <p className="mt-1">Servers: {totalServers}</p>
           </div>

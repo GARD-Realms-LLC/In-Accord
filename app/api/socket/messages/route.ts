@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from "uuid";
 
 import { currentProfile } from "@/lib/current-profile";
 import { channel, db, member, message } from "@/lib/db";
+import { computeChannelPermissionForRole } from "@/lib/channel-permissions";
 
 export async function POST(req: Request) {
   try {
@@ -46,6 +47,21 @@ export async function POST(req: Request) {
 
     if (!currentChannel) {
       return new NextResponse("Channel not found", { status: 404 });
+    }
+
+    const permissions = await computeChannelPermissionForRole({
+      serverId,
+      channelId,
+      role: currentMember.role,
+      isServerOwner: profile.id === currentChannel.profileId,
+    });
+
+    if (!permissions.allowView) {
+      return new NextResponse("You cannot view this channel", { status: 403 });
+    }
+
+    if (!permissions.allowSend) {
+      return new NextResponse("You cannot send messages in this channel", { status: 403 });
     }
 
     const normalizedContent = typeof content === "string" ? content.trim() : "";

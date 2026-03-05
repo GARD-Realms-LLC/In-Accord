@@ -1,9 +1,10 @@
 "use client";
 
-import { Copy, Crown, Settings, ShieldAlert, UserCircle2 } from "lucide-react";
+import { Copy, Crown, LogOut, Settings, ShieldAlert, UserCircle2 } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { useRouter } from "next/navigation";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -39,9 +40,11 @@ export const UserStatusMenu = ({
   profileLastLogonAt,
 }: UserStatusMenuProps) => {
   const { onOpen } = useModal();
+  const router = useRouter();
   const [copied, setCopied] = useState(false);
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const [isProfileCardOpen, setIsProfileCardOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isSavingStatus, setIsSavingStatus] = useState(false);
   const [menuRealName, setMenuRealName] = useState(profileRealName ?? "Unknown User");
   const [menuProfileName, setMenuProfileName] = useState<string | null>(profileName ?? null);
@@ -225,6 +228,35 @@ export const UserStatusMenu = ({
     }
   };
 
+  const onLogoff = async () => {
+    if (isLoggingOut) {
+      return;
+    }
+
+    try {
+      setIsLoggingOut(true);
+      await axios.post("/api/auth/logout");
+      setIsPopoverOpen(false);
+      setIsProfileCardOpen(false);
+      router.push("/sign-in");
+      router.refresh();
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          error.message ||
+          "Logoff failed";
+        console.error("[USER_STATUS_LOGOFF]", error.response?.data ?? error.message);
+        window.alert(message);
+      } else {
+        console.error("[USER_STATUS_LOGOFF]", error);
+        window.alert("Logoff failed");
+      }
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
   const formatDate = (value?: string | null) => {
     if (!value) {
       return "";
@@ -301,7 +333,7 @@ export const UserStatusMenu = ({
           <div className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] p-3 text-xs">
             <div className="space-y-1 text-[#dbdee1]">
               <p>Users ID: {profileId || ""}</p>
-              <p>Name: {menuRealName || "Unknown User"}</p>
+              <p>Name: {menuRealName || menuProfileName || "Unknown User"}</p>
               <p>Profile Name: {menuProfileName || "Not set"}</p>
               <p>Email: {profileEmail || ""}</p>
               <p>Status: {presenceStatusLabelMap[menuPresenceStatus]}</p>
@@ -380,6 +412,16 @@ export const UserStatusMenu = ({
             <UserCircle2 className="h-4 w-4" />
             View In-Accord profile card
           </button>
+
+          <button
+            type="button"
+            onClick={onLogoff}
+            disabled={isLoggingOut}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-rose-300 transition hover:bg-[#3a1f24] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <LogOut className="h-4 w-4" />
+            {isLoggingOut ? "Logging off..." : "Logoff"}
+          </button>
         </div>
       </PopoverContent>
 
@@ -415,7 +457,7 @@ export const UserStatusMenu = ({
             <div className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] p-3 text-xs">
               <div className="space-y-1 text-[#dbdee1]">
                 <p>Users ID: {profileId || ""}</p>
-                <p>Name: {menuRealName || "Unknown User"}</p>
+                <p>Name: {menuRealName || menuProfileName || "Unknown User"}</p>
                 <p>Profile Name: {menuProfileName || "Not set"}</p>
                 <p>Email: {profileEmail || ""}</p>
                 <p>Status: {presenceStatusLabelMap[menuPresenceStatus]}</p>

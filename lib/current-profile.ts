@@ -69,8 +69,8 @@ export const currentProfile = async () => {
       ? {
           id: user.userId,
           userId: user.userId,
-          name: user.profileName ?? user.realName ?? user.email ?? "User",
-          realName: user.realName ?? user.email ?? "User",
+          name: user.profileName ?? user.realName ?? "User",
+          realName: user.realName ?? null,
           profileName: user.profileName ?? null,
           bannerUrl: resolvedBannerUrl,
           presenceStatus: normalizePresenceStatus(user.presenceStatus),

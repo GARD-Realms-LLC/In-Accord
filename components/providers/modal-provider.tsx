@@ -13,6 +13,9 @@ import { DeleteChannelModal } from "@/components/modals/delete-channel-modal";
 import { EditChannelModal } from "@/components/modals/edit-channel-modal";
 import { SettingsModal } from "@/components/modals/settings-modal";
 import { InAccordAdminModal } from "@/components/modals/in-accord-admin-modal";
+import { JoinServerModal } from "@/components/modals/join-server-modal";
+import { CreateChannelGroupModal } from "@/components/modals/create-channel-group-modal";
+import { EditChannelGroupModal } from "@/components/modals/edit-channel-group-modal";
 
 export const ModalProvider = () => {
   const [isMounted, setIsMounted] = useState(false);
@@ -28,10 +31,13 @@ export const ModalProvider = () => {
   return (
     <>
       <CreateServerModal />
+      <JoinServerModal />
       <InviteModal />
       <EditServerModal />
       <MembersModal />
       <CreateChannelModal />
+      <CreateChannelGroupModal />
+      <EditChannelGroupModal />
       <LeaveServerModal />
       <DeleteServerModal />
       <DeleteChannelModal />

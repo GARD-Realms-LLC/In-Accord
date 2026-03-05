@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { v4 as uuidv4 } from "uuid";
 
 import { db } from "@/lib/db";
 import { ensureLocalAuthSchema } from "@/lib/local-auth";
 import { hashPassword } from "@/lib/password";
 import { setSessionUserId } from "@/lib/session";
+import { getNextIncrementalUserId } from "@/lib/user-id";
 import { ensureUserProfileSchema } from "@/lib/user-profile";
 
 export async function POST(request: Request) {
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
       return new NextResponse("Email already in use", { status: 409 });
     }
 
-    const userId = uuidv4();
+    const userId = await getNextIncrementalUserId();
     const now = new Date();
 
     await db.execute(sql`
@@ -67,7 +67,7 @@ export async function POST(request: Request) {
       )
       values (
         ${userId},
-        ${name},
+        ${null},
         ${email},
         ${"/in-accord-steampunk-logo.png"},
         ${"USER"},
