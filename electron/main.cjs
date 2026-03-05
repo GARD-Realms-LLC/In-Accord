@@ -24,6 +24,10 @@ function createWindow() {
   const appUrl = process.env.ELECTRON_START_URL || DEFAULT_URL;
   win.loadURL(appUrl);
 
+  win.webContents.on("context-menu", (event) => {
+    event.preventDefault();
+  });
+
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: "deny" };
