@@ -3,11 +3,14 @@
 import { Copy, Settings, ShieldAlert, UserCircle2 } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
+import axios from "axios";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { UserAvatar } from "@/components/user-avatar";
 import { useModal } from "@/hooks/use-modal-store";
+import { PresenceStatus, presenceStatusLabelMap, normalizePresenceStatus, presenceStatusValues } from "@/lib/presence-status";
 
 interface UserStatusMenuProps {
   profileId?: string | null;
@@ -17,6 +20,7 @@ interface UserStatusMenuProps {
   profileEmail?: string | null;
   profileImageUrl?: string | null;
   profileBannerUrl?: string | null;
+  profilePresenceStatus?: string | null;
   profileJoinedAt?: string | null;
   profileLastLogonAt?: string | null;
 }
@@ -29,6 +33,7 @@ export const UserStatusMenu = ({
   profileEmail,
   profileImageUrl,
   profileBannerUrl,
+  profilePresenceStatus,
   profileJoinedAt,
   profileLastLogonAt,
 }: UserStatusMenuProps) => {
@@ -36,15 +41,20 @@ export const UserStatusMenu = ({
   const [copied, setCopied] = useState(false);
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const [isProfileCardOpen, setIsProfileCardOpen] = useState(false);
+  const [isSavingStatus, setIsSavingStatus] = useState(false);
   const [menuRealName, setMenuRealName] = useState(profileRealName ?? "Unknown User");
   const [menuProfileName, setMenuProfileName] = useState<string | null>(profileName ?? null);
   const [menuBannerUrl, setMenuBannerUrl] = useState<string | null>(profileBannerUrl ?? null);
+  const [menuPresenceStatus, setMenuPresenceStatus] = useState<PresenceStatus>(
+    normalizePresenceStatus(profilePresenceStatus)
+  );
 
   useEffect(() => {
     setMenuRealName(profileRealName ?? "Unknown User");
     setMenuProfileName(profileName ?? null);
     setMenuBannerUrl(profileBannerUrl ?? null);
-  }, [profileBannerUrl, profileName, profileRealName]);
+    setMenuPresenceStatus(normalizePresenceStatus(profilePresenceStatus));
+  }, [profileBannerUrl, profileName, profilePresenceStatus, profileRealName]);
 
   useEffect(() => {
     if (!isPopoverOpen) {
@@ -68,12 +78,14 @@ export const UserStatusMenu = ({
           realName?: string | null;
           profileName?: string | null;
           bannerUrl?: string | null;
+          presenceStatus?: string | null;
         };
 
         if (!cancelled) {
           setMenuRealName(payload.realName?.trim() || "Unknown User");
           setMenuProfileName(payload.profileName ?? null);
           setMenuBannerUrl(payload.bannerUrl ?? null);
+          setMenuPresenceStatus(normalizePresenceStatus(payload.presenceStatus));
         }
       } catch (error) {
         console.error("[USER_STATUS_PROFILE_REFRESH]", error);
@@ -93,6 +105,7 @@ export const UserStatusMenu = ({
         realName?: string;
         profileName?: string;
         bannerUrl?: string | null;
+        presenceStatus?: string;
       }>;
 
       if (typeof customEvent.detail?.realName === "string") {
@@ -105,6 +118,10 @@ export const UserStatusMenu = ({
 
       if (customEvent.detail?.bannerUrl === null || typeof customEvent.detail?.bannerUrl === "string") {
         setMenuBannerUrl(customEvent.detail.bannerUrl ?? null);
+      }
+
+      if (typeof customEvent.detail?.presenceStatus === "string") {
+        setMenuPresenceStatus(normalizePresenceStatus(customEvent.detail.presenceStatus));
       }
     };
 
@@ -138,6 +155,7 @@ export const UserStatusMenu = ({
       profileEmail,
       profileImageUrl,
       profileBannerUrl,
+      profilePresenceStatus: menuPresenceStatus,
       profileJoinedAt,
       profileLastLogonAt,
     });
@@ -160,6 +178,41 @@ export const UserStatusMenu = ({
   const openProfileCardPopup = () => {
     setIsPopoverOpen(false);
     setIsProfileCardOpen(true);
+  };
+
+  const statusDotClassMap: Record<PresenceStatus, string> = {
+    ONLINE: "bg-emerald-500",
+    DND: "bg-rose-500",
+    INVISIBLE: "bg-yellow-400",
+    OFFLINE: "bg-black border border-zinc-400",
+  };
+
+  const onChangeStatus = async (nextStatus: PresenceStatus) => {
+    if (nextStatus === menuPresenceStatus || isSavingStatus) {
+      return;
+    }
+
+    const previousStatus = menuPresenceStatus;
+    setMenuPresenceStatus(nextStatus);
+
+    try {
+      setIsSavingStatus(true);
+      await axios.patch("/api/profile/status", { status: nextStatus });
+
+      window.dispatchEvent(
+        new CustomEvent("inaccord:profile-updated", {
+          detail: {
+            presenceStatus: nextStatus,
+          },
+        })
+      );
+    } catch (error) {
+      setMenuPresenceStatus(previousStatus);
+      console.error("[USER_STATUS_UPDATE]", error);
+      window.alert("Failed to update status.");
+    } finally {
+      setIsSavingStatus(false);
+    }
   };
 
   const formatDate = (value?: string | null) => {
@@ -199,7 +252,7 @@ export const UserStatusMenu = ({
               Users ID: {profileId}
             </p>
             <p className="truncate text-xs font-semibold text-white">{displayStatusName}</p>
-            <p className="truncate text-[10px] text-[#b5bac1]">Online</p>
+            <p className="truncate text-[10px] text-[#b5bac1]">{presenceStatusLabelMap[menuPresenceStatus]}</p>
           </div>
         </button>
       </PopoverTrigger>
@@ -236,9 +289,40 @@ export const UserStatusMenu = ({
               <p>Name: {menuRealName || "Unknown User"}</p>
               <p>Profile Name: {menuProfileName || "Not set"}</p>
               <p>Email: {profileEmail || ""}</p>
-              <p>Status: Online</p>
+              <p>Status: {presenceStatusLabelMap[menuPresenceStatus]}</p>
               <p>Last logon: {lastLogon}</p>
               <p>Created: {created}</p>
+            </div>
+
+            <div className="mt-3 rounded-md border border-white/10 bg-[#15161a] p-2">
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">User Status</p>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    disabled={isSavingStatus}
+                    className="flex w-full items-center justify-between rounded-md border border-white/10 bg-[#1e1f22] px-2 py-2 text-xs text-white transition hover:bg-[#2a2b30] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <span className={`h-2.5 w-2.5 rounded-full ${statusDotClassMap[menuPresenceStatus]}`} />
+                      {presenceStatusLabelMap[menuPresenceStatus]}
+                    </span>
+                    <span className="text-[10px] text-[#949ba4]">{isSavingStatus ? "Saving..." : "Change"}</span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-44 border border-black/40 bg-[#1e1f22] p-1 text-white">
+                  {presenceStatusValues.map((status) => (
+                    <DropdownMenuItem
+                      key={status}
+                      onClick={() => onChangeStatus(status)}
+                      className="flex items-center gap-2 rounded px-2 py-1.5 text-xs text-white focus:bg-[#2f3136]"
+                    >
+                      <span className={`h-2.5 w-2.5 rounded-full ${statusDotClassMap[status]}`} />
+                      <span>{presenceStatusLabelMap[status]}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </div>
@@ -314,7 +398,7 @@ export const UserStatusMenu = ({
                 <p>Name: {menuRealName || "Unknown User"}</p>
                 <p>Profile Name: {menuProfileName || "Not set"}</p>
                 <p>Email: {profileEmail || ""}</p>
-                <p>Status: Online</p>
+                <p>Status: {presenceStatusLabelMap[menuPresenceStatus]}</p>
                 <p>Last logon: {lastLogon}</p>
                 <p>Created: {created}</p>
               </div>

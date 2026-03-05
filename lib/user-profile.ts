@@ -14,6 +14,7 @@ export const ensureUserProfileSchema = async () => {
       "userId" varchar(191) primary key,
       "profileName" varchar(80) not null,
       "bannerUrl" text,
+      "presenceStatus" varchar(16) not null default 'ONLINE',
       "createdAt" timestamp not null,
       "updatedAt" timestamp not null
     )
@@ -22,6 +23,17 @@ export const ensureUserProfileSchema = async () => {
   await db.execute(sql`
     alter table "UserProfile"
     add column if not exists "bannerUrl" text
+  `);
+
+  await db.execute(sql`
+    alter table "UserProfile"
+    add column if not exists "presenceStatus" varchar(16) not null default 'ONLINE'
+  `);
+
+  await db.execute(sql`
+    update "UserProfile"
+    set "presenceStatus" = 'ONLINE'
+    where "presenceStatus" is null or trim("presenceStatus") = ''
   `);
 
   const now = new Date();

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
+import { normalizePresenceStatus } from "@/lib/presence-status";
 import { getSessionUserId } from "@/lib/session";
 import { getUserBanner } from "@/lib/user-banner-store";
 import { ensureUserProfileSchema } from "@/lib/user-profile";
@@ -32,6 +33,7 @@ export const currentProfile = async () => {
         u."name" as "realName",
         up."profileName" as "profileName",
         up."bannerUrl" as "bannerUrl",
+        up."presenceStatus" as "presenceStatus",
         u."role" as "role",
         u."email" as "email",
         coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
@@ -49,6 +51,7 @@ export const currentProfile = async () => {
         realName: string | null;
         profileName: string | null;
         bannerUrl: string | null;
+        presenceStatus: string | null;
         role: string | null;
         email: string | null;
         imageUrl: string | null;
@@ -70,6 +73,7 @@ export const currentProfile = async () => {
           realName: user.realName ?? user.email ?? "User",
           profileName: user.profileName ?? null,
           bannerUrl: resolvedBannerUrl,
+          presenceStatus: normalizePresenceStatus(user.presenceStatus),
           role: user.role ?? null,
           imageUrl: user.imageUrl ?? "/in-accord-steampunk-logo.png",
           email: user.email ?? "",

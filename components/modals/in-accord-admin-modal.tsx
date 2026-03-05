@@ -15,6 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ServerProfilePopover } from "@/components/modals/server-profile-popover";
 import { UserAvatar } from "@/components/user-avatar";
 import { useModal } from "@/hooks/use-modal-store";
+import { normalizePresenceStatus, presenceStatusLabelMap } from "@/lib/presence-status";
 import { cn } from "@/lib/utils";
 
 type AdminSection = "general" | "members" | "servers" | "security" | "integrations";
@@ -25,6 +26,7 @@ type AdminUser = {
   name: string;
   profileName: string | null;
   bannerUrl: string | null;
+  presenceStatus: string;
   email: string;
   role: string;
   imageUrl: string;
@@ -495,6 +497,9 @@ export const InAccordAdminModal = () => {
 
                         <div className="max-h-[420px] overflow-y-auto bg-white/70 font-mono text-[12pt] leading-none text-zinc-800 dark:bg-zinc-950/30 dark:text-zinc-200">
                           {filteredUsers.map((user, index) => (
+                            (() => {
+                              const normalizedPresenceStatus = normalizePresenceStatus(user.presenceStatus);
+                              return (
                             <div
                               key={user.id}
                               className={cn(
@@ -547,6 +552,7 @@ export const InAccordAdminModal = () => {
                                           <p>In-Accord User ID: {user.userId}</p>
                                           <p>Name: {user.name}</p>
                                           <p>Profile Name: {user.profileName || "Not set"}</p>
+                                          <p>Status: {presenceStatusLabelMap[normalizedPresenceStatus]}</p>
                                           <p>Role: {user.role || "USER"}</p>
                                           <p>Joined: {formatDateTime(user.joinedAt)}</p>
                                           <p>Last Login: {formatDateTime(user.lastLogin)}</p>
@@ -565,6 +571,8 @@ export const InAccordAdminModal = () => {
                               <p>{user.ownedServerCount}</p>
                               <p>{user.joinedServerCount}</p>
                             </div>
+                              );
+                            })()
                           ))}
                         </div>
                       </div>

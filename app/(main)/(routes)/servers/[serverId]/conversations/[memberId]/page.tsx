@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { db, member } from "@/lib/db";
 import { getOrCreateConversation } from "@/lib/conversation";
@@ -38,6 +38,51 @@ const MemberIdPage = async ({
 
   if (!currentMember) {
     return redirect("/");
+  }
+
+  const targetMemberResult = await db.execute(sql`
+    select
+      m."id" as "id",
+      m."profileId" as "profileId",
+      m."role" as "role",
+      up."presenceStatus" as "presenceStatus"
+    from "Member" m
+    left join "UserProfile" up on up."userId" = m."profileId"
+    where m."id" = ${params.memberId}
+      and m."serverId" = ${params.serverId}
+    limit 1
+  `);
+
+  const targetMemberRow = (targetMemberResult as unknown as {
+    rows: Array<{
+      id: string;
+      profileId: string;
+      role: string | null;
+      presenceStatus: string | null;
+    }>;
+  }).rows?.[0];
+
+  if (!targetMemberRow) {
+    return redirect(`/servers/${params.serverId}`);
+  }
+
+  const normalizedGlobalRole = (profile.role ?? "").trim().toUpperCase();
+  const isInAccordAdministrator =
+    normalizedGlobalRole === "ADMINISTRATOR" ||
+    normalizedGlobalRole === "IN-ACCORD ADMINISTRATOR" ||
+    normalizedGlobalRole === "IN_ACCORD_ADMINISTRATOR" ||
+    normalizedGlobalRole === "ADMIN";
+  const canBypassPresenceRestrictions = isInAccordAdministrator || currentMember.role === "ADMIN";
+  const targetStatus = String(targetMemberRow.presenceStatus ?? "ONLINE").toUpperCase();
+
+  if (targetMemberRow.profileId !== profile.id) {
+    if (targetStatus === "DND") {
+      return redirect(`/servers/${params.serverId}`);
+    }
+
+    if (!canBypassPresenceRestrictions && targetStatus === "INVISIBLE") {
+      return redirect(`/servers/${params.serverId}`);
+    }
   }
 
   const conversation = await getOrCreateConversation(currentMember.id, params.memberId);

@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { MemberRole } from "@/lib/db/types";
 import { OnlineUsersList } from "@/components/server/online-users-list";
+import { currentProfile } from "@/lib/current-profile";
 
 interface ServerUserRolesRailProps {
   serverId: string;
@@ -15,6 +16,7 @@ type RoleRow = {
   realName: string | null;
   profileName: string | null;
   bannerUrl: string | null;
+  presenceStatus: string | null;
   email: string | null;
   imageUrl: string | null;
   joinedAt: Date | string | null;
@@ -22,6 +24,7 @@ type RoleRow = {
 };
 
 export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps) => {
+  const profile = await currentProfile();
   const membersResult = await db.execute(sql`
     select
       m."id" as "id",
@@ -30,6 +33,7 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
       u."name" as "realName",
       up."profileName" as "profileName",
       up."bannerUrl" as "bannerUrl",
+      up."presenceStatus" as "presenceStatus",
       u."email" as "email",
       coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
       u."account.created" as "joinedAt",
@@ -49,9 +53,21 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
 
   const rows = (membersResult as unknown as { rows: RoleRow[] }).rows;
 
-  const onlineUsers = rows.map((row) => ({
+  const currentMemberRole = rows.find((row) => row.profileId === profile?.id)?.role;
+  const normalizedGlobalRole = (profile?.role ?? "").trim().toUpperCase();
+  const isInAccordAdministrator =
+    normalizedGlobalRole === "ADMINISTRATOR" ||
+    normalizedGlobalRole === "IN-ACCORD ADMINISTRATOR" ||
+    normalizedGlobalRole === "IN_ACCORD_ADMINISTRATOR" ||
+    normalizedGlobalRole === "ADMIN";
+  const canSeeInvisibleMembers = isInAccordAdministrator || currentMemberRole === MemberRole.ADMIN;
+
+  const onlineUsers = rows
+    .filter((row) => canSeeInvisibleMembers || String(row.presenceStatus ?? "ONLINE").toUpperCase() !== "INVISIBLE")
+    .map((row) => ({
     ...row,
-    displayName: row.profileName || row.realName || row.email || row.profileId,
+    displayName: row.realName || row.email || row.profileId,
+    presenceStatus: String(row.presenceStatus ?? "ONLINE").toUpperCase(),
     joinedAt: row.joinedAt ? new Date(row.joinedAt).toISOString() : null,
     lastLogonAt: row.lastLogonAt ? new Date(row.lastLogonAt).toISOString() : null,
   }));

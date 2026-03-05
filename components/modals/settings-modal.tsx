@@ -25,6 +25,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useModal } from "@/hooks/use-modal-store";
+import { normalizePresenceStatus, presenceStatusLabelMap } from "@/lib/presence-status";
 
 type SettingsSection =
   | "myAccount"
@@ -69,6 +70,9 @@ export const SettingsModal = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [realName, setRealName] = useState(data.profileRealName ?? "");
   const [profileName, setProfileName] = useState("");
+  const [profilePresenceStatus, setProfilePresenceStatus] = useState(
+    normalizePresenceStatus(data.profilePresenceStatus)
+  );
   const [profileNameError, setProfileNameError] = useState<string | null>(null);
   const [profileNameSuccess, setProfileNameSuccess] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
@@ -97,9 +101,10 @@ export const SettingsModal = () => {
   useEffect(() => {
     setRealName(data.profileRealName ?? "");
     setProfileName("");
+    setProfilePresenceStatus(normalizePresenceStatus(data.profilePresenceStatus));
     setProfileNameError(null);
     setProfileNameSuccess(null);
-  }, [data.profileName, data.profileRealName, isModalOpen]);
+  }, [data.profileName, data.profilePresenceStatus, data.profileRealName, isModalOpen]);
 
   useEffect(() => {
     setResolvedProfileId(data.profileId ?? null);
@@ -120,12 +125,14 @@ export const SettingsModal = () => {
           realName?: string;
           profileName?: string | null;
           bannerUrl?: string | null;
+          presenceStatus?: string | null;
         }>("/api/profile/me");
         if (!cancelled) {
           setResolvedProfileId(response.data?.id ?? null);
           setRealName(response.data?.realName ?? response.data?.name ?? "");
           setProfileName(response.data?.profileName ?? "");
           setBannerUrl(response.data?.bannerUrl ?? null);
+          setProfilePresenceStatus(normalizePresenceStatus(response.data?.presenceStatus));
         }
       } catch (error) {
         if (!cancelled) {
@@ -840,7 +847,7 @@ export const SettingsModal = () => {
                         </p>
                         <p>
                           <span className="text-[#949ba4]">Status:</span>{" "}
-                          <span className="text-white">Online</span>
+                          <span className="text-white">{presenceStatusLabelMap[profilePresenceStatus]}</span>
                         </p>
                         <p>
                           <span className="text-[#949ba4]">Last logon:</span>{" "}

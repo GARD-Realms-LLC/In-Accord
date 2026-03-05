@@ -6,6 +6,7 @@ import Image from "next/image";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { UserAvatar } from "@/components/user-avatar";
 import { MemberRole } from "@/lib/db/types";
+import { normalizePresenceStatus, presenceStatusDotClassMap, presenceStatusLabelMap } from "@/lib/presence-status";
 
 type OnlineRailUser = {
   id: string;
@@ -15,6 +16,7 @@ type OnlineRailUser = {
   realName: string;
   profileName: string | null;
   bannerUrl: string | null;
+  presenceStatus: string;
   email: string | null;
   imageUrl: string | null;
   joinedAt: string | null;
@@ -48,15 +50,24 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
   return (
     <div className="space-y-1">
       {users.map((member) => (
+        (() => {
+          const normalizedPresenceStatus = normalizePresenceStatus(member.presenceStatus);
+          return (
         <Popover key={`online-${member.profileId}`}>
           <PopoverTrigger asChild>
             <button
               type="button"
-              className="flex w-full items-center gap-2 rounded px-1 py-1 text-left hover:bg-[#2a2b2f]"
-              title={`View ${member.displayName} profile`}
+              className="flex w-full items-start gap-4 rounded px-1 py-1 text-left hover:bg-[#2a2b2f]"
+              title={`View ${member.profileName || "Profile"} profile`}
             >
-              <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true" />
-              <p className="truncate text-xs text-[#dbdee1]">{member.displayName}</p>
+              <span className="relative inline-flex h-6 w-6 shrink-0">
+                <UserAvatar src={member.imageUrl ?? undefined} className="h-6 w-6" />
+                <span
+                  className={`absolute -bottom-0.5 -right-0.5 inline-flex h-2.5 w-2.5 rounded-full border border-[#111214] ${presenceStatusDotClassMap[normalizedPresenceStatus]}`}
+                  aria-hidden="true"
+                />
+              </span>
+              <p className="min-w-0 truncate text-xs text-[#dbdee1]">{member.profileName || "No profile name"}</p>
             </button>
           </PopoverTrigger>
 
@@ -83,7 +94,9 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
               </div>
 
               <p className="truncate text-base font-bold text-white">{member.profileName || member.realName || member.displayName}</p>
-              <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">In-Accord Profile</p>
+              <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">
+                {member.profileName || "In-Accord Profile"}
+              </p>
 
               <div className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] p-3 text-xs">
                 <div className="space-y-1 text-[#dbdee1]">
@@ -91,6 +104,7 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
                   <p>Name: {member.realName || "Unknown User"}</p>
                   <p>In-Accord Profile Name: {member.profileName || "Not set"}</p>
                   <p>Email: {member.email || "N/A"}</p>
+                  <p>Status: {presenceStatusLabelMap[normalizedPresenceStatus]}</p>
                   <p>Role: {member.role}</p>
                   <p>Last logon: {formatDate(member.lastLogonAt)}</p>
                   <p>Created: {formatDate(member.joinedAt)}</p>
@@ -100,10 +114,12 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
 
             <div className="flex items-center border-t border-white/10 p-3 pt-2 text-xs text-[#b5bac1]">
               {roleIconMap[member.role]}
-              Online member
+              {presenceStatusLabelMap[normalizedPresenceStatus]} member
             </div>
           </PopoverContent>
         </Popover>
+          );
+        })()
       ))}
     </div>
   );

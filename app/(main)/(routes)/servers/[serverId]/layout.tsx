@@ -19,6 +19,7 @@ type MemberRow = {
   id: string;
   role: MemberRole;
   profileId: string;
+  presenceStatus: string | null;
   name: string | null;
   email: string | null;
 };
@@ -69,10 +70,12 @@ const ServerIdLayout = async ({
       m."id" as "id",
       m."role" as "role",
       m."profileId" as "profileId",
+      up."presenceStatus" as "presenceStatus",
       u."name" as "name",
       u."email" as "email"
     from "Member" m
     left join "Users" u on u."userId" = m."profileId"
+    left join "UserProfile" up on up."userId" = m."profileId"
     where m."serverId" = ${params.serverId}
     order by
       case m."role"
@@ -90,7 +93,18 @@ const ServerIdLayout = async ({
   const voiceChannels = channelRows.filter((row) => row.type === ChannelType.AUDIO);
   const videoChannels = channelRows.filter((row) => row.type === ChannelType.VIDEO);
 
-  const onlineUsers = memberRows.map((row) => ({
+  const currentMemberRole = memberRows.find((row) => row.profileId === profile.id)?.role;
+  const normalizedGlobalRole = (profile.role ?? "").trim().toUpperCase();
+  const isInAccordAdministrator =
+    normalizedGlobalRole === "ADMINISTRATOR" ||
+    normalizedGlobalRole === "IN-ACCORD ADMINISTRATOR" ||
+    normalizedGlobalRole === "IN_ACCORD_ADMINISTRATOR" ||
+    normalizedGlobalRole === "ADMIN";
+  const canSeeInvisibleMembers = isInAccordAdministrator || currentMemberRole === MemberRole.ADMIN;
+
+  const onlineUsers = memberRows
+    .filter((row) => canSeeInvisibleMembers || String(row.presenceStatus ?? "ONLINE").toUpperCase() !== "INVISIBLE")
+    .map((row) => ({
     ...row,
     displayName: row.name || row.email || row.profileId,
   }));

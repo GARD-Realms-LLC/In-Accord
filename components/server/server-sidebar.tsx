@@ -60,11 +60,13 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
       u."userId" as "userId",
       u."name" as "name",
       u."email" as "email",
+      up."presenceStatus" as "presenceStatus",
       coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
       u."account.created" as "accountCreated",
       u."lastLogin" as "lastLogin"
     from "Member" m
     left join "Users" u on u."userId" = m."profileId"
+    left join "UserProfile" up on up."userId" = m."profileId"
     where m."serverId" = ${serverId}
     order by m."role" asc
   `);
@@ -81,6 +83,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
         userId: string | null;
         name: string | null;
         email: string | null;
+        presenceStatus: string | null;
         imageUrl: string | null;
         accountCreated: Date | string | null;
         lastLogin: Date | string | null;
@@ -90,6 +93,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
     id: row.id,
     role: row.role,
     profileId: row.profileId,
+    presenceStatus: row.presenceStatus ?? "ONLINE",
     serverId: row.serverId,
     createdAt: new Date(row.createdAt),
     updatedAt: new Date(row.updatedAt),
@@ -124,6 +128,16 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
   const role = members.find(
     (member) => member.profileId === profile?.id
   )?.role;
+  const normalizedGlobalRole = (profile?.role ?? "").trim().toUpperCase();
+  const isInAccordAdministrator =
+    normalizedGlobalRole === "ADMINISTRATOR" ||
+    normalizedGlobalRole === "IN-ACCORD ADMINISTRATOR" ||
+    normalizedGlobalRole === "IN_ACCORD_ADMINISTRATOR" ||
+    normalizedGlobalRole === "ADMIN";
+  const canSeeInvisibleMembers = isInAccordAdministrator || role === MemberRole.ADMIN;
+  const visibleMembersWithoutCurrent = membersWithoutCurrent.filter((member) => {
+    return canSeeInvisibleMembers || String(member.presenceStatus ?? "ONLINE").toUpperCase() !== "INVISIBLE";
+  });
   const isServerOwner = !!profile?.id && currentServer.profileId === profile.id;
   const serverWithBanner = {
     ...currentServer,
@@ -197,7 +211,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
             </div>
           </div>
         )}
-        {!!membersWithoutCurrent?.length && (
+        {!!visibleMembersWithoutCurrent?.length && (
           <div className="mb-2">
             <ServerSection
               sectionType="members"
@@ -206,7 +220,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
               server={currentServer}
             />
             <div className="space-y-[2px]">
-              {membersWithoutCurrent.map((member) => (
+              {visibleMembersWithoutCurrent.map((member) => (
                 <ServerMember key={member.id} member={member} server={currentServer} />
               ))}
             </div>

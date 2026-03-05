@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db } from "@/lib/db";
+import { normalizePresenceStatus } from "@/lib/presence-status";
 import { ensureUserProfileSchema } from "@/lib/user-profile";
 
 type UserRow = {
@@ -10,6 +11,7 @@ type UserRow = {
   realName: string | null;
   profileName: string | null;
   bannerUrl: string | null;
+  presenceStatus: string | null;
   email: string | null;
   role: string | null;
   imageUrl: string | null;
@@ -49,6 +51,7 @@ export async function GET() {
         u."name" as "realName",
         up."profileName" as "profileName",
         up."bannerUrl" as "bannerUrl",
+        up."presenceStatus" as "presenceStatus",
         u."email" as "email",
         u."role" as "role",
         coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
@@ -84,6 +87,7 @@ export async function GET() {
       name: row.realName ?? row.email ?? "User",
       profileName: row.profileName ?? null,
       bannerUrl: row.bannerUrl ?? null,
+      presenceStatus: normalizePresenceStatus(row.presenceStatus),
       email: row.email ?? "",
       role: row.role ?? "USER",
       imageUrl: row.imageUrl ?? "/in-accord-steampunk-logo.png",

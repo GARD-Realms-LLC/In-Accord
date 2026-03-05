@@ -11,6 +11,7 @@ interface SettingsButtonProps {
   profileEmail?: string | null;
   profileImageUrl?: string | null;
   profileBannerUrl?: string | null;
+  profilePresenceStatus?: string | null;
   profileJoinedAt?: string | null;
   profileLastLogonAt?: string | null;
 }
@@ -22,6 +23,7 @@ export const SettingsButton = ({
   profileEmail,
   profileImageUrl,
   profileBannerUrl,
+  profilePresenceStatus,
   profileJoinedAt,
   profileLastLogonAt,
 }: SettingsButtonProps) => {
@@ -39,6 +41,7 @@ export const SettingsButton = ({
           profileEmail,
           profileImageUrl,
           profileBannerUrl,
+          profilePresenceStatus,
           profileJoinedAt,
           profileLastLogonAt,
         })
