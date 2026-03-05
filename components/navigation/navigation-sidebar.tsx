@@ -51,6 +51,34 @@ export const NavigationSidebar = async () => {
   const myServers = servers.filter((item) => item.profileId === profile.id);
   const joinedServers = servers.filter((item) => item.profileId !== profile.id);
 
+  const normalizedRole = (profile.role ?? "").trim().toUpperCase();
+  const isInAccordAdministrator =
+    normalizedRole === "ADMINISTRATOR" ||
+    normalizedRole === "IN-ACCORD ADMINISTRATOR" ||
+    normalizedRole === "IN_ACCORD_ADMINISTRATOR" ||
+    normalizedRole === "ADMIN";
+
+  let totalMembers = 0;
+  let totalServers = 0;
+
+  if (isInAccordAdministrator) {
+    const totalsResult = await db.execute(sql`
+      select
+        (select count(*)::int from "Member") as "totalMembers",
+        (select count(*)::int from "Server") as "totalServers"
+    `);
+
+    const totalsRow = (totalsResult as unknown as {
+      rows: Array<{
+        totalMembers: number | string | null;
+        totalServers: number | string | null;
+      }>;
+    }).rows?.[0];
+
+    totalMembers = Number(totalsRow?.totalMembers ?? 0);
+    totalServers = Number(totalsRow?.totalServers ?? 0);
+  }
+
   return (
     <div
       className="space-y-4 flex flex-col items-center h-full w-full overflow-hidden rounded-2xl border border-black/20 text-primary dark:bg-[#1E1F22] bg-[#E3E5E8] py-3"
@@ -59,6 +87,17 @@ export const NavigationSidebar = async () => {
       <div className="text-center text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-700 dark:text-zinc-300">
         In-Accord
       </div>
+
+      {isInAccordAdministrator ? (
+        <>
+          <div className="w-full px-2 text-center text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-700 dark:text-zinc-300">
+            <p className="mb-1">TOTAL</p>
+            <p>Members: {totalMembers}</p>
+            <p className="mt-1">Servers: {totalServers}</p>
+          </div>
+          <div className="h-[2px] w-[85%] rounded bg-zinc-700 dark:bg-zinc-200" />
+        </>
+      ) : null}
 
       <Link
         href="/users"
@@ -116,6 +155,11 @@ export const NavigationSidebar = async () => {
           </div>
         ) : null}
       </ScrollArea>
+
+      <div className="w-full px-3 pb-1 text-center text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
+        <p>My Servers: {myServers.length}</p>
+        <p className="mt-1">Joined: {joinedServers.length}</p>
+      </div>
     </div>
   );
 };
