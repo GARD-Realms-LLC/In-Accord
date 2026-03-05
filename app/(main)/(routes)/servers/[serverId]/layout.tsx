@@ -8,6 +8,7 @@ import { ServerUserRolesRail } from "@/components/server/server-user-roles-rail"
 import { UserLocalTime } from "@/components/server/user-local-time";
 import { ServerRouteShell } from "@/components/server/server-route-shell";
 import { ChannelType, MemberRole } from "@/lib/db/types";
+import { isInAccordAdministrator } from "@/lib/in-accord-admin";
 
 type ChannelRow = {
   id: string;
@@ -94,13 +95,7 @@ const ServerIdLayout = async ({
   const videoChannels = channelRows.filter((row) => row.type === ChannelType.VIDEO);
 
   const currentMemberRole = memberRows.find((row) => row.profileId === profile.id)?.role;
-  const normalizedGlobalRole = (profile.role ?? "").trim().toUpperCase();
-  const isInAccordAdministrator =
-    normalizedGlobalRole === "ADMINISTRATOR" ||
-    normalizedGlobalRole === "IN-ACCORD ADMINISTRATOR" ||
-    normalizedGlobalRole === "IN_ACCORD_ADMINISTRATOR" ||
-    normalizedGlobalRole === "ADMIN";
-  const canSeeInvisibleMembers = isInAccordAdministrator || currentMemberRole === MemberRole.ADMIN;
+  const canSeeInvisibleMembers = isInAccordAdministrator(profile.role) || currentMemberRole === MemberRole.ADMIN;
 
   const onlineUsers = memberRows
     .filter((row) => canSeeInvisibleMembers || String(row.presenceStatus ?? "ONLINE").toUpperCase() !== "INVISIBLE")

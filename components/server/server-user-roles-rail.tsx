@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { MemberRole } from "@/lib/db/types";
 import { OnlineUsersList } from "@/components/server/online-users-list";
 import { currentProfile } from "@/lib/current-profile";
+import { isInAccordAdministrator } from "@/lib/in-accord-admin";
 
 interface ServerUserRolesRailProps {
   serverId: string;
@@ -13,6 +14,7 @@ type RoleRow = {
   id: string;
   role: MemberRole;
   profileId: string;
+  globalRole: string | null;
   realName: string | null;
   profileName: string | null;
   bannerUrl: string | null;
@@ -30,6 +32,7 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
       m."id" as "id",
       m."role" as "role",
       m."profileId" as "profileId",
+      u."role" as "globalRole",
       u."name" as "realName",
       up."profileName" as "profileName",
       up."bannerUrl" as "bannerUrl",
@@ -54,13 +57,7 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
   const rows = (membersResult as unknown as { rows: RoleRow[] }).rows;
 
   const currentMemberRole = rows.find((row) => row.profileId === profile?.id)?.role;
-  const normalizedGlobalRole = (profile?.role ?? "").trim().toUpperCase();
-  const isInAccordAdministrator =
-    normalizedGlobalRole === "ADMINISTRATOR" ||
-    normalizedGlobalRole === "IN-ACCORD ADMINISTRATOR" ||
-    normalizedGlobalRole === "IN_ACCORD_ADMINISTRATOR" ||
-    normalizedGlobalRole === "ADMIN";
-  const canSeeInvisibleMembers = isInAccordAdministrator || currentMemberRole === MemberRole.ADMIN;
+  const canSeeInvisibleMembers = isInAccordAdministrator(profile?.role) || currentMemberRole === MemberRole.ADMIN;
 
   const onlineUsers = rows
     .filter((row) => canSeeInvisibleMembers || String(row.presenceStatus ?? "ONLINE").toUpperCase() !== "INVISIBLE")

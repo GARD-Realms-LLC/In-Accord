@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
+import { Crown } from "lucide-react";
 
 import { currentProfile } from "@/lib/current-profile";
+import { isInAccordAdministrator } from "@/lib/in-accord-admin";
 
 const SettingsPage = async () => {
   const profile = await currentProfile();
@@ -8,6 +10,8 @@ const SettingsPage = async () => {
   if (!profile) {
     return redirect("/sign-in");
   }
+
+  const hasAdminCrown = isInAccordAdministrator(profile.role);
 
   return (
     <div className="h-full bg-[#313338] p-6 text-[#dbdee1]">
@@ -26,7 +30,12 @@ const SettingsPage = async () => {
             </p>
             <p>
               <span className="text-[#949ba4]">Profile Name:</span>{" "}
-              <span className="text-white">{profile.profileName || "Not set"}</span>
+              <span className="inline-flex items-center gap-1.5 text-white">
+                <span>{profile.profileName || "Not set"}</span>
+                {hasAdminCrown ? (
+                  <Crown className="h-3.5 w-3.5 shrink-0 text-rose-500" aria-label="In-Accord Administrator" />
+                ) : null}
+              </span>
             </p>
             <p>
               <span className="text-[#949ba4]">Email:</span>{" "}

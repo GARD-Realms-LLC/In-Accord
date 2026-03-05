@@ -17,6 +17,7 @@ export async function GET() {
       profileName: profile.profileName ?? null,
       bannerUrl: profile.bannerUrl ?? null,
       presenceStatus: profile.presenceStatus ?? "ONLINE",
+      role: profile.role ?? null,
       email: profile.email,
       imageUrl: profile.imageUrl,
     });

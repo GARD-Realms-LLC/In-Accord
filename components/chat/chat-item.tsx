@@ -12,12 +12,14 @@ import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 
 import { UserAvatar } from "@/components/user-avatar";
+import { BotAppBadge } from "@/components/bot-app-badge";
 import { ActionTooltip } from "@/components/action-tooltip";
 import { cn } from "@/lib/utils";
 import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useModal } from "@/hooks/use-modal-store";
+import { isBotUser } from "@/lib/is-bot-user";
 
 interface ChatItemProps {
   id: string;
@@ -57,6 +59,8 @@ export const ChatItem = ({
   socketQuery,
 }: ChatItemProps) => {
   const [isEditing, setIsEditing] = useState(false);
+  const [displayName, setDisplayName] = useState(member.profile.name);
+  const [displayImageUrl, setDisplayImageUrl] = useState(member.profile.imageUrl);
   const { onOpen } = useModal();
   const params = useParams();
   const router = useRouter();
@@ -112,6 +116,50 @@ export const ChatItem = ({
     });
   }, [content]);
 
+  useEffect(() => {
+    setDisplayName(member.profile.name);
+    setDisplayImageUrl(member.profile.imageUrl);
+  }, [member.profile.imageUrl, member.profile.name]);
+
+  useEffect(() => {
+    const onProfileUpdated = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        profileId?: string | null;
+        profileName?: string;
+        imageUrl?: string | null;
+      }>;
+
+      const eventProfileId = customEvent.detail?.profileId?.trim();
+      const belongsToRenderedMember = eventProfileId
+        ? eventProfileId === member.profile.id
+        : member.profile.id === currentMember.profileId;
+
+      if (!belongsToRenderedMember) {
+        return;
+      }
+
+      if (typeof customEvent.detail?.profileName === "string") {
+        const normalizedProfileName = customEvent.detail.profileName.trim();
+        if (normalizedProfileName) {
+          setDisplayName(normalizedProfileName);
+        }
+      }
+
+      if (typeof customEvent.detail?.imageUrl === "string") {
+        const normalizedImageUrl = customEvent.detail.imageUrl.trim();
+        if (normalizedImageUrl) {
+          setDisplayImageUrl(normalizedImageUrl);
+        }
+      }
+    };
+
+    window.addEventListener("inaccord:profile-updated", onProfileUpdated);
+
+    return () => {
+      window.removeEventListener("inaccord:profile-updated", onProfileUpdated);
+    };
+  }, [currentMember.profileId, member.profile.id]);
+
   const fileType = fileUrl?.split(".").pop();
 
   const isAdmin = currentMember.role === MemberRole.ADMIN;
@@ -121,6 +169,10 @@ export const ChatItem = ({
   const canEditMessage = !deleted && isOwner && !fileUrl;
   const isPDF = fileType === "pdf" && fileUrl;
   const isImage = !isPDF && fileUrl;
+  const showBotBadge = isBotUser({
+    name: displayName,
+    email: member.profile.email,
+  });
 
   return (
     <div className="relative group flex items-center hover:bg-black/5 p-4 transition w-full">
@@ -129,7 +181,7 @@ export const ChatItem = ({
           onClick={onMemberClick}
           className="cursor-pointer hover:drop-shadow-md transition"
         >
-          <UserAvatar src={member.profile.imageUrl} />
+          <UserAvatar src={displayImageUrl} />
         </div>
         <div className="flex flex-col w-full">
           <div className="flex items-center gap-x-2">
@@ -138,8 +190,9 @@ export const ChatItem = ({
                 onClick={onMemberClick}
                 className="font-semibold text-sm hover:underline cursor-pointer"
               >
-                {member.profile.name}
+                {displayName}
               </p>
+              {showBotBadge ? <BotAppBadge className="ml-1.5 h-4 px-1 text-[9px]" /> : null}
               <ActionTooltip label={member.role} align="center">
                 {roleIconMap[member.role]}
               </ActionTooltip>

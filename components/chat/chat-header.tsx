@@ -1,5 +1,6 @@
 import { Hash } from "lucide-react";
 
+import { BotAppBadge } from "@/components/bot-app-badge";
 import { MobileToggle } from "@/components/mobile-toggle";
 import { UserAvatar } from "@/components/user-avatar";
 import { SocketIndicator } from "@/components/socket-indicator";
@@ -11,6 +12,7 @@ interface ChatHeaderProps {
   name: string;
   type: "channel" | "conversation";
   imageUrl?: string;
+  isBot?: boolean;
 }
 
 export const ChatHeader = ({
@@ -18,6 +20,7 @@ export const ChatHeader = ({
   name,
   type,
   imageUrl,
+  isBot,
 }: ChatHeaderProps) => {
   return (
     <div className="text-md font-semibold pl-0 pr-3 flex items-center h-12 border-neutral-200 dark:border-neutral-800 border-b-2">
@@ -28,7 +31,10 @@ export const ChatHeader = ({
       {type === "conversation" && (
         <UserAvatar src={imageUrl} className="h-8 w-8 md:h-8 md:w-8 mr-2" />
       )}
-      <p className="font-semibold text-md text-black dark:text-white">{name}</p>
+      <div className="flex min-w-0 items-center gap-1.5">
+        <p className="truncate font-semibold text-md text-black dark:text-white">{name}</p>
+        {type === "conversation" && isBot ? <BotAppBadge className="h-4 px-1 text-[9px]" /> : null}
+      </div>
       <div className="ml-auto flex items-center">
         {type === "conversation" && <ChatVideoButton />}
         <SocketIndicator />

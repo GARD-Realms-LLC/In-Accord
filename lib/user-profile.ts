@@ -50,3 +50,51 @@ export const ensureUserProfileSchema = async () => {
 
   userProfileSchemaReady = true;
 };
+
+export const getUserProfileNameMap = async (userIds: string[]) => {
+  const normalizedUserIds = Array.from(
+    new Set(
+      userIds
+        .map((userId) => String(userId ?? "").trim())
+        .filter((userId) => userId.length > 0)
+    )
+  );
+
+  if (normalizedUserIds.length === 0) {
+    return new Map<string, string>();
+  }
+
+  await ensureUserProfileSchema();
+
+  const values = normalizedUserIds.map((userId) => sql`(${userId})`);
+  const userIdValues = sql.join(values, sql`, `);
+
+  const result = await db.execute(sql`
+    with "RequestedUsers" ("userId") as (
+      values ${userIdValues}
+    )
+    select
+      ru."userId" as "userId",
+      up."profileName" as "profileName"
+    from "RequestedUsers" ru
+    left join "UserProfile" up on up."userId" = ru."userId"
+  `);
+
+  const rows = (result as unknown as {
+    rows: Array<{
+      userId: string;
+      profileName: string | null;
+    }>;
+  }).rows;
+
+  const map = new Map<string, string>();
+
+  for (const row of rows ?? []) {
+    const normalizedName = String(row.profileName ?? "").trim();
+    if (normalizedName) {
+      map.set(row.userId, normalizedName);
+    }
+  }
+
+  return map;
+};

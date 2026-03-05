@@ -4,6 +4,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db, member } from "@/lib/db";
 import { getOrCreateConversation } from "@/lib/conversation";
 import { currentProfile } from "@/lib/current-profile";
+import { isBotUser } from "@/lib/is-bot-user";
 import { ChatHeader } from "@/components/chat/chat-header";
 // import { ChatMessages } from "@/components/chat/chat-messages";
 import { ChatInput } from "@/components/chat/chat-input";
@@ -94,12 +95,17 @@ const MemberIdPage = async ({
   const { memberOne, memberTwo } = conversation;
 
   const otherMember = memberOne.profileId === profile.id ? memberTwo : memberOne;
+  const isOtherMemberBot = isBotUser({
+    name: otherMember.profile.name,
+    email: otherMember.profile.email,
+  });
 
   return ( 
     <div className="flex h-full flex-col overflow-hidden rounded-3xl border border-black/20 bg-white shadow-xl shadow-black/35 dark:bg-[#313338]">
       <ChatHeader
         imageUrl={otherMember.profile.imageUrl}
         name={otherMember.profile.name}
+        isBot={isOtherMemberBot}
         serverId={params.serverId}
         type="conversation"
       />

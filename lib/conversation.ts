@@ -29,7 +29,7 @@ const hydrateConversation = async (conversationId: string) => {
       m1."createdAt" as "memberOneCreatedAt",
       m1."updatedAt" as "memberOneUpdatedAt",
       u1."userId" as "memberOneUserId",
-      u1."name" as "memberOneName",
+      coalesce(nullif(trim(up1."profileName"), ''), u1."name", u1."email", 'User') as "memberOneName",
       u1."email" as "memberOneEmail",
       coalesce(u1."avatarUrl", u1."avatar", u1."icon") as "memberOneImageUrl",
       u1."account.created" as "memberOneAccountCreated",
@@ -42,7 +42,7 @@ const hydrateConversation = async (conversationId: string) => {
       m2."createdAt" as "memberTwoCreatedAt",
       m2."updatedAt" as "memberTwoUpdatedAt",
       u2."userId" as "memberTwoUserId",
-      u2."name" as "memberTwoName",
+      coalesce(nullif(trim(up2."profileName"), ''), u2."name", u2."email", 'User') as "memberTwoName",
       u2."email" as "memberTwoEmail",
       coalesce(u2."avatarUrl", u2."avatar", u2."icon") as "memberTwoImageUrl",
       u2."account.created" as "memberTwoAccountCreated",
@@ -50,8 +50,10 @@ const hydrateConversation = async (conversationId: string) => {
     from "Conversation" c
     left join "Member" m1 on m1."id" = c."memberOneId"
     left join "Users" u1 on u1."userId" = m1."profileId"
+    left join "UserProfile" up1 on up1."userId" = m1."profileId"
     left join "Member" m2 on m2."id" = c."memberTwoId"
     left join "Users" u2 on u2."userId" = m2."profileId"
+    left join "UserProfile" up2 on up2."userId" = m2."profileId"
     where c."id" = ${conversationId}
     limit 1
   `);

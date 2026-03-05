@@ -8,6 +8,7 @@ import { ChatInput } from "@/components/chat/chat-input";
 import { ChatItem } from "@/components/chat/chat-item";
 // import { MediaRoom } from "@/components/media-room";
 import { channel, db, member, message } from "@/lib/db";
+import { getUserProfileNameMap } from "@/lib/user-profile";
 
 interface ChannelIdPageProps {
   params: {
@@ -50,6 +51,29 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
     },
   });
 
+  const profileNameMap = await getUserProfileNameMap(
+    channelMessages.map((item) => item.member.profileId)
+  );
+
+  const hydratedChannelMessages = channelMessages.map((item) => {
+    const profileName = profileNameMap.get(item.member.profileId);
+
+    if (!profileName) {
+      return item;
+    }
+
+    return {
+      ...item,
+      member: {
+        ...item.member,
+        profile: {
+          ...item.member.profile,
+          name: profileName,
+        },
+      },
+    };
+  });
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-black/20 bg-white shadow-xl shadow-black/35 dark:bg-[#313338]">
@@ -61,12 +85,12 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
 
         {currentChannel.type === ChannelType.TEXT ? (
           <div className="flex-1 overflow-y-auto">
-            {channelMessages.length === 0 ? (
+            {hydratedChannelMessages.length === 0 ? (
               <div className="p-6 text-sm text-zinc-500 dark:text-zinc-400">
                 No messages yet. Start the conversation in #{currentChannel.name}.
               </div>
             ) : (
-              channelMessages.map((item) => (
+              hydratedChannelMessages.map((item) => (
                 <ChatItem
                   key={item.id}
                   id={item.id}

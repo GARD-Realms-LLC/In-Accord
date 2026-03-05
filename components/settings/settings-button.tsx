@@ -8,6 +8,7 @@ interface SettingsButtonProps {
   profileId?: string | null;
   profileRealName?: string | null;
   profileName?: string | null;
+  profileRole?: string | null;
   profileEmail?: string | null;
   profileImageUrl?: string | null;
   profileBannerUrl?: string | null;
@@ -20,6 +21,7 @@ export const SettingsButton = ({
   profileId,
   profileRealName,
   profileName,
+  profileRole,
   profileEmail,
   profileImageUrl,
   profileBannerUrl,
@@ -38,6 +40,7 @@ export const SettingsButton = ({
           profileId,
           profileRealName,
           profileName,
+          profileRole,
           profileEmail,
           profileImageUrl,
           profileBannerUrl,

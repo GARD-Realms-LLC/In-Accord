@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { ShieldAlert, ShieldCheck } from "lucide-react";
+import { Crown, ShieldAlert, ShieldCheck } from "lucide-react";
 import Image from "next/image";
 
 import {
@@ -11,10 +11,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { BotAppBadge } from "@/components/bot-app-badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ServerProfilePopover } from "@/components/modals/server-profile-popover";
 import { UserAvatar } from "@/components/user-avatar";
 import { useModal } from "@/hooks/use-modal-store";
+import { isInAccordAdministrator } from "@/lib/in-accord-admin";
+import { isBotUser } from "@/lib/is-bot-user";
 import { normalizePresenceStatus, presenceStatusLabelMap } from "@/lib/presence-status";
 import { cn } from "@/lib/utils";
 
@@ -376,7 +379,13 @@ export const InAccordAdminModal = () => {
                   <p className="text-xs font-semibold uppercase tracking-[0.08em] text-amber-300">Access Status</p>
                   <div className="mt-2 flex items-center gap-2 text-sm text-amber-200">
                     <ShieldCheck className="h-4 w-4" />
-                    Administrator access confirmed for {data.profileName || "current user"}
+                    Administrator access confirmed for
+                    <span className="inline-flex items-center gap-1.5">
+                      <span>{data.profileName || "current user"}</span>
+                      {isInAccordAdministrator(data.profileRole) ? (
+                        <Crown className="h-4 w-4 shrink-0 text-rose-500" aria-label="In-Accord Administrator" />
+                      ) : null}
+                    </span>
                   </div>
                 </div>
 
@@ -499,6 +508,12 @@ export const InAccordAdminModal = () => {
                           {filteredUsers.map((user, index) => (
                             (() => {
                               const normalizedPresenceStatus = normalizePresenceStatus(user.presenceStatus);
+                              const hasAdminCrown = isInAccordAdministrator(user.role);
+                              const showBotBadge = isBotUser({
+                                role: user.role,
+                                name: user.profileName || user.name,
+                                email: user.email,
+                              });
                               return (
                             <div
                               key={user.id}
@@ -544,7 +559,13 @@ export const InAccordAdminModal = () => {
                                         <UserAvatar src={user.imageUrl} className="h-10 w-10" />
                                       </div>
 
-                                      <p className="truncate text-base font-bold text-white">{user.profileName || user.name}</p>
+                                      <div className="flex min-w-0 items-center gap-1.5">
+                                        <p className="truncate text-base font-bold text-white">{user.profileName || user.name}</p>
+                                        {showBotBadge ? <BotAppBadge className="h-4 px-1 text-[9px]" /> : null}
+                                        {hasAdminCrown ? (
+                                          <Crown className="h-4 w-4 shrink-0 text-rose-500" aria-label="In-Accord Administrator" />
+                                        ) : null}
+                                      </div>
                                       <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">In-Accord Profile</p>
 
                                       <div className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] p-3 text-xs">
@@ -565,7 +586,12 @@ export const InAccordAdminModal = () => {
                                 </Popover>
                                 <p className="truncate text-[12pt] leading-none" title={user.userId}>{user.userId}</p>
                               </div>
-                              <p className="truncate" title={user.name}>{user.name}</p>
+                              <div className="flex min-w-0 items-center gap-1.5">
+                                <p className="truncate" title={user.name}>{user.name}</p>
+                                {isBotUser({ role: user.role, name: user.name, email: user.email }) ? (
+                                  <BotAppBadge className="h-4 px-1 text-[9px]" />
+                                ) : null}
+                              </div>
                               <p className="truncate uppercase" title={user.role || "USER"}>{user.role || "USER"}</p>
                               <p className="truncate" title={formatDateTime(user.joinedAt)}>{formatDateTime(user.joinedAt)}</p>
                               <p>{user.ownedServerCount}</p>

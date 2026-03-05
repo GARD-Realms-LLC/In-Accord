@@ -35,6 +35,7 @@ const MainLayout = async ({ children }: { children: React.ReactNode }) => {
                 profileId={profile.id}
                 profileRealName={profile.realName ?? null}
                 profileName={profile.profileName ?? null}
+                profileRole={profile.role}
                 profileEmail={profile.email}
                 profileImageUrl={profile.imageUrl}
                 profileBannerUrl={profile.bannerUrl ?? null}

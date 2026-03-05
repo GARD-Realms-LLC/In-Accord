@@ -5,6 +5,7 @@ import { useRef } from "react";
 import {
   Bell,
   Camera,
+  Crown,
   Loader2,
   LogOut,
   Palette,
@@ -25,6 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useModal } from "@/hooks/use-modal-store";
+import { isInAccordAdministrator } from "@/lib/in-accord-admin";
 import { normalizePresenceStatus, presenceStatusLabelMap } from "@/lib/presence-status";
 
 type SettingsSection =
@@ -70,6 +72,7 @@ export const SettingsModal = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [realName, setRealName] = useState(data.profileRealName ?? "");
   const [profileName, setProfileName] = useState("");
+  const [profileRole, setProfileRole] = useState<string | null>(data.profileRole ?? null);
   const [profilePresenceStatus, setProfilePresenceStatus] = useState(
     normalizePresenceStatus(data.profilePresenceStatus)
   );
@@ -101,10 +104,11 @@ export const SettingsModal = () => {
   useEffect(() => {
     setRealName(data.profileRealName ?? "");
     setProfileName("");
+    setProfileRole(data.profileRole ?? null);
     setProfilePresenceStatus(normalizePresenceStatus(data.profilePresenceStatus));
     setProfileNameError(null);
     setProfileNameSuccess(null);
-  }, [data.profileName, data.profilePresenceStatus, data.profileRealName, isModalOpen]);
+  }, [data.profileName, data.profilePresenceStatus, data.profileRealName, data.profileRole, isModalOpen]);
 
   useEffect(() => {
     setResolvedProfileId(data.profileId ?? null);
@@ -125,6 +129,7 @@ export const SettingsModal = () => {
           realName?: string;
           profileName?: string | null;
           bannerUrl?: string | null;
+          role?: string | null;
           presenceStatus?: string | null;
         }>("/api/profile/me");
         if (!cancelled) {
@@ -132,6 +137,7 @@ export const SettingsModal = () => {
           setRealName(response.data?.realName ?? response.data?.name ?? "");
           setProfileName(response.data?.profileName ?? "");
           setBannerUrl(response.data?.bannerUrl ?? null);
+          setProfileRole(response.data?.role ?? data.profileRole ?? null);
           setProfilePresenceStatus(normalizePresenceStatus(response.data?.presenceStatus));
         }
       } catch (error) {
@@ -146,7 +152,7 @@ export const SettingsModal = () => {
     return () => {
       cancelled = true;
     };
-  }, [isModalOpen]);
+  }, [data.profileRole, isModalOpen]);
 
   const onSaveProfileName = async () => {
     const trimmedName = profileName.trim();
@@ -177,6 +183,7 @@ export const SettingsModal = () => {
       window.dispatchEvent(
         new CustomEvent("inaccord:profile-updated", {
           detail: {
+            profileId: resolvedProfileId,
             profileName: savedName,
           },
         })
@@ -244,6 +251,14 @@ export const SettingsModal = () => {
       });
 
       setAvatarUrl(upload.data.url);
+      window.dispatchEvent(
+        new CustomEvent("inaccord:profile-updated", {
+          detail: {
+            profileId: resolvedProfileId,
+            imageUrl: upload.data.url,
+          },
+        })
+      );
       router.refresh();
     } catch (error) {
       if (axios.isAxiosError(error)) {
@@ -300,6 +315,7 @@ export const SettingsModal = () => {
       window.dispatchEvent(
         new CustomEvent("inaccord:profile-updated", {
           detail: {
+            profileId: resolvedProfileId,
             bannerUrl: upload.data.url,
           },
         })
@@ -335,6 +351,7 @@ export const SettingsModal = () => {
       window.dispatchEvent(
         new CustomEvent("inaccord:profile-updated", {
           detail: {
+            profileId: resolvedProfileId,
             bannerUrl: null,
           },
         })
@@ -459,6 +476,8 @@ export const SettingsModal = () => {
           minute: "2-digit",
         })
       : "Unknown";
+
+  const hasAdminCrown = isInAccordAdministrator(profileRole ?? data.profileRole);
 
   const renderSectionContent = () => {
     if (displaySection === "myAccount") {
@@ -839,7 +858,12 @@ export const SettingsModal = () => {
                         </p>
                         <p>
                           <span className="text-[#949ba4]">In-Accord Profile Name:</span>{" "}
-                          <span className="text-white">{profileName || "Not set"}</span>
+                          <span className="inline-flex items-center gap-1.5 text-white">
+                            <span>{profileName || "Not set"}</span>
+                            {hasAdminCrown ? (
+                              <Crown className="h-3.5 w-3.5 shrink-0 text-rose-500" aria-label="In-Accord Administrator" />
+                            ) : null}
+                          </span>
                         </p>
                         <p>
                           <span className="text-[#949ba4]">Email:</span>{" "}

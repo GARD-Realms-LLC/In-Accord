@@ -1,17 +1,21 @@
 "use client";
 
-import { ShieldAlert, ShieldCheck } from "lucide-react";
+import { Crown, ShieldAlert, ShieldCheck } from "lucide-react";
 import Image from "next/image";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { BotAppBadge } from "@/components/bot-app-badge";
 import { UserAvatar } from "@/components/user-avatar";
 import { MemberRole } from "@/lib/db/types";
+import { isInAccordAdministrator } from "@/lib/in-accord-admin";
+import { isBotUser } from "@/lib/is-bot-user";
 import { normalizePresenceStatus, presenceStatusDotClassMap, presenceStatusLabelMap } from "@/lib/presence-status";
 
 type OnlineRailUser = {
   id: string;
   profileId: string;
   role: MemberRole;
+  globalRole: string | null;
   displayName: string;
   realName: string;
   profileName: string | null;
@@ -52,6 +56,12 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
       {users.map((member) => (
         (() => {
           const normalizedPresenceStatus = normalizePresenceStatus(member.presenceStatus);
+          const isGlobalAdmin = isInAccordAdministrator(member.globalRole);
+          const showBotBadge = isBotUser({
+            role: member.globalRole,
+            name: member.profileName || member.realName || member.displayName,
+            email: member.email,
+          });
           return (
         <Popover key={`online-${member.profileId}`}>
           <PopoverTrigger asChild>
@@ -67,7 +77,13 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
                   aria-hidden="true"
                 />
               </span>
-              <p className="min-w-0 truncate text-xs text-[#dbdee1]">{member.profileName || "No profile name"}</p>
+              <div className="flex min-w-0 items-center gap-1">
+                <p className="min-w-0 truncate text-xs text-[#dbdee1]">{member.profileName || "No profile name"}</p>
+                {showBotBadge ? <BotAppBadge className="h-4 px-1 text-[9px]" /> : null}
+                {isGlobalAdmin ? (
+                  <Crown className="h-3.5 w-3.5 shrink-0 text-rose-500" aria-label="Administrator" />
+                ) : null}
+              </div>
             </button>
           </PopoverTrigger>
 
@@ -93,7 +109,13 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
                 <UserAvatar src={member.imageUrl ?? undefined} className="h-10 w-10" />
               </div>
 
-              <p className="truncate text-base font-bold text-white">{member.profileName || member.realName || member.displayName}</p>
+              <div className="flex min-w-0 items-center gap-1.5">
+                <p className="truncate text-base font-bold text-white">{member.profileName || member.realName || member.displayName}</p>
+                {showBotBadge ? <BotAppBadge className="h-4 px-1 text-[9px]" /> : null}
+                {isGlobalAdmin ? (
+                  <Crown className="h-4 w-4 shrink-0 text-rose-500" aria-label="In-Accord Administrator" />
+                ) : null}
+              </div>
               <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">
                 {member.profileName || "In-Accord Profile"}
               </p>

@@ -15,6 +15,7 @@ import {
   ShieldQuestion,
 } from "lucide-react";
 
+import { BotAppBadge } from "@/components/bot-app-badge";
 import { useModal } from "@/hooks/use-modal-store";
 import {
   Dialog,
@@ -38,6 +39,7 @@ import { ServerWithMembersWithProfiles } from "@/types";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { UserAvatar } from "@/components/user-avatar";
 import { MemberRole } from "@/lib/db/types";
+import { isBotUser } from "@/lib/is-bot-user";
 
 const roleIconMap = {
   GUEST: null,
@@ -115,6 +117,9 @@ export const MembersModal = () => {
               <div className="flex flex-col gap-y-1">
                 <div className="text-xs font-semibold flex items-center gap-x-1">
                   {member.profile.name}
+                  {isBotUser({ name: member.profile.name, email: member.profile.email }) ? (
+                    <BotAppBadge className="h-4 px-1 text-[9px]" />
+                  ) : null}
                   {roleIconMap[member.role]}
                 </div>
                 <p className="text-xs text-zinc-500">{member.profile.email}</p>

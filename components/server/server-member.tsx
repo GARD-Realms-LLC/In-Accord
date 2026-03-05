@@ -4,8 +4,10 @@ import { type Member, MemberRole, type Profile, type Server } from "@/lib/db/typ
 import { ShieldAlert, ShieldCheck } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 
+import { BotAppBadge } from "@/components/bot-app-badge";
 import { cn } from "@/lib/utils";
 import { UserAvatar } from "@/components/user-avatar";
+import { isBotUser } from "@/lib/is-bot-user";
 
 interface ServerMemberProps {
   member: Member & { profile: Profile };
@@ -26,6 +28,10 @@ export const ServerMember = ({
   const router = useRouter();
 
   const icon = roleIconMap[member.role];
+  const showBotBadge = isBotUser({
+    name: member.profile.name,
+    email: member.profile.email,
+  });
 
   const onClick = () => {
     router.push(`/servers/${params?.serverId}/conversations/${member.id}`);
@@ -43,14 +49,17 @@ export const ServerMember = ({
         src={member.profile.imageUrl}
         className="h-8 w-8 md:h-8 md:w-8"
       />
-      <p
-        className={cn(
-          "font-semibold text-sm text-zinc-500 group-hover:text-zinc-600 dark:text-zinc-400 dark:group-hover:text-zinc-300 transition",
-          params?.memberId === member.id && "text-primary dark:text-zinc-200 dark:group-hover:text-white"
-        )}
-      >
-        {member.profile.name}
-      </p>
+      <div className="flex min-w-0 items-center gap-1.5">
+        <p
+          className={cn(
+            "truncate font-semibold text-sm text-zinc-500 group-hover:text-zinc-600 dark:text-zinc-400 dark:group-hover:text-zinc-300 transition",
+            params?.memberId === member.id && "text-primary dark:text-zinc-200 dark:group-hover:text-white"
+          )}
+        >
+          {member.profile.name}
+        </p>
+        {showBotBadge ? <BotAppBadge className="h-4 px-1 text-[9px]" /> : null}
+      </div>
       {icon}
     </button>
   )
