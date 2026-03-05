@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import { redirectToSignIn } from "@clerk/nextjs/server";
 import { and, eq } from "drizzle-orm";
 
 import { db, member, server } from "@/lib/db";
@@ -15,7 +14,7 @@ const ServerIdLayout = async ({
 }) => {
   const profile = await currentProfile();
   if (!profile) {
-    return redirectToSignIn();
+    return redirect("/sign-in");
   }
 
   const hasAccess = await db
@@ -37,10 +36,10 @@ const ServerIdLayout = async ({
 
   return (
     <div className="h-full">
-      <div className="hidden md:flex h-full w-60 z-20 flex-col fixed inset-y-0">
+      <aside className="fixed inset-y-0 left-[88px] w-60 z-40">
         <ServerSidebar serverId={params.serverId} />
-      </div>
-      <main className="h-full md:pl-60">{children}</main>
+      </aside>
+      <main className="h-full pl-[328px]">{children}</main>
     </div>
   );
 };

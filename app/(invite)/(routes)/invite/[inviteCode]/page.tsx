@@ -1,4 +1,3 @@
-import { redirectToSignIn } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
@@ -15,7 +14,7 @@ interface InviteCodeProps {
 const InviteCodePage = async ({ params }: InviteCodeProps) => {
   const profile = await currentProfile();
   if (!profile) {
-    return redirectToSignIn();
+    return redirect("/sign-in");
   }
 
   if (!params.inviteCode) {

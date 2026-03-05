@@ -80,3 +80,11 @@ body,
     @apply bg-background text-foreground;
   }
 }
+
+/* Hard-disable all shadow artifacts inside the global servers rail. */
+.global-servers-rail,
+.global-servers-rail * {
+  box-shadow: none !important;
+  filter: none !important;
+  text-shadow: none !important;
+}

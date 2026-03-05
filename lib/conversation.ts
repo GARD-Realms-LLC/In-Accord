@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, or, sql } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 
 import { conversation } from "@/lib/db";
@@ -17,9 +17,131 @@ export const getOrCreateConversation = async (
   return conversation;
 };
 
+const hydrateConversation = async (conversationId: string) => {
+  const result = await db.execute(sql`
+    select
+      c."id" as "conversationId",
+
+      m1."id" as "memberOneId",
+      m1."role" as "memberOneRole",
+      m1."profileId" as "memberOneProfileId",
+      m1."serverId" as "memberOneServerId",
+      m1."createdAt" as "memberOneCreatedAt",
+      m1."updatedAt" as "memberOneUpdatedAt",
+      u1."userId" as "memberOneUserId",
+      u1."name" as "memberOneName",
+      u1."email" as "memberOneEmail",
+      coalesce(u1."avatarUrl", u1."avatar", u1."icon") as "memberOneImageUrl",
+      u1."account.created" as "memberOneAccountCreated",
+      u1."lastLogin" as "memberOneLastLogin",
+
+      m2."id" as "memberTwoId",
+      m2."role" as "memberTwoRole",
+      m2."profileId" as "memberTwoProfileId",
+      m2."serverId" as "memberTwoServerId",
+      m2."createdAt" as "memberTwoCreatedAt",
+      m2."updatedAt" as "memberTwoUpdatedAt",
+      u2."userId" as "memberTwoUserId",
+      u2."name" as "memberTwoName",
+      u2."email" as "memberTwoEmail",
+      coalesce(u2."avatarUrl", u2."avatar", u2."icon") as "memberTwoImageUrl",
+      u2."account.created" as "memberTwoAccountCreated",
+      u2."lastLogin" as "memberTwoLastLogin"
+    from "Conversation" c
+    left join "Member" m1 on m1."id" = c."memberOneId"
+    left join "Users" u1 on u1."userId" = m1."profileId"
+    left join "Member" m2 on m2."id" = c."memberTwoId"
+    left join "Users" u2 on u2."userId" = m2."profileId"
+    where c."id" = ${conversationId}
+    limit 1
+  `);
+
+  const row = (
+    result as unknown as {
+      rows: Array<{
+        conversationId: string;
+        memberOneId: string;
+        memberOneRole: string;
+        memberOneProfileId: string;
+        memberOneServerId: string;
+        memberOneCreatedAt: Date | string;
+        memberOneUpdatedAt: Date | string;
+        memberOneUserId: string | null;
+        memberOneName: string | null;
+        memberOneEmail: string | null;
+        memberOneImageUrl: string | null;
+        memberOneAccountCreated: Date | string | null;
+        memberOneLastLogin: Date | string | null;
+        memberTwoId: string;
+        memberTwoRole: string;
+        memberTwoProfileId: string;
+        memberTwoServerId: string;
+        memberTwoCreatedAt: Date | string;
+        memberTwoUpdatedAt: Date | string;
+        memberTwoUserId: string | null;
+        memberTwoName: string | null;
+        memberTwoEmail: string | null;
+        memberTwoImageUrl: string | null;
+        memberTwoAccountCreated: Date | string | null;
+        memberTwoLastLogin: Date | string | null;
+      }>;
+    }
+  ).rows[0];
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    id: row.conversationId,
+    memberOne: {
+      id: row.memberOneId,
+      role: row.memberOneRole,
+      profileId: row.memberOneProfileId,
+      serverId: row.memberOneServerId,
+      createdAt: new Date(row.memberOneCreatedAt),
+      updatedAt: new Date(row.memberOneUpdatedAt),
+      profile: {
+        id: row.memberOneUserId ?? row.memberOneProfileId,
+        userId: row.memberOneUserId ?? row.memberOneProfileId,
+        name: row.memberOneName ?? row.memberOneEmail ?? "User",
+        email: row.memberOneEmail ?? "",
+        imageUrl: row.memberOneImageUrl ?? "/in-accord-steampunk-logo.png",
+        createdAt: row.memberOneAccountCreated
+          ? new Date(row.memberOneAccountCreated)
+          : new Date(0),
+        updatedAt: row.memberOneLastLogin
+          ? new Date(row.memberOneLastLogin)
+          : new Date(0),
+      },
+    },
+    memberTwo: {
+      id: row.memberTwoId,
+      role: row.memberTwoRole,
+      profileId: row.memberTwoProfileId,
+      serverId: row.memberTwoServerId,
+      createdAt: new Date(row.memberTwoCreatedAt),
+      updatedAt: new Date(row.memberTwoUpdatedAt),
+      profile: {
+        id: row.memberTwoUserId ?? row.memberTwoProfileId,
+        userId: row.memberTwoUserId ?? row.memberTwoProfileId,
+        name: row.memberTwoName ?? row.memberTwoEmail ?? "User",
+        email: row.memberTwoEmail ?? "",
+        imageUrl: row.memberTwoImageUrl ?? "/in-accord-steampunk-logo.png",
+        createdAt: row.memberTwoAccountCreated
+          ? new Date(row.memberTwoAccountCreated)
+          : new Date(0),
+        updatedAt: row.memberTwoLastLogin
+          ? new Date(row.memberTwoLastLogin)
+          : new Date(0),
+      },
+    },
+  };
+};
+
 const findConversation = async (memberOneId: string, memberTwoId: string) => {
   try {
-    return await db.query.conversation.findFirst({
+    const existing = await db.query.conversation.findFirst({
       where: or(
         and(
           eq(conversation.memberOneId, memberOneId),
@@ -30,19 +152,13 @@ const findConversation = async (memberOneId: string, memberTwoId: string) => {
           eq(conversation.memberTwoId, memberOneId)
         )
       ),
-      with: {
-        memberOne: {
-          with: {
-            profile: true,
-          },
-        },
-        memberTwo: {
-          with: {
-            profile: true,
-          },
-        },
-      },
     });
+
+    if (!existing) {
+      return null;
+    }
+
+    return await hydrateConversation(existing.id);
   } catch (error) {
     return null;
   }
@@ -58,21 +174,7 @@ const createConversation = async (memberOneId: string, memberTwoId: string) => {
         memberTwoId,
     });
 
-    return await db.query.conversation.findFirst({
-      where: eq(conversation.id, nowId),
-      with: {
-        memberOne: {
-          with: {
-            profile: true,
-          },
-        },
-        memberTwo: {
-          with: {
-            profile: true,
-          },
-        },
-      },
-    });
+    return await hydrateConversation(nowId);
   } catch (error) {
     return null;
   }

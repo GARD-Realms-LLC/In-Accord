@@ -1,6 +1,7 @@
 import { Server as NetServer } from "http";
 import { NextApiRequest } from "next";
-import { Server as ServerIO } from "socket.io";
+
+const { Server: ServerIO } = require("socket.io");
 
 import { NextApiResponseServerIO } from "@/types";
 

@@ -1,12 +1,11 @@
 import { ChannelType, MemberRole } from "@/lib/db/types";
-import { redirect } from "next/navigation";
 import { Hash, Mic, ShieldAlert, ShieldCheck, Video } from "lucide-react";
-import { eq } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { currentProfile } from "@/lib/current-profile";
-import { db, server } from "@/lib/db";
+import { channel, db, server } from "@/lib/db";
 
 import { ServerHeader } from "./server-header";
 import { ServerSearch } from "./server-search";
@@ -35,44 +34,94 @@ const roleIconMap = {
 export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
   const profile = await currentProfile();
 
-  if (!profile) {
-    return redirect("/");
-  }
+  const currentServerResult = await db
+    .select()
+    .from(server)
+    .where(eq(server.id, serverId))
+    .limit(1);
 
-  const currentServer = await db.query.server.findFirst({
-    where: eq(server.id, serverId),
-    with: {
-      channels: {
-        orderBy: (channels, { asc }) => [asc(channels.createdAt)],
-      },
-      members: {
-        with: {
-          profile: true,
-        },
-        orderBy: (members, { asc }) => [asc(members.role)],
-      },
+  const currentServer = currentServerResult[0];
+
+  const channels = await db
+    .select()
+    .from(channel)
+    .where(eq(channel.serverId, serverId))
+    .orderBy(asc(channel.createdAt));
+
+  const membersResult = await db.execute(sql`
+    select
+      m."id",
+      m."role",
+      m."profileId",
+      m."serverId",
+      m."createdAt",
+      m."updatedAt",
+      u."userId" as "userId",
+      u."name" as "name",
+      u."email" as "email",
+      coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
+      u."account.created" as "accountCreated",
+      u."lastLogin" as "lastLogin"
+    from "Member" m
+    left join "Users" u on u."userId" = m."profileId"
+    where m."serverId" = ${serverId}
+    order by m."role" asc
+  `);
+
+  const members = (
+    membersResult as unknown as {
+      rows: Array<{
+        id: string;
+        role: MemberRole;
+        profileId: string;
+        serverId: string;
+        createdAt: Date | string;
+        updatedAt: Date | string;
+        userId: string | null;
+        name: string | null;
+        email: string | null;
+        imageUrl: string | null;
+        accountCreated: Date | string | null;
+        lastLogin: Date | string | null;
+      }>;
+    }
+  ).rows.map((row) => ({
+    id: row.id,
+    role: row.role,
+    profileId: row.profileId,
+    serverId: row.serverId,
+    createdAt: new Date(row.createdAt),
+    updatedAt: new Date(row.updatedAt),
+    profile: {
+      id: row.userId ?? row.profileId,
+      userId: row.userId ?? row.profileId,
+      name: row.name ?? row.email ?? "User",
+      email: row.email ?? "",
+      imageUrl: row.imageUrl ?? "/in-accord-steampunk-logo.png",
+      createdAt: row.accountCreated ? new Date(row.accountCreated) : new Date(0),
+      updatedAt: row.lastLogin ? new Date(row.lastLogin) : new Date(0),
     },
-  });
+  }));
 
-  const textChannels = currentServer?.channels.filter(
+  const textChannels = channels.filter(
     (channel) => channel.type === ChannelType.TEXT
   );
-  const audioChannels = currentServer?.channels.filter(
+  const audioChannels = channels.filter(
     (channel) => channel.type === ChannelType.AUDIO
   );
-  const videoChannels = currentServer?.channels.filter(
+  const videoChannels = channels.filter(
     (channel) => channel.type === ChannelType.VIDEO
   );
-  const members = currentServer?.members.filter(
-    (member) => member.profileId !== profile.id
+  const membersWithoutCurrent = members.filter(
+    (member) => (profile?.id ? member.profileId !== profile.id : true)
   );
 
   if (!currentServer) {
-    return redirect("/");
+    return null;
   }
 
-  const role = currentServer.members.find(
-    (member) => member.profileId === profile.id
+  const role = members.find(
+    (member) => member.profileId === profile?.id
   )?.role;
 
   return (
@@ -81,6 +130,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
       <ScrollArea className="flex-1 px-3">
         <div className="mt-2">
           <ServerSearch
+            serverId={serverId}
             data={[
               {
                 label: "Text Channels",
@@ -112,7 +162,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
               {
                 label: "Members",
                 type: "member",
-                data: members?.map((member) => ({
+                data: membersWithoutCurrent?.map((member) => ({
                   id: member.id,
                   name: member.profile.name,
                   icon: roleIconMap[member.role],
@@ -182,7 +232,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
             </div>
           </div>
         )}
-        {!!members?.length && (
+        {!!membersWithoutCurrent?.length && (
           <div className="mb-2">
             <ServerSection
               sectionType="members"
@@ -191,13 +241,14 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
               server={currentServer}
             />
             <div className="space-y-[2px]">
-              {members.map((member) => (
+              {membersWithoutCurrent.map((member) => (
                 <ServerMember key={member.id} member={member} server={currentServer} />
               ))}
             </div>
           </div>
         )}
       </ScrollArea>
+
     </div>
   );
 };

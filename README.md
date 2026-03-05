@@ -1,12 +1,12 @@
-![In-Accord Logo](./Images/in-accord-steampunk-logo.png)
+# In-Accord — Social Your Way
 
-## In-Accord — Social Your Way!
+![In-Accord Logo](./Images/in-accord-steampunk-logo.png)
 
 In-Accord is a desktop-ready, real-time social platform built with:
 
 - Next.js (App Router) + TypeScript
 - Electron (desktop shell)
-- Clerk (authentication)
+- Local database-backed authentication (session cookies)
 - Socket.IO (real-time updates)
 - Drizzle ORM + MySQL
 - UploadThing (file uploads)
@@ -23,8 +23,7 @@ Create or update `.env` in the project root with at least:
 
 - `DATABASE_URL`
 - `NEXT_PUBLIC_SITE_URL`
-- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
-- `CLERK_SECRET_KEY`
+- `SESSION_SECRET`
 - `UPLOADTHING_SECRET`
 - `UPLOADTHING_APP_ID`
 

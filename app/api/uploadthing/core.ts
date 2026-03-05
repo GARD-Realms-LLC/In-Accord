@@ -1,20 +1,20 @@
-import { auth } from "@clerk/nextjs/server";
 import { createUploadthing, type FileRouter } from "uploadthing/next";
+import { getSessionUserId } from "@/lib/session";
 
 const f = createUploadthing();
 
-const handleAuth = () => {
-  const { userId } = auth();
+const handleAuth = async () => {
+  const userId = await getSessionUserId();
   if (!userId) throw new Error("Unauthorized ");
   return { userId };
 };
 
 export const ourFileRouter = {
   serverImage: f({ image: { maxFileSize: "4MB", maxFileCount: 1 } })
-    .middleware(() => handleAuth())
+    .middleware(async () => handleAuth())
     .onUploadComplete(() => {}),
   messageFile: f(["image", "pdf"])
-    .middleware(() => handleAuth())
+    .middleware(async () => handleAuth())
     .onUploadComplete(() => {}),
 } satisfies FileRouter;
 

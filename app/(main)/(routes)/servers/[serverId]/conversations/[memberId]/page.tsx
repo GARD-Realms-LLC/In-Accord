@@ -1,4 +1,3 @@
-import { redirectToSignIn } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 
@@ -27,7 +26,7 @@ const MemberIdPage = async ({
   const profile = await currentProfile();
 
   if (!profile) {
-    return redirectToSignIn();
+    return redirect("/sign-in");
   }
 
   const currentMember = await db.query.member.findFirst({
@@ -35,9 +34,6 @@ const MemberIdPage = async ({
       eq(member.serverId, params.serverId),
       eq(member.profileId, profile.id)
     ),
-    with: {
-      profile: true,
-    },
   });
 
   if (!currentMember) {

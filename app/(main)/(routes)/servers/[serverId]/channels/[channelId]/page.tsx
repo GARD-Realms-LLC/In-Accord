@@ -1,4 +1,3 @@
-import { redirectToSignIn } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { ChannelType } from "@/lib/db";
 import { and, eq } from "drizzle-orm";
@@ -21,7 +20,7 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
   const profile = await currentProfile();
 
   if (!profile) {
-    return redirectToSignIn();
+    return redirect("/sign-in");
   }
 
   const currentChannel = await db.query.channel.findFirst({

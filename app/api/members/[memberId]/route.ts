@@ -1,8 +1,78 @@
 import { NextResponse } from "next/server";
-import { and, asc, eq, ne } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db, member, server } from "@/lib/db";
+
+const getServerWithMembers = async (serverId: string) => {
+  const serverRecord = await db.query.server.findFirst({
+    where: eq(server.id, serverId),
+  });
+
+  if (!serverRecord) {
+    return null;
+  }
+
+  const membersResult = await db.execute(sql`
+    select
+      m."id",
+      m."role",
+      m."profileId",
+      m."serverId",
+      m."createdAt",
+      m."updatedAt",
+      u."userId" as "userId",
+      u."name" as "name",
+      u."email" as "email",
+      coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
+      u."account.created" as "accountCreated",
+      u."lastLogin" as "lastLogin"
+    from "Member" m
+    left join "Users" u on u."userId" = m."profileId"
+    where m."serverId" = ${serverId}
+    order by m."role" asc
+  `);
+
+  const members = (
+    membersResult as unknown as {
+      rows: Array<{
+        id: string;
+        role: string;
+        profileId: string;
+        serverId: string;
+        createdAt: Date | string;
+        updatedAt: Date | string;
+        userId: string | null;
+        name: string | null;
+        email: string | null;
+        imageUrl: string | null;
+        accountCreated: Date | string | null;
+        lastLogin: Date | string | null;
+      }>;
+    }
+  ).rows.map((row) => ({
+    id: row.id,
+    role: row.role,
+    profileId: row.profileId,
+    serverId: row.serverId,
+    createdAt: new Date(row.createdAt),
+    updatedAt: new Date(row.updatedAt),
+    profile: {
+      id: row.userId ?? row.profileId,
+      userId: row.userId ?? row.profileId,
+      name: row.name ?? row.email ?? "User",
+      email: row.email ?? "",
+      imageUrl: row.imageUrl ?? "/in-accord-steampunk-logo.png",
+      createdAt: row.accountCreated ? new Date(row.accountCreated) : new Date(0),
+      updatedAt: row.lastLogin ? new Date(row.lastLogin) : new Date(0),
+    },
+  }));
+
+  return {
+    ...serverRecord,
+    members,
+  };
+};
 
 export async function DELETE(
   req: Request,
@@ -42,17 +112,7 @@ export async function DELETE(
       )
     );
 
-    const updatedServer = await db.query.server.findFirst({
-      where: eq(server.id, serverId),
-      with: {
-        members: {
-          with: {
-            profile: true,
-          },
-          orderBy: (members, { asc }) => [asc(members.role)],
-        },
-      },
-    });
+    const updatedServer = await getServerWithMembers(serverId);
 
     return NextResponse.json(updatedServer);
   } catch (error) {
@@ -103,17 +163,7 @@ export async function PATCH(
       )
     );
 
-    const updatedServer = await db.query.server.findFirst({
-      where: eq(server.id, serverId),
-      with: {
-        members: {
-          with: {
-            profile: true,
-          },
-          orderBy: (members, { asc }) => [asc(members.role)],
-        },
-      },
-    });
+    const updatedServer = await getServerWithMembers(serverId);
 
     return NextResponse.json(updatedServer);
   } catch (error) {

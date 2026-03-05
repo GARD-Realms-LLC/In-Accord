@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 
 import {
@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/command";
 
 interface ServerSearchProps {
+  serverId: string;
   data: {
     label: string;
     type: "channel" | "member";
@@ -27,10 +28,9 @@ interface ServerSearchProps {
   }[];
 }
 
-export const ServerSearch = ({ data }: ServerSearchProps) => {
+export const ServerSearch = ({ serverId, data }: ServerSearchProps) => {
   const [open, setOpen] = useState(false);
   const router = useRouter();
-  const params = useParams();
 
   const onClick = ({
     id,
@@ -42,11 +42,11 @@ export const ServerSearch = ({ data }: ServerSearchProps) => {
     setOpen(false);
 
     if (type === "member") {
-      return router.push(`/servers/${params?.serverId}/conversations/${id}`);
+      return router.push(`/servers/${serverId}/conversations/${id}`);
     }
 
     if (type === "channel") {
-      return router.push(`/servers/${params?.serverId}/channels/${id}`);
+      return router.push(`/servers/${serverId}/channels/${id}`);
     }
   };
 

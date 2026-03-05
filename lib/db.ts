@@ -1,29 +1,37 @@
-import { drizzle } from "drizzle-orm/mysql2";
-import mysql from "mysql2/promise";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
 
 import * as schema from "@/lib/db/schema";
 
 declare global {
   // eslint-disable-next-line no-var
-  var mysqlPool: mysql.Pool | undefined;
+  var pgPool: Pool | undefined;
 }
 
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL is required");
+const liveDatabaseUrl = process.env.LIVE_DATABASE_URL?.trim();
+const fallbackDatabaseUrl = process.env.DATABASE_URL?.trim();
+
+const connectionString =
+  liveDatabaseUrl && !/^replace_/i.test(liveDatabaseUrl)
+    ? liveDatabaseUrl
+    : fallbackDatabaseUrl;
+
+if (!connectionString) {
+  throw new Error("No database URL configured. Set LIVE_DATABASE_URL for the shared live PostgreSQL database.");
 }
 
 const pool =
-  globalThis.mysqlPool ||
-  mysql.createPool({
-    uri: process.env.DATABASE_URL,
-    connectionLimit: 10,
+  globalThis.pgPool ||
+  new Pool({
+    connectionString,
+    max: 10,
   });
 
 if (process.env.NODE_ENV !== "production") {
-  globalThis.mysqlPool = pool;
+  globalThis.pgPool = pool;
 }
 
-export const db = drizzle(pool, { schema, mode: "default" });
+export const db = drizzle(pool, { schema });
 
 export {
   channel,
