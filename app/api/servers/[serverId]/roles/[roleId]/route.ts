@@ -63,6 +63,16 @@ export async function PATCH(req: Request, { params }: Params) {
 					? (body.iconUrl.trim() || null)
 					: undefined;
 
+		const shouldKeepName = nextName === undefined;
+		const shouldKeepColor = nextColor === undefined;
+		const shouldKeepPosition = nextPosition === undefined;
+		const shouldKeepIcon = nextIconUrl === undefined;
+
+		const nextNameParam = nextName ?? "";
+		const nextColorParam = nextColor ?? "#99aab5";
+		const nextPositionParam = nextPosition ?? 0;
+		const nextIconParam = nextIconUrl ?? null;
+
 		if (nextName !== undefined && !nextName) {
 			return new NextResponse("Role name cannot be empty", { status: 400 });
 		}
@@ -78,13 +88,22 @@ export async function PATCH(req: Request, { params }: Params) {
 		const updateResult = await db.execute(sql`
 			update "ServerRole"
 			set
-				"name" = coalesce(${nextName}, "name"),
-				"color" = coalesce(${nextColor}, "color"),
-				"iconUrl" = case
-					when ${nextIconUrl === undefined} then "iconUrl"
-					else ${nextIconUrl}
+				"name" = case
+					when ${shouldKeepName} then "name"
+					else ${nextNameParam}
 				end,
-				"position" = coalesce(${nextPosition}, "position"),
+				"color" = case
+					when ${shouldKeepColor} then "color"
+					else ${nextColorParam}
+				end,
+				"iconUrl" = case
+					when ${shouldKeepIcon} then "iconUrl"
+					else ${nextIconParam}
+				end,
+				"position" = case
+					when ${shouldKeepPosition} then "position"
+					else ${nextPositionParam}
+				end,
 				"updatedAt" = now()
 			where "id" = ${roleId}
 				and "serverId" = ${serverId}
@@ -109,6 +128,15 @@ export async function PATCH(req: Request, { params }: Params) {
 		return NextResponse.json({ role });
 	} catch (error) {
 		console.error("[SERVER_ROLE_PATCH]", error);
+
+		const message = error instanceof Error ? error.message : String(error);
+		if (/duplicate key|ServerRole_serverId_name_uq|unique/i.test(message)) {
+			return new NextResponse("A role with that name already exists in this server", { status: 409 });
+		}
+		if (/undefined/i.test(message)) {
+			return new NextResponse("Invalid role update payload", { status: 400 });
+		}
+
 		return new NextResponse("Internal Error", { status: 500 });
 	}
 }

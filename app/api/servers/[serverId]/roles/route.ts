@@ -33,6 +33,13 @@ export async function GET(_req: Request, { params }: Params) {
     await ensureServerRolesSchema();
     await seedDefaultServerRoles(serverId);
 
+    const ownerServer = await db.query.server.findFirst({
+      where: and(eq(server.id, serverId), eq(server.profileId, profile.id)),
+      columns: { id: true },
+    });
+
+    const canManageRoles = Boolean(ownerServer);
+
     const rolesResult = await db.execute(sql`
       select
         r."id",
@@ -75,7 +82,7 @@ export async function GET(_req: Request, { params }: Params) {
       (totalMembersResult as unknown as { rows?: Array<{ totalMembers: number }> }).rows?.[0]?.totalMembers ?? 0
     );
 
-    return NextResponse.json({ roles, totalMembers });
+    return NextResponse.json({ roles, totalMembers, canManageRoles });
   } catch (error) {
     console.error("[SERVER_ROLES_GET]", error);
     return new NextResponse("Internal Error", { status: 500 });

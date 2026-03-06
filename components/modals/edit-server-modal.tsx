@@ -953,6 +953,7 @@ export const EditServerModal = () => {
 
                             <div>
                               <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Role Icon</p>
+                              <p className="mb-2 text-[11px] text-zinc-500">Pick an icon file or paste an icon URL.</p>
                               <div className="flex items-center gap-2">
                                 <input
                                   value={newRoleIconUrl}
@@ -967,7 +968,7 @@ export const EditServerModal = () => {
                                   disabled={!canManageRoles || isCreatingRole || isUploadingNewRoleIcon}
                                   className="h-10 bg-[#4e5058] px-3 text-xs text-white hover:bg-[#5d6069]"
                                 >
-                                  {isUploadingNewRoleIcon ? "Uploading..." : "Upload"}
+                                  {isUploadingNewRoleIcon ? "Uploading..." : "Pick Icon"}
                                 </Button>
                               </div>
                               <input
@@ -977,6 +978,18 @@ export const EditServerModal = () => {
                                 className="hidden"
                                 onChange={(event) => void onNewRoleIconChange(event.target.files?.[0])}
                               />
+
+                              <div className="mt-2">
+                                {newRoleIconUrl ? (
+                                  <span className="relative inline-flex h-10 w-10 overflow-hidden rounded-md border border-zinc-700">
+                                    <Image src={newRoleIconUrl} alt="New role icon preview" fill className="object-cover" unoptimized />
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-zinc-700 bg-[#1e1f22] text-lg font-semibold uppercase text-zinc-300">
+                                    {newRoleName.slice(0, 1) || "R"}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
 
@@ -1045,6 +1058,7 @@ export const EditServerModal = () => {
 
                             <div>
                               <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Role Icon</p>
+                              <p className="mb-2 text-[11px] text-zinc-500">Pick an icon file or paste an icon URL.</p>
                               <div className="flex items-center gap-2">
                                 <input
                                   value={editRoleIconUrl}
@@ -1059,7 +1073,7 @@ export const EditServerModal = () => {
                                   disabled={!canManageRoles || isSavingRole || isUploadingEditRoleIcon}
                                   className="h-10 bg-[#4e5058] px-3 text-xs text-white hover:bg-[#5d6069]"
                                 >
-                                  {isUploadingEditRoleIcon ? "Uploading..." : "Upload"}
+                                  {isUploadingEditRoleIcon ? "Uploading..." : "Pick Icon"}
                                 </Button>
                                 <Button
                                   type="button"
