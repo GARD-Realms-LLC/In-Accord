@@ -6,7 +6,7 @@ import qs from "query-string";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { type Member, MemberRole, type Profile } from "@/lib/db/types";
-import { Crown, Edit, FileIcon, MessageCircle, ShieldAlert, ShieldCheck, SmilePlus, Trash, UserPlus } from "lucide-react";
+import { Crown, Edit, FileIcon, MessageCircle, Reply, ShieldAlert, ShieldCheck, SmilePlus, Trash, UserPlus } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -23,6 +23,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useModal } from "@/hooks/use-modal-store";
 import { isInAccordAdministrator } from "@/lib/in-accord-admin";
 import { isBotUser } from "@/lib/is-bot-user";
+import { extractQuotedContent, getQuoteSnippetFromBody } from "@/lib/message-quotes";
 import { parseMentionSegments } from "@/lib/mentions";
 
 interface ChatItemProps {
@@ -266,6 +267,24 @@ export const ChatItem = ({
     window.alert("Friend requests are coming soon.");
   };
 
+  const onQuoteMessage = () => {
+    if (deleted) {
+      return;
+    }
+
+    const { body } = extractQuotedContent(content);
+
+    window.dispatchEvent(
+      new CustomEvent("inaccord:quote-message", {
+        detail: {
+          messageId: id,
+          authorName: displayName,
+          snippet: getQuoteSnippetFromBody(body),
+        },
+      })
+    );
+  };
+
   useEffect(() => {
     const handleKeyDown = (event: any) => {
       if (event.key === "Escape" || event.keyCode === 27) {
@@ -462,7 +481,8 @@ export const ChatItem = ({
     memberCreatedDate && !Number.isNaN(memberCreatedDate.getTime())
       ? memberCreatedDate.toLocaleString()
       : "Unknown";
-  const contentSegments = parseMentionSegments(content);
+  const { quote: quotedMessage, body: messageBody } = extractQuotedContent(content);
+  const contentSegments = parseMentionSegments(messageBody);
   const hasMention = contentSegments.some((segment) => segment.kind === "mention");
   const isMentioningCurrentUser = contentSegments.some(
     (segment) =>
@@ -692,39 +712,48 @@ export const ChatItem = ({
             </div>
           )}
           {!fileUrl && !isEditing && (
-            <p
-              className={cn(
-                "text-sm text-zinc-600 dark:text-zinc-300",
-                deleted &&
-                  "italic text-zinc-500 dark:text-zinc-400 text-xs mt-1"
-              )}
-            >
-              {contentSegments.map((segment, index) => {
-                if (segment.kind === "text") {
-                  return <span key={`text-${index}`}>{segment.value}</span>;
-                }
+            <div>
+              {quotedMessage ? (
+                <div className="mb-1 rounded-md border-l-2 border-indigo-400/70 bg-indigo-500/10 px-2 py-1 text-xs text-indigo-100/95">
+                  <p className="font-semibold text-indigo-200">Replying to {quotedMessage.authorName}</p>
+                  <p className="mt-0.5 truncate">{quotedMessage.snippet || "Quoted message"}</p>
+                </div>
+              ) : null}
 
-                return (
-                  <span
-                    key={`mention-${segment.entityType}-${segment.entityId}-${index}`}
-                    className={cn(
-                      "mx-0.5 inline-flex rounded px-1.5 py-0.5 font-semibold",
-                      segment.entityType === "role"
-                        ? "bg-amber-500/20 text-amber-700 dark:text-amber-200"
-                        : "bg-indigo-500/20 text-indigo-700 dark:text-indigo-200"
-                    )}
-                    title={`Mentioned ${segment.entityType}: ${segment.label}`}
-                  >
-                    @{segment.label}
+              <p
+                className={cn(
+                  "text-sm text-zinc-600 dark:text-zinc-300",
+                  deleted &&
+                    "italic text-zinc-500 dark:text-zinc-400 text-xs mt-1"
+                )}
+              >
+                {contentSegments.map((segment, index) => {
+                  if (segment.kind === "text") {
+                    return <span key={`text-${index}`}>{segment.value}</span>;
+                  }
+
+                  return (
+                    <span
+                      key={`mention-${segment.entityType}-${segment.entityId}-${index}`}
+                      className={cn(
+                        "mx-0.5 inline-flex rounded px-1.5 py-0.5 font-semibold",
+                        segment.entityType === "role"
+                          ? "bg-amber-500/20 text-amber-700 dark:text-amber-200"
+                          : "bg-indigo-500/20 text-indigo-700 dark:text-indigo-200"
+                      )}
+                      title={`Mentioned ${segment.entityType}: ${segment.label}`}
+                    >
+                      @{segment.label}
+                    </span>
+                  );
+                })}
+                {isUpdated && !deleted && (
+                  <span className="text-[10px] mx-2 text-zinc-500 dark:text-zinc-400">
+                    (edited)
                   </span>
-                );
-              })}
-              {isUpdated && !deleted && (
-                <span className="text-[10px] mx-2 text-zinc-500 dark:text-zinc-400">
-                  (edited)
-                </span>
-              )}
-            </p>
+                )}
+              </p>
+            </div>
           )}
           {!deleted ? (
             <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -757,7 +786,7 @@ export const ChatItem = ({
                     </button>
 
                     {activePickerId === item.id ? (
-                      <div className="absolute z-20 mt-2 w-[320px] max-w-[80vw] grid grid-cols-6 gap-2 rounded-xl border border-zinc-500 bg-[#1e1f22] p-3 shadow-2xl shadow-black/50">
+                      <div className="absolute bottom-full z-20 mb-2 w-[320px] max-w-[80vw] grid grid-cols-6 gap-2 rounded-xl border border-zinc-500 bg-[#1e1f22] p-3 shadow-2xl shadow-black/50">
                         {basicEmotes.map((emoji) => (
                           <button
                             key={`${item.id}-${emoji}`}
@@ -811,8 +840,14 @@ export const ChatItem = ({
           )}
         </div>
       </div>
-      {canDeleteMessage && (
+      {!deleted && (
         <div className="hidden group-hover:flex items-center gap-x-2 absolute p-1 -top-2 right-5 bg-white dark:bg-zinc-800 border rounded-sm">
+          <ActionTooltip label="Reply" align="center">
+            <Reply
+              onClick={onQuoteMessage}
+              className="cursor-pointer ml-auto w-4 h-4 text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition"
+            />
+          </ActionTooltip>
           {canEditMessage && (
             <ActionTooltip label="Edit" align="center">
               <Edit
@@ -821,17 +856,19 @@ export const ChatItem = ({
               />
             </ActionTooltip>
           )}
-          <ActionTooltip label="Delete" align="center">
-            <Trash
-              onClick={() =>
-                onOpen("deleteMessage", {
-                  apiUrl: `${socketUrl}/${id}`,
-                  query: socketQuery,
-                })
-              }
-              className="cursor-pointer ml-auto w-4 h-4 text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition"
-            />
-          </ActionTooltip>
+          {canDeleteMessage && (
+            <ActionTooltip label="Delete" align="center">
+              <Trash
+                onClick={() =>
+                  onOpen("deleteMessage", {
+                    apiUrl: `${socketUrl}/${id}`,
+                    query: socketQuery,
+                  })
+                }
+                className="cursor-pointer ml-auto w-4 h-4 text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition"
+              />
+            </ActionTooltip>
+          )}
         </div>
       )}
     </div>

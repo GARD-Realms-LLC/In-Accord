@@ -5,7 +5,7 @@ import axios from "axios";
 import qs from "query-string";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Plus } from "lucide-react";
+import { Plus, Reply, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -21,6 +21,7 @@ import {
   type MentionOption,
   readMentionsEnabled,
 } from "@/lib/mentions";
+import { buildQuotedContent, type QuotedMessageMeta } from "@/lib/message-quotes";
 
 interface ChatInputProps {
   apiUrl: string;
@@ -55,6 +56,7 @@ export const ChatInput = ({
   const [activeMentionEnd, setActiveMentionEnd] = useState<number | null>(null);
   const [mentionQuery, setMentionQuery] = useState("");
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
+  const [activeQuote, setActiveQuote] = useState<QuotedMessageMeta | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const mentionOptions = useMemo<MentionOption[]>(() => {
@@ -130,6 +132,31 @@ export const ChatInput = ({
     return () => {
       window.removeEventListener("storage", onStorageChange);
       window.removeEventListener("inaccord:mentions-setting-updated", onMentionsPreferenceChanged);
+    };
+  }, []);
+
+  useEffect(() => {
+    const onQuoteMessage = (event: Event) => {
+      const customEvent = event as CustomEvent<QuotedMessageMeta>;
+      const messageId = String(customEvent.detail?.messageId ?? "").trim();
+
+      if (!messageId) {
+        return;
+      }
+
+      setActiveQuote({
+        messageId,
+        authorName: String(customEvent.detail?.authorName ?? "Unknown User").trim() || "Unknown User",
+        snippet: String(customEvent.detail?.snippet ?? "").trim(),
+      });
+
+      inputRef.current?.focus();
+    };
+
+    window.addEventListener("inaccord:quote-message", onQuoteMessage as EventListener);
+
+    return () => {
+      window.removeEventListener("inaccord:quote-message", onQuoteMessage as EventListener);
     };
   }, []);
 
@@ -219,7 +246,10 @@ export const ChatInput = ({
         query,
       });
 
-      await axios.post(url, values);
+      await axios.post(url, {
+        ...values,
+        content: buildQuotedContent(values.content, activeQuote),
+      });
 
       if (type === "conversation" && conversationId) {
         void axios.post("/api/direct-messages/typing", {
@@ -230,6 +260,7 @@ export const ChatInput = ({
 
       form.reset();
       clearMentionState();
+      setActiveQuote(null);
       router.refresh();
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
@@ -269,7 +300,7 @@ export const ChatInput = ({
       });
 
       await axios.post(url, {
-        content: "[gif]",
+        content: buildQuotedContent("[gif]", activeQuote),
         fileUrl: gifUrl,
       });
 
@@ -282,6 +313,7 @@ export const ChatInput = ({
 
       form.reset();
       clearMentionState();
+      setActiveQuote(null);
       router.refresh();
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
@@ -309,7 +341,7 @@ export const ChatInput = ({
       });
 
       await axios.post(url, {
-        content: "[sticker]",
+        content: buildQuotedContent("[sticker]", activeQuote),
         fileUrl: stickerUrl,
       });
 
@@ -322,6 +354,7 @@ export const ChatInput = ({
 
       form.reset();
       clearMentionState();
+      setActiveQuote(null);
       router.refresh();
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
@@ -349,6 +382,25 @@ export const ChatInput = ({
             <FormItem>
               <FormControl>
                 <div className="relative w-full p-4 pb-6">
+                  {activeQuote ? (
+                    <div className="mb-2 ml-14 mr-14 flex items-start justify-between rounded-md border border-indigo-500/35 bg-indigo-500/10 px-3 py-2 text-xs text-indigo-100">
+                      <div className="min-w-0">
+                        <p className="inline-flex items-center gap-1 font-semibold text-indigo-200">
+                          <Reply className="h-3.5 w-3.5" /> Replying to {activeQuote.authorName}
+                        </p>
+                        <p className="mt-1 truncate text-indigo-100/90">{activeQuote.snippet || "Quoted message"}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setActiveQuote(null)}
+                        className="ml-2 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-indigo-200 transition hover:bg-indigo-500/25"
+                        aria-label="Cancel quote"
+                        title="Cancel quote"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => onOpen("messageFile", { apiUrl, query })}
