@@ -6,13 +6,14 @@ import qs from "query-string";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { type Member, MemberRole, type Profile } from "@/lib/db/types";
-import { Edit, FileIcon, ShieldAlert, ShieldCheck, Trash } from "lucide-react";
+import { Edit, FileIcon, ShieldAlert, ShieldCheck, SmilePlus, Trash } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 
 import { UserAvatar } from "@/components/user-avatar";
 import { BotAppBadge } from "@/components/bot-app-badge";
+import { NewUserCloverBadge } from "@/components/new-user-clover-badge";
 import { ActionTooltip } from "@/components/action-tooltip";
 import { cn } from "@/lib/utils";
 import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
@@ -47,6 +48,74 @@ const formSchema = z.object({
   content: z.string().min(1),
 });
 
+type EmoteReaction = {
+  id: string;
+  kind: "reaction";
+  emoji: string;
+  count: number;
+  reactedByCurrentMember: boolean;
+};
+
+type EmotePickerSlot = {
+  id: string;
+  kind: "picker";
+};
+
+type PostEmoteItem = EmoteReaction | EmotePickerSlot;
+
+const basicEmotes = ["😀", "😂", "😍", "🔥", "👏", "🎉", "👍", "👀", "💯", "🤝", "😎", "🙏"];
+const getPostEmoteStorageKey = (messageId: string) => `inaccord:post-emotes:${messageId}`;
+
+const createInitialPostEmoteItems = (): PostEmoteItem[] => [
+  {
+    id: crypto.randomUUID(),
+    kind: "picker",
+  },
+];
+
+const normalizeStoredPostEmoteItems = (value: unknown): PostEmoteItem[] => {
+  if (!Array.isArray(value)) {
+    return createInitialPostEmoteItems();
+  }
+
+  const next: PostEmoteItem[] = [];
+
+  for (const rawItem of value) {
+    if (!rawItem || typeof rawItem !== "object") {
+      continue;
+    }
+
+    const item = rawItem as Partial<PostEmoteItem> & {
+      id?: unknown;
+      kind?: unknown;
+      emoji?: unknown;
+      count?: unknown;
+      reactedByCurrentMember?: unknown;
+    };
+
+    if (typeof item.id !== "string" || !item.id.trim()) {
+      continue;
+    }
+
+    if (item.kind === "picker") {
+      next.push({ id: item.id, kind: "picker" });
+      continue;
+    }
+
+    if (item.kind === "reaction" && typeof item.emoji === "string" && item.emoji.trim()) {
+      next.push({
+        id: item.id,
+        kind: "reaction",
+        emoji: item.emoji,
+        count: typeof item.count === "number" && Number.isFinite(item.count) ? Math.max(0, Math.floor(item.count)) : 0,
+        reactedByCurrentMember: Boolean(item.reactedByCurrentMember),
+      });
+    }
+  }
+
+  return next.length > 0 ? next : createInitialPostEmoteItems();
+};
+
 export const ChatItem = ({
   id,
   content,
@@ -63,9 +132,82 @@ export const ChatItem = ({
   const [isEditing, setIsEditing] = useState(false);
   const [displayName, setDisplayName] = useState(member.profile.name);
   const [displayImageUrl, setDisplayImageUrl] = useState(member.profile.imageUrl);
+  const [postEmoteItems, setPostEmoteItems] = useState<PostEmoteItem[]>(() => {
+    if (typeof window === "undefined") {
+      return createInitialPostEmoteItems();
+    }
+
+    try {
+      const stored = window.localStorage.getItem(getPostEmoteStorageKey(id));
+      if (!stored) {
+        return createInitialPostEmoteItems();
+      }
+
+      return normalizeStoredPostEmoteItems(JSON.parse(stored));
+    } catch {
+      return createInitialPostEmoteItems();
+    }
+  });
+  const [activePickerId, setActivePickerId] = useState<string | null>(null);
   const { onOpen } = useModal();
   const params = useParams();
   const router = useRouter();
+
+  const onReactionClick = (reactionId: string) => {
+    if (deleted) {
+      return;
+    }
+
+    setPostEmoteItems((prev) => {
+      const clicked = prev.find((item) => item.id === reactionId && item.kind === "reaction");
+      if (!clicked || clicked.kind !== "reaction") {
+        return prev;
+      }
+
+      return prev.map((item) =>
+        item.id === reactionId && item.kind === "reaction"
+          ? {
+              ...item,
+              count: item.count + 1,
+              reactedByCurrentMember: true,
+            }
+          : item
+      );
+    });
+  };
+
+  const onPickEmote = (pickerId: string, emoji: string) => {
+    if (deleted) {
+      return;
+    }
+
+    setPostEmoteItems((prev) => {
+      const pickerIndex = prev.findIndex((item) => item.id === pickerId && item.kind === "picker");
+      if (pickerIndex === -1) {
+        return prev;
+      }
+
+      const next = [...prev];
+
+      const newReaction: EmoteReaction = {
+        id: crypto.randomUUID(),
+        kind: "reaction",
+        emoji,
+        count: 1,
+        reactedByCurrentMember: true,
+      };
+
+      const newPicker: EmotePickerSlot = {
+        id: crypto.randomUUID(),
+        kind: "picker",
+      };
+
+      next.splice(pickerIndex, 1, newReaction, newPicker);
+      return next;
+    });
+
+    setActivePickerId(null);
+  };
 
   const onMemberClick = () => {
     if (member.id === currentMember.id) {
@@ -134,6 +276,38 @@ export const ChatItem = ({
     setDisplayName(member.profile.name);
     setDisplayImageUrl(member.profile.imageUrl);
   }, [member.profile.imageUrl, member.profile.name]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      setPostEmoteItems(createInitialPostEmoteItems());
+      return;
+    }
+
+    try {
+      const stored = window.localStorage.getItem(getPostEmoteStorageKey(id));
+      if (!stored) {
+        setPostEmoteItems(createInitialPostEmoteItems());
+      } else {
+        setPostEmoteItems(normalizeStoredPostEmoteItems(JSON.parse(stored)));
+      }
+    } catch {
+      setPostEmoteItems(createInitialPostEmoteItems());
+    }
+
+    setActivePickerId(null);
+  }, [id]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(getPostEmoteStorageKey(id), JSON.stringify(postEmoteItems));
+    } catch {
+      // ignore local storage write errors
+    }
+  }, [id, postEmoteItems]);
 
   useEffect(() => {
     const onProfileUpdated = (event: Event) => {
@@ -210,6 +384,7 @@ export const ChatItem = ({
               >
                 {displayName}
               </p>
+              <NewUserCloverBadge createdAt={member.profile.createdAt} className="text-xs" />
               {showBotBadge ? <BotAppBadge className="ml-1.5 h-4 px-1 text-[9px]" /> : null}
               <ActionTooltip label={member.role} align="center">
                 {roleIconMap[member.role]}
@@ -277,6 +452,56 @@ export const ChatItem = ({
               )}
             </p>
           )}
+          {!deleted ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {postEmoteItems.map((item) =>
+                item.kind === "reaction" ? (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => onReactionClick(item.id)}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition",
+                      item.reactedByCurrentMember
+                        ? "border-emerald-400/80 bg-emerald-500/15 text-emerald-100"
+                        : "border-zinc-600/80 bg-zinc-700/40 text-zinc-200 hover:bg-zinc-700/60"
+                    )}
+                  >
+                    <span>{item.emoji}</span>
+                    <span>{item.count}</span>
+                  </button>
+                ) : (
+                  <div key={item.id} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setActivePickerId((prev) => (prev === item.id ? null : item.id))}
+                      className="inline-flex items-center gap-1 rounded-full border border-dashed border-zinc-500/80 bg-zinc-700/25 px-2.5 py-1 text-xs text-zinc-200 transition hover:bg-zinc-700/50"
+                      title="Pick emoji"
+                    >
+                      <SmilePlus className="h-3.5 w-3.5" />
+                      <span>Add</span>
+                    </button>
+
+                    {activePickerId === item.id ? (
+                      <div className="absolute z-20 mt-2 w-[320px] max-w-[80vw] grid grid-cols-6 gap-2 rounded-xl border border-zinc-500 bg-[#1e1f22] p-3 shadow-2xl shadow-black/50">
+                        {basicEmotes.map((emoji) => (
+                          <button
+                            key={`${item.id}-${emoji}`}
+                            type="button"
+                            onClick={() => onPickEmote(item.id, emoji)}
+                            className="rounded-md px-2 py-2 text-xl leading-none transition hover:bg-zinc-700"
+                            title={`Add ${emoji}`}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                )
+              )}
+            </div>
+          ) : null}
           {!fileUrl && isEditing && (
             <Form {...form}>
               <form

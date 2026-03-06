@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { BotAppBadge } from "@/components/bot-app-badge";
+import { NewUserCloverBadge } from "@/components/new-user-clover-badge";
 import { UserAvatar } from "@/components/user-avatar";
 import { MemberRole } from "@/lib/db/types";
 import { isInAccordAdministrator } from "@/lib/in-accord-admin";
@@ -140,6 +141,7 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
             </span>
             <div className="flex min-w-0 items-center gap-1">
               <p className="min-w-0 truncate text-xs text-[#dbdee1]">{member.profileName || "No profile name"}</p>
+              <NewUserCloverBadge createdAt={member.joinedAt} className="text-[11px]" />
               {showBotBadge ? <BotAppBadge className="h-4 px-1 text-[9px]" /> : null}
               {isGlobalAdmin ? (
                 <Crown className="h-3.5 w-3.5 shrink-0 text-rose-500" aria-label="Administrator" />
@@ -172,6 +174,7 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
 
             <div className="flex min-w-0 items-center gap-1.5">
               <p className="truncate text-base font-bold text-white">{member.profileName || member.realName || member.displayName}</p>
+              <NewUserCloverBadge createdAt={member.joinedAt} className="text-sm" />
               {showBotBadge ? <BotAppBadge className="h-4 px-1 text-[9px]" /> : null}
               {isGlobalAdmin ? (
                 <Crown className="h-4 w-4 shrink-0 text-rose-500" aria-label="In-Accord Administrator" />

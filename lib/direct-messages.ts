@@ -8,6 +8,7 @@ export interface GlobalRecentDmItem {
   memberId: string;
   displayName: string;
   imageUrl: string | null;
+  profileCreatedAt: Date | null;
   lastMessageAt: Date;
   unreadCount: number;
 }
@@ -44,6 +45,7 @@ export const getGlobalRecentDmsForProfile = async ({
       om."id" as "memberId",
       coalesce(nullif(trim(up."profileName"), ''), u."name", u."email", 'User') as "displayName",
       coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
+      u."account.created" as "profileCreatedAt",
       coalesce(max(dm."createdAt"), now()) as "lastMessageAt",
       0::integer as "unreadCount"
     from conversations_with_other cwo
@@ -56,7 +58,8 @@ export const getGlobalRecentDmsForProfile = async ({
       om."serverId",
       om."id",
       coalesce(nullif(trim(up."profileName"), ''), u."name", u."email", 'User'),
-      coalesce(u."avatarUrl", u."avatar", u."icon")
+      coalesce(u."avatarUrl", u."avatar", u."icon"),
+      u."account.created"
     order by max(dm."createdAt") desc nulls last
     limit 50
   `);
@@ -68,6 +71,7 @@ export const getGlobalRecentDmsForProfile = async ({
       memberId: string;
       displayName: string;
       imageUrl: string | null;
+      profileCreatedAt: Date | string | null;
       lastMessageAt: Date | string;
       unreadCount: number | string;
     }>;
@@ -79,6 +83,7 @@ export const getGlobalRecentDmsForProfile = async ({
     memberId: row.memberId,
     displayName: row.displayName,
     imageUrl: row.imageUrl,
+    profileCreatedAt: row.profileCreatedAt ? new Date(row.profileCreatedAt) : null,
     lastMessageAt: new Date(row.lastMessageAt),
     unreadCount: Number(row.unreadCount ?? 0),
   }));

@@ -106,6 +106,7 @@ const MemberIdPage = async ({
         imageUrl={otherMember.profile.imageUrl}
         name={otherMember.profile.name}
         isBot={isOtherMemberBot}
+        profileCreatedAt={otherMember.profile.createdAt}
         serverId={params.serverId}
         type="conversation"
       />

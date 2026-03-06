@@ -19,6 +19,7 @@ import { PendingRequestItem } from "@/components/friends/pending-request-item";
 import { isBotUser } from "@/lib/is-bot-user";
 import { presenceStatusDotClassMap, presenceStatusLabelMap, resolveAutoPresenceStatus } from "@/lib/presence-status";
 import { ensureFriendRelationsSchema } from "@/lib/friend-relations";
+import { NewUserCloverBadge } from "@/components/new-user-clover-badge";
 
 const formatTimestamp = (value: Date) => {
   if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
@@ -117,6 +118,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
     displayName: string;
     email: string | null;
     imageUrl: string | null;
+    profileCreatedAt: Date | string | null;
     presenceStatus: string | null;
     presenceUpdatedAt: Date | string | null;
     hasConversation: boolean;
@@ -129,6 +131,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
     displayName: string;
     email: string | null;
     imageUrl: string | null;
+    profileCreatedAt: Date | string | null;
     status: ReturnType<typeof resolveAutoPresenceStatus>;
     hasConversation: boolean;
     isBlocked: boolean;
@@ -175,6 +178,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
         coalesce(nullif(trim(up."profileName"), ''), u."name", u."email", 'User') as "displayName",
         u."email" as "email",
         coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
+        u."account.created" as "profileCreatedAt",
         up."presenceStatus" as "presenceStatus",
         up."updatedAt" as "presenceUpdatedAt",
         exists (
@@ -212,6 +216,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
         displayName: row.displayName,
         email: row.email,
         imageUrl: row.imageUrl,
+        profileCreatedAt: row.profileCreatedAt,
         status: resolveAutoPresenceStatus(row.presenceStatus, row.presenceUpdatedAt),
         hasConversation: Boolean(row.hasConversation),
         isBlocked: Boolean(row.isBlocked),
@@ -318,6 +323,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
           name: string;
           imageUrl: string;
           email: string;
+          createdAt: Date | string | null;
         };
         isOtherMemberBot: boolean;
         messages: Array<any>;
@@ -384,6 +390,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
             name: otherMemberData.profile.name,
             imageUrl: otherMemberData.profile.imageUrl,
             email: otherMemberData.profile.email,
+            createdAt: otherMemberData.profile.createdAt,
           },
           isOtherMemberBot: isBotUser({
             name: otherMemberData.profile.name,
@@ -445,6 +452,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                         memberId={dm.memberId}
                         displayName={dm.displayName}
                         imageUrl={dm.imageUrl}
+                        profileCreatedAt={dm.profileCreatedAt}
                         timestampLabel={formatTimestamp(dm.lastMessageAt)}
                         unreadCount={dm.unreadCount}
                         isActive={selectedConversation?.conversationId === dm.conversationId}
@@ -535,6 +543,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                   <ChatHeader
                     imageUrl={selectedConversation.otherMember.imageUrl}
                     name={selectedConversation.otherMember.name}
+                    profileCreatedAt={selectedConversation.otherMember.createdAt}
                     isBot={selectedConversation.isOtherMemberBot}
                     serverId={selectedConversation.serverId}
                     type="conversation"
@@ -658,7 +667,10 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                               />
                             </span>
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-semibold text-white">{friend.displayName}</p>
+                              <p className="truncate text-sm font-semibold text-white flex items-center gap-1">
+                                <span className="truncate">{friend.displayName}</span>
+                                <NewUserCloverBadge createdAt={friend.profileCreatedAt} className="text-xs" />
+                              </p>
                               <p className="truncate text-xs text-[#949ba4]">
                                 {presenceStatusLabelMap[friend.status]}
                                 {friend.email ? ` • ${friend.email}` : ""}

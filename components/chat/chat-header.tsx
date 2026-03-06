@@ -1,6 +1,7 @@
 import { Hash } from "lucide-react";
 
 import { BotAppBadge } from "@/components/bot-app-badge";
+import { NewUserCloverBadge } from "@/components/new-user-clover-badge";
 import { MobileToggle } from "@/components/mobile-toggle";
 import { UserAvatar } from "@/components/user-avatar";
 import { SocketIndicator } from "@/components/socket-indicator";
@@ -14,6 +15,7 @@ interface ChatHeaderProps {
   type: "channel" | "conversation";
   imageUrl?: string;
   isBot?: boolean;
+  profileCreatedAt?: Date | string | null;
 }
 
 export const ChatHeader = ({
@@ -23,6 +25,7 @@ export const ChatHeader = ({
   type,
   imageUrl,
   isBot,
+  profileCreatedAt,
 }: ChatHeaderProps) => {
   const normalizedTopic = typeof topic === "string" ? topic.trim() : "";
 
@@ -38,6 +41,7 @@ export const ChatHeader = ({
         )}
         <div className="flex min-w-0 items-center gap-1.5">
           <p className="truncate font-semibold text-md text-black dark:text-white">{name}</p>
+          {type === "conversation" ? <NewUserCloverBadge createdAt={profileCreatedAt} className="text-sm" /> : null}
           {type === "conversation" && isBot ? <BotAppBadge className="h-4 px-1 text-[9px]" /> : null}
         </div>
         <div className="ml-auto flex items-center">

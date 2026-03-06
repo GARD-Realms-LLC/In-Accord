@@ -5,6 +5,7 @@ import { ShieldAlert, ShieldCheck } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 
 import { BotAppBadge } from "@/components/bot-app-badge";
+import { NewUserCloverBadge } from "@/components/new-user-clover-badge";
 import { cn } from "@/lib/utils";
 import { UserAvatar } from "@/components/user-avatar";
 import { isBotUser } from "@/lib/is-bot-user";
@@ -58,6 +59,7 @@ export const ServerMember = ({
         >
           {member.profile.name}
         </p>
+        <NewUserCloverBadge createdAt={member.profile.createdAt} className="text-xs" />
         {showBotBadge ? <BotAppBadge className="h-4 px-1 text-[9px]" /> : null}
       </div>
       {icon}

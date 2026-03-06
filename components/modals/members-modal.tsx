@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { BotAppBadge } from "@/components/bot-app-badge";
+import { NewUserCloverBadge } from "@/components/new-user-clover-badge";
 import { useModal } from "@/hooks/use-modal-store";
 import {
   Dialog,
@@ -117,6 +118,7 @@ export const MembersModal = () => {
               <div className="flex flex-col gap-y-1">
                 <div className="text-xs font-semibold flex items-center gap-x-1">
                   {member.profile.name}
+                  <NewUserCloverBadge createdAt={member.profile.createdAt} className="text-xs" />
                   {isBotUser({ name: member.profile.name, email: member.profile.email }) ? (
                     <BotAppBadge className="h-4 px-1 text-[9px]" />
                   ) : null}
