@@ -6,6 +6,8 @@ import { OnlineUsersList } from "@/components/server/online-users-list";
 import { currentProfile } from "@/lib/current-profile";
 import { isInAccordAdministrator } from "@/lib/in-accord-admin";
 import { ensureServerRolesSchema } from "@/lib/server-roles";
+import { server } from "@/lib/db/schema";
+import { and, eq } from "drizzle-orm";
 
 interface ServerUserRolesRailProps {
   serverId: string;
@@ -31,6 +33,13 @@ type RoleRow = {
 export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps) => {
   const profile = await currentProfile();
   await ensureServerRolesSchema();
+
+  const ownerRecord = profile?.id
+    ? await db.query.server.findFirst({
+        where: and(eq(server.id, serverId), eq(server.profileId, profile.id)),
+        columns: { id: true },
+      })
+    : null;
 
   const membersResult = await db.execute(sql`
     select
@@ -76,6 +85,19 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
 
   const currentMemberRole = rows.find((row) => row.profileId === profile?.id)?.role;
   const canSeeInvisibleMembers = isInAccordAdministrator(profile?.role) || currentMemberRole === MemberRole.ADMIN;
+  const canSeeInvisibleCount = Boolean(ownerRecord) || isInAccordAdministrator(profile?.role);
+
+  const totalMembersCount = rows.length;
+  const onlineCount = rows.filter((row) => {
+    const status = String(row.presenceStatus ?? "ONLINE").toUpperCase();
+    return status !== "OFFLINE" && status !== "INVISIBLE";
+  }).length;
+  const offlineCount = rows.filter(
+    (row) => String(row.presenceStatus ?? "ONLINE").toUpperCase() === "OFFLINE"
+  ).length;
+  const invisibleCount = rows.filter(
+    (row) => String(row.presenceStatus ?? "ONLINE").toUpperCase() === "INVISIBLE"
+  ).length;
 
   const resolveEffectiveRole = (row: RoleRow): MemberRole => {
     const globalRole = String(row.globalRole ?? "").trim().toUpperCase();
@@ -146,6 +168,22 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
         <h3 className="text-xs font-bold uppercase tracking-[0.08em] text-[#949ba4]">
           Online Members
         </h3>
+        <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+          <div className="rounded bg-[#1e1f22] px-2 py-1 text-[#b5bac1]">
+            <span className="text-[#949ba4]">Members:</span> {totalMembersCount}
+          </div>
+          <div className="rounded bg-[#1e1f22] px-2 py-1 text-[#b5bac1]">
+            <span className="text-[#949ba4]">Online:</span> {onlineCount}
+          </div>
+          <div className="rounded bg-[#1e1f22] px-2 py-1 text-[#b5bac1]">
+            <span className="text-[#949ba4]">Offline:</span> {offlineCount}
+          </div>
+          {canSeeInvisibleCount ? (
+            <div className="rounded bg-[#1e1f22] px-2 py-1 text-[#b5bac1]">
+              <span className="text-[#949ba4]">Invisible:</span> {invisibleCount}
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <div className="flex-1 overflow-auto p-3">
