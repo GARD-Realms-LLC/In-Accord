@@ -34,6 +34,7 @@ interface ChatItemProps {
   isUpdated: boolean;
   socketUrl: string;
   socketQuery: Record<string, string>;
+  dmServerId?: string;
 }
 
 const roleIconMap = {
@@ -57,6 +58,7 @@ export const ChatItem = ({
   isUpdated,
   socketUrl,
   socketQuery,
+  dmServerId,
 }: ChatItemProps) => {
   const [isEditing, setIsEditing] = useState(false);
   const [displayName, setDisplayName] = useState(member.profile.name);
@@ -70,7 +72,19 @@ export const ChatItem = ({
       return;
     }
 
-    router.push(`/servers/${params?.serverId}/conversations/${member.id}`);
+    const serverIdFromRoute =
+      typeof params?.serverId === "string"
+        ? params.serverId
+        : Array.isArray(params?.serverId)
+          ? (params?.serverId[0] ?? "")
+          : "";
+
+    const effectiveServerId = dmServerId ?? serverIdFromRoute;
+    if (!effectiveServerId) {
+      return;
+    }
+
+    router.push(`/users?serverId=${encodeURIComponent(effectiveServerId)}&memberId=${encodeURIComponent(member.id)}`);
   };
 
   useEffect(() => {
@@ -161,6 +175,10 @@ export const ChatItem = ({
   }, [currentMember.profileId, member.profile.id]);
 
   const fileType = fileUrl?.split(".").pop();
+  const isGif = !!fileUrl && /\.gif(\?|$)/i.test(fileUrl);
+  const isSticker =
+    !!fileUrl &&
+    (content.trim().toLowerCase() === "[sticker]" || /\/stickers\//i.test(fileUrl));
 
   const isAdmin = currentMember.role === MemberRole.ADMIN;
   const isModerator = currentMember.role === MemberRole.MODERATOR;
@@ -206,14 +224,28 @@ export const ChatItem = ({
               href={fileUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="relative aspect-square rounded-md mt-2 overflow-hidden border flex items-center bg-secondary h-48 w-48"
+              className={cn(
+                "relative mt-2 overflow-hidden flex items-center",
+                isSticker
+                  ? "h-40 w-40 rounded-lg"
+                  : "aspect-square rounded-md border bg-secondary h-48 w-48"
+              )}
             >
-              <Image
-                src={fileUrl}
-                alt={content}
-                fill
-                className="object-cover"
-              />
+              {isGif ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={fileUrl}
+                  alt={content}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <Image
+                  src={fileUrl}
+                  alt={content}
+                  fill
+                  className={isSticker ? "object-contain" : "object-cover"}
+                />
+              )}
             </a>
           )}
           {isPDF && (

@@ -23,3 +23,24 @@ export const presenceStatusDotClassMap: Record<PresenceStatus, string> = {
   INVISIBLE: "bg-yellow-400",
   OFFLINE: "bg-black border border-zinc-400",
 };
+
+export const resolveAutoPresenceStatus = (
+  rawStatus: unknown,
+  rawUpdatedAt: unknown
+): PresenceStatus => {
+  const normalized = normalizePresenceStatus(rawStatus);
+
+  if (normalized === "DND" || normalized === "INVISIBLE") {
+    return normalized;
+  }
+
+  const updatedAt = rawUpdatedAt instanceof Date ? rawUpdatedAt : new Date(String(rawUpdatedAt ?? ""));
+  if (!Number.isNaN(updatedAt.getTime())) {
+    const ageMs = Date.now() - updatedAt.getTime();
+    if (ageMs > 5 * 60 * 1000) {
+      return "OFFLINE";
+    }
+  }
+
+  return normalized;
+};

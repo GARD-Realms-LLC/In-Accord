@@ -13,19 +13,23 @@ import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useModal } from "@/hooks/use-modal-store";
 import { EmojiPicker } from "@/components/emoji-picker";
+import { GifPicker } from "@/components/gif-picker";
+import { StickerPicker } from "@/components/sticker-picker";
 
 interface ChatInputProps {
   apiUrl: string;
   query: Record<string, any>;
   name: string;
   type: "conversation" | "channel";
+  conversationId?: string;
+  disabled?: boolean;
 }
 
 const formSchema = z.object({
   content: z.string().min(1),
 });
 
-export const ChatInput = ({ apiUrl, query, name, type }: ChatInputProps) => {
+export const ChatInput = ({ apiUrl, query, name, type, conversationId, disabled = false }: ChatInputProps) => {
   const { onOpen } = useModal();
   const router = useRouter();
   const [sendError, setSendError] = useState<string | null>(null);
@@ -37,7 +41,7 @@ export const ChatInput = ({ apiUrl, query, name, type }: ChatInputProps) => {
     },
   });
 
-  const isLoading = form.formState.isSubmitting;
+  const isLoading = form.formState.isSubmitting || disabled;
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
@@ -49,6 +53,13 @@ export const ChatInput = ({ apiUrl, query, name, type }: ChatInputProps) => {
       });
 
       await axios.post(url, values);
+
+      if (type === "conversation" && conversationId) {
+        void axios.post("/api/direct-messages/typing", {
+          conversationId,
+          isTyping: false,
+        });
+      }
 
       form.reset();
       router.refresh();
@@ -68,6 +79,96 @@ export const ChatInput = ({ apiUrl, query, name, type }: ChatInputProps) => {
     }
   };
 
+  const onTypingHeartbeat = (nextValue: string) => {
+    if (type !== "conversation" || !conversationId) {
+      return;
+    }
+
+    const isTyping = nextValue.trim().length > 0;
+    void axios.post("/api/direct-messages/typing", {
+      conversationId,
+      isTyping,
+    });
+  };
+
+  const onGifSelect = async (gifUrl: string) => {
+    try {
+      setSendError(null);
+
+      const url = qs.stringifyUrl({
+        url: apiUrl,
+        query,
+      });
+
+      await axios.post(url, {
+        content: "[gif]",
+        fileUrl: gifUrl,
+      });
+
+      if (type === "conversation" && conversationId) {
+        void axios.post("/api/direct-messages/typing", {
+          conversationId,
+          isTyping: false,
+        });
+      }
+
+      form.reset();
+      router.refresh();
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error)) {
+        const dataMessage =
+          typeof error.response?.data === "string"
+            ? error.response.data
+            : error.response?.data?.message;
+
+        setSendError(dataMessage || "Failed to send GIF.");
+      } else {
+        setSendError("Failed to send GIF.");
+      }
+
+      console.error("[CHAT_INPUT_SEND_GIF]", error);
+    }
+  };
+
+  const onStickerSelect = async (stickerUrl: string) => {
+    try {
+      setSendError(null);
+
+      const url = qs.stringifyUrl({
+        url: apiUrl,
+        query,
+      });
+
+      await axios.post(url, {
+        content: "[sticker]",
+        fileUrl: stickerUrl,
+      });
+
+      if (type === "conversation" && conversationId) {
+        void axios.post("/api/direct-messages/typing", {
+          conversationId,
+          isTyping: false,
+        });
+      }
+
+      form.reset();
+      router.refresh();
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error)) {
+        const dataMessage =
+          typeof error.response?.data === "string"
+            ? error.response.data
+            : error.response?.data?.message;
+
+        setSendError(dataMessage || "Failed to send sticker.");
+      } else {
+        setSendError("Failed to send sticker.");
+      }
+
+      console.error("[CHAT_INPUT_SEND_STICKER]", error);
+    }
+  };
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -81,6 +182,7 @@ export const ChatInput = ({ apiUrl, query, name, type }: ChatInputProps) => {
                   <button
                     type="button"
                     onClick={() => onOpen("messageFile", { apiUrl, query })}
+                    disabled={isLoading}
                     className="absolute top-7 left-8 h-[24px] w-[24px] bg-zinc-500 dark:bg-zinc-400 hover:bg-zinc-600 dark:hover:bg-zinc-300 transition rounded-full p-1 flex items-center justify-center"
                   >
                     <Plus className="text-white dark:text-[#313338]" />
@@ -92,8 +194,14 @@ export const ChatInput = ({ apiUrl, query, name, type }: ChatInputProps) => {
                       type === "conversation" ? name : "#" + name
                     }`}
                     {...field}
+                    onChange={(event) => {
+                      field.onChange(event.target.value);
+                      onTypingHeartbeat(event.target.value);
+                    }}
                   />
-                  <div className="absolute top-7 right-8">
+                  <div className="absolute top-[26px] right-8 flex items-center gap-2">
+                    <StickerPicker onSelect={onStickerSelect} />
+                    <GifPicker onSelect={onGifSelect} />
                     <EmojiPicker
                       onChange={(emoji: string) =>
                         field.onChange(`${field.value} ${emoji}`)

@@ -50,6 +50,15 @@ export const profile = pgTable("Users", {
   userIdUnique: uniqueIndex("Users_userId_key").on(t.id),
 }));
 
+export const localCredential = pgTable("LocalCredential", {
+  userId: varchar("userId", { length: 191 }).primaryKey(),
+  passwordHash: text("passwordHash").notNull(),
+  createdAt: timestamp("createdAt", { mode: "date" }).notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).notNull(),
+}, (t) => ({
+  userIdIdx: index("LocalCredential_userId_idx").on(t.userId),
+}));
+
 export const server = pgTable("Server", {
   id: varchar("id", { length: 191 }).primaryKey(),
   name: varchar("name", { length: 191 }).notNull(),
@@ -134,6 +143,10 @@ export const profileRelations = relations(profile, ({ many }) => ({
   channels: many(channel),
 }));
 
+export const localCredentialRelations = relations(localCredential, ({ one }) => ({
+  profile: one(profile, { fields: [localCredential.userId], references: [profile.id] }),
+}));
+
 export const serverRelations = relations(server, ({ one, many }) => ({
   profile: one(profile, { fields: [server.profileId], references: [profile.id] }),
   members: many(member),
@@ -186,6 +199,7 @@ export const directMessageRelations = relations(directMessage, ({ one }) => ({
 }));
 
 export type Profile = typeof profile.$inferSelect;
+export type LocalCredential = typeof localCredential.$inferSelect;
 export type Server = typeof server.$inferSelect;
 export type Member = typeof member.$inferSelect;
 export type Channel = typeof channel.$inferSelect;

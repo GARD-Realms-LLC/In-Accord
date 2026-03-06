@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Camera, Plus, X } from "lucide-react";
+import { Camera, Loader2, Pencil, Plus, X } from "lucide-react";
 
 import {
   Dialog,
@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { UserAvatar } from "@/components/user-avatar";
 import { useModal } from "@/hooks/use-modal-store";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -127,6 +128,25 @@ const SECTION_TITLES: Record<ServerSettingsSection, string> = {
   deleteServer: "Delete Server",
 };
 
+type ServerRoleItem = {
+  id: string;
+  name: string;
+  color: string;
+  iconUrl: string | null;
+  position: number;
+  isManaged: boolean;
+  memberCount?: number;
+};
+
+type RoleMemberItem = {
+  memberId: string;
+  profileId: string;
+  displayName: string;
+  email: string | null;
+  imageUrl: string | null;
+  isAssigned: boolean;
+};
+
 export const EditServerModal = () => {
   const { isOpen, onClose, onOpen, type, data } = useModal();
   const router = useRouter();
@@ -134,13 +154,39 @@ export const EditServerModal = () => {
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isUploadingBanner, setIsUploadingBanner] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [roles, setRoles] = useState<ServerRoleItem[]>([]);
+  const [rolesError, setRolesError] = useState<string | null>(null);
+  const [isLoadingRoles, setIsLoadingRoles] = useState(false);
+  const [serverMemberTotal, setServerMemberTotal] = useState(0);
+  const [canManageRoles, setCanManageRoles] = useState(false);
+  const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
+  const [newRoleName, setNewRoleName] = useState("");
+  const [newRoleColor, setNewRoleColor] = useState("#99aab5");
+  const [newRoleIconUrl, setNewRoleIconUrl] = useState("");
+  const [isCreateRolePopupOpen, setIsCreateRolePopupOpen] = useState(false);
+  const [isCreatingRole, setIsCreatingRole] = useState(false);
+  const [isUploadingNewRoleIcon, setIsUploadingNewRoleIcon] = useState(false);
+  const [isSavingRole, setIsSavingRole] = useState(false);
+  const [isRoleEditorPopupOpen, setIsRoleEditorPopupOpen] = useState(false);
+  const [editRoleName, setEditRoleName] = useState("");
+  const [editRoleColor, setEditRoleColor] = useState("#99aab5");
+  const [editRoleIconUrl, setEditRoleIconUrl] = useState("");
+  const [isUploadingEditRoleIcon, setIsUploadingEditRoleIcon] = useState(false);
+  const [roleMembers, setRoleMembers] = useState<RoleMemberItem[]>([]);
+  const [isLoadingRoleMembers, setIsLoadingRoleMembers] = useState(false);
+  const [roleMembersError, setRoleMembersError] = useState<string | null>(null);
+  const [canManageRoleMembers, setCanManageRoleMembers] = useState(false);
+  const [togglingMemberId, setTogglingMemberId] = useState<string | null>(null);
+  const [addMemberSearch, setAddMemberSearch] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const bannerInputRef = useRef<HTMLInputElement | null>(null);
+  const newRoleIconInputRef = useRef<HTMLInputElement | null>(null);
+  const editRoleIconInputRef = useRef<HTMLInputElement | null>(null);
 
   const isModalOpen = isOpen && type === "editServer";
   const { server } = data;
 
-  const form = useForm({
+  const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: "",
@@ -176,8 +222,145 @@ export const EditServerModal = () => {
   useEffect(() => {
     if (!isModalOpen) {
       setActiveSection("overview");
+      setRoles([]);
+      setRolesError(null);
+      setCanManageRoles(false);
+      setServerMemberTotal(0);
+      setSelectedRoleId(null);
+      setNewRoleName("");
+      setNewRoleColor("#99aab5");
+      setNewRoleIconUrl("");
+      setIsCreateRolePopupOpen(false);
+      setIsRoleEditorPopupOpen(false);
+      setEditRoleName("");
+      setEditRoleColor("#99aab5");
+      setEditRoleIconUrl("");
+      setRoleMembers([]);
+      setRoleMembersError(null);
+      setCanManageRoleMembers(false);
+      setTogglingMemberId(null);
+      setAddMemberSearch("");
+      setIsUploadingNewRoleIcon(false);
+      setIsUploadingEditRoleIcon(false);
     }
   }, [isModalOpen]);
+
+  useEffect(() => {
+    if (!isModalOpen || activeSection !== "roles" || !isRoleEditorPopupOpen || !server?.id || !selectedRoleId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadRoleMembers = async () => {
+      try {
+        setIsLoadingRoleMembers(true);
+        setRoleMembersError(null);
+
+        const response = await axios.get<{
+          members?: RoleMemberItem[];
+          canManageRoleMembers?: boolean;
+        }>(`/api/servers/${server.id}/roles/${selectedRoleId}/members`);
+
+        if (cancelled) {
+          return;
+        }
+
+        setRoleMembers(response.data.members ?? []);
+        setCanManageRoleMembers(Boolean(response.data.canManageRoleMembers));
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        if (axios.isAxiosError(error)) {
+          const message =
+            (error.response?.data as { error?: string })?.error ||
+            (typeof error.response?.data === "string" ? error.response.data : "") ||
+            error.message;
+          setRoleMembersError(message || "Failed to load role members.");
+        } else {
+          setRoleMembersError("Failed to load role members.");
+        }
+
+        setRoleMembers([]);
+      } finally {
+        if (!cancelled) {
+          setIsLoadingRoleMembers(false);
+        }
+      }
+    };
+
+    void loadRoleMembers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSection, isModalOpen, isRoleEditorPopupOpen, selectedRoleId, server?.id]);
+
+  useEffect(() => {
+    if (!isModalOpen || activeSection !== "roles" || !server?.id) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadRoles = async () => {
+      try {
+        setIsLoadingRoles(true);
+        setRolesError(null);
+
+        const response = await axios.get<{
+          roles?: ServerRoleItem[];
+          totalMembers?: number;
+          canManageRoles?: boolean;
+        }>(`/api/servers/${server.id}/roles`);
+
+        if (cancelled) {
+          return;
+        }
+
+        const nextRoles = response.data.roles ?? [];
+        setRoles(nextRoles);
+        setServerMemberTotal(Number(response.data.totalMembers ?? 0));
+        setCanManageRoles(Boolean(response.data.canManageRoles));
+
+        const initialRole = nextRoles[0] ?? null;
+
+        setSelectedRoleId(initialRole?.id ?? null);
+        setEditRoleName(initialRole?.name ?? "");
+        setEditRoleColor(initialRole?.color ?? "#99aab5");
+        setEditRoleIconUrl(initialRole?.iconUrl ?? "");
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        if (axios.isAxiosError(error)) {
+          const message =
+            (error.response?.data as { error?: string })?.error ||
+            (typeof error.response?.data === "string" ? error.response.data : "") ||
+            error.message;
+          setRolesError(message || "Failed to load roles.");
+        } else {
+          setRolesError("Failed to load roles.");
+        }
+
+        setRoles([]);
+        setServerMemberTotal(0);
+      } finally {
+        if (!cancelled) {
+          setIsLoadingRoles(false);
+        }
+      }
+    };
+
+    void loadRoles();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSection, isModalOpen, server?.id]);
 
   const isLoading = form.formState.isSubmitting;
   const imageUrl = form.watch("imageUrl") || "";
@@ -315,9 +498,270 @@ export const EditServerModal = () => {
     onClose();
   }
 
+  const onSelectRole = (role: ServerRoleItem) => {
+    setSelectedRoleId(role.id);
+    setEditRoleName(role.name);
+    setEditRoleColor(role.color);
+    setEditRoleIconUrl(role.iconUrl ?? "");
+    setIsRoleEditorPopupOpen(true);
+  };
+
+  const onPickNewRoleIcon = () => {
+    if (!canManageRoles || isUploadingNewRoleIcon || isCreatingRole) {
+      return;
+    }
+
+    newRoleIconInputRef.current?.click();
+  };
+
+  const onPickEditRoleIcon = () => {
+    if (!canManageRoles || isUploadingEditRoleIcon || isSavingRole) {
+      return;
+    }
+
+    editRoleIconInputRef.current?.click();
+  };
+
+  const onNewRoleIconChange = async (file?: File) => {
+    if (!file || !canManageRoles) {
+      return;
+    }
+
+    try {
+      setIsUploadingNewRoleIcon(true);
+      setRolesError(null);
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const upload = await axios.post<{ url: string }>(
+        "/api/r2/upload?type=serverImage",
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        }
+      );
+
+      setNewRoleIconUrl(upload.data.url);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          error.message ||
+          "Role icon upload failed.";
+        setRolesError(message);
+      } else {
+        setRolesError("Role icon upload failed.");
+      }
+    } finally {
+      setIsUploadingNewRoleIcon(false);
+      if (newRoleIconInputRef.current) {
+        newRoleIconInputRef.current.value = "";
+      }
+    }
+  };
+
+  const onEditRoleIconChange = async (file?: File) => {
+    if (!file || !canManageRoles) {
+      return;
+    }
+
+    try {
+      setIsUploadingEditRoleIcon(true);
+      setRolesError(null);
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const upload = await axios.post<{ url: string }>(
+        "/api/r2/upload?type=serverImage",
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        }
+      );
+
+      setEditRoleIconUrl(upload.data.url);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          error.message ||
+          "Role icon upload failed.";
+        setRolesError(message);
+      } else {
+        setRolesError("Role icon upload failed.");
+      }
+    } finally {
+      setIsUploadingEditRoleIcon(false);
+      if (editRoleIconInputRef.current) {
+        editRoleIconInputRef.current.value = "";
+      }
+    }
+  };
+
+  const onCreateRole = async () => {
+    if (!server?.id || !canManageRoles || isCreatingRole) {
+      return;
+    }
+
+    const name = newRoleName.trim();
+    if (!name) {
+      setRolesError("Role name is required.");
+      return;
+    }
+
+    try {
+      setRolesError(null);
+      setIsCreatingRole(true);
+
+      const response = await axios.post<{ role?: ServerRoleItem }>(`/api/servers/${server.id}/roles`, {
+        name,
+        color: newRoleColor,
+        iconUrl: newRoleIconUrl || null,
+      });
+
+      const role = response.data.role;
+      if (!role) {
+        setRolesError("Failed to create role.");
+        return;
+      }
+
+      const next = [...roles, role].sort((a, b) => a.position - b.position);
+      setRoles(next);
+      setSelectedRoleId(role.id);
+      setEditRoleName(role.name);
+      setEditRoleColor(role.color);
+      setEditRoleIconUrl(role.iconUrl ?? "");
+      setNewRoleName("");
+      setNewRoleColor("#99aab5");
+      setNewRoleIconUrl("");
+      setIsCreateRolePopupOpen(false);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          (typeof error.response?.data === "string" ? error.response.data : "") ||
+          error.message;
+        setRolesError(message || "Failed to create role.");
+      } else {
+        setRolesError("Failed to create role.");
+      }
+    } finally {
+      setIsCreatingRole(false);
+    }
+  };
+
+  const onSaveRole = async () => {
+    if (!server?.id || !selectedRoleId || !canManageRoles || isSavingRole) {
+      return;
+    }
+
+    const name = editRoleName.trim();
+    if (!name) {
+      setRolesError("Role name is required.");
+      return;
+    }
+
+    try {
+      setRolesError(null);
+      setIsSavingRole(true);
+
+      const response = await axios.patch<{ role?: ServerRoleItem }>(
+        `/api/servers/${server.id}/roles/${selectedRoleId}`,
+        {
+          name,
+          color: editRoleColor,
+          iconUrl: editRoleIconUrl || null,
+        }
+      );
+
+      const role = response.data.role;
+      if (!role) {
+        setRolesError("Failed to save role.");
+        return;
+      }
+
+      setRoles((prev) => prev.map((item) => (item.id === role.id ? role : item)));
+      setEditRoleName(role.name);
+      setEditRoleColor(role.color);
+      setEditRoleIconUrl(role.iconUrl ?? "");
+      setIsRoleEditorPopupOpen(false);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          (typeof error.response?.data === "string" ? error.response.data : "") ||
+          error.message;
+        setRolesError(message || "Failed to save role.");
+      } else {
+        setRolesError("Failed to save role.");
+      }
+    } finally {
+      setIsSavingRole(false);
+    }
+  };
+
+  const selectedRole = roles.find((role) => role.id === selectedRoleId) ?? null;
+  const normalizedAddMemberSearch = addMemberSearch.trim().toLowerCase();
+  const assignedRoleMembers = roleMembers.filter((memberItem) => memberItem.isAssigned);
+  const addableRoleMembers = roleMembers.filter((memberItem) => {
+    if (!normalizedAddMemberSearch) {
+      return false;
+    }
+
+    if (memberItem.isAssigned) {
+      return false;
+    }
+
+    const haystack = `${memberItem.displayName} ${memberItem.email ?? ""} ${memberItem.profileId}`.toLowerCase();
+    return haystack.includes(normalizedAddMemberSearch);
+  });
+
+  const onToggleRoleMember = async (memberItem: RoleMemberItem) => {
+    if (!server?.id || !selectedRoleId || !canManageRoleMembers || togglingMemberId) {
+      return;
+    }
+
+    try {
+      setRoleMembersError(null);
+      setTogglingMemberId(memberItem.memberId);
+
+      if (memberItem.isAssigned) {
+        await axios.delete(`/api/servers/${server.id}/roles/${selectedRoleId}/members`, {
+          data: { memberId: memberItem.memberId },
+        });
+      } else {
+        await axios.post(`/api/servers/${server.id}/roles/${selectedRoleId}/members`, {
+          memberId: memberItem.memberId,
+        });
+      }
+
+      setRoleMembers((prev) =>
+        prev.map((item) =>
+          item.memberId === memberItem.memberId
+            ? { ...item, isAssigned: !item.isAssigned }
+            : item
+        )
+      );
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          (typeof error.response?.data === "string" ? error.response.data : "") ||
+          error.message;
+        setRoleMembersError(message || "Failed to update role member.");
+      } else {
+        setRoleMembersError("Failed to update role member.");
+      }
+    } finally {
+      setTogglingMemberId(null);
+    }
+  };
+
   return (
     <Dialog open={isModalOpen} onOpenChange={handleClose}>
-      <DialogContent className="overflow-hidden border-0 bg-[#313338] p-0 text-white shadow-2xl sm:max-w-[860px]">
+      <DialogContent className="overflow-hidden border-0 bg-[#313338] p-0 text-white shadow-2xl sm:max-w-[990px]">
         <DialogTitle className="sr-only">Server Settings</DialogTitle>
         <DialogDescription className="sr-only">
           Edit server overview settings.
@@ -369,12 +813,391 @@ export const EditServerModal = () => {
                   <DialogDescription className="pt-1 text-sm text-zinc-300">
                     {activeSection === "overview"
                       ? "Customize your server's appearance and identity."
-                      : "Discord-style menu section scaffolded. Hook up server-side behavior as needed."}
+                      : "Menu section scaffolded. Hook up server-side behavior as needed."}
                   </DialogDescription>
                 </DialogHeader>
 
                 {activeSection !== "overview" ? (
                   <div className="flex-1 space-y-4 px-8 py-6">
+                    {activeSection === "roles" ? (
+                      <div className="rounded-xl border border-zinc-700 bg-[#2B2D31] p-3">
+                          <div className="mb-3 flex items-center justify-between">
+                            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-300">
+                              Server Roles
+                            </p>
+                            <span className="rounded bg-[#1e1f22] px-2 py-0.5 text-[10px] text-zinc-400">
+                              {roles.length}
+                            </span>
+                          </div>
+
+                          <div className="mb-3">
+                            <Button
+                              type="button"
+                              onClick={() => setIsCreateRolePopupOpen(true)}
+                              disabled={!canManageRoles}
+                              className="w-full bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Create Role
+                            </Button>
+                          </div>
+
+                          <div className="mb-2 grid grid-cols-[1fr_96px_80px] items-center px-2 text-[11px] font-semibold text-zinc-400">
+                            <span className="text-left">Roles - {roles.length}</span>
+                            <span className="text-center">Members: {serverMemberTotal}</span>
+                            <span className="text-right">Edit</span>
+                          </div>
+
+                          <div className="max-h-[320px] space-y-1 overflow-y-auto pr-1">
+                            {isLoadingRoles ? (
+                              <div className="flex items-center gap-2 rounded-md bg-[#1e1f22] px-3 py-2 text-sm text-zinc-300">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Loading roles...
+                              </div>
+                            ) : roles.length === 0 ? (
+                              <p className="rounded-md bg-[#1e1f22] px-3 py-2 text-xs text-zinc-400">No roles found.</p>
+                            ) : (
+                              roles.map((role) => (
+                                <button
+                                  key={role.id}
+                                  type="button"
+                                  onClick={() => onSelectRole(role)}
+                                  className={cn(
+                                    "grid w-full grid-cols-[1fr_96px_80px] items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition",
+                                    selectedRoleId === role.id
+                                      ? "bg-[#404249] text-white"
+                                      : "text-zinc-300 hover:bg-[#36393f]"
+                                  )}
+                                >
+                                  <span className="flex min-w-0 items-center gap-2">
+                                    {role.iconUrl ? (
+                                      <span className="relative inline-flex h-4 w-4 overflow-hidden rounded-sm border border-zinc-600">
+                                        <Image src={role.iconUrl} alt={`${role.name} icon`} fill className="object-cover" unoptimized />
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex h-4 w-4 items-center justify-center rounded-sm border border-zinc-600 bg-[#1e1f22] text-[10px] font-semibold uppercase text-zinc-200">
+                                        {role.name.slice(0, 1)}
+                                      </span>
+                                    )}
+                                    <span className="truncate">{role.name}</span>
+                                    {role.isManaged ? (
+                                      <span className="rounded bg-black/25 px-1.5 py-0.5 text-[10px] text-zinc-400">
+                                        System
+                                      </span>
+                                    ) : null}
+                                  </span>
+                                  <span className="text-center">
+                                    <span className="inline-flex w-10 items-center justify-center rounded bg-black/25 px-1.5 py-0.5 text-[10px] text-zinc-300">
+                                      {role.memberCount ?? 0}
+                                    </span>
+                                  </span>
+                                  <span className="inline-flex items-center justify-end">
+                                    <Pencil className="h-3.5 w-3.5 shrink-0 text-zinc-400" aria-label="Edit role" />
+                                  </span>
+                                </button>
+                              ))
+                            )}
+                          </div>
+
+
+                        {!canManageRoles ? (
+                          <p className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                            Only the server owner can add or edit roles.
+                          </p>
+                        ) : null}
+
+                        {rolesError ? (
+                          <p className="mt-3 rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+                            {rolesError}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    {activeSection === "roles" && isCreateRolePopupOpen ? (
+                      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-4">
+                        <div className="w-full max-w-[520px] rounded-xl border border-zinc-700 bg-[#2B2D31] p-4 shadow-2xl shadow-black/60">
+                          <div className="mb-3 flex items-center justify-between">
+                            <p className="text-sm font-semibold text-white">Create Role</p>
+                            <button
+                              type="button"
+                              onClick={() => setIsCreateRolePopupOpen(false)}
+                              className="rounded p-1 text-zinc-300 transition hover:bg-white/10 hover:text-white"
+                              aria-label="Close create role popup"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+
+                          <div className="space-y-3">
+                            <div>
+                              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Role Name</p>
+                              <input
+                                value={newRoleName}
+                                onChange={(event) => setNewRoleName(event.target.value)}
+                                placeholder="Role name"
+                                className="h-10 w-full rounded-md border border-zinc-700 bg-[#15161a] px-3 text-sm text-white outline-none focus:border-indigo-500"
+                                disabled={!canManageRoles || isCreatingRole}
+                              />
+                            </div>
+
+                            <div>
+                              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Role Color</p>
+                              <input
+                                value={newRoleColor}
+                                onChange={(event) => setNewRoleColor(event.target.value)}
+                                placeholder="#99aab5"
+                                className="h-10 w-full rounded-md border border-zinc-700 bg-[#15161a] px-3 text-sm text-white outline-none focus:border-indigo-500"
+                                disabled={!canManageRoles || isCreatingRole}
+                              />
+                            </div>
+
+                            <div>
+                              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Role Icon</p>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  value={newRoleIconUrl}
+                                  onChange={(event) => setNewRoleIconUrl(event.target.value)}
+                                  placeholder="https://..."
+                                  className="h-10 flex-1 rounded-md border border-zinc-700 bg-[#15161a] px-3 text-sm text-white outline-none focus:border-indigo-500"
+                                  disabled={!canManageRoles || isCreatingRole || isUploadingNewRoleIcon}
+                                />
+                                <Button
+                                  type="button"
+                                  onClick={onPickNewRoleIcon}
+                                  disabled={!canManageRoles || isCreatingRole || isUploadingNewRoleIcon}
+                                  className="h-10 bg-[#4e5058] px-3 text-xs text-white hover:bg-[#5d6069]"
+                                >
+                                  {isUploadingNewRoleIcon ? "Uploading..." : "Upload"}
+                                </Button>
+                              </div>
+                              <input
+                                ref={newRoleIconInputRef}
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(event) => void onNewRoleIconChange(event.target.files?.[0])}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="mt-4 flex items-center justify-end gap-2">
+                            <Button
+                              type="button"
+                              onClick={() => setIsCreateRolePopupOpen(false)}
+                              className="bg-transparent text-zinc-300 hover:bg-white/10"
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={onCreateRole}
+                              disabled={!canManageRoles || isCreatingRole}
+                              className="bg-[#5865f2] text-white hover:bg-[#4752c4]"
+                            >
+                              {isCreatingRole ? "Creating..." : "Create Role"}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {activeSection === "roles" && isRoleEditorPopupOpen && selectedRole ? (
+                      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-4">
+                        <div className="w-full max-w-[560px] rounded-xl border border-zinc-700 bg-[#2B2D31] p-4 shadow-2xl shadow-black/60">
+                          <div className="mb-3 flex items-center justify-between">
+                            <p className="text-sm font-semibold text-white">Role Editor</p>
+                            <button
+                              type="button"
+                              onClick={() => setIsRoleEditorPopupOpen(false)}
+                              className="rounded p-1 text-zinc-300 transition hover:bg-white/10 hover:text-white"
+                              aria-label="Close role editor popup"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+
+                          <div className="space-y-3">
+                            <div>
+                              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Role Name</p>
+                              <input
+                                value={editRoleName}
+                                onChange={(event) => setEditRoleName(event.target.value)}
+                                className="h-10 w-full rounded-md border border-zinc-700 bg-[#1e1f22] px-3 text-sm text-white outline-none focus:border-indigo-500"
+                                disabled={!canManageRoles || isSavingRole}
+                              />
+                            </div>
+
+                            <div>
+                              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Role Color</p>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  value={editRoleColor}
+                                  onChange={(event) => setEditRoleColor(event.target.value)}
+                                  className="h-10 flex-1 rounded-md border border-zinc-700 bg-[#1e1f22] px-3 text-sm text-white outline-none focus:border-indigo-500"
+                                  disabled={!canManageRoles || isSavingRole || isUploadingEditRoleIcon}
+                                />
+                                <span
+                                  className="inline-flex h-8 w-8 rounded-full border border-zinc-700"
+                                  style={{ backgroundColor: editRoleColor || "#99aab5" }}
+                                />
+                              </div>
+                            </div>
+
+                            <div>
+                              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Role Icon</p>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  value={editRoleIconUrl}
+                                  onChange={(event) => setEditRoleIconUrl(event.target.value)}
+                                  placeholder="https://..."
+                                  className="h-10 flex-1 rounded-md border border-zinc-700 bg-[#1e1f22] px-3 text-sm text-white outline-none focus:border-indigo-500"
+                                  disabled={!canManageRoles || isSavingRole || isUploadingEditRoleIcon}
+                                />
+                                <Button
+                                  type="button"
+                                  onClick={onPickEditRoleIcon}
+                                  disabled={!canManageRoles || isSavingRole || isUploadingEditRoleIcon}
+                                  className="h-10 bg-[#4e5058] px-3 text-xs text-white hover:bg-[#5d6069]"
+                                >
+                                  {isUploadingEditRoleIcon ? "Uploading..." : "Upload"}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  onClick={() => setEditRoleIconUrl("")}
+                                  disabled={!canManageRoles || isSavingRole || isUploadingEditRoleIcon}
+                                  className="h-10 bg-transparent px-3 text-xs text-zinc-300 hover:bg-white/10"
+                                >
+                                  Remove
+                                </Button>
+                              </div>
+
+                              <input
+                                ref={editRoleIconInputRef}
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(event) => void onEditRoleIconChange(event.target.files?.[0])}
+                              />
+
+                              <div className="mt-2">
+                                {editRoleIconUrl ? (
+                                  <span className="relative inline-flex h-10 w-10 overflow-hidden rounded-md border border-zinc-700">
+                                    <Image src={editRoleIconUrl} alt="Role icon preview" fill className="object-cover" unoptimized />
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-zinc-700 bg-[#1e1f22] text-lg font-semibold uppercase text-zinc-300">
+                                    {editRoleName.slice(0, 1) || "R"}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div>
+                              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Members with this role</p>
+                              <div className="max-h-[220px] space-y-1 overflow-y-auto rounded-md border border-zinc-700 bg-[#1e1f22] p-2">
+                                {isLoadingRoleMembers ? (
+                                  <div className="flex items-center gap-2 px-2 py-2 text-xs text-zinc-300">
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    Loading members...
+                                  </div>
+                                ) : assignedRoleMembers.length === 0 ? (
+                                  <p className="px-2 py-2 text-xs text-zinc-400">No users currently have this role.</p>
+                                ) : (
+                                  assignedRoleMembers.map((memberItem) => (
+                                    <div key={memberItem.memberId} className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-black/20">
+                                      <UserAvatar src={memberItem.imageUrl ?? undefined} className="h-7 w-7" />
+                                      <div className="min-w-0 flex-1">
+                                        <p className="truncate text-xs font-medium text-white">{memberItem.displayName}</p>
+                                        <p className="truncate text-[11px] text-zinc-400">{memberItem.email || memberItem.profileId}</p>
+                                      </div>
+                                      <Button
+                                        type="button"
+                                        onClick={() => void onToggleRoleMember(memberItem)}
+                                        disabled={!canManageRoleMembers || togglingMemberId === memberItem.memberId}
+                                        className="h-7 bg-rose-600/80 px-2 text-[11px] text-white hover:bg-rose-600"
+                                      >
+                                        {togglingMemberId === memberItem.memberId ? "..." : "Remove"}
+                                      </Button>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+
+                              {!canManageRoleMembers ? (
+                                <p className="mt-2 text-[11px] text-amber-300">Only the server owner can change role members.</p>
+                              ) : null}
+
+                              {roleMembersError ? (
+                                <p className="mt-2 text-[11px] text-rose-300">{roleMembersError}</p>
+                              ) : null}
+                            </div>
+
+                            <div>
+                              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Add members to this role</p>
+                              <input
+                                value={addMemberSearch}
+                                onChange={(event) => setAddMemberSearch(event.target.value)}
+                                placeholder="Search users by name, email, or ID"
+                                className="h-9 w-full rounded-md border border-zinc-700 bg-[#1e1f22] px-3 text-xs text-white outline-none focus:border-indigo-500"
+                                disabled={!canManageRoleMembers || isLoadingRoleMembers}
+                              />
+
+                              <div className="mt-2 max-h-[180px] space-y-1 overflow-y-auto rounded-md border border-zinc-700 bg-[#1e1f22] p-2">
+                                {isLoadingRoleMembers ? (
+                                  <div className="flex items-center gap-2 px-2 py-2 text-xs text-zinc-300">
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    Loading users...
+                                  </div>
+                                ) : addableRoleMembers.length === 0 ? (
+                                  <p className="px-2 py-2 text-xs text-zinc-400">
+                                    {normalizedAddMemberSearch
+                                      ? "No users match your search."
+                                      : "Type in search to find users."}
+                                  </p>
+                                ) : (
+                                  addableRoleMembers.map((memberItem) => (
+                                    <div key={`add-${memberItem.memberId}`} className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-black/20">
+                                      <UserAvatar src={memberItem.imageUrl ?? undefined} className="h-7 w-7" />
+                                      <div className="min-w-0 flex-1">
+                                        <p className="truncate text-xs font-medium text-white">{memberItem.displayName}</p>
+                                        <p className="truncate text-[11px] text-zinc-400">{memberItem.email || memberItem.profileId}</p>
+                                      </div>
+                                      <Button
+                                        type="button"
+                                        onClick={() => void onToggleRoleMember(memberItem)}
+                                        disabled={!canManageRoleMembers || togglingMemberId === memberItem.memberId}
+                                        className="h-7 bg-emerald-600/80 px-2 text-[11px] text-white hover:bg-emerald-600"
+                                      >
+                                        {togglingMemberId === memberItem.memberId ? "..." : "Add"}
+                                      </Button>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 flex items-center justify-end gap-2">
+                            <Button
+                              type="button"
+                              onClick={() => setIsRoleEditorPopupOpen(false)}
+                              className="bg-transparent text-zinc-300 hover:bg-white/10"
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={onSaveRole}
+                              disabled={!canManageRoles || isSavingRole}
+                              className="bg-[#5865f2] text-white hover:bg-[#4752c4]"
+                            >
+                              {isSavingRole ? "Saving..." : "Save Role"}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+
                     {activeSection === "deleteServer" ? (
                       <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-4">
                         <p className="text-sm text-zinc-200">
@@ -393,7 +1216,7 @@ export const EditServerModal = () => {
                           Continue to Delete Server
                         </Button>
                       </div>
-                    ) : (
+                    ) : activeSection !== "roles" ? (
                       <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-4">
                         <p className="text-sm text-zinc-200">
                           {SECTION_TITLES[activeSection]} menu is now available in the settings rail.
@@ -402,7 +1225,7 @@ export const EditServerModal = () => {
                           This section currently uses a placeholder panel and is ready for feature-specific controls.
                         </p>
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 ) : (
                 <>

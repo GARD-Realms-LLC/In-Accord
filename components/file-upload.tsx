@@ -13,17 +13,6 @@ interface FileUploadProps {
   endpoint: "serverImage" | "messageFile";
 }
 
-type UploadthingFile = {
-  url?: string;
-  ufsUrl?: string;
-  fileUrl?: string;
-  appUrl?: string;
-  serverData?: {
-    url?: string;
-    appUrl?: string;
-  };
-};
-
 export const FileUpload = ({ onChange, value, endpoint }: FileUploadProps) => {
   const fileType = value.split(".")[0];
 
@@ -45,8 +34,20 @@ export const FileUpload = ({ onChange, value, endpoint }: FileUploadProps) => {
   return (
     <UploadDropzone
       endpoint={endpoint}
-      onClientUploadComplete={(res: UploadthingFile[] | undefined) => {
-        const uploaded = res?.[0];
+      onClientUploadComplete={(res) => {
+        const uploaded = res?.[0] as
+          | {
+              url?: string;
+              ufsUrl?: string;
+              fileUrl?: string;
+              appUrl?: string;
+              serverData?: {
+                url?: string;
+                appUrl?: string;
+              } | null;
+            }
+          | undefined;
+
         onChange(
           uploaded?.url ||
             uploaded?.ufsUrl ||

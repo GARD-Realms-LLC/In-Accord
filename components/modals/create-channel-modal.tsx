@@ -122,7 +122,7 @@ export const CreateChannelModal = () => {
         typeof params?.serverId === "string"
           ? params.serverId
           : Array.isArray(params?.serverId)
-            ? params.serverId[0]
+            ? (params?.serverId[0] ?? "")
             : "";
 
       if (!routeServerId) {

@@ -63,6 +63,7 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
     .filter((row) => canSeeInvisibleMembers || String(row.presenceStatus ?? "ONLINE").toUpperCase() !== "INVISIBLE")
     .map((row) => ({
     ...row,
+    realName: row.realName ?? "",
     displayName: row.realName || row.email || row.profileId,
     presenceStatus: String(row.presenceStatus ?? "ONLINE").toUpperCase(),
     joinedAt: row.joinedAt ? new Date(row.joinedAt).toISOString() : null,

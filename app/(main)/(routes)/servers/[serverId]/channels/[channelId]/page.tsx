@@ -11,6 +11,7 @@ import { channel, db, member, message } from "@/lib/db";
 import { computeChannelPermissionForRole } from "@/lib/channel-permissions";
 import { resolveMemberContext } from "@/lib/channel-permissions";
 import { getUserProfileNameMap } from "@/lib/user-profile";
+import type { Profile } from "@/lib/db/types";
 
 interface ChannelIdPageProps {
   params: {
@@ -75,19 +76,21 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
 
   const hydratedChannelMessages = channelMessages.map((item) => {
     const profileName = profileNameMap.get(item.member.profileId);
-
-    if (!profileName) {
-      return item;
-    }
+    const safeProfile: Profile = {
+      id: item.member.profile.id,
+      userId: item.member.profile.userId ?? item.member.profile.id,
+      name: profileName ?? item.member.profile.name ?? item.member.profile.email ?? "User",
+      imageUrl: item.member.profile.imageUrl ?? "/in-accord-steampunk-logo.png",
+      email: item.member.profile.email ?? "",
+      createdAt: item.member.profile.createdAt ?? new Date(0),
+      updatedAt: item.member.profile.updatedAt ?? new Date(0),
+    };
 
     return {
       ...item,
       member: {
         ...item.member,
-        profile: {
-          ...item.member.profile,
-          name: profileName,
-        },
+        profile: safeProfile,
       },
     };
   });

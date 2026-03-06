@@ -55,7 +55,7 @@ export const CreateChannelGroupModal = () => {
         typeof params?.serverId === "string"
           ? params.serverId
           : Array.isArray(params?.serverId)
-            ? params.serverId[0]
+            ? (params?.serverId[0] ?? "")
             : "";
       const fallbackServerId = typeof data.server?.id === "string" ? data.server.id : "";
       const serverId = (routeServerId || fallbackServerId).trim();

@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 export default function Page() {
   const router = useRouter();
   const search = useSearchParams();
-  const fallbackPath = useMemo(() => search.get("next") || "/users", [search]);
+  const fallbackPath = useMemo(() => search?.get("next") || "/users", [search]);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

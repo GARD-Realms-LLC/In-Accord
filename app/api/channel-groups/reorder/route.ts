@@ -18,8 +18,9 @@ export async function PATCH(req: Request) {
       | null;
 
     const serverId = String(body?.serverId ?? "").trim();
-    const orderedGroupIds = Array.isArray(body?.orderedGroupIds)
-      ? body?.orderedGroupIds.map((id) => String(id ?? "").trim()).filter(Boolean)
+    const incomingOrderedGroupIds = body?.orderedGroupIds;
+    const orderedGroupIds = Array.isArray(incomingOrderedGroupIds)
+      ? incomingOrderedGroupIds.map((id) => String(id ?? "").trim()).filter(Boolean)
       : [];
 
     if (!serverId) {
@@ -65,7 +66,7 @@ export async function PATCH(req: Request) {
       return new NextResponse("orderedGroupIds must include all groups", { status: 400 });
     }
 
-    for (const id of existingIds) {
+    for (const id of Array.from(existingIds)) {
       if (!incomingIds.has(id)) {
         return new NextResponse("orderedGroupIds must include all groups", { status: 400 });
       }
