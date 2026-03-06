@@ -6,10 +6,10 @@ import qs from "query-string";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { type Member, MemberRole, type Profile } from "@/lib/db/types";
-import { Edit, FileIcon, ShieldAlert, ShieldCheck, SmilePlus, Trash } from "lucide-react";
+import { Crown, Edit, FileIcon, MessageCircle, ShieldAlert, ShieldCheck, SmilePlus, Trash, UserPlus } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 
 import { UserAvatar } from "@/components/user-avatar";
 import { BotAppBadge } from "@/components/bot-app-badge";
@@ -19,8 +19,11 @@ import { cn } from "@/lib/utils";
 import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useModal } from "@/hooks/use-modal-store";
+import { isInAccordAdministrator } from "@/lib/in-accord-admin";
 import { isBotUser } from "@/lib/is-bot-user";
+import { parseMentionSegments } from "@/lib/mentions";
 
 interface ChatItemProps {
   id: string;
@@ -42,12 +45,6 @@ interface ChatItemProps {
     count: number;
   }>;
 }
-
-const roleIconMap = {
-  GUEST: null,
-  MODERATOR: <ShieldCheck className="h-4 w-4 ml-2 text-indigo-500" />,
-  ADMIN: <ShieldAlert className="h-4 w-4 ml-2 text-rose-500" />,
-};
 
 const formSchema = z.object({
   content: z.string().min(1),
@@ -114,7 +111,22 @@ export const ChatItem = ({
   reactionScope = "channel",
   initialReactions,
 }: ChatItemProps) => {
+  type ProfileCardData = {
+    id: string;
+    realName: string | null;
+    profileName: string | null;
+    bannerUrl: string | null;
+    presenceStatus: string | null;
+    role: string | null;
+    email: string;
+    imageUrl: string;
+    createdAt: string | null;
+    lastLogonAt: string | null;
+  };
+
   const [isEditing, setIsEditing] = useState(false);
+  const [isProfilePopoverOpen, setIsProfilePopoverOpen] = useState(false);
+  const [profileCard, setProfileCard] = useState<ProfileCardData | null>(null);
   const [displayName, setDisplayName] = useState(member.profile.name);
   const [displayImageUrl, setDisplayImageUrl] = useState(member.profile.imageUrl);
   const [postEmoteItems, setPostEmoteItems] = useState<PostEmoteItem[]>(() =>
@@ -228,10 +240,10 @@ export const ChatItem = ({
   };
 
   const onMemberClick = () => {
-    if (member.id === currentMember.id) {
-      return;
-    }
+    setIsProfilePopoverOpen((prev) => !prev);
+  };
 
+  const onStartDirectMessage = () => {
     const serverIdFromRoute =
       typeof params?.serverId === "string"
         ? params.serverId
@@ -240,11 +252,18 @@ export const ChatItem = ({
           : "";
 
     const effectiveServerId = dmServerId ?? serverIdFromRoute;
+
     if (!effectiveServerId) {
+      window.alert("Unable to open DM from this view.");
       return;
     }
 
+    setIsProfilePopoverOpen(false);
     router.push(`/users?serverId=${encodeURIComponent(effectiveServerId)}&memberId=${encodeURIComponent(member.id)}`);
+  };
+
+  const onAddFriend = () => {
+    window.alert("Friend requests are coming soon.");
   };
 
   useEffect(() => {
@@ -289,6 +308,37 @@ export const ChatItem = ({
       content: content,
     });
   }, [content]);
+
+  useEffect(() => {
+    if (!isProfilePopoverOpen) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadProfileCard = async () => {
+      try {
+        const response = await axios.get<ProfileCardData>(
+          `/api/profile/${encodeURIComponent(member.profile.id)}/card`,
+          { params: { memberId: member.id } }
+        );
+
+        if (!cancelled) {
+          setProfileCard(response.data);
+        }
+      } catch {
+        if (!cancelled) {
+          setProfileCard(null);
+        }
+      }
+    };
+
+    void loadProfileCard();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isProfilePopoverOpen, member.id, member.profile.id]);
 
   useEffect(() => {
     setDisplayName(member.profile.name);
@@ -386,30 +436,214 @@ export const ChatItem = ({
     name: displayName,
     email: member.profile.email,
   });
+  const globalRoleFromProfile = (member.profile as Profile & { role?: string | null }).role ?? null;
+  const isInAccordAdmin = isInAccordAdministrator(profileCard?.role ?? globalRoleFromProfile);
+  const highestRoleIcon = isInAccordAdmin
+    ? <Crown className="h-3.5 w-3.5 text-rose-500" aria-label="In-Accord Administrator" />
+    : member.role === MemberRole.ADMIN
+      ? <ShieldAlert className="h-4 w-4 text-rose-500" />
+      : member.role === MemberRole.MODERATOR
+        ? <ShieldCheck className="h-4 w-4 text-indigo-500" />
+        : null;
+  const highestRoleLabel = isInAccordAdmin
+    ? "In-Accord Administrator"
+    : member.role === MemberRole.ADMIN
+      ? "ADMIN"
+      : member.role === MemberRole.MODERATOR
+        ? "MODERATOR"
+        : null;
+  const effectiveBannerUrl = profileCard?.bannerUrl ?? null;
+  const memberCreatedDate = profileCard?.createdAt
+    ? new Date(profileCard.createdAt)
+    : member.profile.createdAt
+      ? new Date(member.profile.createdAt)
+      : null;
+  const memberCreatedDisplay =
+    memberCreatedDate && !Number.isNaN(memberCreatedDate.getTime())
+      ? memberCreatedDate.toLocaleString()
+      : "Unknown";
+  const contentSegments = parseMentionSegments(content);
+  const hasMention = contentSegments.some((segment) => segment.kind === "mention");
+  const isMentioningCurrentUser = contentSegments.some(
+    (segment) =>
+      segment.kind === "mention" &&
+      segment.entityType === "user" &&
+      segment.entityId === currentMember.profileId
+  );
+  const plainContentForNotification = contentSegments
+    .map((segment) => (segment.kind === "mention" ? `@${segment.label}` : segment.value))
+    .join("")
+    .trim();
+
+  useEffect(() => {
+    if (!isMentioningCurrentUser || deleted) {
+      return;
+    }
+
+    if (member.id === currentMember.id) {
+      return;
+    }
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const notifiedKey = `inaccord:mention-notified:${id}`;
+    if (window.sessionStorage.getItem(notifiedKey) === "1") {
+      return;
+    }
+
+    window.sessionStorage.setItem(notifiedKey, "1");
+
+    const title = `New mention from ${displayName}`;
+    const body = plainContentForNotification || "You were mentioned in chat.";
+    const shouldUseBrowserNotification = document.visibilityState !== "visible";
+
+    if (shouldUseBrowserNotification && "Notification" in window) {
+      const notify = () => {
+        try {
+          new Notification(title, {
+            body,
+            tag: `mention-${id}`,
+          });
+        } catch {
+          // ignore notification failures
+        }
+      };
+
+      if (Notification.permission === "granted") {
+        notify();
+      } else if (Notification.permission === "default") {
+        void Notification.requestPermission().then((permission) => {
+          if (permission === "granted") {
+            notify();
+          }
+        });
+      }
+    }
+  }, [
+    currentMember.id,
+    deleted,
+    displayName,
+    id,
+    isMentioningCurrentUser,
+    member.id,
+    plainContentForNotification,
+  ]);
 
   return (
-    <div className="relative group flex items-center hover:bg-black/5 p-4 transition w-full">
+    <div
+      className={cn(
+        "relative group flex items-center p-4 transition w-full",
+        isMentioningCurrentUser
+          ? "bg-zinc-400 hover:bg-zinc-400 dark:bg-zinc-700 dark:hover:bg-zinc-700 border-l-4 border-amber-500/80"
+          : hasMention
+            ? "bg-zinc-300 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-800 border-l-4 border-zinc-500/70"
+            : "hover:bg-black/5"
+      )}
+    >
       <div className="group flex gap-x-2 items-start w-full">
-        <div
-          onClick={onMemberClick}
-          className="cursor-pointer hover:drop-shadow-md transition"
-        >
-          <UserAvatar src={displayImageUrl} />
-        </div>
+        <Popover open={isProfilePopoverOpen} onOpenChange={setIsProfilePopoverOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              onClick={onMemberClick}
+              className="cursor-pointer hover:drop-shadow-md transition"
+              aria-label={`Open profile for ${displayName}`}
+              title={`View ${displayName}'s profile`}
+            >
+              <UserAvatar src={displayImageUrl} />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            side="right"
+            align="start"
+            className="w-[320px] overflow-hidden rounded-xl border border-black/30 bg-[#111214] p-0 text-[#dbdee1] shadow-2xl shadow-black/50"
+          >
+            <div className="relative h-24 bg-gradient-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
+              {effectiveBannerUrl ? (
+                <Image
+                  src={effectiveBannerUrl}
+                  alt="User banner"
+                  fill
+                  className="object-cover"
+                  unoptimized
+                />
+              ) : null}
+            </div>
+
+            <div className="relative p-3 pt-7">
+              <div className="absolute -top-5 left-3 rounded-full border-4 border-[#111214]">
+                <UserAvatar src={displayImageUrl} className="h-10 w-10" />
+              </div>
+
+              <div className="flex min-w-0 items-center gap-1.5">
+                <p className="truncate text-base font-bold text-white">{displayName || "Unknown User"}</p>
+                {highestRoleIcon && highestRoleLabel ? (
+                  <ActionTooltip label={highestRoleLabel} align="center">
+                    {highestRoleIcon}
+                  </ActionTooltip>
+                ) : null}
+                <NewUserCloverBadge createdAt={member.profile.createdAt} className="text-sm" />
+                {showBotBadge ? <BotAppBadge className="h-4 px-1 text-[9px]" /> : null}
+              </div>
+              <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">In-Accord Profile</p>
+
+              <div className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] p-3 text-xs">
+                <div className="space-y-1 text-[#dbdee1]">
+                  <p>Users ID: {member.profile.id || "N/A"}</p>
+                  <p>Name: {profileCard?.realName || displayName || "Unknown User"}</p>
+                  <p>Email: {profileCard?.email || member.profile.email || "N/A"}</p>
+                  <p>Role: {member.role}</p>
+                  <p>Created: {memberCreatedDisplay}</p>
+                </div>
+              </div>
+
+              <div className="mt-3 flex items-center gap-2 border-t border-white/10 pt-3">
+                <ActionTooltip label="Add Friend" align="center">
+                  <button
+                    type="button"
+                    onClick={onAddFriend}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/15 bg-[#1e1f22] text-[#dbdee1] transition hover:bg-[#2a2b30]"
+                    aria-label="Add friend"
+                    title="Add Friend"
+                  >
+                    <UserPlus className="h-4 w-4" />
+                  </button>
+                </ActionTooltip>
+
+                <ActionTooltip label="Direct Message" align="center">
+                  <button
+                    type="button"
+                    onClick={onStartDirectMessage}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/15 bg-[#1e1f22] text-[#dbdee1] transition hover:bg-[#2a2b30]"
+                    aria-label="Open direct message"
+                    title="Direct Message"
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                  </button>
+                </ActionTooltip>
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
         <div className="flex flex-col w-full">
           <div className="flex items-center gap-x-2">
-            <div className="flex items-center">
-              <p
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
                 onClick={onMemberClick}
                 className="font-semibold text-sm hover:underline cursor-pointer"
               >
                 {displayName}
-              </p>
+              </button>
+              {highestRoleIcon && highestRoleLabel ? (
+                <ActionTooltip label={highestRoleLabel} align="center">
+                  {highestRoleIcon}
+                </ActionTooltip>
+              ) : null}
               <NewUserCloverBadge createdAt={member.profile.createdAt} className="text-xs" />
               {showBotBadge ? <BotAppBadge className="ml-1.5 h-4 px-1 text-[9px]" /> : null}
-              <ActionTooltip label={member.role} align="center">
-                {roleIconMap[member.role]}
-              </ActionTooltip>
             </div>
             <span className="text-xs text-zinc-500 dark:text-zinc-400">
               {timestamp}
@@ -465,7 +699,26 @@ export const ChatItem = ({
                   "italic text-zinc-500 dark:text-zinc-400 text-xs mt-1"
               )}
             >
-              {content}
+              {contentSegments.map((segment, index) => {
+                if (segment.kind === "text") {
+                  return <span key={`text-${index}`}>{segment.value}</span>;
+                }
+
+                return (
+                  <span
+                    key={`mention-${segment.entityType}-${segment.entityId}-${index}`}
+                    className={cn(
+                      "mx-0.5 inline-flex rounded px-1.5 py-0.5 font-semibold",
+                      segment.entityType === "role"
+                        ? "bg-amber-500/20 text-amber-700 dark:text-amber-200"
+                        : "bg-indigo-500/20 text-indigo-700 dark:text-indigo-200"
+                    )}
+                    title={`Mentioned ${segment.entityType}: ${segment.label}`}
+                  >
+                    @{segment.label}
+                  </span>
+                );
+              })}
               {isUpdated && !deleted && (
                 <span className="text-[10px] mx-2 text-zinc-500 dark:text-zinc-400">
                   (edited)

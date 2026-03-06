@@ -50,6 +50,7 @@ import {
 import { useModal } from "@/hooks/use-modal-store";
 import { isInAccordAdministrator } from "@/lib/in-accord-admin";
 import { normalizePresenceStatus, presenceStatusLabelMap } from "@/lib/presence-status";
+import { readMentionsEnabled, writeMentionsEnabled } from "@/lib/mentions";
 
 type SettingsSection =
   | "myAccount"
@@ -237,6 +238,7 @@ export const SettingsModal = () => {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(data.profileImageUrl ?? null);
   const [bannerUrl, setBannerUrl] = useState<string | null>(data.profileBannerUrl ?? null);
   const [resolvedProfileId, setResolvedProfileId] = useState<string | null>(data.profileId ?? null);
+  const [mentionsEnabled, setMentionsEnabled] = useState(true);
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const bannerInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -264,6 +266,21 @@ export const SettingsModal = () => {
   useEffect(() => {
     setResolvedProfileId(data.profileId ?? null);
   }, [data.profileId]);
+
+  useEffect(() => {
+    if (!isModalOpen) {
+      return;
+    }
+
+    setMentionsEnabled(readMentionsEnabled());
+  }, [isModalOpen]);
+
+  const onToggleMentions = () => {
+    const next = !mentionsEnabled;
+    setMentionsEnabled(next);
+    writeMentionsEnabled(next);
+    window.dispatchEvent(new Event("inaccord:mentions-setting-updated"));
+  };
 
   useEffect(() => {
     if (!isModalOpen) {
@@ -823,6 +840,39 @@ export const SettingsModal = () => {
             <p className="text-sm font-medium text-white">Notification Preferences</p>
             <p className="mt-1 text-xs text-[#949ba4]">
               Notification toggles can be configured here.
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-white">Enable @Mentions</p>
+                <p className="mt-1 text-xs text-[#949ba4]">
+                  When enabled, typing <span className="font-semibold text-[#c9cdfb]">@</span> in chat suggests users and server roles.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={onToggleMentions}
+                className={`inline-flex h-7 w-12 items-center rounded-full border transition ${
+                  mentionsEnabled
+                    ? "border-emerald-400/50 bg-emerald-500/40"
+                    : "border-zinc-600 bg-zinc-700"
+                }`}
+                aria-pressed={mentionsEnabled}
+                aria-label="Toggle @Mentions"
+              >
+                <span
+                  className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
+                    mentionsEnabled ? "translate-x-6" : "translate-x-1"
+                  }`}
+                />
+              </button>
+            </div>
+
+            <p className="mt-3 rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
+              Current status: <span className="font-semibold text-white">{mentionsEnabled ? "On" : "Off"}</span>
             </p>
           </div>
         </div>

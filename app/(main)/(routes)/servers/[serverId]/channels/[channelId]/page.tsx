@@ -14,6 +14,7 @@ import { getUserProfileNameMap } from "@/lib/user-profile";
 import type { Profile } from "@/lib/db/types";
 import { ensureChannelTopicSchema } from "@/lib/channel-topic";
 import { ensureMessageReactionSchema } from "@/lib/message-reactions";
+import { ensureServerRolesSchema } from "@/lib/server-roles";
 
 interface ChannelIdPageProps {
   params: {
@@ -113,14 +114,72 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
     channelMessages.map((item) => item.member.profileId)
   );
 
+  const uniqueMessageProfileIds = Array.from(
+    new Set(channelMessages.map((item) => item.member.profileId).filter(Boolean))
+  );
+
+  const profileRoleRows = uniqueMessageProfileIds.length
+    ? await db.execute(sql`
+        select "userId", "role"
+        from "Users"
+        where "userId" in (${sql.join(uniqueMessageProfileIds.map((id) => sql`${id}`), sql`, `)})
+      `)
+    : { rows: [] };
+
+  const profileRoleMap = new Map<string, string | null>(
+    ((profileRoleRows as unknown as {
+      rows?: Array<{ userId: string; role: string | null }>;
+    }).rows ?? []).map((row) => [row.userId, row.role ?? null])
+  );
+
+  const serverMembers = await db.query.member.findMany({
+    where: eq(member.serverId, params.serverId),
+    with: {
+      profile: true,
+    },
+    orderBy: [asc(member.createdAt)],
+  });
+
+  const mentionProfileNameMap = await getUserProfileNameMap(serverMembers.map((item) => item.profileId));
+
+  const mentionUsers = serverMembers.map((item) => {
+    const resolvedName =
+      mentionProfileNameMap.get(item.profileId) ??
+      item.profile.name ??
+      item.profile.email ??
+      "User";
+
+    return {
+      id: item.profileId,
+      label: resolvedName,
+    };
+  });
+
+  await ensureServerRolesSchema();
+
+  const roleRows = await db.execute(sql`
+    select "id", "name"
+    from "ServerRole"
+    where "serverId" = ${params.serverId}
+    order by "position" asc, "name" asc
+  `);
+
+  const mentionRoles = ((roleRows as unknown as { rows?: Array<{ id: string; name: string }> }).rows ?? [])
+    .map((row) => ({
+      id: String(row.id ?? "").trim(),
+      label: String(row.name ?? "").trim(),
+    }))
+    .filter((row) => row.id && row.label);
+
   const hydratedChannelMessages = channelMessages.map((item) => {
     const profileName = profileNameMap.get(item.member.profileId);
-    const safeProfile: Profile = {
+    const safeProfile: Profile & { role?: string | null } = {
       id: item.member.profile.id,
       userId: item.member.profile.userId ?? item.member.profile.id,
       name: profileName ?? item.member.profile.name ?? item.member.profile.email ?? "User",
       imageUrl: item.member.profile.imageUrl ?? "/in-accord-steampunk-logo.png",
       email: item.member.profile.email ?? "",
+      role: profileRoleMap.get(item.member.profileId) ?? null,
       createdAt: item.member.profile.createdAt ?? new Date(0),
       updatedAt: item.member.profile.updatedAt ?? new Date(0),
     };
@@ -191,6 +250,8 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
               serverId: currentChannel.serverId,
             }}
             disabled={!channelPermissions.allowSend}
+            mentionUsers={mentionUsers}
+            mentionRoles={mentionRoles}
           />
         </div>
       ) : null}

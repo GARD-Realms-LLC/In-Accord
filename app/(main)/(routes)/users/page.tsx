@@ -388,11 +388,27 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
           messageRows.map((item) => item.member.profileId)
         );
 
+        const uniqueMessageProfileIds = Array.from(
+          new Set(messageRows.map((item) => item.member.profileId).filter(Boolean))
+        );
+
+        const profileRoleRows = uniqueMessageProfileIds.length
+          ? await db.execute(sql`
+              select "userId", "role"
+              from "Users"
+              where "userId" in (${sql.join(uniqueMessageProfileIds.map((id) => sql`${id}`), sql`, `)})
+            `)
+          : { rows: [] };
+
+        const profileRoleMap = new Map<string, string | null>(
+          ((profileRoleRows as unknown as {
+            rows?: Array<{ userId: string; role: string | null }>;
+          }).rows ?? []).map((row) => [row.userId, row.role ?? null])
+        );
+
         const hydratedRows = messageRows.map((item) => {
           const profileName = profileNameMap.get(item.member.profileId);
-          if (!profileName) {
-            return item;
-          }
+          const profileRole = profileRoleMap.get(item.member.profileId) ?? null;
 
           return {
             ...item,
@@ -400,7 +416,8 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
               ...item.member,
               profile: {
                 ...item.member.profile,
-                name: profileName,
+                name: profileName ?? item.member.profile.name,
+                role: profileRole,
               },
             },
           };
@@ -622,6 +639,16 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                     apiUrl="/api/socket/direct-messages"
                     conversationId={selectedConversation.conversationId}
                     query={{ conversationId: selectedConversation.conversationId }}
+                    mentionUsers={[
+                      {
+                        id: profile.id,
+                        label: profile.name ?? "You",
+                      },
+                      {
+                        id: selectedConversation.otherMember.id,
+                        label: selectedConversation.otherMember.name,
+                      },
+                    ]}
                   />
                 </div>
               </div>

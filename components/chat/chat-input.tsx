@@ -7,7 +7,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,12 @@ import { useModal } from "@/hooks/use-modal-store";
 import { EmojiPicker } from "@/components/emoji-picker";
 import { GifPicker } from "@/components/gif-picker";
 import { StickerPicker } from "@/components/sticker-picker";
+import {
+  buildMentionToken,
+  MENTION_SETTINGS_KEY,
+  type MentionOption,
+  readMentionsEnabled,
+} from "@/lib/mentions";
 
 interface ChatInputProps {
   apiUrl: string;
@@ -23,16 +29,72 @@ interface ChatInputProps {
   type: "conversation" | "channel";
   conversationId?: string;
   disabled?: boolean;
+  mentionUsers?: Array<{ id: string; label: string }>;
+  mentionRoles?: Array<{ id: string; label: string }>;
 }
 
 const formSchema = z.object({
   content: z.string().min(1),
 });
 
-export const ChatInput = ({ apiUrl, query, name, type, conversationId, disabled = false }: ChatInputProps) => {
+export const ChatInput = ({
+  apiUrl,
+  query,
+  name,
+  type,
+  conversationId,
+  disabled = false,
+  mentionUsers = [],
+  mentionRoles = [],
+}: ChatInputProps) => {
   const { onOpen } = useModal();
   const router = useRouter();
   const [sendError, setSendError] = useState<string | null>(null);
+  const [mentionsEnabled, setMentionsEnabled] = useState(true);
+  const [activeMentionStart, setActiveMentionStart] = useState<number | null>(null);
+  const [activeMentionEnd, setActiveMentionEnd] = useState<number | null>(null);
+  const [mentionQuery, setMentionQuery] = useState("");
+  const [activeMentionIndex, setActiveMentionIndex] = useState(0);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const mentionOptions = useMemo<MentionOption[]>(() => {
+    const userOptions = mentionUsers
+      .map((item) => ({
+        id: String(item.id ?? "").trim(),
+        label: String(item.label ?? "").trim(),
+        type: "user" as const,
+      }))
+      .filter((item) => item.id && item.label);
+
+    const roleOptions = mentionRoles
+      .map((item) => ({
+        id: String(item.id ?? "").trim(),
+        label: String(item.label ?? "").trim(),
+        type: "role" as const,
+      }))
+      .filter((item) => item.id && item.label);
+
+    return [...userOptions, ...roleOptions];
+  }, [mentionRoles, mentionUsers]);
+
+  const filteredMentionOptions = useMemo(() => {
+    if (!mentionsEnabled || activeMentionStart === null || activeMentionEnd === null) {
+      return [] as MentionOption[];
+    }
+
+    const normalizedQuery = mentionQuery.trim().toLowerCase();
+    const visible = mentionOptions.filter((item) => {
+      if (!normalizedQuery) {
+        return true;
+      }
+
+      return item.label.toLowerCase().includes(normalizedQuery);
+    });
+
+    return visible.slice(0, 8);
+  }, [activeMentionEnd, activeMentionStart, mentionOptions, mentionQuery, mentionsEnabled]);
+
+  const isMentionMenuOpen = filteredMentionOptions.length > 0;
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -42,6 +104,111 @@ export const ChatInput = ({ apiUrl, query, name, type, conversationId, disabled 
   });
 
   const isLoading = form.formState.isSubmitting || disabled;
+
+  useEffect(() => {
+    const syncMentionsPreference = () => {
+      setMentionsEnabled(readMentionsEnabled());
+    };
+
+    syncMentionsPreference();
+
+    const onStorageChange = (event: StorageEvent) => {
+      if (event.key && event.key !== MENTION_SETTINGS_KEY) {
+        return;
+      }
+
+      syncMentionsPreference();
+    };
+
+    const onMentionsPreferenceChanged = () => {
+      syncMentionsPreference();
+    };
+
+    window.addEventListener("storage", onStorageChange);
+    window.addEventListener("inaccord:mentions-setting-updated", onMentionsPreferenceChanged);
+
+    return () => {
+      window.removeEventListener("storage", onStorageChange);
+      window.removeEventListener("inaccord:mentions-setting-updated", onMentionsPreferenceChanged);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isMentionMenuOpen) {
+      setActiveMentionIndex(0);
+      return;
+    }
+
+    setActiveMentionIndex((prev) => Math.min(prev, filteredMentionOptions.length - 1));
+  }, [filteredMentionOptions.length, isMentionMenuOpen]);
+
+  const clearMentionState = () => {
+    setActiveMentionStart(null);
+    setActiveMentionEnd(null);
+    setMentionQuery("");
+    setActiveMentionIndex(0);
+  };
+
+  const detectMentionState = (value: string, caret: number | null | undefined) => {
+    if (!mentionsEnabled || !mentionOptions.length || typeof caret !== "number") {
+      clearMentionState();
+      return;
+    }
+
+    const textBeforeCaret = value.slice(0, caret);
+    const atIndex = textBeforeCaret.lastIndexOf("@");
+
+    if (atIndex < 0) {
+      clearMentionState();
+      return;
+    }
+
+    const charBeforeAt = atIndex > 0 ? textBeforeCaret[atIndex - 1] : " ";
+    if (atIndex > 0 && !/\s/.test(charBeforeAt)) {
+      clearMentionState();
+      return;
+    }
+
+    const draft = textBeforeCaret.slice(atIndex + 1);
+
+    if (draft.includes(" ") || draft.includes("\n") || draft.includes("\t") || draft.includes("[")) {
+      clearMentionState();
+      return;
+    }
+
+    setActiveMentionStart(atIndex);
+    setActiveMentionEnd(caret);
+    setMentionQuery(draft);
+  };
+
+  const insertMention = (option: MentionOption) => {
+    const currentContent = String(form.getValues("content") ?? "");
+    const mentionStart = activeMentionStart;
+    const mentionEnd = activeMentionEnd;
+
+    if (mentionStart === null || mentionEnd === null) {
+      return;
+    }
+
+    const before = currentContent.slice(0, mentionStart);
+    const after = currentContent.slice(mentionEnd);
+    const token = `${buildMentionToken(option)} `;
+    const nextValue = `${before}${token}${after}`;
+    const nextCaretPosition = before.length + token.length;
+
+    form.setValue("content", nextValue, {
+      shouldDirty: true,
+      shouldTouch: true,
+      shouldValidate: true,
+    });
+
+    clearMentionState();
+
+    window.requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(nextCaretPosition, nextCaretPosition);
+    });
+  };
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
@@ -62,6 +229,7 @@ export const ChatInput = ({ apiUrl, query, name, type, conversationId, disabled 
       }
 
       form.reset();
+      clearMentionState();
       router.refresh();
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
@@ -113,6 +281,7 @@ export const ChatInput = ({ apiUrl, query, name, type, conversationId, disabled 
       }
 
       form.reset();
+      clearMentionState();
       router.refresh();
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
@@ -152,6 +321,7 @@ export const ChatInput = ({ apiUrl, query, name, type, conversationId, disabled 
       }
 
       form.reset();
+      clearMentionState();
       router.refresh();
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
@@ -194,11 +364,80 @@ export const ChatInput = ({ apiUrl, query, name, type, conversationId, disabled 
                       type === "conversation" ? name : "#" + name
                     }`}
                     {...field}
+                    ref={(element) => {
+                      field.ref(element);
+                      inputRef.current = element;
+                    }}
                     onChange={(event) => {
-                      field.onChange(event.target.value);
-                      onTypingHeartbeat(event.target.value);
+                      const nextValue = event.target.value;
+                      field.onChange(nextValue);
+                      onTypingHeartbeat(nextValue);
+                      detectMentionState(nextValue, event.target.selectionStart);
+                    }}
+                    onKeyDown={(event) => {
+                      if (!isMentionMenuOpen) {
+                        return;
+                      }
+
+                      if (event.key === "ArrowDown") {
+                        event.preventDefault();
+                        setActiveMentionIndex((prev) => (prev + 1) % filteredMentionOptions.length);
+                        return;
+                      }
+
+                      if (event.key === "ArrowUp") {
+                        event.preventDefault();
+                        setActiveMentionIndex((prev) =>
+                          prev <= 0 ? filteredMentionOptions.length - 1 : prev - 1
+                        );
+                        return;
+                      }
+
+                      if (event.key === "Enter" || event.key === "Tab") {
+                        event.preventDefault();
+                        const selected = filteredMentionOptions[activeMentionIndex] ?? filteredMentionOptions[0];
+                        if (selected) {
+                          insertMention(selected);
+                        }
+                        return;
+                      }
+
+                      if (event.key === "Escape") {
+                        event.preventDefault();
+                        clearMentionState();
+                      }
+                    }}
+                    onClick={(event) => {
+                      detectMentionState(String(field.value ?? ""), event.currentTarget.selectionStart);
                     }}
                   />
+                  {isMentionMenuOpen ? (
+                    <div className="absolute bottom-[64px] left-14 right-16 z-20 max-h-56 overflow-auto rounded-lg border border-black/30 bg-[#1e1f22] p-1 shadow-2xl shadow-black/45">
+                      {filteredMentionOptions.map((option, index) => {
+                        const isActive = index === activeMentionIndex;
+                        return (
+                          <button
+                            key={`${option.type}:${option.id}`}
+                            type="button"
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              insertMention(option);
+                            }}
+                            className={`flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left text-xs transition ${
+                              isActive
+                                ? "bg-[#5865f2]/35 text-white"
+                                : "text-[#dbdee1] hover:bg-[#2f3136]"
+                            }`}
+                          >
+                            <span className="truncate">@{option.label}</span>
+                            <span className="ml-2 shrink-0 rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.06em] text-[#949ba4]">
+                              {option.type}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
                   <div className="absolute top-[26px] right-8 flex items-center gap-2">
                     <StickerPicker onSelect={onStickerSelect} />
                     <GifPicker onSelect={onGifSelect} />

@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, Crown, LogOut, Settings, ShieldAlert, UserCircle2 } from "lucide-react";
+import { Copy, Crown, LogOut, MessageCircle, Settings, ShieldAlert, ShieldCheck, UserCircle2, UserPlus } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import axios from "axios";
@@ -193,6 +193,14 @@ export const UserStatusMenu = ({
     setIsProfileCardOpen(true);
   };
 
+  const onAddFriend = () => {
+    window.alert("Friend requests are coming soon.");
+  };
+
+  const onStartDirectMessage = () => {
+    window.alert("Open the Users tab to start direct messages.");
+  };
+
   const statusDotClassMap: Record<PresenceStatus, string> = {
     ONLINE: "bg-emerald-500",
     DND: "bg-rose-500",
@@ -273,6 +281,15 @@ export const UserStatusMenu = ({
   const lastLogon = formatDate(profileLastLogonAt);
   const created = formatDate(profileJoinedAt);
   const hasAdminCrown = isInAccordAdministrator(menuProfileRole ?? profileRole);
+  const normalizedProfileRole = (menuProfileRole ?? profileRole ?? "").trim().toUpperCase();
+  const isGlobalModerator =
+    !hasAdminCrown &&
+    (normalizedProfileRole === "MODERATOR" || normalizedProfileRole === "MOD");
+  const highestRoleIcon = hasAdminCrown
+    ? <Crown className="h-4 w-4 shrink-0 text-rose-500" aria-label="In-Accord Administrator" />
+    : isGlobalModerator
+      ? <ShieldCheck className="h-4 w-4 shrink-0 text-indigo-500" aria-label="Moderator" />
+      : null;
   const displayStatusName = menuProfileName?.trim() || menuRealName || "Unknown User";
 
   return (
@@ -290,9 +307,7 @@ export const UserStatusMenu = ({
             </p>
             <div className="flex min-w-0 items-center gap-1.5">
               <p className="truncate text-xs font-semibold text-white">{displayStatusName}</p>
-              {hasAdminCrown ? (
-                <Crown className="h-3.5 w-3.5 shrink-0 text-rose-500" aria-label="In-Accord Administrator" />
-              ) : null}
+              {highestRoleIcon}
             </div>
             <p className="truncate text-[10px] text-[#b5bac1]">{presenceStatusLabelMap[menuPresenceStatus]}</p>
           </div>
@@ -324,9 +339,7 @@ export const UserStatusMenu = ({
 
           <div className="flex min-w-0 items-center gap-1.5">
             <p className="truncate text-base font-bold text-white">{displayStatusName}</p>
-            {hasAdminCrown ? (
-              <Crown className="h-4 w-4 shrink-0 text-rose-500" aria-label="In-Accord Administrator" />
-            ) : null}
+            {highestRoleIcon}
           </div>
           <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">In-Accord Profile</p>
 
@@ -426,7 +439,7 @@ export const UserStatusMenu = ({
       </PopoverContent>
 
       <Dialog open={isProfileCardOpen} onOpenChange={setIsProfileCardOpen}>
-        <DialogContent className="w-[360px] overflow-hidden rounded-xl border border-black/30 bg-[#111214] p-0 text-[#dbdee1] shadow-2xl shadow-black/50">
+        <DialogContent className="w-[320px] overflow-hidden rounded-xl border border-black/30 bg-[#111214] p-0 text-[#dbdee1] shadow-2xl shadow-black/50">
           <DialogTitle className="sr-only">In-Accord Profile Card</DialogTitle>
 
           <div className="relative h-24 bg-gradient-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
@@ -441,16 +454,14 @@ export const UserStatusMenu = ({
             ) : null}
           </div>
 
-          <div className="relative p-4 pt-8">
-            <div className="absolute -top-6 left-4 rounded-full border-4 border-[#111214]">
-              <UserAvatar src={profileImageUrl ?? undefined} className="h-12 w-12" />
+          <div className="relative p-3 pt-7">
+            <div className="absolute -top-5 left-3 rounded-full border-4 border-[#111214]">
+              <UserAvatar src={profileImageUrl ?? undefined} className="h-10 w-10" />
             </div>
 
             <div className="flex min-w-0 items-center gap-1.5">
               <p className="truncate text-base font-bold text-white">{displayStatusName}</p>
-              {hasAdminCrown ? (
-                <Crown className="h-4 w-4 shrink-0 text-rose-500" aria-label="In-Accord Administrator" />
-              ) : null}
+              {highestRoleIcon}
             </div>
             <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">In-Accord Profile</p>
 
@@ -458,12 +469,32 @@ export const UserStatusMenu = ({
               <div className="space-y-1 text-[#dbdee1]">
                 <p>Users ID: {profileId || ""}</p>
                 <p>Name: {menuRealName || menuProfileName || "Unknown User"}</p>
-                <p>Profile Name: {menuProfileName || "Not set"}</p>
                 <p>Email: {profileEmail || ""}</p>
-                <p>Status: {presenceStatusLabelMap[menuPresenceStatus]}</p>
                 <p>Last logon: {lastLogon}</p>
                 <p>Created: {created}</p>
               </div>
+            </div>
+
+            <div className="mt-3 flex items-center gap-2 border-t border-white/10 pt-3">
+              <button
+                type="button"
+                onClick={onAddFriend}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/15 bg-[#1e1f22] text-[#dbdee1] transition hover:bg-[#2a2b30]"
+                aria-label="Add friend"
+                title="Add Friend"
+              >
+                <UserPlus className="h-4 w-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={onStartDirectMessage}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/15 bg-[#1e1f22] text-[#dbdee1] transition hover:bg-[#2a2b30]"
+                aria-label="Open direct message"
+                title="Direct Message"
+              >
+                <MessageCircle className="h-4 w-4" />
+              </button>
             </div>
           </div>
         </DialogContent>

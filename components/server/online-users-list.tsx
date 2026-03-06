@@ -1,10 +1,12 @@
 "use client";
 
-import { Crown, ShieldAlert, ShieldCheck } from "lucide-react";
+import { Crown, MessageCircle, ShieldAlert, ShieldCheck, UserPlus } from "lucide-react";
 import Image from "next/image";
 import { useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ActionTooltip } from "@/components/action-tooltip";
 import { BotAppBadge } from "@/components/bot-app-badge";
 import { NewUserCloverBadge } from "@/components/new-user-clover-badge";
 import { UserAvatar } from "@/components/user-avatar";
@@ -47,6 +49,8 @@ const formatDate = (value: string | null) => {
 };
 
 export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
+  const params = useParams();
+  const router = useRouter();
   const [collapsed, setCollapsed] = useState<Record<MemberRole, boolean>>({
     [MemberRole.ADMIN]: false,
     [MemberRole.MODERATOR]: false,
@@ -118,11 +122,44 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
   const renderMember = (member: OnlineRailUser) => {
     const normalizedPresenceStatus = normalizePresenceStatus(member.presenceStatus);
     const isGlobalAdmin = isInAccordAdministrator(member.globalRole);
+    const highestRoleIcon = isGlobalAdmin
+      ? <Crown className="h-4 w-4 shrink-0 text-rose-500" aria-label="In-Accord Administrator" />
+      : member.role === MemberRole.ADMIN
+        ? <ShieldAlert className="h-4 w-4 shrink-0 text-rose-500" />
+        : member.role === MemberRole.MODERATOR
+          ? <ShieldCheck className="h-4 w-4 shrink-0 text-indigo-500" />
+          : null;
+    const highestRoleLabel = isGlobalAdmin
+      ? "In-Accord Administrator"
+      : member.role === MemberRole.ADMIN
+        ? "ADMIN"
+        : member.role === MemberRole.MODERATOR
+          ? "MODERATOR"
+          : null;
     const showBotBadge = isBotUser({
       role: member.globalRole,
       name: member.profileName || member.realName || member.displayName,
       email: member.email,
     });
+    const onStartDirectMessage = () => {
+      const serverIdFromRoute =
+        typeof params?.serverId === "string"
+          ? params.serverId
+          : Array.isArray(params?.serverId)
+            ? (params?.serverId[0] ?? "")
+            : "";
+
+      if (!serverIdFromRoute) {
+        window.alert("Unable to open DM from this view.");
+        return;
+      }
+
+      router.push(`/users?serverId=${encodeURIComponent(serverIdFromRoute)}&memberId=${encodeURIComponent(member.id)}`);
+    };
+
+    const onAddFriend = () => {
+      window.alert("Friend requests are coming soon.");
+    };
 
     return (
       <Popover key={`online-${member.profileId}`}>
@@ -174,27 +211,51 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
 
             <div className="flex min-w-0 items-center gap-1.5">
               <p className="truncate text-base font-bold text-white">{member.profileName || member.realName || member.displayName}</p>
+              {highestRoleIcon && highestRoleLabel ? (
+                <ActionTooltip label={highestRoleLabel} align="center">
+                  {highestRoleIcon}
+                </ActionTooltip>
+              ) : null}
               <NewUserCloverBadge createdAt={member.joinedAt} className="text-sm" />
               {showBotBadge ? <BotAppBadge className="h-4 px-1 text-[9px]" /> : null}
-              {isGlobalAdmin ? (
-                <Crown className="h-4 w-4 shrink-0 text-rose-500" aria-label="In-Accord Administrator" />
-              ) : null}
             </div>
-            <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">
-              {member.profileName || "In-Accord Profile"}
-            </p>
+            <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">In-Accord Profile</p>
 
             <div className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] p-3 text-xs">
               <div className="space-y-1 text-[#dbdee1]">
                 <p>Users ID: {member.profileId}</p>
-                <p>Name: {member.realName || "Unknown User"}</p>
-                <p>In-Accord Profile Name: {member.profileName || "Not set"}</p>
+                <p>Name: {member.realName || member.profileName || member.displayName || "Unknown User"}</p>
                 <p>Email: {member.email || "N/A"}</p>
-                <p>Status: {presenceStatusLabelMap[normalizedPresenceStatus]}</p>
                 <p>Role: {member.role}</p>
                 <p>Last logon: {formatDate(member.lastLogonAt)}</p>
                 <p>Created: {formatDate(member.joinedAt)}</p>
               </div>
+            </div>
+
+            <div className="mt-3 flex items-center gap-2 border-t border-white/10 pt-3">
+              <ActionTooltip label="Add Friend" align="center">
+                <button
+                  type="button"
+                  onClick={onAddFriend}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/15 bg-[#1e1f22] text-[#dbdee1] transition hover:bg-[#2a2b30]"
+                  aria-label="Add friend"
+                  title="Add Friend"
+                >
+                  <UserPlus className="h-4 w-4" />
+                </button>
+              </ActionTooltip>
+
+              <ActionTooltip label="Direct Message" align="center">
+                <button
+                  type="button"
+                  onClick={onStartDirectMessage}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/15 bg-[#1e1f22] text-[#dbdee1] transition hover:bg-[#2a2b30]"
+                  aria-label="Open direct message"
+                  title="Direct Message"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                </button>
+              </ActionTooltip>
             </div>
           </div>
 
