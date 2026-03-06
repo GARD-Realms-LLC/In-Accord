@@ -1,6 +1,8 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
+import "@/lib/silence-server-console";
+
 import * as schema from "@/lib/db/schema";
 
 declare global {
