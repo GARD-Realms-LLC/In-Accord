@@ -5,6 +5,7 @@ import { MemberRole } from "@/lib/db/types";
 import { OnlineUsersList } from "@/components/server/online-users-list";
 import { currentProfile } from "@/lib/current-profile";
 import { isInAccordAdministrator } from "@/lib/in-accord-admin";
+import { ensureServerRolesSchema } from "@/lib/server-roles";
 
 interface ServerUserRolesRailProps {
   serverId: string;
@@ -13,6 +14,8 @@ interface ServerUserRolesRailProps {
 type RoleRow = {
   id: string;
   role: MemberRole;
+  assignedRoleName: string | null;
+  assignedRolePosition: number | null;
   profileId: string;
   globalRole: string | null;
   realName: string | null;
@@ -27,10 +30,14 @@ type RoleRow = {
 
 export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps) => {
   const profile = await currentProfile();
+  await ensureServerRolesSchema();
+
   const membersResult = await db.execute(sql`
     select
       m."id" as "id",
       m."role" as "role",
+      top_role."name" as "assignedRoleName",
+      top_role."position" as "assignedRolePosition",
       m."profileId" as "profileId",
       u."role" as "globalRole",
       u."name" as "realName",
@@ -42,6 +49,17 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
       u."account.created" as "joinedAt",
       u."lastLogin" as "lastLogonAt"
     from "Member" m
+    left join lateral (
+      select
+        sr."name" as "name",
+        sr."position" as "position"
+      from "ServerRoleAssignment" sra
+      inner join "ServerRole" sr on sr."id" = sra."roleId"
+      where sra."memberId" = m."id"
+        and sra."serverId" = ${serverId}
+      order by sr."position" asc, sr."name" asc
+      limit 1
+    ) top_role on true
     left join "Users" u on u."userId" = m."profileId"
     left join "UserProfile" up on up."userId" = m."profileId"
     where m."serverId" = ${serverId}
@@ -51,7 +69,7 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
         when 'MODERATOR' then 2
         else 3
       end,
-      coalesce(u."name", u."email", m."profileId") asc
+      coalesce(nullif(trim(up."profileName"), ''), u."name", u."email", m."profileId") asc
   `);
 
   const rows = (membersResult as unknown as { rows: RoleRow[] }).rows;
@@ -59,16 +77,68 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
   const currentMemberRole = rows.find((row) => row.profileId === profile?.id)?.role;
   const canSeeInvisibleMembers = isInAccordAdministrator(profile?.role) || currentMemberRole === MemberRole.ADMIN;
 
-  const onlineUsers = rows
+  const resolveEffectiveRole = (row: RoleRow): MemberRole => {
+    const globalRole = String(row.globalRole ?? "").trim().toUpperCase();
+    if (globalRole.includes("ADMIN")) {
+      return MemberRole.ADMIN;
+    }
+
+    const assignedRoleName = String(row.assignedRoleName ?? "").trim().toUpperCase();
+    if (assignedRoleName.includes("ADMIN")) {
+      return MemberRole.ADMIN;
+    }
+
+    if (assignedRoleName.includes("MODERATOR") || assignedRoleName === "MOD") {
+      return MemberRole.MODERATOR;
+    }
+
+    const memberRole = String(row.role ?? "").trim().toUpperCase();
+    if (memberRole === MemberRole.ADMIN) {
+      return MemberRole.ADMIN;
+    }
+
+    if (memberRole === MemberRole.MODERATOR) {
+      return MemberRole.MODERATOR;
+    }
+
+    return MemberRole.GUEST;
+  };
+
+  const roleRank: Record<MemberRole, number> = {
+    [MemberRole.ADMIN]: 1,
+    [MemberRole.MODERATOR]: 2,
+    [MemberRole.GUEST]: 3,
+  };
+
+  const visibleUsers = rows
     .filter((row) => canSeeInvisibleMembers || String(row.presenceStatus ?? "ONLINE").toUpperCase() !== "INVISIBLE")
     .map((row) => ({
     ...row,
+    role: resolveEffectiveRole(row),
     realName: row.realName ?? "",
     displayName: row.realName || row.email || row.profileId,
     presenceStatus: String(row.presenceStatus ?? "ONLINE").toUpperCase(),
     joinedAt: row.joinedAt ? new Date(row.joinedAt).toISOString() : null,
     lastLogonAt: row.lastLogonAt ? new Date(row.lastLogonAt).toISOString() : null,
-  }));
+  }))
+    .sort((a, b) => {
+      const byRole = roleRank[a.role] - roleRank[b.role];
+      if (byRole !== 0) {
+        return byRole;
+      }
+
+      const aName = (a.profileName || a.realName || a.email || a.profileId || "").toLowerCase();
+      const bName = (b.profileName || b.realName || b.email || b.profileId || "").toLowerCase();
+      return aName.localeCompare(bName);
+    });
+
+  const onlineUsers = visibleUsers.filter(
+    (item) => String(item.presenceStatus ?? "ONLINE").toUpperCase() !== "OFFLINE"
+  );
+
+  const offlineUsers = visibleUsers.filter(
+    (item) => String(item.presenceStatus ?? "ONLINE").toUpperCase() === "OFFLINE"
+  );
 
   return (
     <aside className="flex h-full w-full flex-col overflow-hidden rounded-2xl border border-black/20 bg-[#2b2d31] text-primary shadow-xl shadow-black/35">
@@ -80,15 +150,23 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
 
       <div className="flex-1 overflow-auto p-3">
         <div className="rounded-md bg-[#1e1f22] p-2.5">
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
-            Online ({onlineUsers.length})
-          </p>
-
           {onlineUsers.length === 0 ? (
             <p className="text-xs text-[#6f7680]">N/A</p>
           ) : (
             <OnlineUsersList users={onlineUsers} />
           )}
+
+          <div className="mt-4">
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+              Offline ({offlineUsers.length})
+            </p>
+
+            {offlineUsers.length === 0 ? (
+              <p className="text-xs text-[#6f7680]">N/A</p>
+            ) : (
+              <OnlineUsersList users={offlineUsers} />
+            )}
+          </div>
         </div>
       </div>
 
