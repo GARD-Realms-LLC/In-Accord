@@ -7,6 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { currentProfile } from "@/lib/current-profile";
 import { db, server } from "@/lib/db";
 import { ensureChannelGroupSchema } from "@/lib/channel-groups";
+import { ensureChannelTopicSchema } from "@/lib/channel-topic";
 import { visibleChannelIdsForRole } from "@/lib/channel-permissions";
 import { getServerBannerConfig } from "@/lib/server-banner-store";
 import { ensureRulesChannelForServer } from "@/lib/system-channels";
@@ -24,6 +25,7 @@ interface ServerSidebarProps {
 type ChannelRow = {
   id: string;
   name: string;
+  topic: string | null;
   type: ChannelType;
   profileId: string;
   serverId: string;
@@ -61,11 +63,13 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
   }
 
   await ensureChannelGroupSchema();
+  await ensureChannelTopicSchema();
 
   const channelsResult = await db.execute(sql`
     select
       c."id" as "id",
       c."name" as "name",
+      ct."topic" as "topic",
       c."type" as "type",
       c."profileId" as "profileId",
       c."serverId" as "serverId",
@@ -73,6 +77,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
       c."updatedAt" as "updatedAt",
       c."channelGroupId" as "channelGroupId"
     from "Channel" c
+    left join "ChannelTopic" ct on ct."channelId" = c."id" and ct."serverId" = c."serverId"
     where c."serverId" = ${serverId}
     order by c."createdAt" asc
   `);
@@ -80,6 +85,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
   const channels = ((channelsResult as unknown as { rows: ChannelRow[] }).rows ?? []).map((row) => ({
     id: row.id,
     name: row.name,
+    topic: row.topic,
     type: row.type,
     profileId: row.profileId,
     serverId: row.serverId,

@@ -42,6 +42,7 @@ export interface Member {
 export interface Channel {
   id: string;
   name: string;
+  topic?: string | null;
   type: ChannelType;
   profileId: string;
   serverId: string;

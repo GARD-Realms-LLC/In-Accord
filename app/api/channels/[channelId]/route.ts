@@ -5,6 +5,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { currentProfile } from "@/lib/current-profile";
 import { channel, db, member, server } from "@/lib/db";
 import { ensureChannelGroupSchema } from "@/lib/channel-groups";
+import { ensureChannelTopicSchema } from "@/lib/channel-topic";
 import { ensureSystemChannelSchema } from "@/lib/system-channels";
 
 export async function DELETE(
@@ -66,8 +67,15 @@ export async function DELETE(
     }
 
     await db.transaction(async (tx) => {
+      await ensureChannelTopicSchema();
+
       await tx.execute(sql`
         delete from "Message"
+        where "channelId" = ${params.channelId}
+      `);
+
+      await tx.execute(sql`
+        delete from "ChannelTopic"
         where "channelId" = ${params.channelId}
       `);
 
@@ -102,7 +110,7 @@ export async function PATCH(
 ) {
   try {
     const profile = await currentProfile();
-    const { name, type, channelGroupId } = await req.json();
+    const { name, type, channelGroupId, topic } = await req.json();
     const { searchParams } = new URL(req.url);
 
     const serverId = searchParams.get("serverId");
@@ -120,6 +128,12 @@ export async function PATCH(
     }
 
     await ensureChannelGroupSchema();
+    await ensureChannelTopicSchema();
+
+    const isServerOwner = await db.query.server.findFirst({
+      where: and(eq(server.id, serverId), eq(server.profileId, profile.id)),
+      columns: { id: true },
+    });
 
     const authorizedMember = await db.query.member.findFirst({
       where: and(
@@ -129,7 +143,7 @@ export async function PATCH(
       ),
     });
 
-    if (!authorizedMember) {
+    if (!isServerOwner && !authorizedMember) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
@@ -171,9 +185,14 @@ export async function PATCH(
 
     const incomingName = String(name ?? "").trim();
     const nextName = incomingName;
+    const nextTopic = typeof topic === "string" ? topic.trim() : "";
 
     if (!nextName) {
       return new NextResponse("Name is required", { status: 400 });
+    }
+
+    if (nextTopic.length > 500) {
+      return new NextResponse("Channel topic must be 500 characters or fewer", { status: 400 });
     }
 
     await db.execute(sql`
@@ -185,6 +204,16 @@ export async function PATCH(
         "updatedAt" = ${new Date()}
       where "id" = ${params.channelId}
         and "serverId" = ${serverId}
+    `);
+
+    await db.execute(sql`
+      insert into "ChannelTopic" ("channelId", "serverId", "topic", "createdAt", "updatedAt")
+      values (${params.channelId}, ${serverId}, ${nextTopic || null}, now(), now())
+      on conflict ("channelId") do update
+      set
+        "topic" = excluded."topic",
+        "serverId" = excluded."serverId",
+        "updatedAt" = now()
     `);
 
     const currentServer = await db.query.server.findFirst({

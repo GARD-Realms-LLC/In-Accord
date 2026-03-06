@@ -48,6 +48,12 @@ const formSchema = z.object({
     .min(1, {
       message: "Channel name is required.",
     }),
+  topic: z
+    .string()
+    .max(500, {
+      message: "Channel topic must be 500 characters or fewer.",
+    })
+    .optional(),
   type: z.nativeEnum(ChannelType),
   channelGroupId: z.string().nullable().optional(),
 });
@@ -115,7 +121,7 @@ const tabLabelMap: Record<ChannelSettingsTab, string> = {
 };
 
 const tabDescriptionMap: Record<ChannelSettingsTab, string> = {
-  overview: "Edit channel name, type, and grouping.",
+  overview: "Edit channel name, topic, type, and grouping.",
   permissions: "Configure role and member access to this channel.",
   invites: "Manage invite links and temporary access rules.",
   integrations: "Configure channel integrations and connected services.",
@@ -159,6 +165,7 @@ export const EditChannelModal = () => {
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: "",
+      topic: "",
       type: channel?.type || ChannelType.TEXT,
       channelGroupId: null,
     },
@@ -167,6 +174,7 @@ export const EditChannelModal = () => {
   useEffect(() => {
     if (channel) {
       form.setValue("name", channel.name);
+      form.setValue("topic", ((channel as { topic?: string | null })?.topic ?? ""));
       form.setValue("type", channel.type);
       form.setValue("channelGroupId", ((channel as { channelGroupId?: string | null })?.channelGroupId ?? null));
     }
@@ -273,6 +281,7 @@ export const EditChannelModal = () => {
       });
       await axios.patch(url, {
         ...values,
+        topic: (values.topic ?? "").trim(),
         channelGroupId:
           typeof values.channelGroupId === "string" && values.channelGroupId.length > 0
             ? values.channelGroupId
@@ -552,6 +561,28 @@ export const EditChannelModal = () => {
                               ))}
                             </SelectContent>
                           </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="topic"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs font-bold uppercase text-zinc-400">Channel Topic</FormLabel>
+                          <FormControl>
+                            <Input
+                              disabled={isLoading}
+                              className="border-0 bg-zinc-700/50 text-zinc-100 focus-visible:ring-0 focus-visible:ring-offset-0"
+                              placeholder="What is this channel about?"
+                              maxLength={500}
+                              {...field}
+                              value={field.value ?? ""}
+                            />
+                          </FormControl>
+                          <p className="text-[11px] text-zinc-500">Shows at the top of this channel.</p>
                           <FormMessage />
                         </FormItem>
                       )}

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { ChannelType } from "@/lib/db";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { ChatHeader } from "@/components/chat/chat-header";
@@ -12,6 +12,7 @@ import { computeChannelPermissionForRole } from "@/lib/channel-permissions";
 import { resolveMemberContext } from "@/lib/channel-permissions";
 import { getUserProfileNameMap } from "@/lib/user-profile";
 import type { Profile } from "@/lib/db/types";
+import { ensureChannelTopicSchema } from "@/lib/channel-topic";
 
 interface ChannelIdPageProps {
   params: {
@@ -27,6 +28,8 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
     return redirect("/sign-in");
   }
 
+  await ensureChannelTopicSchema();
+
   const currentChannel = await db.query.channel.findFirst({
     where: eq(channel.id, params.channelId),
   });
@@ -41,6 +44,18 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
   if (!currentChannel || !currentMember) {
     redirect("/");
   }
+
+  const topicResult = await db.execute(sql`
+    select "topic"
+    from "ChannelTopic"
+    where "channelId" = ${currentChannel.id}
+      and "serverId" = ${currentChannel.serverId}
+    limit 1
+  `);
+
+  const channelTopic = (topicResult as unknown as {
+    rows?: Array<{ topic: string | null }>;
+  }).rows?.[0]?.topic ?? null;
 
   const memberContext = await resolveMemberContext({
     profileId: profile.id,
@@ -100,6 +115,7 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-black/20 bg-white shadow-xl shadow-black/35 dark:bg-[#313338]">
         <ChatHeader
           name={currentChannel.name}
+          topic={channelTopic}
           serverId={currentChannel.serverId}
           type="channel"
         />
