@@ -446,10 +446,10 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
   }
 
   return (
-    <div className="h-full bg-[#313338] text-[#dbdee1]">
+    <div className="theme-users-shell h-full bg-[#313338] text-[#dbdee1]">
       <div className="grid h-full w-full grid-cols-[240px_1fr_260px] gap-2 p-2">
 
-        <aside className="rounded-2xl border border-black/20 bg-[#2b2d31] p-2.5 shadow-xl shadow-black/35">
+        <aside className="theme-users-left-rail rounded-2xl border border-black/20 bg-[#2b2d31] p-2.5 shadow-xl shadow-black/35">
           <div className="flex h-full flex-col">
             <div>
               <div className="mb-2 rounded-md bg-[#1e1f22] px-3 py-2 text-sm font-semibold text-[#f2f3f5]">
@@ -508,8 +508,8 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
           </div>
         </aside>
 
-        <main className="flex h-full flex-col rounded-2xl border border-black/20 bg-[#313338] overflow-hidden shadow-xl shadow-black/35">
-          <header className="flex h-12 items-center justify-between border-b border-black/20 px-4">
+        <main className="theme-users-main-panel flex h-full flex-col overflow-hidden rounded-2xl border border-black/20 bg-[#313338] shadow-xl shadow-black/35">
+          <header className="theme-users-main-header flex h-12 items-center justify-between border-b border-black/20 px-4">
             <div className="flex items-center gap-3">
               <MessageCircle className="h-5 w-5 text-[#b5bac1]" />
               <span className="text-sm font-bold text-white">
@@ -582,7 +582,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
           <section className="flex min-h-0 flex-1 overflow-auto p-3">
             {selectedConversation ? (
               <div className="flex h-full min-h-0 w-full flex-col gap-2">
-                <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-black/20 bg-white shadow-xl shadow-black/35 dark:bg-[#313338]">
+                <div className="theme-users-chat-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-black/20 bg-white shadow-xl shadow-black/35 dark:bg-[#313338]">
                   <ChatHeader
                     imageUrl={selectedConversation.otherMember.imageUrl}
                     name={selectedConversation.otherMember.name}
@@ -631,7 +631,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                   </div>
                 </div>
 
-                <div className="w-full max-w-full rounded-2xl border border-black/20 bg-white shadow-lg shadow-black/25 dark:bg-[#313338]">
+                <div className="theme-users-chat-bar w-full max-w-full rounded-2xl border border-black/20 bg-white shadow-lg shadow-black/25 dark:bg-[#313338]">
                   <ConversationTypingIndicator conversationId={selectedConversation.conversationId} />
                   <ChatInput
                     name={selectedConversation.otherMember.name}
@@ -744,7 +744,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
           </section>
         </main>
 
-        <aside className="rounded-2xl border border-black/20 bg-[#2b2d31] p-4 shadow-xl shadow-black/35">
+        <aside className="theme-users-right-rail rounded-2xl border border-black/20 bg-[#2b2d31] p-4 shadow-xl shadow-black/35">
           <h3 className="text-xs font-bold uppercase tracking-[0.08em] text-[#949ba4]">Active Now</h3>
           <div className="mt-4 rounded-lg bg-[#1e1f22] p-4 text-center">
             <p className="text-sm font-semibold text-white">It&apos;s quiet for now...</p>

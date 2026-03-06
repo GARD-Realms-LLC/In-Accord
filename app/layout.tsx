@@ -30,11 +30,24 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={cn(font.className, "bg-white dark:bg-[#313338]")}>
+      <body className={cn(font.className)}>
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"
-          enableSystem
+          enableSystem={false}
+          themes={[
+            "light",
+            "dark",
+            "dark-blue",
+            "dark-teal",
+            "light-blue",
+            "light-red",
+            "dark-red",
+            "light-gray",
+            "dark-gray",
+            "custom-theme",
+            "transparent-theme",
+          ]}
           storageKey="in-accord-theme"
         >
           <SocketProvider>

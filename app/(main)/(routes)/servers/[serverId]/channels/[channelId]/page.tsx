@@ -195,7 +195,7 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-black/20 bg-white shadow-xl shadow-black/35 dark:bg-[#313338]">
+      <div className="theme-server-chat-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-border bg-background shadow-xl shadow-black/35">
         <ChatHeader
           name={currentChannel.name}
           topic={channelTopic}
@@ -240,7 +240,7 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
       </div>
 
       {currentChannel.type === ChannelType.TEXT ? (
-        <div className="w-[calc(100vw-584px)] max-w-full rounded-2xl border border-black/20 bg-white shadow-lg shadow-black/25 dark:bg-[#313338]">
+        <div className="theme-server-chat-bar w-[calc(100vw-584px)] max-w-full rounded-2xl border border-border bg-card shadow-lg shadow-black/25">
           <ChatInput
             name={currentChannel.name}
             type="channel"

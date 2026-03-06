@@ -15,7 +15,7 @@ export const NavigationSidebar = async () => {
   if (!profile) {
     return (
       <div
-        className="space-y-4 flex flex-col items-center h-full w-full overflow-hidden rounded-2xl border border-black/20 text-primary dark:bg-[#1E1F22] bg-[#E3E5E8] py-3"
+        className="theme-servers-rail space-y-4 flex h-full w-full flex-col items-center overflow-hidden rounded-2xl border border-border bg-card py-3 text-primary"
         aria-label="Servers rail"
       />
     );
@@ -81,7 +81,7 @@ export const NavigationSidebar = async () => {
 
   return (
     <div
-      className="space-y-4 flex flex-col items-center h-full w-full overflow-hidden rounded-2xl border border-black/20 text-primary dark:bg-[#1E1F22] bg-[#E3E5E8] py-3"
+      className="theme-servers-rail space-y-4 flex h-full w-full flex-col items-center overflow-hidden rounded-2xl border border-border bg-card py-3 text-primary"
       aria-label="Servers rail"
     >
       <div className="text-center text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-700 dark:text-zinc-300">

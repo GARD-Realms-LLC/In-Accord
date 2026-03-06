@@ -74,17 +74,17 @@ export const ServerRouteShell = ({
   return (
     <div className="h-full overflow-hidden">
       <header
-        className="fixed right-0 top-0 z-40 h-12 border-b border-black/20 bg-[#2b2d31] px-4 flex items-center rounded-b-xl overflow-hidden"
+        className="theme-server-topbar fixed right-0 top-0 z-40 flex h-12 items-center overflow-hidden rounded-b-xl border-b border-border bg-background px-4"
         style={{ left: `${GLOBAL_SERVERS_RAIL_WIDTH + CHANNELS_RAIL_WIDTH}px` }}
       >
         <h1
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 truncate text-center text-sm font-bold uppercase tracking-[0.08em] text-[#f2f3f5]"
+          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 truncate text-center text-sm font-bold uppercase tracking-[0.08em] text-foreground"
           style={headerTitleStyle}
         >
           {serverName}
         </h1>
 
-        <div className="absolute right-[276px] top-1/2 z-20 -translate-y-1/2 flex items-center gap-1 text-[#b5bac1]">
+        <div className="absolute right-[276px] top-1/2 z-20 flex -translate-y-1/2 items-center gap-1 text-muted-foreground">
           <button type="button" title="Start Call" className="rounded p-1.5 hover:bg-[#3f4248] hover:text-white transition-colors">
             <PhoneCall className="h-4 w-4" />
           </button>
@@ -100,7 +100,7 @@ export const ServerRouteShell = ({
         </div>
 
         <div
-          className="absolute top-1/2 z-20 -translate-y-1/2 text-[#b5bac1]"
+          className="absolute top-1/2 z-20 -translate-y-1/2 text-muted-foreground"
           style={{ left: "calc(100% - 252px)" }}
         >
           <button
@@ -114,7 +114,7 @@ export const ServerRouteShell = ({
         </div>
 
         <div
-          className="absolute top-1/2 z-20 w-[163px] -translate-y-1/2 -translate-x-1/2 rounded-md border border-black/30 bg-[#1e1f22]/90"
+          className="theme-server-search-shell absolute top-1/2 z-20 w-[163px] -translate-y-1/2 -translate-x-1/2 rounded-md border border-border bg-card/90"
           style={{ left: "calc(100% - 128px)" }}
         >
           <ServerSearch

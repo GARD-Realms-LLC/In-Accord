@@ -816,18 +816,113 @@ export const SettingsModal = () => {
       return (
         <div className="space-y-4">
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
-            <p className="text-sm font-medium text-white">Theme</p>
-            <p className="mt-1 text-xs text-[#949ba4]">Choose light, dark, or system.</p>
+            <p className="text-sm font-medium text-white">Switch Color Modes</p>
             <div className="mt-3">
               <ModeToggle />
             </div>
           </div>
 
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
-            <p className="text-sm font-medium text-white">Interface Density</p>
+            <p className="text-sm font-medium text-white">Theam Uploads</p>
             <p className="mt-1 text-xs text-[#949ba4]">
-              Compact and cozy density options can be added here.
+              Manage uploads and review uploaded assets.
             </p>
+
+            <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                Upload List
+              </p>
+
+              <ul className="mt-3 space-y-2 text-sm text-[#dbdee1]">
+                <li className="rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2">
+                  <span className="text-[#949ba4]">Avatar Upload:</span>{" "}
+                  {avatarUrl ? (
+                    <a
+                      href={avatarUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[#c9cdfb] underline decoration-dotted underline-offset-2 hover:text-white"
+                    >
+                      Available
+                    </a>
+                  ) : (
+                    <span className="text-white">None</span>
+                  )}
+                </li>
+
+                <li className="rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2">
+                  <span className="text-[#949ba4]">Banner Upload:</span>{" "}
+                  {bannerUrl ? (
+                    <a
+                      href={bannerUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[#c9cdfb] underline decoration-dotted underline-offset-2 hover:text-white"
+                    >
+                      Available
+                    </a>
+                  ) : (
+                    <span className="text-white">None</span>
+                  )}
+                </li>
+              </ul>
+
+              {!avatarUrl && !bannerUrl ? (
+                <p className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-xs text-[#949ba4]">
+                  No uploads found yet.
+                </p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
+            <p className="text-sm font-medium text-white">Upload Plugins</p>
+            <p className="mt-1 text-xs text-[#949ba4]">
+              Manage plugin uploads and review uploaded plugin assets.
+            </p>
+
+            <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                Plugin Upload List
+              </p>
+
+              <ul className="mt-3 space-y-2 text-sm text-[#dbdee1]">
+                <li className="rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2">
+                  <span className="text-[#949ba4]">Plugin Package:</span>{" "}
+                  <span className="text-white">None</span>
+                </li>
+
+                <li className="rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2">
+                  <span className="text-[#949ba4]">Plugin Manifest:</span>{" "}
+                  <span className="text-white">None</span>
+                </li>
+              </ul>
+
+              <p className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-xs text-[#949ba4]">
+                No plugin uploads found yet.
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
+            <p className="text-sm font-medium text-white">Custome CSS</p>
+            <p className="mt-1 text-xs text-[#949ba4]">
+              Add CSS overrides to personalize your interface.
+            </p>
+            <textarea
+              rows={15}
+              placeholder="/* Paste your custom CSS here */"
+              className="mt-3 w-full resize-y rounded-xl border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+            />
+            <div className="mt-3 flex justify-end">
+              <Button
+                type="button"
+                disabled
+                className="bg-[#5865f2]/60 text-white hover:bg-[#5865f2]/60 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                Save CSS (Coming Soon)
+              </Button>
+            </div>
           </div>
         </div>
       );
@@ -888,15 +983,15 @@ export const SettingsModal = () => {
 
   return (
     <Dialog open={isModalOpen} onOpenChange={onClose}>
-      <DialogContent className="flex h-[85vh] max-h-[85vh] w-[85vw] max-w-[85vw] flex-col overflow-hidden rounded-3xl border-black/30 bg-[#2b2d31] p-0 text-[#dbdee1]">
+      <DialogContent className="settings-theme-scope settings-scrollbar theme-settings-shell flex h-[85vh] max-h-[85vh] w-[85vw] max-w-[85vw] flex-col overflow-hidden rounded-3xl border-black/30 bg-[#2b2d31] p-0 text-[#dbdee1]">
         <DialogTitle className="sr-only">User Settings</DialogTitle>
         <DialogDescription className="sr-only">
           Edit account, appearance, notification, and privacy settings.
         </DialogDescription>
 
         <div className="grid min-h-0 flex-1 grid-cols-[260px_1fr] overflow-hidden">
-          <aside className="flex h-full flex-col rounded-l-3xl border-r border-black/20 bg-[#232428] p-4 pt-2 shadow-2xl shadow-black/40">
-            <nav className="flex-1 space-y-3 overflow-y-auto pr-1">
+          <aside className="theme-settings-left-rail flex h-full flex-col rounded-l-3xl border-r border-black/20 bg-[#232428] p-4 pt-2 shadow-2xl shadow-black/40">
+            <nav className="settings-scrollbar flex-1 space-y-3 overflow-y-auto pr-1">
               {sectionGroups.map((group) => (
                 <div key={group.label} className="space-y-1">
                   <p className="px-3 text-[11px] font-bold uppercase tracking-[0.08em] text-[#949ba4]">
@@ -946,13 +1041,13 @@ export const SettingsModal = () => {
             </button>
           </aside>
 
-          <section className="min-h-0 overflow-y-auto">
+          <section className="theme-settings-main-panel min-h-0 overflow-hidden">
             <div
               className={`transition-all duration-200 ${
                 isSectionVisible ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0"
               }`}
             >
-              <div className="sticky top-0 z-10 border-b border-black/20 bg-[#2b2d31]/95 px-6 py-4 shadow-lg shadow-black/35 backdrop-blur">
+              <div className="theme-settings-main-header sticky top-0 z-10 border-b border-black/20 bg-[#2b2d31]/95 px-6 py-4 shadow-lg shadow-black/35 backdrop-blur">
                 <h3 className={`text-xl font-bold text-white ${displaySection === "myAccount" ? "text-center" : ""}`}>
                   {sectionLabelMap[displaySection]}
                 </h3>
@@ -961,7 +1056,7 @@ export const SettingsModal = () => {
                 </p>
               </div>
 
-              <div className="px-6 py-5">
+              <div className="settings-scrollbar theme-settings-main-content h-[calc(85vh-78px)] overflow-y-auto px-6 py-5">
                 {displaySection === "myAccount" ? (
                   <div className="mx-auto mb-6 w-full max-w-[28rem] overflow-hidden rounded-[2.5rem] border border-white/15 bg-[#1f2024] p-4 shadow-2xl shadow-black/45">
                     <div className="mb-4 overflow-hidden rounded-2xl border border-black/25 bg-[#141518]">
