@@ -20,6 +20,7 @@ import { isBotUser } from "@/lib/is-bot-user";
 import { presenceStatusDotClassMap, presenceStatusLabelMap, resolveAutoPresenceStatus } from "@/lib/presence-status";
 import { ensureFriendRelationsSchema } from "@/lib/friend-relations";
 import { NewUserCloverBadge } from "@/components/new-user-clover-badge";
+import { ensureMessageReactionSchema } from "@/lib/message-reactions";
 
 const formatTimestamp = (value: Date) => {
   if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
@@ -327,6 +328,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
         };
         isOtherMemberBot: boolean;
         messages: Array<any>;
+        reactionsByMessageId: Map<string, Array<{ emoji: string; count: number }>>;
       }
     | null = null;
 
@@ -358,6 +360,29 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
             },
           },
         });
+
+        await ensureMessageReactionSchema();
+
+        const reactionRows = messageRows.length
+          ? await db.execute(sql`
+              select "messageId", "emoji", "count"
+              from "MessageReaction"
+              where "scope" = 'direct'
+                and "messageId" in (${sql.join(
+                  messageRows.map((item) => sql`${item.id}`),
+                  sql`, `
+                )})
+            `)
+          : { rows: [] };
+
+        const reactionMap = new Map<string, Array<{ emoji: string; count: number }>>();
+        for (const row of ((reactionRows as unknown as {
+          rows?: Array<{ messageId: string; emoji: string; count: number }>;
+        }).rows ?? [])) {
+          const bucket = reactionMap.get(row.messageId) ?? [];
+          bucket.push({ emoji: row.emoji, count: Number(row.count ?? 0) });
+          reactionMap.set(row.messageId, bucket);
+        }
 
         const profileNameMap = await getUserProfileNameMap(
           messageRows.map((item) => item.member.profileId)
@@ -397,6 +422,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
             email: otherMemberData.profile.email,
           }),
           messages: hydratedRows,
+          reactionsByMessageId: reactionMap,
         };
       }
     }
@@ -580,6 +606,8 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                           socketUrl="/api/socket/direct-messages"
                           socketQuery={{ conversationId: selectedConversation!.conversationId }}
                           dmServerId={selectedConversation!.serverId}
+                          reactionScope="direct"
+                          initialReactions={selectedConversation!.reactionsByMessageId.get(item.id) ?? []}
                         />
                       ))
                     )}

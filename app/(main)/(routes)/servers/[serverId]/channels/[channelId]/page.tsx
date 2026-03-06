@@ -13,6 +13,7 @@ import { resolveMemberContext } from "@/lib/channel-permissions";
 import { getUserProfileNameMap } from "@/lib/user-profile";
 import type { Profile } from "@/lib/db/types";
 import { ensureChannelTopicSchema } from "@/lib/channel-topic";
+import { ensureMessageReactionSchema } from "@/lib/message-reactions";
 
 interface ChannelIdPageProps {
   params: {
@@ -85,6 +86,29 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
     },
   });
 
+  await ensureMessageReactionSchema();
+
+  const reactionRows = channelMessages.length
+    ? await db.execute(sql`
+        select "messageId", "emoji", "count"
+        from "MessageReaction"
+        where "scope" = 'channel'
+          and "messageId" in (${sql.join(
+            channelMessages.map((item) => sql`${item.id}`),
+            sql`, `
+          )})
+      `)
+    : { rows: [] };
+
+  const reactionMap = new Map<string, Array<{ emoji: string; count: number }>>();
+  for (const row of ((reactionRows as unknown as {
+    rows?: Array<{ messageId: string; emoji: string; count: number }>;
+  }).rows ?? [])) {
+    const bucket = reactionMap.get(row.messageId) ?? [];
+    bucket.push({ emoji: row.emoji, count: Number(row.count ?? 0) });
+    reactionMap.set(row.messageId, bucket);
+  }
+
   const profileNameMap = await getUserProfileNameMap(
     channelMessages.map((item) => item.member.profileId)
   );
@@ -143,6 +167,8 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
                     channelId: currentChannel.id,
                     serverId: currentChannel.serverId,
                   }}
+                  reactionScope="channel"
+                  initialReactions={reactionMap.get(item.id) ?? []}
                 />
               ))
             )}

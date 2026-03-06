@@ -36,6 +36,11 @@ interface ChatItemProps {
   socketUrl: string;
   socketQuery: Record<string, string>;
   dmServerId?: string;
+  reactionScope?: "channel" | "direct";
+  initialReactions?: Array<{
+    emoji: string;
+    count: number;
+  }>;
 }
 
 const roleIconMap = {
@@ -64,7 +69,6 @@ type EmotePickerSlot = {
 type PostEmoteItem = EmoteReaction | EmotePickerSlot;
 
 const basicEmotes = ["😀", "😂", "😍", "🔥", "👏", "🎉", "👍", "👀", "💯", "🤝", "😎", "🙏"];
-const getPostEmoteStorageKey = (messageId: string) => `inaccord:post-emotes:${messageId}`;
 
 const createInitialPostEmoteItems = (): PostEmoteItem[] => [
   {
@@ -73,48 +77,27 @@ const createInitialPostEmoteItems = (): PostEmoteItem[] => [
   },
 ];
 
-const normalizeStoredPostEmoteItems = (value: unknown): PostEmoteItem[] => {
-  if (!Array.isArray(value)) {
-    return createInitialPostEmoteItems();
-  }
+const createPostEmoteItemsFromReactions = (
+  reactions?: Array<{ emoji: string; count: number }>
+): PostEmoteItem[] => {
+  const reactionItems: PostEmoteItem[] = (reactions ?? [])
+    .filter((item) => typeof item.emoji === "string" && basicEmotes.includes(item.emoji))
+    .map((item) => ({
+      id: crypto.randomUUID(),
+      kind: "reaction" as const,
+      emoji: item.emoji,
+      count: Math.max(0, Number(item.count ?? 0)),
+      reactedByCurrentMember: false,
+    }));
 
-  const next: PostEmoteItem[] = [];
-
-  for (const rawItem of value) {
-    if (!rawItem || typeof rawItem !== "object") {
-      continue;
-    }
-
-    const item = rawItem as Partial<PostEmoteItem> & {
-      id?: unknown;
-      kind?: unknown;
-      emoji?: unknown;
-      count?: unknown;
-      reactedByCurrentMember?: unknown;
-    };
-
-    if (typeof item.id !== "string" || !item.id.trim()) {
-      continue;
-    }
-
-    if (item.kind === "picker") {
-      next.push({ id: item.id, kind: "picker" });
-      continue;
-    }
-
-    if (item.kind === "reaction" && typeof item.emoji === "string" && item.emoji.trim()) {
-      next.push({
-        id: item.id,
-        kind: "reaction",
-        emoji: item.emoji,
-        count: typeof item.count === "number" && Number.isFinite(item.count) ? Math.max(0, Math.floor(item.count)) : 0,
-        reactedByCurrentMember: Boolean(item.reactedByCurrentMember),
-      });
-    }
-  }
-
-  return next.length > 0 ? next : createInitialPostEmoteItems();
+  return [...reactionItems, { id: crypto.randomUUID(), kind: "picker" as const }];
 };
+
+const reactionSummary = (items: PostEmoteItem[]) =>
+  items
+    .filter((item): item is EmoteReaction => item.kind === "reaction")
+    .map((item) => `${item.emoji}:${item.count}`)
+    .join("|");
 
 export const ChatItem = ({
   id,
@@ -128,33 +111,42 @@ export const ChatItem = ({
   socketUrl,
   socketQuery,
   dmServerId,
+  reactionScope = "channel",
+  initialReactions,
 }: ChatItemProps) => {
   const [isEditing, setIsEditing] = useState(false);
   const [displayName, setDisplayName] = useState(member.profile.name);
   const [displayImageUrl, setDisplayImageUrl] = useState(member.profile.imageUrl);
-  const [postEmoteItems, setPostEmoteItems] = useState<PostEmoteItem[]>(() => {
-    if (typeof window === "undefined") {
-      return createInitialPostEmoteItems();
-    }
-
-    try {
-      const stored = window.localStorage.getItem(getPostEmoteStorageKey(id));
-      if (!stored) {
-        return createInitialPostEmoteItems();
-      }
-
-      return normalizeStoredPostEmoteItems(JSON.parse(stored));
-    } catch {
-      return createInitialPostEmoteItems();
-    }
-  });
+  const [postEmoteItems, setPostEmoteItems] = useState<PostEmoteItem[]>(() =>
+    createPostEmoteItemsFromReactions(initialReactions)
+  );
   const [activePickerId, setActivePickerId] = useState<string | null>(null);
   const { onOpen } = useModal();
   const params = useParams();
   const router = useRouter();
 
+  const applyServerReactions = (reactions?: Array<{ emoji: string; count: number }>) => {
+    setPostEmoteItems((prev) => {
+      const next = createPostEmoteItemsFromReactions(reactions);
+
+      if (reactionSummary(prev) === reactionSummary(next)) {
+        const hadPicker = prev.some((item) => item.kind === "picker");
+        if (hadPicker) {
+          return prev;
+        }
+      }
+
+      return next;
+    });
+  };
+
   const onReactionClick = (reactionId: string) => {
     if (deleted) {
+      return;
+    }
+
+    const clicked = postEmoteItems.find((item) => item.id === reactionId && item.kind === "reaction");
+    if (!clicked || clicked.kind !== "reaction") {
       return;
     }
 
@@ -174,6 +166,19 @@ export const ChatItem = ({
           : item
       );
     });
+
+    void axios
+      .post(`/api/messages/${id}/reactions`, {
+        emoji: clicked.emoji,
+        scope: reactionScope,
+      })
+      .then((response) => {
+        const reactions = (response.data as { reactions?: Array<{ emoji: string; count: number }> }).reactions ?? [];
+        applyServerReactions(reactions);
+      })
+      .catch(() => {
+        // keep optimistic state if request fails
+      });
   };
 
   const onPickEmote = (pickerId: string, emoji: string) => {
@@ -207,6 +212,19 @@ export const ChatItem = ({
     });
 
     setActivePickerId(null);
+
+    void axios
+      .post(`/api/messages/${id}/reactions`, {
+        emoji,
+        scope: reactionScope,
+      })
+      .then((response) => {
+        const reactions = (response.data as { reactions?: Array<{ emoji: string; count: number }> }).reactions ?? [];
+        applyServerReactions(reactions);
+      })
+      .catch(() => {
+        // keep optimistic state if request fails
+      });
   };
 
   const onMemberClick = () => {
@@ -278,36 +296,39 @@ export const ChatItem = ({
   }, [member.profile.imageUrl, member.profile.name]);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      setPostEmoteItems(createInitialPostEmoteItems());
-      return;
-    }
-
-    try {
-      const stored = window.localStorage.getItem(getPostEmoteStorageKey(id));
-      if (!stored) {
-        setPostEmoteItems(createInitialPostEmoteItems());
-      } else {
-        setPostEmoteItems(normalizeStoredPostEmoteItems(JSON.parse(stored)));
-      }
-    } catch {
-      setPostEmoteItems(createInitialPostEmoteItems());
-    }
+    setPostEmoteItems(createPostEmoteItemsFromReactions(initialReactions));
 
     setActivePickerId(null);
-  }, [id]);
+  }, [id, initialReactions]);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
+    let cancelled = false;
 
-    try {
-      window.localStorage.setItem(getPostEmoteStorageKey(id), JSON.stringify(postEmoteItems));
-    } catch {
-      // ignore local storage write errors
-    }
-  }, [id, postEmoteItems]);
+    const syncReactions = async () => {
+      try {
+        const response = await axios.get<{ reactions?: Array<{ emoji: string; count: number }> }>(
+          `/api/messages/${id}/reactions`,
+          {
+            params: { scope: reactionScope },
+          }
+        );
+
+        if (!cancelled) {
+          applyServerReactions(response.data.reactions ?? []);
+        }
+      } catch {
+        // ignore polling failures
+      }
+    };
+
+    void syncReactions();
+    const timer = window.setInterval(syncReactions, 4000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [id, reactionScope]);
 
   useEffect(() => {
     const onProfileUpdated = (event: Event) => {
