@@ -12,14 +12,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useModal } from "@/hooks/use-modal-store";
-import { EmojiPicker } from "@/components/emoji-picker";
 import { GifPicker } from "@/components/gif-picker";
+import { EmotePicker } from "@/components/emote-picker";
 import { StickerPicker } from "@/components/sticker-picker";
 import {
   buildMentionToken,
-  MENTION_SETTINGS_KEY,
   type MentionOption,
   readMentionsEnabled,
+  writeMentionsEnabled,
 } from "@/lib/mentions";
 import { buildQuotedContent, type QuotedMessageMeta } from "@/lib/message-quotes";
 
@@ -106,31 +106,70 @@ export const ChatInput = ({
   });
 
   const isLoading = form.formState.isSubmitting || disabled;
+  const stickerServerId = useMemo(() => {
+    const raw = query?.serverId;
+    if (typeof raw === "string") {
+      return raw;
+    }
+
+    if (Array.isArray(raw)) {
+      const first = raw.find((value) => typeof value === "string");
+      return typeof first === "string" ? first : null;
+    }
+
+    return null;
+  }, [query]);
 
   useEffect(() => {
-    const syncMentionsPreference = () => {
-      setMentionsEnabled(readMentionsEnabled());
+    let cancelled = false;
+
+    const syncMentionsPreference = async () => {
+      try {
+        const response = await fetch("/api/profile/preferences", {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          if (!cancelled) {
+            setMentionsEnabled(readMentionsEnabled());
+          }
+          return;
+        }
+
+        const payload = (await response.json()) as { mentionsEnabled?: unknown };
+        const next = payload.mentionsEnabled !== false;
+        writeMentionsEnabled(next);
+
+        if (!cancelled) {
+          setMentionsEnabled(next);
+        }
+      } catch {
+        if (!cancelled) {
+          setMentionsEnabled(readMentionsEnabled());
+        }
+      }
     };
 
-    syncMentionsPreference();
+    void syncMentionsPreference();
 
-    const onStorageChange = (event: StorageEvent) => {
-      if (event.key && event.key !== MENTION_SETTINGS_KEY) {
+    const onMentionsPreferenceChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<{ mentionsEnabled?: boolean }>;
+      const next = customEvent.detail?.mentionsEnabled;
+
+      if (typeof next === "boolean") {
+        writeMentionsEnabled(next);
+        setMentionsEnabled(next);
         return;
       }
 
-      syncMentionsPreference();
+      void syncMentionsPreference();
     };
 
-    const onMentionsPreferenceChanged = () => {
-      syncMentionsPreference();
-    };
-
-    window.addEventListener("storage", onStorageChange);
     window.addEventListener("inaccord:mentions-setting-updated", onMentionsPreferenceChanged);
 
     return () => {
-      window.removeEventListener("storage", onStorageChange);
+      cancelled = true;
       window.removeEventListener("inaccord:mentions-setting-updated", onMentionsPreferenceChanged);
     };
   }, []);
@@ -372,6 +411,47 @@ export const ChatInput = ({
     }
   };
 
+  const onEmoteSelect = async (emoteUrl: string) => {
+    try {
+      setSendError(null);
+
+      const url = qs.stringifyUrl({
+        url: apiUrl,
+        query,
+      });
+
+      await axios.post(url, {
+        content: buildQuotedContent("[emote]", activeQuote),
+        fileUrl: emoteUrl,
+      });
+
+      if (type === "conversation" && conversationId) {
+        void axios.post("/api/direct-messages/typing", {
+          conversationId,
+          isTyping: false,
+        });
+      }
+
+      form.reset();
+      clearMentionState();
+      setActiveQuote(null);
+      router.refresh();
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error)) {
+        const dataMessage =
+          typeof error.response?.data === "string"
+            ? error.response.data
+            : error.response?.data?.message;
+
+        setSendError(dataMessage || "Failed to send emote.");
+      } else {
+        setSendError("Failed to send emote.");
+      }
+
+      console.error("[CHAT_INPUT_SEND_EMOTE]", error);
+    }
+  };
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -491,13 +571,9 @@ export const ChatInput = ({
                     </div>
                   ) : null}
                   <div className="absolute top-[26px] right-8 flex items-center gap-2">
-                    <StickerPicker onSelect={onStickerSelect} />
-                    <GifPicker onSelect={onGifSelect} />
-                    <EmojiPicker
-                      onChange={(emoji: string) =>
-                        field.onChange(`${field.value} ${emoji}`)
-                      }
-                    />
+                    <EmotePicker onSelect={onEmoteSelect} serverId={stickerServerId} />
+                    <StickerPicker onSelect={onStickerSelect} serverId={stickerServerId} />
+                    <GifPicker onSelect={onGifSelect} serverId={stickerServerId} />
                   </div>
                   {sendError ? (
                     <p className="mt-2 px-2 text-xs font-medium text-rose-500">Send error: {sendError}</p>

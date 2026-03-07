@@ -23,6 +23,8 @@ const mentionTokenRegex = /@\[(.+?)\]\((user|role):([^)]+)\)/g;
 
 export const MENTION_SETTINGS_KEY = "inaccord_mentions_enabled";
 
+let mentionsEnabledCache = true;
+
 export const buildMentionToken = (option: MentionOption) => {
   return `@[${option.label}](${option.type}:${option.id})`;
 };
@@ -77,22 +79,9 @@ export const parseMentionSegments = (content: string): MentionSegment[] => {
 };
 
 export const readMentionsEnabled = () => {
-  if (typeof window === "undefined") {
-    return true;
-  }
-
-  const stored = window.localStorage.getItem(MENTION_SETTINGS_KEY);
-  if (stored === null) {
-    return true;
-  }
-
-  return stored !== "false";
+  return mentionsEnabledCache;
 };
 
 export const writeMentionsEnabled = (enabled: boolean) => {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.setItem(MENTION_SETTINGS_KEY, enabled ? "true" : "false");
+  mentionsEnabledCache = enabled;
 };

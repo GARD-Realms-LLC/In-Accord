@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, Crown, LogOut, MessageCircle, Settings, ShieldAlert, ShieldCheck, UserCircle2, UserPlus } from "lucide-react";
+import { Copy, Crown, LogOut, MessageCircle, Settings, ShieldAlert, UserCircle2, UserPlus, Wrench } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import axios from "axios";
@@ -9,9 +9,11 @@ import { useRouter } from "next/navigation";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ModeratorLineIcon } from "@/components/moderator-line-icon";
+import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
 import { UserAvatar } from "@/components/user-avatar";
 import { useModal } from "@/hooks/use-modal-store";
-import { isInAccordAdministrator } from "@/lib/in-accord-admin";
+import { hasInAccordAdministrativeAccess, isInAccordAdministrator, isInAccordDeveloper, isInAccordModerator } from "@/lib/in-accord-admin";
 import { PresenceStatus, presenceStatusLabelMap, normalizePresenceStatus, presenceStatusValues } from "@/lib/presence-status";
 
 interface UserStatusMenuProps {
@@ -46,7 +48,7 @@ export const UserStatusMenu = ({
   const [isProfileCardOpen, setIsProfileCardOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isSavingStatus, setIsSavingStatus] = useState(false);
-  const [menuRealName, setMenuRealName] = useState(profileRealName ?? "Unknown User");
+  const [menuRealName, setMenuRealName] = useState<string | null>(profileRealName ?? null);
   const [menuProfileName, setMenuProfileName] = useState<string | null>(profileName ?? null);
   const [menuBannerUrl, setMenuBannerUrl] = useState<string | null>(profileBannerUrl ?? null);
   const [menuProfileRole, setMenuProfileRole] = useState<string | null>(profileRole ?? null);
@@ -55,7 +57,7 @@ export const UserStatusMenu = ({
   );
 
   useEffect(() => {
-    setMenuRealName(profileRealName ?? "Unknown User");
+    setMenuRealName(profileRealName ?? null);
     setMenuProfileName(profileName ?? null);
     setMenuBannerUrl(profileBannerUrl ?? null);
     setMenuProfileRole(profileRole ?? null);
@@ -89,7 +91,7 @@ export const UserStatusMenu = ({
         };
 
         if (!cancelled) {
-          setMenuRealName(payload.realName?.trim() || "Unknown User");
+          setMenuRealName(payload.realName?.trim() || null);
           setMenuProfileName(payload.profileName ?? null);
           setMenuBannerUrl(payload.bannerUrl ?? null);
           setMenuProfileRole(payload.role ?? profileRole ?? null);
@@ -118,7 +120,7 @@ export const UserStatusMenu = ({
       }>;
 
       if (typeof customEvent.detail?.realName === "string") {
-        setMenuRealName(customEvent.detail.realName || "Unknown User");
+        setMenuRealName(customEvent.detail.realName?.trim() || null);
       }
 
       if (typeof customEvent.detail?.profileName === "string") {
@@ -195,7 +197,27 @@ export const UserStatusMenu = ({
 
   const onAddFriend = () => {
     setIsPopoverOpen(false);
-    router.push("/users?view=friends&filter=pending&pendingBucket=requests");
+    const targetProfileId = String(profileId ?? "").trim();
+
+    if (!targetProfileId) {
+      window.alert("Unable to send friend request from this view.");
+      return;
+    }
+
+    void axios
+      .post("/api/friends/requests", {
+        profileId: targetProfileId,
+      })
+      .then(() => {
+        router.refresh();
+        window.alert("Friend request sent.");
+      })
+      .catch((error) => {
+        const message = axios.isAxiosError(error)
+          ? (error.response?.data as { error?: string } | undefined)?.error ?? "Failed to send friend request."
+          : "Failed to send friend request.";
+        window.alert(message);
+      });
   };
 
   const onStartDirectMessage = () => {
@@ -281,17 +303,31 @@ export const UserStatusMenu = ({
 
   const lastLogon = formatDate(profileLastLogonAt);
   const created = formatDate(profileJoinedAt);
-  const hasAdminCrown = isInAccordAdministrator(menuProfileRole ?? profileRole);
-  const normalizedProfileRole = (menuProfileRole ?? profileRole ?? "").trim().toUpperCase();
-  const isGlobalModerator =
-    !hasAdminCrown &&
-    (normalizedProfileRole === "MODERATOR" || normalizedProfileRole === "MOD");
-  const highestRoleIcon = hasAdminCrown
-    ? <Crown className="h-4 w-4 shrink-0 text-rose-500" aria-label="In-Accord Administrator" />
-    : isGlobalModerator
-      ? <ShieldCheck className="h-4 w-4 shrink-0 text-indigo-500" aria-label="Moderator" />
-      : null;
-  const displayStatusName = menuProfileName?.trim() || menuRealName || "Unknown User";
+  const effectiveGlobalRole = menuProfileRole ?? profileRole;
+  const hasAdministrativeAccess = hasInAccordAdministrativeAccess(effectiveGlobalRole);
+  const isGlobalDeveloper = isInAccordDeveloper(effectiveGlobalRole);
+  const isGlobalAdministrator = isInAccordAdministrator(effectiveGlobalRole);
+  const isGlobalModerator = isInAccordModerator(effectiveGlobalRole);
+  const highestRoleIcon = isGlobalDeveloper
+    ? <Wrench className="h-4 w-4 shrink-0 text-cyan-400" aria-label="Developer" suppressHydrationWarning />
+    : isGlobalAdministrator
+      ? <Crown className="h-4 w-4 shrink-0 text-rose-500" aria-label="Administrator" suppressHydrationWarning />
+      : isGlobalModerator
+        ? <ModeratorLineIcon className="h-4 w-4 shrink-0 text-indigo-500" aria-label="Moderator" suppressHydrationWarning />
+        : null;
+  const fallbackNameFromEmail = profileEmail?.split("@")[0]?.trim() || "";
+  const displayStatusName =
+    menuProfileName?.trim() ||
+    menuRealName?.trim() ||
+    fallbackNameFromEmail ||
+    profileId ||
+    "Unknown User";
+  const displayNameForProfileCard =
+    menuRealName?.trim() ||
+    menuProfileName?.trim() ||
+    fallbackNameFromEmail ||
+    profileId ||
+    "Unknown User";
 
   return (
     <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
@@ -307,7 +343,11 @@ export const UserStatusMenu = ({
               Users ID: {profileId}
             </p>
             <div className="flex min-w-0 items-center gap-1.5">
-              <p className="truncate text-xs font-semibold text-white">{displayStatusName}</p>
+              <ProfileNameWithServerTag
+                name={displayStatusName}
+                profileId={profileId}
+                nameClassName="text-xs font-semibold text-white"
+              />
               {highestRoleIcon}
             </div>
             <p className="truncate text-[10px] text-[#b5bac1]">{presenceStatusLabelMap[menuPresenceStatus]}</p>
@@ -339,7 +379,11 @@ export const UserStatusMenu = ({
           </div>
 
           <div className="flex min-w-0 items-center gap-1.5">
-            <p className="truncate text-base font-bold text-white">{displayStatusName}</p>
+            <ProfileNameWithServerTag
+              name={displayStatusName}
+              profileId={profileId}
+              nameClassName="text-base font-bold text-white"
+            />
             {highestRoleIcon}
           </div>
           <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">In-Accord Profile</p>
@@ -347,7 +391,7 @@ export const UserStatusMenu = ({
           <div className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] p-3 text-xs">
             <div className="space-y-1 text-[#dbdee1]">
               <p>Users ID: {profileId || ""}</p>
-              <p>Name: {menuRealName || menuProfileName || "Unknown User"}</p>
+              <p>Name: {displayNameForProfileCard}</p>
               <p>Profile Name: {menuProfileName || "Not set"}</p>
               <p>Email: {profileEmail || ""}</p>
               <p>Status: {presenceStatusLabelMap[menuPresenceStatus]}</p>
@@ -389,14 +433,14 @@ export const UserStatusMenu = ({
         </div>
 
         <div className="space-y-1 border-t border-white/10 p-3 pt-2">
-          {hasAdminCrown ? (
+          {hasAdministrativeAccess ? (
             <button
               type="button"
               onClick={openInAccordAdminPanel}
               className="flex w-full items-center gap-2 rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-2 text-sm font-medium text-amber-300 transition hover:bg-amber-500/20"
             >
               <ShieldAlert className="h-4 w-4" />
-              In-Accord Admin
+              In-Accord Staff
             </button>
           ) : null}
 
@@ -461,7 +505,11 @@ export const UserStatusMenu = ({
             </div>
 
             <div className="flex min-w-0 items-center gap-1.5">
-              <p className="truncate text-base font-bold text-white">{displayStatusName}</p>
+              <ProfileNameWithServerTag
+                name={displayStatusName}
+                profileId={profileId}
+                nameClassName="text-base font-bold text-white"
+              />
               {highestRoleIcon}
             </div>
             <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">In-Accord Profile</p>
@@ -469,7 +517,7 @@ export const UserStatusMenu = ({
             <div className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] p-3 text-xs">
               <div className="space-y-1 text-[#dbdee1]">
                 <p>Users ID: {profileId || ""}</p>
-                <p>Name: {menuRealName || menuProfileName || "Unknown User"}</p>
+                <p>Name: {displayNameForProfileCard}</p>
                 <p>Email: {profileEmail || ""}</p>
                 <p>Last logon: {lastLogon}</p>
                 <p>Created: {created}</p>

@@ -25,9 +25,10 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
 import { UserAvatar } from "@/components/user-avatar";
 import { useModal } from "@/hooks/use-modal-store";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 const formSchema = z.object({
@@ -69,7 +70,7 @@ const SETTINGS_SECTIONS: Array<{
       { key: "roles", label: "Roles" },
       { key: "emoji", label: "Emoji" },
       { key: "stickers", label: "Stickers" },
-      { key: "soundboard", label: "Soundboard" },
+      { key: "soundboard", label: "Sound EFX" },
     ],
   },
   {
@@ -111,7 +112,7 @@ const SECTION_TITLES: Record<ServerSettingsSection, string> = {
   roles: "Roles",
   emoji: "Emoji",
   stickers: "Stickers",
-  soundboard: "Soundboard",
+  soundboard: "Sound EFX",
   moderation: "Moderation",
   auditLog: "Audit Log",
   invites: "Invites",
@@ -147,6 +148,44 @@ type RoleMemberItem = {
   isAssigned: boolean;
 };
 
+type ServerEmojiStickerAsset = {
+  id: string;
+  serverId: string;
+  assetType: "EMOJI" | "STICKER";
+  name: string;
+  emoji: string | null;
+  imageUrl: string | null;
+  isEnabled: boolean;
+  createdByProfileId: string | null;
+  createdByName: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+type ServerEmojiStickerSummary = {
+  totalAssets: number;
+  emojiAssets: number;
+  stickerAssets: number;
+  activeAssets: number;
+};
+
+type ServerSoundEfxItem = {
+  id: string;
+  serverId: string;
+  name: string;
+  audioUrl: string;
+  isEnabled: boolean;
+  createdByProfileId: string | null;
+  createdByName: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+type ServerSoundEfxSummary = {
+  total: number;
+  active: number;
+};
+
 export const EditServerModal = () => {
   const { isOpen, onClose, onOpen, type, data } = useModal();
   const router = useRouter();
@@ -178,6 +217,30 @@ export const EditServerModal = () => {
   const [canManageRoleMembers, setCanManageRoleMembers] = useState(false);
   const [togglingMemberId, setTogglingMemberId] = useState<string | null>(null);
   const [addMemberSearch, setAddMemberSearch] = useState("");
+  const [emojiStickerAssets, setEmojiStickerAssets] = useState<ServerEmojiStickerAsset[]>([]);
+  const [emojiStickerSummary, setEmojiStickerSummary] = useState<ServerEmojiStickerSummary | null>(null);
+  const [canManageEmojiStickers, setCanManageEmojiStickers] = useState(false);
+  const [isLoadingEmojiStickers, setIsLoadingEmojiStickers] = useState(false);
+  const [emojiStickerStatusFilter, setEmojiStickerStatusFilter] = useState<"ALL" | "ACTIVE" | "DISABLED">("ALL");
+  const [emojiStickersError, setEmojiStickersError] = useState<string | null>(null);
+  const [emojiStickerActionSuccess, setEmojiStickerActionSuccess] = useState<string | null>(null);
+  const [emojiStickerActionItemId, setEmojiStickerActionItemId] = useState<string | null>(null);
+  const [creatingEmojiSticker, setCreatingEmojiSticker] = useState(false);
+  const [newEmojiName, setNewEmojiName] = useState("");
+  const [newEmojiValue, setNewEmojiValue] = useState("");
+  const [newStickerName, setNewStickerName] = useState("");
+  const [newStickerValue, setNewStickerValue] = useState("");
+  const [soundEfxItems, setSoundEfxItems] = useState<ServerSoundEfxItem[]>([]);
+  const [soundEfxSummary, setSoundEfxSummary] = useState<ServerSoundEfxSummary | null>(null);
+  const [canManageSoundEfx, setCanManageSoundEfx] = useState(false);
+  const [isLoadingSoundEfx, setIsLoadingSoundEfx] = useState(false);
+  const [soundEfxStatusFilter, setSoundEfxStatusFilter] = useState<"ALL" | "ACTIVE" | "DISABLED">("ALL");
+  const [soundEfxError, setSoundEfxError] = useState<string | null>(null);
+  const [soundEfxActionSuccess, setSoundEfxActionSuccess] = useState<string | null>(null);
+  const [soundEfxActionItemId, setSoundEfxActionItemId] = useState<string | null>(null);
+  const [creatingSoundEfx, setCreatingSoundEfx] = useState(false);
+  const [newSoundEfxName, setNewSoundEfxName] = useState("");
+  const [newSoundEfxUrl, setNewSoundEfxUrl] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const bannerInputRef = useRef<HTMLInputElement | null>(null);
   const newRoleIconInputRef = useRef<HTMLInputElement | null>(null);
@@ -242,6 +305,30 @@ export const EditServerModal = () => {
       setAddMemberSearch("");
       setIsUploadingNewRoleIcon(false);
       setIsUploadingEditRoleIcon(false);
+      setEmojiStickerAssets([]);
+      setEmojiStickerSummary(null);
+      setCanManageEmojiStickers(false);
+      setIsLoadingEmojiStickers(false);
+      setEmojiStickerStatusFilter("ALL");
+      setEmojiStickersError(null);
+      setEmojiStickerActionSuccess(null);
+      setEmojiStickerActionItemId(null);
+      setCreatingEmojiSticker(false);
+      setNewEmojiName("");
+      setNewEmojiValue("");
+      setNewStickerName("");
+      setNewStickerValue("");
+      setSoundEfxItems([]);
+      setSoundEfxSummary(null);
+      setCanManageSoundEfx(false);
+      setIsLoadingSoundEfx(false);
+      setSoundEfxStatusFilter("ALL");
+      setSoundEfxError(null);
+      setSoundEfxActionSuccess(null);
+      setSoundEfxActionItemId(null);
+      setCreatingSoundEfx(false);
+      setNewSoundEfxName("");
+      setNewSoundEfxUrl("");
     }
   }, [isModalOpen]);
 
@@ -759,6 +846,323 @@ export const EditServerModal = () => {
     }
   };
 
+  const activeEmojiStickerType =
+    activeSection === "emoji" ? "EMOJI" : activeSection === "stickers" ? "STICKER" : null;
+
+  const loadEmojiStickers = useCallback(
+    async (assetType: "EMOJI" | "STICKER") => {
+      if (!server?.id) {
+        return;
+      }
+
+      try {
+        setIsLoadingEmojiStickers(true);
+        setEmojiStickersError(null);
+
+        const query = new URLSearchParams();
+        query.set("assetType", assetType);
+        query.set("status", emojiStickerStatusFilter);
+
+        const response = await fetch(`/api/servers/${server.id}/emoji-stickers?${query.toString()}`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          const message = (await response.text()) || `Failed to load emoji/stickers (${response.status})`;
+          throw new Error(message);
+        }
+
+        const payload = (await response.json()) as {
+          assets?: ServerEmojiStickerAsset[];
+          summary?: ServerEmojiStickerSummary;
+          canManageEmojiStickers?: boolean;
+        };
+
+        setEmojiStickerAssets(payload.assets ?? []);
+        setEmojiStickerSummary(
+          payload.summary ?? {
+            totalAssets: 0,
+            emojiAssets: 0,
+            stickerAssets: 0,
+            activeAssets: 0,
+          }
+        );
+        setCanManageEmojiStickers(Boolean(payload.canManageEmojiStickers));
+      } catch (error) {
+        console.error("[EDIT_SERVER_EMOJI_STICKERS_LOAD]", error);
+        setEmojiStickerAssets([]);
+        setEmojiStickerSummary(null);
+        setCanManageEmojiStickers(false);
+        setEmojiStickersError(error instanceof Error ? error.message : "Unable to load emoji and stickers.");
+      } finally {
+        setIsLoadingEmojiStickers(false);
+      }
+    },
+    [emojiStickerStatusFilter, server?.id]
+  );
+
+  useEffect(() => {
+    if (!isModalOpen || !activeEmojiStickerType) {
+      return;
+    }
+
+    void loadEmojiStickers(activeEmojiStickerType);
+  }, [activeEmojiStickerType, isModalOpen, loadEmojiStickers]);
+
+  const onCreateEmojiSticker = async () => {
+    if (!server?.id || !activeEmojiStickerType || creatingEmojiSticker) {
+      return;
+    }
+
+    const isEmoji = activeEmojiStickerType === "EMOJI";
+    const name = (isEmoji ? newEmojiName : newStickerName).trim().toLowerCase();
+    const value = (isEmoji ? newEmojiValue : newStickerValue).trim();
+
+    setEmojiStickersError(null);
+    setEmojiStickerActionSuccess(null);
+
+    if (!/^[a-z0-9_]{2,32}$/.test(name)) {
+      setEmojiStickersError("Name must be 2-32 chars and use lowercase letters, numbers, or underscore.");
+      return;
+    }
+
+    if (!value) {
+      setEmojiStickersError(isEmoji ? "Enter an emoji character." : "Enter a sticker URL or app-relative path.");
+      return;
+    }
+
+    try {
+      setCreatingEmojiSticker(true);
+
+      const response = await fetch(`/api/servers/${server.id}/emoji-stickers`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          assetType: activeEmojiStickerType,
+          name,
+          emoji: isEmoji ? value : undefined,
+          imageUrl: !isEmoji ? value : undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Failed to create ${isEmoji ? "emoji" : "sticker"} (${response.status})`;
+        throw new Error(message);
+      }
+
+      if (isEmoji) {
+        setNewEmojiName("");
+        setNewEmojiValue("");
+      } else {
+        setNewStickerName("");
+        setNewStickerValue("");
+      }
+
+      setEmojiStickerActionSuccess(`${isEmoji ? "Emoji" : "Sticker"} saved.`);
+      await loadEmojiStickers(activeEmojiStickerType);
+    } catch (error) {
+      console.error("[EDIT_SERVER_EMOJI_STICKERS_CREATE]", error);
+      setEmojiStickersError(
+        error instanceof Error ? error.message : `Unable to create ${isEmoji ? "emoji" : "sticker"}.`
+      );
+    } finally {
+      setCreatingEmojiSticker(false);
+    }
+  };
+
+  const onEmojiStickerAction = async (itemId: string, action: "ENABLE" | "DISABLE" | "DELETE") => {
+    if (!server?.id || !activeEmojiStickerType) {
+      return;
+    }
+
+    setEmojiStickersError(null);
+    setEmojiStickerActionSuccess(null);
+
+    try {
+      setEmojiStickerActionItemId(itemId);
+
+      const response = await fetch(`/api/servers/${server.id}/emoji-stickers`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          itemId,
+          action,
+        }),
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Failed to apply action (${response.status})`;
+        throw new Error(message);
+      }
+
+      setEmojiStickerActionSuccess(
+        action === "DELETE"
+          ? "Asset deleted."
+          : action === "ENABLE"
+            ? "Asset enabled."
+            : "Asset disabled."
+      );
+
+      await loadEmojiStickers(activeEmojiStickerType);
+    } catch (error) {
+      console.error("[EDIT_SERVER_EMOJI_STICKERS_ACTION]", error);
+      setEmojiStickersError(error instanceof Error ? error.message : "Unable to update asset.");
+    } finally {
+      setEmojiStickerActionItemId(null);
+    }
+  };
+
+  const loadSoundEfx = useCallback(async () => {
+    if (!server?.id) {
+      return;
+    }
+
+    try {
+      setIsLoadingSoundEfx(true);
+      setSoundEfxError(null);
+
+      const query = new URLSearchParams();
+      query.set("status", soundEfxStatusFilter);
+
+      const response = await fetch(`/api/servers/${server.id}/sound-efx?${query.toString()}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Failed to load sound EFX (${response.status})`;
+        throw new Error(message);
+      }
+
+      const payload = (await response.json()) as {
+        soundEfx?: ServerSoundEfxItem[];
+        summary?: ServerSoundEfxSummary;
+        canManageSoundEfx?: boolean;
+      };
+
+      setSoundEfxItems(payload.soundEfx ?? []);
+      setSoundEfxSummary(payload.summary ?? { total: 0, active: 0 });
+      setCanManageSoundEfx(Boolean(payload.canManageSoundEfx));
+    } catch (error) {
+      console.error("[EDIT_SERVER_SOUND_EFX_LOAD]", error);
+      setSoundEfxItems([]);
+      setSoundEfxSummary(null);
+      setCanManageSoundEfx(false);
+      setSoundEfxError(error instanceof Error ? error.message : "Unable to load sound EFX.");
+    } finally {
+      setIsLoadingSoundEfx(false);
+    }
+  }, [server?.id, soundEfxStatusFilter]);
+
+  useEffect(() => {
+    if (!isModalOpen || activeSection !== "soundboard") {
+      return;
+    }
+
+    void loadSoundEfx();
+  }, [activeSection, isModalOpen, loadSoundEfx]);
+
+  const onCreateSoundEfx = async () => {
+    if (!server?.id || creatingSoundEfx) {
+      return;
+    }
+
+    const name = newSoundEfxName.trim().toLowerCase();
+    const audioUrl = newSoundEfxUrl.trim();
+
+    setSoundEfxError(null);
+    setSoundEfxActionSuccess(null);
+
+    if (!/^[a-z0-9_]{2,32}$/.test(name)) {
+      setSoundEfxError("Name must be 2-32 chars and use lowercase letters, numbers, or underscore.");
+      return;
+    }
+
+    if (!audioUrl) {
+      setSoundEfxError("Enter a sound URL or app-relative path.");
+      return;
+    }
+
+    try {
+      setCreatingSoundEfx(true);
+
+      const response = await fetch(`/api/servers/${server.id}/sound-efx`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name, audioUrl }),
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Failed to create sound EFX (${response.status})`;
+        throw new Error(message);
+      }
+
+      setNewSoundEfxName("");
+      setNewSoundEfxUrl("");
+      setSoundEfxActionSuccess("Sound EFX saved.");
+      await loadSoundEfx();
+    } catch (error) {
+      console.error("[EDIT_SERVER_SOUND_EFX_CREATE]", error);
+      setSoundEfxError(error instanceof Error ? error.message : "Unable to create sound EFX.");
+    } finally {
+      setCreatingSoundEfx(false);
+    }
+  };
+
+  const onSoundEfxAction = async (itemId: string, action: "ENABLE" | "DISABLE" | "DELETE") => {
+    if (!server?.id) {
+      return;
+    }
+
+    setSoundEfxError(null);
+    setSoundEfxActionSuccess(null);
+
+    try {
+      setSoundEfxActionItemId(itemId);
+
+      const response = await fetch(`/api/servers/${server.id}/sound-efx`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ itemId, action }),
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Failed to apply action (${response.status})`;
+        throw new Error(message);
+      }
+
+      setSoundEfxActionSuccess(
+        action === "DELETE"
+          ? "Sound EFX deleted."
+          : action === "ENABLE"
+            ? "Sound EFX enabled."
+            : "Sound EFX disabled."
+      );
+
+      await loadSoundEfx();
+    } catch (error) {
+      console.error("[EDIT_SERVER_SOUND_EFX_ACTION]", error);
+      setSoundEfxError(error instanceof Error ? error.message : "Unable to update sound EFX.");
+    } finally {
+      setSoundEfxActionItemId(null);
+    }
+  };
+
   return (
     <Dialog open={isModalOpen} onOpenChange={handleClose}>
       <DialogContent className="overflow-hidden border-0 bg-[#313338] p-0 text-white shadow-2xl sm:max-w-[990px]">
@@ -1121,7 +1525,13 @@ export const EditServerModal = () => {
                                     <div key={memberItem.memberId} className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-black/20">
                                       <UserAvatar src={memberItem.imageUrl ?? undefined} className="h-7 w-7" />
                                       <div className="min-w-0 flex-1">
-                                        <p className="truncate text-xs font-medium text-white">{memberItem.displayName}</p>
+                                        <p className="truncate text-xs font-medium text-white">
+                                          <ProfileNameWithServerTag
+                                            name={memberItem.displayName}
+                                            profileId={memberItem.profileId}
+                                            memberId={memberItem.memberId}
+                                          />
+                                        </p>
                                         <p className="truncate text-[11px] text-zinc-400">{memberItem.email || memberItem.profileId}</p>
                                       </div>
                                       <Button
@@ -1173,7 +1583,13 @@ export const EditServerModal = () => {
                                     <div key={`add-${memberItem.memberId}`} className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-black/20">
                                       <UserAvatar src={memberItem.imageUrl ?? undefined} className="h-7 w-7" />
                                       <div className="min-w-0 flex-1">
-                                        <p className="truncate text-xs font-medium text-white">{memberItem.displayName}</p>
+                                        <p className="truncate text-xs font-medium text-white">
+                                          <ProfileNameWithServerTag
+                                            name={memberItem.displayName}
+                                            profileId={memberItem.profileId}
+                                            memberId={memberItem.memberId}
+                                          />
+                                        </p>
                                         <p className="truncate text-[11px] text-zinc-400">{memberItem.email || memberItem.profileId}</p>
                                       </div>
                                       <Button
@@ -1229,6 +1645,286 @@ export const EditServerModal = () => {
                         >
                           Continue to Delete Server
                         </Button>
+                      </div>
+                    ) : activeSection === "soundboard" ? (
+                      <div className="space-y-4">
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Total</p>
+                            <p className="mt-1 text-2xl font-semibold text-zinc-100">{soundEfxSummary?.total ?? 0}</p>
+                          </div>
+                          <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Active</p>
+                            <p className="mt-1 text-2xl font-semibold text-emerald-300">{soundEfxSummary?.active ?? 0}</p>
+                          </div>
+                        </div>
+
+                        <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-4">
+                          <div className="grid gap-2 md:grid-cols-[1fr_1fr_160px_auto]">
+                            <input
+                              value={newSoundEfxName}
+                              onChange={(event) => setNewSoundEfxName(event.target.value)}
+                              placeholder="sound_name"
+                              disabled={!canManageSoundEfx || creatingSoundEfx}
+                              className="h-10 rounded-md border border-zinc-700 bg-[#15161a] px-3 text-sm text-white outline-none focus:border-indigo-500"
+                            />
+
+                            <input
+                              value={newSoundEfxUrl}
+                              onChange={(event) => setNewSoundEfxUrl(event.target.value)}
+                              placeholder="https://... or /uploads/..."
+                              disabled={!canManageSoundEfx || creatingSoundEfx}
+                              className="h-10 rounded-md border border-zinc-700 bg-[#15161a] px-3 text-sm text-white outline-none focus:border-indigo-500"
+                            />
+
+                            <select
+                              value={soundEfxStatusFilter}
+                              onChange={(event) =>
+                                setSoundEfxStatusFilter(event.target.value as "ALL" | "ACTIVE" | "DISABLED")
+                              }
+                              className="h-10 rounded-md border border-zinc-700 bg-[#15161a] px-2 text-sm text-zinc-100 outline-none focus:border-indigo-500"
+                            >
+                              <option value="ALL">All statuses</option>
+                              <option value="ACTIVE">Active</option>
+                              <option value="DISABLED">Disabled</option>
+                            </select>
+
+                            <Button
+                              type="button"
+                              onClick={() => void onCreateSoundEfx()}
+                              disabled={!canManageSoundEfx || creatingSoundEfx}
+                              className="h-10 bg-[#5865f2] text-white hover:bg-[#4752c4]"
+                            >
+                              {creatingSoundEfx ? "Saving..." : "Save Sound EFX"}
+                            </Button>
+                          </div>
+
+                          {!canManageSoundEfx ? (
+                            <p className="mt-2 text-xs text-amber-300">Only the server owner can manage sound EFX.</p>
+                          ) : null}
+
+                          {soundEfxError ? (
+                            <p className="mt-2 text-xs text-rose-300">{soundEfxError}</p>
+                          ) : null}
+
+                          {soundEfxActionSuccess ? (
+                            <p className="mt-2 text-xs text-emerald-300">{soundEfxActionSuccess}</p>
+                          ) : null}
+                        </div>
+
+                        <div className="max-h-[280px] space-y-2 overflow-y-auto pr-1">
+                          {isLoadingSoundEfx ? (
+                            <div className="flex items-center gap-2 rounded-md border border-zinc-700 bg-[#2B2D31] px-3 py-2 text-sm text-zinc-300">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Loading sound EFX...
+                            </div>
+                          ) : soundEfxItems.length === 0 ? (
+                            <p className="rounded-md border border-zinc-700 bg-[#2B2D31] px-3 py-2 text-xs text-zinc-400">
+                              No sound effects found for this filter.
+                            </p>
+                          ) : (
+                            soundEfxItems.map((item) => (
+                              <div
+                                key={item.id}
+                                className="flex items-center gap-3 rounded-lg border border-zinc-700 bg-[#2B2D31] px-3 py-2"
+                              >
+                                <div className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-zinc-700 bg-[#15161a] text-xs text-zinc-300">
+                                  SFX
+                                </div>
+
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-sm font-semibold text-zinc-100">{item.name}</p>
+                                  <p className="truncate text-xs text-zinc-400" title={item.audioUrl}>
+                                    {item.audioUrl}
+                                  </p>
+                                  <p className="truncate text-xs text-zinc-400">
+                                    {item.isEnabled ? "Active" : "Disabled"} • Updated {item.updatedAt ? new Date(item.updatedAt).toLocaleString() : "N/A"}
+                                  </p>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    type="button"
+                                    onClick={() =>
+                                      void onSoundEfxAction(item.id, item.isEnabled ? "DISABLE" : "ENABLE")
+                                    }
+                                    disabled={!canManageSoundEfx || soundEfxActionItemId === item.id}
+                                    className="h-8 bg-[#4e5058] px-2.5 text-xs text-white hover:bg-[#5d6069]"
+                                  >
+                                    {soundEfxActionItemId === item.id
+                                      ? "..."
+                                      : item.isEnabled
+                                        ? "Disable"
+                                        : "Enable"}
+                                  </Button>
+
+                                  <Button
+                                    type="button"
+                                    onClick={() => void onSoundEfxAction(item.id, "DELETE")}
+                                    disabled={!canManageSoundEfx || soundEfxActionItemId === item.id}
+                                    className="h-8 bg-rose-600/80 px-2.5 text-xs text-white hover:bg-rose-600"
+                                  >
+                                    Delete
+                                  </Button>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    ) : activeEmojiStickerType ? (
+                      <div className="space-y-4">
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Total</p>
+                            <p className="mt-1 text-2xl font-semibold text-zinc-100">{emojiStickerSummary?.totalAssets ?? 0}</p>
+                          </div>
+                          <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Active</p>
+                            <p className="mt-1 text-2xl font-semibold text-emerald-300">{emojiStickerSummary?.activeAssets ?? 0}</p>
+                          </div>
+                          <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">
+                              {activeEmojiStickerType === "EMOJI" ? "Emoji" : "Stickers"}
+                            </p>
+                            <p className="mt-1 text-2xl font-semibold text-zinc-100">
+                              {activeEmojiStickerType === "EMOJI"
+                                ? emojiStickerSummary?.emojiAssets ?? 0
+                                : emojiStickerSummary?.stickerAssets ?? 0}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-4">
+                          <div className="grid gap-2 md:grid-cols-[1fr_1fr_160px_auto]">
+                            <input
+                              value={activeEmojiStickerType === "EMOJI" ? newEmojiName : newStickerName}
+                              onChange={(event) =>
+                                activeEmojiStickerType === "EMOJI"
+                                  ? setNewEmojiName(event.target.value)
+                                  : setNewStickerName(event.target.value)
+                              }
+                              placeholder={`${activeEmojiStickerType === "EMOJI" ? "emoji" : "sticker"}_name`}
+                              disabled={!canManageEmojiStickers || creatingEmojiSticker}
+                              className="h-10 rounded-md border border-zinc-700 bg-[#15161a] px-3 text-sm text-white outline-none focus:border-indigo-500"
+                            />
+
+                            <input
+                              value={activeEmojiStickerType === "EMOJI" ? newEmojiValue : newStickerValue}
+                              onChange={(event) =>
+                                activeEmojiStickerType === "EMOJI"
+                                  ? setNewEmojiValue(event.target.value)
+                                  : setNewStickerValue(event.target.value)
+                              }
+                              placeholder={activeEmojiStickerType === "EMOJI" ? "😀" : "https://... or /uploads/..."}
+                              disabled={!canManageEmojiStickers || creatingEmojiSticker}
+                              className="h-10 rounded-md border border-zinc-700 bg-[#15161a] px-3 text-sm text-white outline-none focus:border-indigo-500"
+                            />
+
+                            <select
+                              value={emojiStickerStatusFilter}
+                              onChange={(event) =>
+                                setEmojiStickerStatusFilter(event.target.value as "ALL" | "ACTIVE" | "DISABLED")
+                              }
+                              className="h-10 rounded-md border border-zinc-700 bg-[#15161a] px-2 text-sm text-zinc-100 outline-none focus:border-indigo-500"
+                            >
+                              <option value="ALL">All statuses</option>
+                              <option value="ACTIVE">Active</option>
+                              <option value="DISABLED">Disabled</option>
+                            </select>
+
+                            <Button
+                              type="button"
+                              onClick={() => void onCreateEmojiSticker()}
+                              disabled={!canManageEmojiStickers || creatingEmojiSticker}
+                              className="h-10 bg-[#5865f2] text-white hover:bg-[#4752c4]"
+                            >
+                              {creatingEmojiSticker ? "Saving..." : `Save ${activeEmojiStickerType === "EMOJI" ? "Emoji" : "Sticker"}`}
+                            </Button>
+                          </div>
+
+                          {!canManageEmojiStickers ? (
+                            <p className="mt-2 text-xs text-amber-300">Only the server owner can manage emoji and stickers.</p>
+                          ) : null}
+
+                          {emojiStickersError ? (
+                            <p className="mt-2 text-xs text-rose-300">{emojiStickersError}</p>
+                          ) : null}
+
+                          {emojiStickerActionSuccess ? (
+                            <p className="mt-2 text-xs text-emerald-300">{emojiStickerActionSuccess}</p>
+                          ) : null}
+                        </div>
+
+                        <div className="max-h-[280px] space-y-2 overflow-y-auto pr-1">
+                          {isLoadingEmojiStickers ? (
+                            <div className="flex items-center gap-2 rounded-md border border-zinc-700 bg-[#2B2D31] px-3 py-2 text-sm text-zinc-300">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Loading {activeEmojiStickerType === "EMOJI" ? "emoji" : "stickers"}...
+                            </div>
+                          ) : emojiStickerAssets.length === 0 ? (
+                            <p className="rounded-md border border-zinc-700 bg-[#2B2D31] px-3 py-2 text-xs text-zinc-400">
+                              No {activeEmojiStickerType === "EMOJI" ? "emoji" : "stickers"} found for this filter.
+                            </p>
+                          ) : (
+                            emojiStickerAssets.map((asset) => (
+                              <div
+                                key={asset.id}
+                                className="flex items-center gap-3 rounded-lg border border-zinc-700 bg-[#2B2D31] px-3 py-2"
+                              >
+                                <div className="inline-flex h-10 w-10 items-center justify-center overflow-hidden rounded-md border border-zinc-700 bg-[#15161a] text-xl">
+                                  {asset.assetType === "EMOJI" ? (
+                                    <span>{asset.emoji || "😀"}</span>
+                                  ) : asset.imageUrl ? (
+                                    <Image
+                                      src={asset.imageUrl}
+                                      alt={asset.name}
+                                      width={40}
+                                      height={40}
+                                      className="h-full w-full object-cover"
+                                      unoptimized
+                                    />
+                                  ) : (
+                                    <span className="text-xs text-zinc-400">N/A</span>
+                                  )}
+                                </div>
+
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-sm font-semibold text-zinc-100">{asset.name}</p>
+                                  <p className="truncate text-xs text-zinc-400">
+                                    {asset.isEnabled ? "Active" : "Disabled"} • Updated {asset.updatedAt ? new Date(asset.updatedAt).toLocaleString() : "N/A"}
+                                  </p>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    type="button"
+                                    onClick={() =>
+                                      void onEmojiStickerAction(asset.id, asset.isEnabled ? "DISABLE" : "ENABLE")
+                                    }
+                                    disabled={!canManageEmojiStickers || emojiStickerActionItemId === asset.id}
+                                    className="h-8 bg-[#4e5058] px-2.5 text-xs text-white hover:bg-[#5d6069]"
+                                  >
+                                    {emojiStickerActionItemId === asset.id
+                                      ? "..."
+                                      : asset.isEnabled
+                                        ? "Disable"
+                                        : "Enable"}
+                                  </Button>
+
+                                  <Button
+                                    type="button"
+                                    onClick={() => void onEmojiStickerAction(asset.id, "DELETE")}
+                                    disabled={!canManageEmojiStickers || emojiStickerActionItemId === asset.id}
+                                    className="h-8 bg-rose-600/80 px-2.5 text-xs text-white hover:bg-rose-600"
+                                  >
+                                    Delete
+                                  </Button>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
                       </div>
                     ) : activeSection !== "roles" ? (
                       <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-4">

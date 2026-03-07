@@ -6,6 +6,7 @@ import { currentProfile } from "@/lib/current-profile";
 import { ChatHeader } from "@/components/chat/chat-header";
 import { ChatInput } from "@/components/chat/chat-input";
 import { ChatItem } from "@/components/chat/chat-item";
+import { ChatScrollBox } from "@/components/chat/chat-scroll-box";
 // import { MediaRoom } from "@/components/media-room";
 import { channel, db, member, message } from "@/lib/db";
 import { computeChannelPermissionForRole } from "@/lib/channel-permissions";
@@ -195,6 +196,8 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
     };
   });
 
+  const lastChannelMessageId = hydratedChannelMessages[hydratedChannelMessages.length - 1]?.id ?? "none";
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
       <div className="theme-server-chat-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-border bg-background shadow-xl shadow-black/35">
@@ -206,7 +209,10 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
         />
 
         {currentChannel.type === ChannelType.TEXT ? (
-          <div className="flex-1 overflow-y-auto">
+          <ChatScrollBox
+            className="flex-1 overflow-y-auto"
+            scrollKey={`${currentChannel.id}:${hydratedChannelMessages.length}:${lastChannelMessageId}`}
+          >
             {hydratedChannelMessages.length === 0 ? (
               <div className="p-6 text-sm text-zinc-500 dark:text-zinc-400">
                 No messages yet. Start the conversation in #{currentChannel.name}.
@@ -233,7 +239,7 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
                 />
               ))
             )}
-          </div>
+          </ChatScrollBox>
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-zinc-500 dark:text-zinc-400">
             This channel type does not use text chat.

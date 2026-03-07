@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
+import { ensureRemovedInAccordRolesNormalized } from "@/lib/in-accord-admin-migration";
 import { normalizePresenceStatus } from "@/lib/presence-status";
 import { getSessionUserId } from "@/lib/session";
 import { getUserBanner } from "@/lib/user-banner-store";
@@ -26,6 +27,7 @@ export const currentProfile = async () => {
 
   try {
     await ensureUserProfileSchema();
+    await ensureRemovedInAccordRolesNormalized();
 
     const userResult = await db.execute(sql`
       select

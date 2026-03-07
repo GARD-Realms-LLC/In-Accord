@@ -2,6 +2,7 @@
 
 import {
   ChevronDown,
+  Flag,
   LogOut,
   PlusCircle,
   Settings,
@@ -10,6 +11,7 @@ import {
   UserPlus,
   Users,
 } from "lucide-react";
+import axios from "axios";
 
 import { ServerWithMembersWithProfiles } from "@/types";
 import {
@@ -49,8 +51,24 @@ export const ServerHeader = ({ server, role, isServerOwner = false }: ServerHead
   const isAdmin = isServerOwner || role === MemberRole.ADMIN;
   const isModerator = isAdmin || role === MemberRole.MODERATOR;
 
+  const onReportServer = async () => {
+    try {
+      await axios.post("/api/reports", {
+        targetType: "SERVER",
+        targetId: server.id,
+        reason: "Reported from server header menu",
+      });
+      window.alert("Server report submitted.");
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Failed to submit report."
+        : "Failed to submit report.";
+      window.alert(message);
+    }
+  };
+
   return (
-    <div className="relative h-[82px] border-b-2 border-neutral-200 dark:border-neutral-800 overflow-hidden">
+    <div className="relative h-20.5 border-b-2 border-neutral-200 dark:border-neutral-800 overflow-hidden">
       {normalizedBannerUrl ? (
         <>
           <img
@@ -80,7 +98,7 @@ export const ServerHeader = ({ server, role, isServerOwner = false }: ServerHead
         <DropdownMenu>
           <DropdownMenuTrigger className="focus:outline-none" asChild>
             <button
-              className="absolute left-1/2 top-1/2 z-10 flex w-[84%] max-w-[220px] -translate-x-1/2 -translate-y-1/2 items-center justify-center gap-2 rounded-md bg-black/20 px-3 py-1 text-sm font-semibold hover:bg-black/35 transition"
+              className="absolute left-1/2 top-1/2 z-10 flex w-[84%] max-w-55 -translate-x-1/2 -translate-y-1/2 items-center justify-center gap-2 rounded-md bg-black/20 px-3 py-1 text-sm font-semibold hover:bg-black/35 transition"
             >
               <span className="truncate">{server.name}</span>
               <ChevronDown className="h-4 w-4 shrink-0" />
@@ -88,7 +106,7 @@ export const ServerHeader = ({ server, role, isServerOwner = false }: ServerHead
           </DropdownMenuTrigger>
           <DropdownMenuContent
             className="w-56 text-xs font-medium text-black 
-          dark:text-neutral-400 space-y-[2px]"
+          dark:text-neutral-400 space-y-0.5"
           >
             {isModerator && (
               <DropdownMenuItem
@@ -135,6 +153,15 @@ export const ServerHeader = ({ server, role, isServerOwner = false }: ServerHead
               >
                 Delete Server
                 <Trash className="h-4 w-4 ml-auto" />
+              </DropdownMenuItem>
+            )}
+            {!isAdmin && (
+              <DropdownMenuItem
+                onClick={() => void onReportServer()}
+                className="text-amber-500 px-3 py-2 text-sm cursor-pointer"
+              >
+                Report Server
+                <Flag className="h-4 w-4 ml-auto" />
               </DropdownMenuItem>
             )}
             {!isAdmin && (

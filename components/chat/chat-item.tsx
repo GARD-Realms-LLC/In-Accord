@@ -6,25 +6,28 @@ import qs from "query-string";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { type Member, MemberRole, type Profile } from "@/lib/db/types";
-import { Crown, Edit, FileIcon, MessageCircle, Reply, ShieldAlert, ShieldCheck, SmilePlus, Trash, UserPlus } from "lucide-react";
+import { Ban, Crown, Edit, FileIcon, Flag, MessageCircle, Reply, SmilePlus, Trash, UserPlus, Wrench } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
 import { UserAvatar } from "@/components/user-avatar";
 import { BotAppBadge } from "@/components/bot-app-badge";
 import { NewUserCloverBadge } from "@/components/new-user-clover-badge";
+import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
 import { ActionTooltip } from "@/components/action-tooltip";
+import { ModeratorLineIcon } from "@/components/moderator-line-icon";
 import { cn } from "@/lib/utils";
 import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useModal } from "@/hooks/use-modal-store";
-import { isInAccordAdministrator } from "@/lib/in-accord-admin";
+import { getInAccordStaffLabel, isInAccordAdministrator, isInAccordDeveloper, isInAccordModerator } from "@/lib/in-accord-admin";
 import { isBotUser } from "@/lib/is-bot-user";
 import { extractQuotedContent, getQuoteSnippetFromBody } from "@/lib/message-quotes";
 import { parseMentionSegments } from "@/lib/mentions";
+import { extractUrlsFromText, splitTextWithUrls } from "@/lib/link-previews";
 
 interface ChatItemProps {
   id: string;
@@ -97,6 +100,39 @@ const reactionSummary = (items: PostEmoteItem[]) =>
     .map((item) => `${item.emoji}:${item.count}`)
     .join("|");
 
+const notifiedMentionMessageIds = new Set<string>();
+const previewCache = new Map<string, LinkPreview | null>();
+
+type LinkPreview = {
+  url: string;
+  siteName: string;
+  title: string;
+  description: string | null;
+  imageUrl: string | null;
+  canonicalUrl: string;
+};
+
+const renderTextWithLinks = (text: string, keyPrefix: string) => {
+  const chunks = splitTextWithUrls(text);
+  return chunks.map((chunk, chunkIndex) => {
+    if (chunk.kind === "text") {
+      return <span key={`${keyPrefix}-text-${chunkIndex}`}>{chunk.value}</span>;
+    }
+
+    return (
+      <a
+        key={`${keyPrefix}-url-${chunkIndex}`}
+        href={chunk.value}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline decoration-indigo-400/80 underline-offset-2 transition hover:text-indigo-500 dark:hover:text-indigo-300"
+      >
+        {chunk.value}
+      </a>
+    );
+  });
+};
+
 export const ChatItem = ({
   id,
   content,
@@ -117,6 +153,13 @@ export const ChatItem = ({
     realName: string | null;
     profileName: string | null;
     bannerUrl: string | null;
+    selectedServerTag?: {
+      serverId: string;
+      serverName: string;
+      tagCode: string;
+      iconKey: string;
+      iconEmoji: string;
+    } | null;
     presenceStatus: string | null;
     role: string | null;
     email: string;
@@ -130,6 +173,7 @@ export const ChatItem = ({
   const [profileCard, setProfileCard] = useState<ProfileCardData | null>(null);
   const [displayName, setDisplayName] = useState(member.profile.name);
   const [displayImageUrl, setDisplayImageUrl] = useState(member.profile.imageUrl);
+  const [linkPreviews, setLinkPreviews] = useState<Record<string, LinkPreview | null>>({});
   const [postEmoteItems, setPostEmoteItems] = useState<PostEmoteItem[]>(() =>
     createPostEmoteItemsFromReactions(initialReactions)
   );
@@ -263,9 +307,56 @@ export const ChatItem = ({
     router.push(`/users?serverId=${encodeURIComponent(effectiveServerId)}&memberId=${encodeURIComponent(member.id)}`);
   };
 
-  const onAddFriend = () => {
+  const onAddFriend = async () => {
     setIsProfilePopoverOpen(false);
-    router.push("/users?view=friends&filter=pending&pendingBucket=requests");
+
+    try {
+      await axios.post("/api/friends/requests", {
+        profileId: member.profile.id,
+      });
+      router.refresh();
+      window.alert("Friend request sent.");
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Failed to send friend request."
+        : "Failed to send friend request.";
+      window.alert(message);
+    }
+  };
+
+  const onBlockUser = async () => {
+    setIsProfilePopoverOpen(false);
+
+    try {
+      await axios.post("/api/friends/blocked", {
+        profileId: member.profile.id,
+      });
+      router.refresh();
+      window.alert("User blocked.");
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Failed to block user."
+        : "Failed to block user.";
+      window.alert(message);
+    }
+  };
+
+  const onReportUser = async () => {
+    setIsProfilePopoverOpen(false);
+
+    try {
+      await axios.post("/api/reports", {
+        targetType: "USER",
+        targetId: member.profile.id,
+        reason: "Reported from chat profile card",
+      });
+      window.alert("User report submitted.");
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Failed to submit report."
+        : "Failed to submit report.";
+      window.alert(message);
+    }
   };
 
   const onQuoteMessage = () => {
@@ -441,6 +532,7 @@ export const ChatItem = ({
 
   const fileType = fileUrl?.split(".").pop();
   const isGif = !!fileUrl && /\.gif(\?|$)/i.test(fileUrl);
+  const isEmote = !!fileUrl && content.trim().toLowerCase() === "[emote]";
   const isSticker =
     !!fileUrl &&
     (content.trim().toLowerCase() === "[sticker]" || /\/stickers\//i.test(fileUrl));
@@ -457,21 +549,38 @@ export const ChatItem = ({
     email: member.profile.email,
   });
   const globalRoleFromProfile = (member.profile as Profile & { role?: string | null }).role ?? null;
-  const isInAccordAdmin = isInAccordAdministrator(profileCard?.role ?? globalRoleFromProfile);
-  const highestRoleIcon = isInAccordAdmin
-    ? <Crown className="h-3.5 w-3.5 text-rose-500" aria-label="In-Accord Administrator" />
-    : member.role === MemberRole.ADMIN
-      ? <ShieldAlert className="h-4 w-4 text-rose-500" />
-      : member.role === MemberRole.MODERATOR
-        ? <ShieldCheck className="h-4 w-4 text-indigo-500" />
-        : null;
-  const highestRoleLabel = isInAccordAdmin
-    ? "In-Accord Administrator"
-    : member.role === MemberRole.ADMIN
-      ? "ADMIN"
-      : member.role === MemberRole.MODERATOR
-        ? "MODERATOR"
-        : null;
+  const effectiveGlobalRole = profileCard?.role ?? globalRoleFromProfile;
+  const isGlobalDeveloper = isInAccordDeveloper(effectiveGlobalRole);
+  const isGlobalAdministrator = isInAccordAdministrator(effectiveGlobalRole);
+  const isGlobalModerator = isInAccordModerator(effectiveGlobalRole);
+  const globalRoleLabel = getInAccordStaffLabel(effectiveGlobalRole);
+  const highestRoleIcon = isGlobalDeveloper
+    ? <Wrench className="h-4 w-4 text-cyan-400" aria-label={globalRoleLabel ?? "Developer"} />
+    : isGlobalAdministrator
+      ? <Crown className="h-4 w-4 text-rose-500" aria-label={globalRoleLabel ?? "Administrator"} />
+      : isGlobalModerator
+        ? <ModeratorLineIcon className="h-4 w-4 text-indigo-500" aria-label={globalRoleLabel ?? "Moderator"} />
+        : isInAccordAdministrator(member.role)
+          ? <Crown className="h-4 w-4 text-rose-500" aria-label="Administrator" />
+          : isInAccordModerator(member.role)
+            ? <ModeratorLineIcon className="h-4 w-4 text-indigo-500" aria-label="Moderator" />
+            : null;
+  const highestRoleLabel = isGlobalDeveloper
+    ? "Developer"
+    : isGlobalAdministrator
+      ? "Administrator"
+      : isGlobalModerator
+        ? "Moderator"
+        : isInAccordAdministrator(member.role)
+          ? "Administrator"
+          : isInAccordModerator(member.role)
+            ? "Moderator"
+            : null;
+  const displayMemberRole = isInAccordAdministrator(member.role)
+    ? "Administrator"
+    : isInAccordModerator(member.role)
+      ? "Moderator"
+      : String(member.role ?? "User");
   const effectiveBannerUrl = profileCard?.bannerUrl ?? null;
   const memberCreatedDate = profileCard?.createdAt
     ? new Date(profileCard.createdAt)
@@ -495,6 +604,10 @@ export const ChatItem = ({
     .map((segment) => (segment.kind === "mention" ? `@${segment.label}` : segment.value))
     .join("")
     .trim();
+  const messageUrls = useMemo(() => extractUrlsFromText(messageBody, 3), [messageBody]);
+  const renderedPreviews = messageUrls
+    .map((url) => linkPreviews[url])
+    .filter((item): item is LinkPreview => Boolean(item));
 
   useEffect(() => {
     if (!isMentioningCurrentUser || deleted) {
@@ -509,12 +622,11 @@ export const ChatItem = ({
       return;
     }
 
-    const notifiedKey = `inaccord:mention-notified:${id}`;
-    if (window.sessionStorage.getItem(notifiedKey) === "1") {
+    if (notifiedMentionMessageIds.has(id)) {
       return;
     }
 
-    window.sessionStorage.setItem(notifiedKey, "1");
+    notifiedMentionMessageIds.add(id);
 
     const title = `New mention from ${displayName}`;
     const body = plainContentForNotification || "You were mentioned in chat.";
@@ -552,6 +664,51 @@ export const ChatItem = ({
     plainContentForNotification,
   ]);
 
+  useEffect(() => {
+    if (!messageUrls.length) {
+      setLinkPreviews({});
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadPreviews = async () => {
+      const nextEntries: Array<[string, LinkPreview | null]> = [];
+
+      for (const url of messageUrls) {
+        if (previewCache.has(url)) {
+          nextEntries.push([url, previewCache.get(url) ?? null]);
+          continue;
+        }
+
+        try {
+          const response = await axios.get<{ preview?: LinkPreview | null }>("/api/link-preview", {
+            params: { url },
+          });
+
+          const preview = response.data.preview ?? null;
+          previewCache.set(url, preview);
+          nextEntries.push([url, preview]);
+        } catch {
+          previewCache.set(url, null);
+          nextEntries.push([url, null]);
+        }
+      }
+
+      if (cancelled) {
+        return;
+      }
+
+      setLinkPreviews(Object.fromEntries(nextEntries));
+    };
+
+    void loadPreviews();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [messageUrls]);
+
   return (
     <div
       className={cn(
@@ -581,7 +738,7 @@ export const ChatItem = ({
             align="start"
             className="w-[320px] overflow-hidden rounded-xl border border-black/30 bg-[#111214] p-0 text-[#dbdee1] shadow-2xl shadow-black/50"
           >
-            <div className="relative h-24 bg-gradient-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
+            <div className="relative h-24 bg-linear-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
               {effectiveBannerUrl ? (
                 <Image
                   src={effectiveBannerUrl}
@@ -599,7 +756,12 @@ export const ChatItem = ({
               </div>
 
               <div className="flex min-w-0 items-center gap-1.5">
-                <p className="truncate text-base font-bold text-white">{displayName || "Unknown User"}</p>
+                <ProfileNameWithServerTag
+                  name={displayName || "Unknown User"}
+                  profileId={member.profile.id}
+                  memberId={member.id}
+                  nameClassName="text-base font-bold text-white"
+                />
                 {highestRoleIcon && highestRoleLabel ? (
                   <ActionTooltip label={highestRoleLabel} align="center">
                     {highestRoleIcon}
@@ -613,12 +775,30 @@ export const ChatItem = ({
               <div className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] p-3 text-xs">
                 <div className="space-y-1 text-[#dbdee1]">
                   <p>Users ID: {member.profile.id || "N/A"}</p>
-                  <p>Name: {profileCard?.realName || displayName || "Unknown User"}</p>
+                  <p>
+                    Name: {profileCard?.realName || profileCard?.profileName || displayName || member.profile.email?.split("@")[0] || member.profile.id || "Unknown User"}
+                  </p>
                   <p>Email: {profileCard?.email || member.profile.email || "N/A"}</p>
-                  <p>Role: {member.role}</p>
+                  <p>Role: {displayMemberRole}</p>
                   <p>Created: {memberCreatedDisplay}</p>
                 </div>
               </div>
+
+              {profileCard?.selectedServerTag ? (
+                <div className="mt-2 rounded-lg border border-white/10 bg-[#1a1b1e] p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">Server Tag</p>
+                  <div className="mt-2">
+                    <span
+                      className="inline-flex items-center gap-1.5 rounded-full border border-[#5865f2]/35 bg-[#5865f2]/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#d7dcff]"
+                      title={`Server tag from ${profileCard.selectedServerTag.serverName}`}
+                    >
+                      <span>{profileCard.selectedServerTag.iconEmoji}</span>
+                      <span>{profileCard.selectedServerTag.tagCode}</span>
+                      <span className="text-[#bfc5ff]">{profileCard.selectedServerTag.serverName}</span>
+                    </span>
+                  </div>
+                </div>
+              ) : null}
 
               <div className="mt-3 flex items-center gap-2 border-t border-white/10 pt-3">
                 <ActionTooltip label="Add Friend" align="center">
@@ -633,6 +813,18 @@ export const ChatItem = ({
                   </button>
                 </ActionTooltip>
 
+                <ActionTooltip label="Block" align="center">
+                  <button
+                    type="button"
+                    onClick={onBlockUser}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-rose-500/35 bg-rose-500/15 text-rose-200 transition hover:bg-rose-500/25"
+                    aria-label="Block user"
+                    title="Block"
+                  >
+                    <Ban className="h-4 w-4" />
+                  </button>
+                </ActionTooltip>
+
                 <ActionTooltip label="Direct Message" align="center">
                   <button
                     type="button"
@@ -642,6 +834,18 @@ export const ChatItem = ({
                     title="Direct Message"
                   >
                     <MessageCircle className="h-4 w-4" />
+                  </button>
+                </ActionTooltip>
+
+                <ActionTooltip label="Report User" align="center">
+                  <button
+                    type="button"
+                    onClick={onReportUser}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-amber-500/35 bg-amber-500/15 text-amber-200 transition hover:bg-amber-500/25"
+                    aria-label="Report user"
+                    title="Report User"
+                  >
+                    <Flag className="h-4 w-4" />
                   </button>
                 </ActionTooltip>
               </div>
@@ -656,7 +860,12 @@ export const ChatItem = ({
                 onClick={onMemberClick}
                 className="font-semibold text-sm hover:underline cursor-pointer"
               >
-                {displayName}
+                <ProfileNameWithServerTag
+                  name={displayName}
+                  profileId={member.profile.id}
+                  memberId={member.id}
+                  nameClassName="font-semibold text-sm"
+                />
               </button>
               {highestRoleIcon && highestRoleLabel ? (
                 <ActionTooltip label={highestRoleLabel} align="center">
@@ -677,7 +886,9 @@ export const ChatItem = ({
               rel="noopener noreferrer"
               className={cn(
                 "relative mt-2 overflow-hidden flex items-center",
-                isSticker
+                isEmote
+                  ? "h-16 w-16 rounded-md"
+                  : isSticker
                   ? "h-40 w-40 rounded-lg"
                   : "aspect-square rounded-md border bg-secondary h-48 w-48"
               )}
@@ -730,7 +941,11 @@ export const ChatItem = ({
               >
                 {contentSegments.map((segment, index) => {
                   if (segment.kind === "text") {
-                    return <span key={`text-${index}`}>{segment.value}</span>;
+                    return (
+                      <span key={`text-${index}`}>
+                        {renderTextWithLinks(segment.value, `content-${id}-${index}`)}
+                      </span>
+                    );
                   }
 
                   return (
@@ -754,6 +969,45 @@ export const ChatItem = ({
                   </span>
                 )}
               </p>
+
+              {renderedPreviews.length ? (
+                <div className="mt-2 space-y-2">
+                  {renderedPreviews.map((preview) => (
+                    <a
+                      key={`${id}-${preview.canonicalUrl}`}
+                      href={preview.canonicalUrl || preview.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block overflow-hidden rounded-lg border border-zinc-300/70 bg-zinc-100/80 transition hover:bg-zinc-200/80 dark:border-zinc-700 dark:bg-zinc-900/80 dark:hover:bg-zinc-800/80"
+                    >
+                      <div className="flex">
+                        {preview.imageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={preview.imageUrl}
+                            alt={preview.title}
+                            className="h-24 w-24 shrink-0 object-cover"
+                          />
+                        ) : null}
+
+                        <div className="min-w-0 p-3">
+                          <p className="truncate text-[11px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                            {preview.siteName}
+                          </p>
+                          <p className="line-clamp-2 text-sm font-semibold text-zinc-800 dark:text-zinc-100">
+                            {preview.title}
+                          </p>
+                          {preview.description ? (
+                            <p className="mt-1 line-clamp-2 text-xs text-zinc-600 dark:text-zinc-300">
+                              {preview.description}
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              ) : null}
             </div>
           )}
           {!deleted ? (

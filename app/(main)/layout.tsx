@@ -30,8 +30,8 @@ const MainLayout = async ({ children }: { children: React.ReactNode }) => {
               profileLastLogonAt={profile.updatedAt ? profile.updatedAt.toISOString() : null}
             />
             <div className="ml-auto flex items-center gap-1 text-[#b5bac1]">
-              <button title="Mute" className="rounded p-1 hover:bg-[#3f4248]"><Mic className="h-3.5 w-3.5" /></button>
-              <button title="Deafen" className="rounded p-1 hover:bg-[#3f4248]"><Headphones className="h-3.5 w-3.5" /></button>
+              <button title="Mute" className="rounded p-1 hover:bg-[#3f4248]"><Mic className="h-3.5 w-3.5" suppressHydrationWarning /></button>
+              <button title="Deafen" className="rounded p-1 hover:bg-[#3f4248]"><Headphones className="h-3.5 w-3.5" suppressHydrationWarning /></button>
               <SettingsButton
                 profileId={profile.id}
                 profileRealName={profile.realName ?? null}

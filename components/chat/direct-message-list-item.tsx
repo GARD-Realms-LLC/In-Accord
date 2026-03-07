@@ -1,12 +1,14 @@
 import Link from "next/link";
 
 import { NewUserCloverBadge } from "@/components/new-user-clover-badge";
+import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
 import { UserAvatar } from "@/components/user-avatar";
 
 interface DirectMessageListItemProps {
   conversationId: string;
   serverId: string;
   memberId: string;
+  profileId: string;
   displayName: string;
   imageUrl: string | null;
   profileCreatedAt?: Date | string | null;
@@ -19,6 +21,7 @@ export const DirectMessageListItem = ({
   conversationId,
   serverId,
   memberId,
+  profileId,
   displayName,
   imageUrl,
   profileCreatedAt,
@@ -39,8 +42,12 @@ export const DirectMessageListItem = ({
     >
       <UserAvatar src={imageUrl ?? undefined} className="h-7 w-7" />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-semibold flex items-center gap-1">
-          <span className="truncate">{displayName}</span>
+        <p className="truncate text-xs font-semibold flex items-center gap-2">
+          <ProfileNameWithServerTag
+            name={displayName}
+            profileId={profileId}
+            memberId={memberId}
+          />
           <NewUserCloverBadge createdAt={profileCreatedAt} className="text-[11px]" />
         </p>
         <p className="truncate text-[10px] text-[#949ba4]">{timestampLabel || "No messages yet"}</p>

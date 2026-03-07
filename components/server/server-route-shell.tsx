@@ -84,6 +84,7 @@ export const ServerRouteShell = ({
   children,
 }: ServerRouteShellProps) => {
   const [isMembersCollapsed, setIsMembersCollapsed] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false);
   const [isUpdaterModalOpen, setIsUpdaterModalOpen] = useState(false);
   const [runtimeMeta, setRuntimeMeta] = useState<RuntimeMeta>({
     isPackaged: false,
@@ -108,6 +109,10 @@ export const ServerRouteShell = ({
   const CONTENT_LEFT_PADDING = CHANNELS_RAIL_WIDTH + TOPBAR_LEFT_GAP + CHANNELS_TO_CHAT_GAP;
 
   const electronApi = typeof window !== "undefined" ? (window as any).electronAPI : null;
+
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
 
   useEffect(() => {
     if (!electronApi) {
@@ -212,8 +217,12 @@ export const ServerRouteShell = ({
     }
   };
 
+  if (!isHydrated) {
+    return <div className="h-full overflow-hidden" suppressHydrationWarning />;
+  }
+
   return (
-    <div className="h-full overflow-hidden">
+    <div className="h-full overflow-hidden" suppressHydrationWarning>
       <header
         className="theme-server-topbar fixed right-0 top-0 z-40 flex h-12 items-center overflow-hidden rounded-b-xl border-b border-border bg-background px-4"
         style={{ left: `${CHANNELS_RAIL_LEFT}px` }}

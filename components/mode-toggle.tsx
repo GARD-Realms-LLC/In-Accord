@@ -43,11 +43,8 @@ type TransparentBackgroundSettingsPayload = {
   uploadedBackgrounds: string[]
 }
 
-const TRANSPARENT_BG_STORAGE_KEY = "in-accord-transparent-bg"
-const TRANSPARENT_BG_UPLOADS_STORAGE_KEY = "in-accord-transparent-bg-uploads"
 const TRANSPARENT_BG_ATTRIBUTE = "data-transparent-bg"
 const UPLOADED_BG_PREFIX = "uploaded:"
-const CUSTOM_THEME_COLORS_STORAGE_KEY = "in-accord-custom-theme-colors"
 
 const defaultCustomThemeColors: CustomThemeColors = {
   background: "#101419",
@@ -201,7 +198,7 @@ export const ModeToggle = () => {
           body: JSON.stringify(settings),
         })
       } catch {
-        // ignore network issues; localStorage still keeps current browser state
+        // ignore network issues; current in-memory UI state remains active
       }
     },
     []
@@ -234,31 +231,10 @@ export const ModeToggle = () => {
   }, [])
 
   React.useEffect(() => {
-    let storedValue = transparentBackgroundOptions[0].value
-    let storedUploads: string[] = []
-
-    try {
-      storedValue = window.localStorage.getItem(TRANSPARENT_BG_STORAGE_KEY) || storedValue
-      const uploadsRaw = window.localStorage.getItem(TRANSPARENT_BG_UPLOADS_STORAGE_KEY)
-      if (uploadsRaw) {
-        const parsed = JSON.parse(uploadsRaw)
-        if (Array.isArray(parsed)) {
-          storedUploads = parsed.filter((value): value is string => typeof value === "string")
-        }
-      }
-    } catch {
-      // ignore storage read issues
-    }
-
-    const isPreset = transparentBackgroundOptions.some((option) => option.value === storedValue)
-    const isUploaded = storedValue.startsWith(UPLOADED_BG_PREFIX)
-    if (!isPreset && !isUploaded) {
-      storedValue = transparentBackgroundOptions[0].value
-    }
-
-    setUploadedBackgrounds(storedUploads)
-    applyTransparentBackground(storedValue)
-    setTransparentBackground(storedValue)
+    const fallbackValue = transparentBackgroundOptions[0].value
+    applyTransparentBackground(fallbackValue)
+    setTransparentBackground(fallbackValue)
+    setUploadedBackgrounds([])
 
     let cancelled = false
 
@@ -298,14 +274,8 @@ export const ModeToggle = () => {
         setTransparentBackground(normalizedValue)
         applyTransparentBackground(normalizedValue)
 
-        try {
-          window.localStorage.setItem(TRANSPARENT_BG_STORAGE_KEY, normalizedValue)
-          window.localStorage.setItem(TRANSPARENT_BG_UPLOADS_STORAGE_KEY, JSON.stringify(serverUploads))
-        } catch {
-          // ignore quota/security errors
-        }
       } catch {
-        // keep local fallback
+        // keep default fallback
       }
     }
 
@@ -317,44 +287,64 @@ export const ModeToggle = () => {
   }, [applyTransparentBackground])
 
   React.useEffect(() => {
-    let next = defaultCustomThemeColors
+    let cancelled = false
 
-    try {
-      const raw = window.localStorage.getItem(CUSTOM_THEME_COLORS_STORAGE_KEY)
-      if (raw) {
-        const parsed = JSON.parse(raw) as Partial<CustomThemeColors>
+    const hydrateCustomTheme = async () => {
+      let next = defaultCustomThemeColors
 
-        next = {
-          background: typeof parsed.background === "string" ? parsed.background : defaultCustomThemeColors.background,
-          card: typeof parsed.card === "string" ? parsed.card : defaultCustomThemeColors.card,
-          secondary: typeof parsed.secondary === "string" ? parsed.secondary : defaultCustomThemeColors.secondary,
-          accent: typeof parsed.accent === "string" ? parsed.accent : defaultCustomThemeColors.accent,
-          primary: typeof parsed.primary === "string" ? parsed.primary : defaultCustomThemeColors.primary,
-          foreground: typeof parsed.foreground === "string" ? parsed.foreground : defaultCustomThemeColors.foreground,
-          mutedForeground:
-            typeof parsed.mutedForeground === "string"
-              ? parsed.mutedForeground
-              : defaultCustomThemeColors.mutedForeground,
-          border: typeof parsed.border === "string" ? parsed.border : defaultCustomThemeColors.border,
+      try {
+        const response = await fetch("/api/profile/preferences", {
+          method: "GET",
+          cache: "no-store",
+        })
+
+        if (response.ok) {
+          const payload = (await response.json()) as {
+            customThemeColors?: Partial<CustomThemeColors> | null
+          }
+
+          const parsed = payload.customThemeColors
+          if (parsed && typeof parsed === "object") {
+            next = {
+              background:
+                typeof parsed.background === "string" ? parsed.background : defaultCustomThemeColors.background,
+              card: typeof parsed.card === "string" ? parsed.card : defaultCustomThemeColors.card,
+              secondary:
+                typeof parsed.secondary === "string" ? parsed.secondary : defaultCustomThemeColors.secondary,
+              accent: typeof parsed.accent === "string" ? parsed.accent : defaultCustomThemeColors.accent,
+              primary: typeof parsed.primary === "string" ? parsed.primary : defaultCustomThemeColors.primary,
+              foreground:
+                typeof parsed.foreground === "string" ? parsed.foreground : defaultCustomThemeColors.foreground,
+              mutedForeground:
+                typeof parsed.mutedForeground === "string"
+                  ? parsed.mutedForeground
+                  : defaultCustomThemeColors.mutedForeground,
+              border: typeof parsed.border === "string" ? parsed.border : defaultCustomThemeColors.border,
+            }
+          }
         }
+      } catch {
+        // keep defaults
       }
-    } catch {
-      // ignore storage parsing issues
+
+      if (cancelled) {
+        return
+      }
+
+      setCustomThemeColors(next)
+      applyCustomThemeColors(next)
     }
 
-    setCustomThemeColors(next)
-    applyCustomThemeColors(next)
+    void hydrateCustomTheme()
+
+    return () => {
+      cancelled = true
+    }
   }, [applyCustomThemeColors])
 
   const onChangeTransparentBackground = (value: string) => {
     applyTransparentBackground(value)
     setTransparentBackground(value)
-
-    try {
-      window.localStorage.setItem(TRANSPARENT_BG_STORAGE_KEY, value)
-    } catch {
-      // ignore quota/security errors
-    }
 
     const uploadsSnapshot = uploadedBackgrounds
     void persistTransparentBackgroundSettings({
@@ -404,24 +394,12 @@ export const ModeToggle = () => {
         const next = [uploadedUrl, ...previous.filter((value) => value !== uploadedUrl)]
         nextUploads = next
 
-        try {
-          window.localStorage.setItem(TRANSPARENT_BG_UPLOADS_STORAGE_KEY, JSON.stringify(next))
-        } catch {
-          // ignore quota/security errors
-        }
-
         return next
       })
 
       const selectedToken = `${UPLOADED_BG_PREFIX}${uploadedUrl}`
       applyTransparentBackground(selectedToken)
       setTransparentBackground(selectedToken)
-
-      try {
-        window.localStorage.setItem(TRANSPARENT_BG_STORAGE_KEY, selectedToken)
-      } catch {
-        // ignore quota/security errors
-      }
 
       void persistTransparentBackgroundSettings({
         selectedBackground: selectedToken,
@@ -441,11 +419,15 @@ export const ModeToggle = () => {
     setCustomThemeColors(next)
     applyCustomThemeColors(next)
 
-    try {
-      window.localStorage.setItem(CUSTOM_THEME_COLORS_STORAGE_KEY, JSON.stringify(next))
-    } catch {
-      // ignore quota/security errors
-    }
+    void fetch("/api/profile/preferences", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        customThemeColors: next,
+      }),
+    })
   }, [applyCustomThemeColors])
 
   const onChangeCustomThemeColor = (key: keyof CustomThemeColors, value: string) => {

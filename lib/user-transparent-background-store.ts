@@ -1,15 +1,10 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { getUserPreferences, updateUserPreferences } from "@/lib/user-preferences";
 
 type TransparentBackgroundSettings = {
   selectedBackground: string | null;
   uploadedBackgrounds: string[];
 };
 
-type TransparentBackgroundMap = Record<string, TransparentBackgroundSettings>;
-
-const dataDir = path.join(process.cwd(), ".data");
-const settingsFile = path.join(dataDir, "user-transparent-backgrounds.json");
 
 const normalizeUrlList = (values: unknown): string[] => {
   if (!Array.isArray(values)) {
@@ -65,45 +60,15 @@ const normalizeSettings = (value: unknown): TransparentBackgroundSettings => {
   };
 };
 
-async function readSettingsMap(): Promise<TransparentBackgroundMap> {
-  try {
-    const raw = await readFile(settingsFile, "utf8");
-    const parsed = JSON.parse(raw) as unknown;
-
-    if (!parsed || typeof parsed !== "object") {
-      return {};
-    }
-
-    const result: TransparentBackgroundMap = {};
-    for (const [userId, value] of Object.entries(parsed as Record<string, unknown>)) {
-      result[userId] = normalizeSettings(value);
-    }
-
-    return result;
-  } catch {
-    return {};
-  }
-}
-
-async function writeSettingsMap(map: TransparentBackgroundMap) {
-  await mkdir(dataDir, { recursive: true });
-  await writeFile(settingsFile, JSON.stringify(map, null, 2), "utf8");
-}
-
 export async function getUserTransparentBackgroundSettings(
   userId: string
 ): Promise<TransparentBackgroundSettings> {
-  const map = await readSettingsMap();
-  const value = map[userId];
+  const preferences = await getUserPreferences(userId);
 
-  if (!value) {
-    return {
-      selectedBackground: null,
-      uploadedBackgrounds: [],
-    };
-  }
-
-  return normalizeSettings(value);
+  return normalizeSettings({
+    selectedBackground: preferences.transparentBackground.selectedBackground,
+    uploadedBackgrounds: preferences.transparentBackground.uploadedBackgrounds,
+  });
 }
 
 export async function setUserTransparentBackgroundSettings(
@@ -113,15 +78,15 @@ export async function setUserTransparentBackgroundSettings(
     uploadedBackgrounds?: string[];
   }
 ) {
-  const map = await readSettingsMap();
-
   const normalized = normalizeSettings({
     selectedBackground: settings.selectedBackground,
     uploadedBackgrounds: settings.uploadedBackgrounds,
   });
 
-  map[userId] = normalized;
-  await writeSettingsMap(map);
+  await updateUserPreferences(userId, {
+    transparentBackgroundSelected: normalized.selectedBackground,
+    transparentBackgroundUploads: normalized.uploadedBackgrounds,
+  });
 
   return normalized;
 }

@@ -15,6 +15,7 @@ export const NavigationAction = () => {
         onClick={() => onOpen("createServer")}
         className="group flex items-center shadow-none ring-0 outline-none border-0 bg-transparent"
         style={{ boxShadow: "none", filter: "none", WebkitAppearance: "none", appearance: "none" }}
+        suppressHydrationWarning
       >
         <div
           className="flex mx-3 h-[48px] w-[48px] rounded-[24px] 
@@ -22,10 +23,12 @@ export const NavigationAction = () => {
         items-center justify-center bg-background dark:bg-neutral-700 
         group-hover:bg-emerald-500"
           style={{ boxShadow: "none", filter: "none" }}
+          suppressHydrationWarning
         >
           <Plus
             className="group-hover:text-white transition text-emerald-500"
             size={25}
+            suppressHydrationWarning
           />
         </div>
       </button>

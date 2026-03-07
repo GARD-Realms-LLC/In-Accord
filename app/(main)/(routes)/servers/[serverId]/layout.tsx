@@ -7,7 +7,7 @@ import { ServerSidebar } from "@/components/server/server-sidebar";
 import { ServerUserRolesRail } from "@/components/server/server-user-roles-rail";
 import { ServerRouteShell } from "@/components/server/server-route-shell";
 import { ChannelType, MemberRole } from "@/lib/db/types";
-import { isInAccordAdministrator } from "@/lib/in-accord-admin";
+import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 
 type ChannelRow = {
   id: string;
@@ -96,7 +96,7 @@ const ServerIdLayout = async ({
   const videoChannels = channelRows.filter((row) => row.type === ChannelType.VIDEO);
 
   const currentMemberRole = memberRows.find((row) => row.profileId === profile.id)?.role;
-  const canSeeInvisibleMembers = isInAccordAdministrator(profile.role) || currentMemberRole === MemberRole.ADMIN;
+  const canSeeInvisibleMembers = hasInAccordAdministrativeAccess(profile.role) || currentMemberRole === MemberRole.ADMIN;
 
   const onlineUsers = memberRows
     .filter((row) => canSeeInvisibleMembers || String(row.presenceStatus ?? "ONLINE").toUpperCase() !== "INVISIBLE")

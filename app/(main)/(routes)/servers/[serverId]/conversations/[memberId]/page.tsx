@@ -4,6 +4,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db, member } from "@/lib/db";
 import { getOrCreateConversation } from "@/lib/conversation";
 import { currentProfile } from "@/lib/current-profile";
+import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 import { isBotUser } from "@/lib/is-bot-user";
 import { ChatHeader } from "@/components/chat/chat-header";
 // import { ChatMessages } from "@/components/chat/chat-messages";
@@ -70,13 +71,7 @@ const MemberIdPage = async ({
     return redirect(`/servers/${serverId}`);
   }
 
-  const normalizedGlobalRole = (profile.role ?? "").trim().toUpperCase();
-  const isInAccordAdministrator =
-    normalizedGlobalRole === "ADMINISTRATOR" ||
-    normalizedGlobalRole === "IN-ACCORD ADMINISTRATOR" ||
-    normalizedGlobalRole === "IN_ACCORD_ADMINISTRATOR" ||
-    normalizedGlobalRole === "ADMIN";
-  const canBypassPresenceRestrictions = isInAccordAdministrator || currentMember.role === "ADMIN";
+  const canBypassPresenceRestrictions = hasInAccordAdministrativeAccess(profile.role) || currentMember.role === "ADMIN";
   const targetStatus = String(targetMemberRow.presenceStatus ?? "ONLINE").toUpperCase();
 
   if (targetMemberRow.profileId !== profile.id) {
@@ -110,6 +105,8 @@ const MemberIdPage = async ({
       <ChatHeader
         imageUrl={otherMember.profile.imageUrl}
         name={otherMember.profile.name}
+        profileId={otherMember.profileId}
+        memberId={otherMember.id}
         isBot={isOtherMemberBot}
         profileCreatedAt={otherMember.profile.createdAt}
         serverId={serverId}

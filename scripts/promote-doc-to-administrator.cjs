@@ -21,8 +21,55 @@ function readLiveDatabaseUrl() {
   return url;
 }
 
+function readDatabaseUrlFromEnvFile(key) {
+  const envPath = path.join(process.cwd(), ".env");
+  const envRaw = fs.readFileSync(envPath, "utf8");
+  const line = envRaw
+    .split(/\r?\n/)
+    .find((l) => l.trim().startsWith(`${key}=`));
+
+  if (!line) {
+    return "";
+  }
+
+  return line.slice(`${key}=`.length).trim();
+}
+
+function isUnsafeUrl(url) {
+  const value = String(url || "").trim();
+  if (!value) {
+    return true;
+  }
+
+  if (/localhost|127\.0\.0\.1/i.test(value)) {
+    return true;
+  }
+
+  if (!/^postgres(ql)?:\/\//i.test(value)) {
+    return true;
+  }
+
+  return false;
+}
+
+function resolveConnectionString() {
+  const candidates = [
+    process.env.LIVE_DATABASE_URL,
+    process.env.DATABASE_URL,
+    readDatabaseUrlFromEnvFile("LIVE_DATABASE_URL"),
+    readDatabaseUrlFromEnvFile("DATABASE_URL"),
+  ].map((value) => String(value || "").trim());
+
+  const picked = candidates.find((value) => !isUnsafeUrl(value));
+  if (!picked) {
+    throw new Error("Could not resolve a valid non-local postgres URL from LIVE_DATABASE_URL or DATABASE_URL");
+  }
+
+  return picked;
+}
+
 (async () => {
-  const connectionString = process.env.LIVE_DATABASE_URL || readLiveDatabaseUrl();
+  const connectionString = resolveConnectionString();
   const client = new Client({ connectionString });
   await client.connect();
 
@@ -78,7 +125,7 @@ function readLiveDatabaseUrl() {
     const result = await client.query(
       `
       UPDATE "Member"
-      SET "role" = 'ADMINISTRATOR'
+      SET "role" = 'ADMIN'
       WHERE "profileId" = ANY($1::text[])
       RETURNING "id", "profileId", "serverId", "role"::text as role;
       `,
@@ -90,7 +137,7 @@ function readLiveDatabaseUrl() {
       console.log(`- ${u.name ?? "(no name)"} <${u.email ?? "no-email"}> (${u.userId})`);
     }
 
-    console.log(`Updated Member rows to ADMINISTRATOR: ${result.rowCount}`);
+    console.log(`Updated Member rows to ADMIN: ${result.rowCount}`);
 
     if (result.rowCount > 0) {
       const verify = await client.query(

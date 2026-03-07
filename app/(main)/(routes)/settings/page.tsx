@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
-import { Crown } from "lucide-react";
+import { Crown, Wrench } from "lucide-react";
 
+import { ModeratorLineIcon } from "@/components/moderator-line-icon";
+import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
 import { currentProfile } from "@/lib/current-profile";
-import { isInAccordAdministrator } from "@/lib/in-accord-admin";
+import { isInAccordAdministrator, isInAccordDeveloper, isInAccordModerator } from "@/lib/in-accord-admin";
 
 const SettingsPage = async () => {
   const profile = await currentProfile();
@@ -11,7 +13,9 @@ const SettingsPage = async () => {
     return redirect("/sign-in");
   }
 
-  const hasAdminCrown = isInAccordAdministrator(profile.role);
+  const isDeveloper = isInAccordDeveloper(profile.role);
+  const isAdministrator = isInAccordAdministrator(profile.role);
+  const isModerator = isInAccordModerator(profile.role);
 
   return (
     <div className="h-full bg-[#313338] p-6 text-[#dbdee1]">
@@ -26,14 +30,24 @@ const SettingsPage = async () => {
           <div className="mt-3 space-y-2 text-sm">
             <p>
               <span className="text-[#949ba4]">Name:</span>{" "}
-              <span className="text-white">{profile.realName || "Unknown User"}</span>
+              <span className="text-white">
+                {profile.realName || profile.profileName || profile.email?.split("@")[0] || profile.id || "Unknown User"}
+              </span>
             </p>
             <p>
               <span className="text-[#949ba4]">Profile Name:</span>{" "}
               <span className="inline-flex items-center gap-1.5 text-white">
-                <span>{profile.profileName || "Not set"}</span>
-                {hasAdminCrown ? (
-                  <Crown className="h-3.5 w-3.5 shrink-0 text-rose-500" aria-label="In-Accord Administrator" />
+                <ProfileNameWithServerTag
+                  name={profile.profileName || "Not set"}
+                  profileId={profile.id}
+                  nameClassName=""
+                />
+                {isDeveloper ? (
+                  <Wrench className="h-3.5 w-3.5 shrink-0 text-cyan-400" aria-label="Developer" />
+                ) : isAdministrator ? (
+                  <Crown className="h-3.5 w-3.5 shrink-0 text-rose-500" aria-label="Administrator" />
+                ) : isModerator ? (
+                  <ModeratorLineIcon className="h-3.5 w-3.5 shrink-0 text-indigo-500" aria-label="Moderator" />
                 ) : null}
               </span>
             </p>

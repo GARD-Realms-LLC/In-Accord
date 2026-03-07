@@ -1262,3 +1262,48 @@ select,
 .settings-theme-scope .border-white\/10 {
   border-color: var(--settings-border) !important;
 }
+
+/* Global readable spacing between icons/images and nearby text labels. */
+:root {
+  --icon-text-gap: 0.45rem;
+}
+
+:where(
+  button,
+  a,
+  label,
+  p,
+  span,
+  div,
+  li,
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6
+)
+  > :is(svg, img, .lucide)
+  + :is(span, p, small, strong, em, b, i, label) {
+  margin-inline-start: var(--icon-text-gap);
+}
+
+:where(
+  button,
+  a,
+  label,
+  p,
+  span,
+  div,
+  li,
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6
+)
+  > :is(span, p, small, strong, em, b, i, label)
+  + :is(svg, img, .lucide) {
+  margin-inline-start: var(--icon-text-gap);
+}

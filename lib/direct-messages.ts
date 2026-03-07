@@ -6,6 +6,7 @@ export interface GlobalRecentDmItem {
   conversationId: string;
   serverId: string;
   memberId: string;
+  profileId: string;
   displayName: string;
   imageUrl: string | null;
   profileCreatedAt: Date | null;
@@ -43,6 +44,7 @@ export const getGlobalRecentDmsForProfile = async ({
       cwo."conversationId" as "conversationId",
       om."serverId" as "serverId",
       om."id" as "memberId",
+      om."profileId" as "profileId",
       coalesce(nullif(trim(up."profileName"), ''), u."name", u."email", 'User') as "displayName",
       coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
       u."account.created" as "profileCreatedAt",
@@ -69,6 +71,7 @@ export const getGlobalRecentDmsForProfile = async ({
       conversationId: string;
       serverId: string;
       memberId: string;
+      profileId: string;
       displayName: string;
       imageUrl: string | null;
       profileCreatedAt: Date | string | null;
@@ -81,6 +84,7 @@ export const getGlobalRecentDmsForProfile = async ({
     conversationId: row.conversationId,
     serverId: row.serverId,
     memberId: row.memberId,
+    profileId: row.profileId,
     displayName: row.displayName,
     imageUrl: row.imageUrl,
     profileCreatedAt: row.profileCreatedAt ? new Date(row.profileCreatedAt) : null,

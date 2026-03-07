@@ -168,6 +168,7 @@ export const NavigationItem = ({
           onMouseLeave={scheduleClosePopover}
           className="group relative flex items-center shadow-none ring-0 outline-none border-0 bg-transparent"
           style={{ boxShadow: "none", filter: "none", WebkitAppearance: "none", appearance: "none" }}
+          suppressHydrationWarning
           title={name}
           aria-label={`Open ${name} server`}
         >

@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { currentProfile } from "@/lib/current-profile";
 import { db } from "@/lib/db";
 import { getServerBannerConfig } from "@/lib/server-banner-store";
+import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 
 type ServerRow = {
   id: string;
@@ -19,16 +20,6 @@ type ServerRow = {
   channelCount: number | string | null;
 };
 
-const isInAccordAdministrator = (role: string | null | undefined) => {
-  const normalizedRole = (role ?? "").trim().toUpperCase();
-  return (
-    normalizedRole === "ADMINISTRATOR" ||
-    normalizedRole === "IN-ACCORD ADMINISTRATOR" ||
-    normalizedRole === "IN_ACCORD_ADMINISTRATOR" ||
-    normalizedRole === "ADMIN"
-  );
-};
-
 export async function GET() {
   try {
     const profile = await currentProfile();
@@ -37,7 +28,7 @@ export async function GET() {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    if (!isInAccordAdministrator(profile.role)) {
+    if (!hasInAccordAdministrativeAccess(profile.role)) {
       return new NextResponse("Forbidden", { status: 403 });
     }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Folder, FolderOpen, Pencil, Trash2 } from "lucide-react";
 
 import { NavigationItem } from "@/components/navigation/navigation-item";
@@ -31,81 +31,6 @@ type ServerFolder = {
 type NavigationServersCollectionProps = {
   myServers: ServerEntry[];
   joinedServers: ServerEntry[];
-};
-
-const STORAGE_KEY = "in-accord.server-rail-folders.v1";
-const STORAGE_DB_NAME = "in-accord-ui-state";
-const STORAGE_STORE_NAME = "kv";
-
-type PersistenceMode = "local" | "indexeddb" | "session" | "memory";
-
-const openFoldersDb = async (): Promise<IDBDatabase | null> => {
-  if (typeof window === "undefined" || typeof window.indexedDB === "undefined") {
-    return null;
-  }
-
-  return new Promise((resolve) => {
-    const request = window.indexedDB.open(STORAGE_DB_NAME, 1);
-
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(STORAGE_STORE_NAME)) {
-        db.createObjectStore(STORAGE_STORE_NAME);
-      }
-    };
-
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => resolve(null);
-  });
-};
-
-const readFromIndexedDb = async (key: string): Promise<string | null> => {
-  const db = await openFoldersDb();
-  if (!db) {
-    return null;
-  }
-
-  return new Promise((resolve) => {
-    const tx = db.transaction(STORAGE_STORE_NAME, "readonly");
-    const store = tx.objectStore(STORAGE_STORE_NAME);
-    const request = store.get(key);
-
-    request.onsuccess = () => {
-      const value = request.result;
-      resolve(typeof value === "string" ? value : null);
-    };
-
-    request.onerror = () => resolve(null);
-    tx.oncomplete = () => db.close();
-    tx.onerror = () => db.close();
-    tx.onabort = () => db.close();
-  });
-};
-
-const writeToIndexedDb = async (key: string, value: string): Promise<boolean> => {
-  const db = await openFoldersDb();
-  if (!db) {
-    return false;
-  }
-
-  return new Promise((resolve) => {
-    const tx = db.transaction(STORAGE_STORE_NAME, "readwrite");
-    const store = tx.objectStore(STORAGE_STORE_NAME);
-    store.put(value, key);
-
-    tx.oncomplete = () => {
-      db.close();
-      resolve(true);
-    };
-    tx.onerror = () => {
-      db.close();
-      resolve(false);
-    };
-    tx.onabort = () => {
-      db.close();
-      resolve(false);
-    };
-  });
 };
 
 const safeParseFolders = (raw: string | null): ServerFolder[] => {
@@ -149,13 +74,44 @@ const safeParseFolders = (raw: string | null): ServerFolder[] => {
 const pruneEmptyFolders = (sourceFolders: ServerFolder[]) =>
   sourceFolders.filter((folder) => folder.serverIds.length > 0);
 
+const normalizeFoldersForState = (source: ServerFolder[]) =>
+  source
+    .map((folder) => ({
+      ...folder,
+      serverIds: Array.from(new Set(folder.serverIds)),
+    }))
+    .filter((folder) => folder.serverIds.length > 0 || folder.name.trim().length > 0);
+
+const folderLayoutSignature = (source: ServerFolder[]) =>
+  JSON.stringify(
+    source.map((folder) => ({
+      id: folder.id,
+      name: folder.name,
+      serverIds: folder.serverIds,
+    }))
+  );
+
+const resolveDraggedServerId = (
+  event: { dataTransfer?: DataTransfer | null },
+  fallbackId: string | null
+) => {
+  const fromState = String(fallbackId ?? "").trim();
+  if (fromState) {
+    return fromState;
+  }
+
+  const fromDataTransfer = String(event.dataTransfer?.getData("text/plain") ?? "").trim();
+  return fromDataTransfer || null;
+};
+
 export const NavigationServersCollection = ({
   myServers,
   joinedServers,
 }: NavigationServersCollectionProps) => {
   const [folders, setFolders] = useState<ServerFolder[]>([]);
   const [isFoldersLoaded, setIsFoldersLoaded] = useState(false);
-  const [persistenceMode, setPersistenceMode] = useState<PersistenceMode>("local");
+  const [isSyncingFolders, setIsSyncingFolders] = useState(false);
+  const [foldersSyncError, setFoldersSyncError] = useState<string | null>(null);
   const [expandedFolderId, setExpandedFolderId] = useState<string | null>(null);
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [editingFolderName, setEditingFolderName] = useState("");
@@ -163,6 +119,8 @@ export const NavigationServersCollection = ({
   const [draggedServerId, setDraggedServerId] = useState<string | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [dragOverServerId, setDragOverServerId] = useState<string | null>(null);
+  const hasLocalFolderEdits = useRef(false);
+  const lastAppliedLayoutSignature = useRef<string>("[]");
 
   const allServers = useMemo(() => [...myServers, ...joinedServers], [myServers, joinedServers]);
   const allServerMap = useMemo(() => {
@@ -177,96 +135,130 @@ export const NavigationServersCollection = ({
     let isCancelled = false;
 
     const loadFolders = async () => {
-      let raw: string | null = null;
+      let loaded: ServerFolder[] = [];
 
       try {
-        raw = window.localStorage.getItem(STORAGE_KEY);
-      } catch {
-        raw = null;
-      }
+        const response = await fetch("/api/navigation/server-rail-layout", {
+          method: "GET",
+          cache: "no-store",
+        });
 
-      if (!raw) {
-        raw = await readFromIndexedDb(STORAGE_KEY);
-      }
-
-      if (!raw) {
-        try {
-          raw = window.sessionStorage.getItem(STORAGE_KEY);
-        } catch {
-          raw = null;
+        if (response.ok) {
+          const data = (await response.json()) as { folders?: unknown };
+          const parsed = Array.isArray(data?.folders)
+            ? safeParseFolders(JSON.stringify(data.folders))
+            : [];
+          loaded = parsed;
+          setFoldersSyncError(null);
+        } else {
+          setFoldersSyncError("Unable to load rail layout from database.");
         }
+      } catch {
+        setFoldersSyncError("Unable to load rail layout from database.");
       }
 
-      const loaded = safeParseFolders(raw);
-      const validServerIds = new Set(allServers.map((server) => server.id));
-
-      const normalized = loaded
-        .map((folder) => ({
-          ...folder,
-          serverIds: folder.serverIds.filter((id) => validServerIds.has(id)),
-        }))
-        .filter((folder) => folder.serverIds.length > 0 || folder.name.trim().length > 0);
+      const normalized = normalizeFoldersForState(loaded);
+      const signature = folderLayoutSignature(normalized);
 
       if (isCancelled) {
         return;
       }
 
-      setFolders(normalized);
+      if (!hasLocalFolderEdits.current && signature !== lastAppliedLayoutSignature.current) {
+        setFolders(normalized);
+        lastAppliedLayoutSignature.current = signature;
+      }
+
       setIsFoldersLoaded(true);
     };
 
     void loadFolders();
 
+    const pollingTimer = window.setInterval(() => {
+      void loadFolders();
+    }, 1800);
+
+    const onWindowFocus = () => {
+      void loadFolders();
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void loadFolders();
+      }
+    };
+
+    window.addEventListener("focus", onWindowFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
     return () => {
       isCancelled = true;
+      window.clearInterval(pollingTimer);
+      window.removeEventListener("focus", onWindowFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [allServers]);
 
   useEffect(() => {
-    if (!isFoldersLoaded) {
+    if (!isFoldersLoaded || !hasLocalFolderEdits.current) {
       return;
     }
 
-    const payload = JSON.stringify(
-      folders.map((folder) => ({
-        id: folder.id,
-        name: folder.name,
-        serverIds: Array.from(new Set(folder.serverIds)),
-      }))
-    );
+    const payload = folders.map((folder) => ({
+      id: folder.id,
+      name: folder.name,
+      serverIds: Array.from(new Set(folder.serverIds)),
+    }));
+    const payloadSignature = folderLayoutSignature(payload);
 
-    const persist = async () => {
+    const timeoutId = window.setTimeout(async () => {
       try {
-        window.localStorage.setItem(STORAGE_KEY, payload);
-        setPersistenceMode("local");
-        return;
+        setIsSyncingFolders(true);
+
+        const response = await fetch("/api/navigation/server-rail-layout", {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ folders: payload }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to persist server rail folders.");
+        }
+
+        hasLocalFolderEdits.current = false;
+        lastAppliedLayoutSignature.current = payloadSignature;
+        setFoldersSyncError(null);
       } catch {
-        // continue
+        setFoldersSyncError("Unable to save rail layout to database.");
+      } finally {
+        setIsSyncingFolders(false);
       }
+    }, 250);
 
-      const idbSaved = await writeToIndexedDb(STORAGE_KEY, payload);
-      if (idbSaved) {
-        setPersistenceMode("indexeddb");
-        return;
-      }
-
-      try {
-        window.sessionStorage.setItem(STORAGE_KEY, payload);
-        setPersistenceMode("session");
-        return;
-      } catch {
-        setPersistenceMode("memory");
-      }
-
-      console.warn("[SERVER_RAIL_FOLDERS_PERSIST] Unable to persist folders in any storage backend");
+    return () => {
+      window.clearTimeout(timeoutId);
     };
-
-    void persist();
   }, [folders, isFoldersLoaded]);
 
   const folderServerIds = useMemo(
     () => new Set(folders.flatMap((folder) => folder.serverIds)),
     [folders]
+  );
+
+  const visibleFolders = useMemo(
+    () =>
+      folders
+        .map((folder) => {
+          const visibleServerIds = folder.serverIds.filter((id) => allServerMap.has(id));
+          return {
+            ...folder,
+            visibleServerIds,
+          };
+        })
+        .filter((folder) => folder.visibleServerIds.length > 0),
+    [allServerMap, folders]
   );
 
   const recentlyUngroupedSet = useMemo(
@@ -297,6 +289,7 @@ export const NavigationServersCollection = ({
 
   const assignServerToFolder = (serverId: string, targetFolderId: string) => {
     setRecentlyUngroupedServerIds((prev) => prev.filter((id) => id !== serverId));
+    hasLocalFolderEdits.current = true;
     setFolders((prev) =>
       pruneEmptyFolders(
         prev.map((folder) => {
@@ -319,6 +312,7 @@ export const NavigationServersCollection = ({
   };
 
   const ungroupServer = (serverId: string) => {
+    hasLocalFolderEdits.current = true;
     setFolders((prev) =>
       pruneEmptyFolders(
         prev.map((folder) => ({
@@ -339,6 +333,7 @@ export const NavigationServersCollection = ({
       prev.filter((id) => id !== firstServerId && id !== secondServerId)
     );
 
+    hasLocalFolderEdits.current = true;
     setFolders((prev) => {
       const firstServer = allServerMap.get(firstServerId);
       const fallbackName = firstServer?.name ? `${firstServer.name} Group` : "New Folder";
@@ -416,6 +411,8 @@ export const NavigationServersCollection = ({
       )
     );
 
+    hasLocalFolderEdits.current = true;
+
     closeEditFolderPopup();
   };
 
@@ -444,6 +441,7 @@ export const NavigationServersCollection = ({
       });
     }
 
+    hasLocalFolderEdits.current = true;
     setFolders((prev) => prev.filter((folder) => folder.id !== editingFolderId));
     setExpandedFolderId((prev) => (prev === editingFolderId ? null : prev));
     closeEditFolderPopup();
@@ -453,7 +451,8 @@ export const NavigationServersCollection = ({
     <div
       key={server.id}
       onDragOver={(event) => {
-        if (!draggedServerId || draggedServerId === server.id) {
+        const activeDraggedServerId = resolveDraggedServerId(event, draggedServerId);
+        if (!activeDraggedServerId || activeDraggedServerId === server.id) {
           return;
         }
         event.preventDefault();
@@ -467,8 +466,9 @@ export const NavigationServersCollection = ({
       onDrop={(event) => {
         event.preventDefault();
         event.stopPropagation();
-        if (draggedServerId) {
-          dropServerOnServer(draggedServerId, server.id);
+        const activeDraggedServerId = resolveDraggedServerId(event, draggedServerId);
+        if (activeDraggedServerId) {
+          dropServerOnServer(activeDraggedServerId, server.id);
         }
         setDragOverServerId(null);
         setDraggedServerId(null);
@@ -497,15 +497,17 @@ export const NavigationServersCollection = ({
   return (
     <div
       onDragOver={(event) => {
-        if (!draggedServerId) {
+        const activeDraggedServerId = resolveDraggedServerId(event, draggedServerId);
+        if (!activeDraggedServerId) {
           return;
         }
         event.preventDefault();
       }}
       onDrop={(event) => {
         event.preventDefault();
-        if (draggedServerId) {
-          ungroupServer(draggedServerId);
+        const activeDraggedServerId = resolveDraggedServerId(event, draggedServerId);
+        if (activeDraggedServerId) {
+          ungroupServer(activeDraggedServerId);
         }
         setDraggedServerId(null);
         setDragOverFolderId(null);
@@ -580,21 +582,23 @@ export const NavigationServersCollection = ({
         </DialogContent>
       </Dialog>
 
-      {persistenceMode === "session" ? (
-        <div className="mb-2 px-3 text-center text-[9px] font-semibold uppercase tracking-[0.08em] text-yellow-600 dark:text-yellow-400">
-          Persistent storage full — temporary session fallback active
-        </div>
-      ) : persistenceMode === "memory" ? (
+      {foldersSyncError ? (
         <div className="mb-2 px-3 text-center text-[9px] font-semibold uppercase tracking-[0.08em] text-red-600 dark:text-red-400">
-          Unable to persist folder layout in this browser
+          {foldersSyncError}
+        </div>
+      ) : null}
+
+      {isSyncingFolders ? (
+        <div className="mb-2 px-3 text-center text-[9px] font-semibold uppercase tracking-[0.08em] text-emerald-700 dark:text-emerald-300">
+          Syncing rail layout...
         </div>
       ) : null}
 
       {folders.length > 0 || recentlyUngroupedServers.length > 0 ? (
         <div className="mb-4 flex w-full flex-col items-center gap-2 px-2">
-          {folders.map((folder) => {
+          {visibleFolders.map((folder) => {
             const isExpanded = expandedFolderId === folder.id;
-            const containedServers = folder.serverIds
+            const containedServers = folder.visibleServerIds
               .map((id) => allServerMap.get(id))
               .filter((server): server is ServerEntry => Boolean(server));
             const previewServers = containedServers.slice(0, 4);
@@ -605,6 +609,10 @@ export const NavigationServersCollection = ({
                   type="button"
                   onClick={() => setExpandedFolderId((prev) => (prev === folder.id ? null : folder.id))}
                   onDragOver={(event) => {
+                    const activeDraggedServerId = resolveDraggedServerId(event, draggedServerId);
+                    if (!activeDraggedServerId) {
+                      return;
+                    }
                     event.preventDefault();
                     setDragOverFolderId(folder.id);
                   }}
@@ -616,8 +624,9 @@ export const NavigationServersCollection = ({
                   onDrop={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
-                    if (draggedServerId) {
-                      assignServerToFolder(draggedServerId, folder.id);
+                    const activeDraggedServerId = resolveDraggedServerId(event, draggedServerId);
+                    if (activeDraggedServerId) {
+                      assignServerToFolder(activeDraggedServerId, folder.id);
                     }
                     setDragOverFolderId(null);
                     setDragOverServerId(null);
@@ -714,6 +723,12 @@ export const NavigationServersCollection = ({
         </div>
       ))}
 
+      {myServers.length === 0 ? (
+        <div className="mb-2 text-center text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
+          None
+        </div>
+      ) : null}
+
       <div className="mt-1 mb-2 flex justify-center">
         <div className="h-0.5 w-10 rounded-md bg-zinc-300 dark:bg-zinc-700" />
       </div>
@@ -728,9 +743,9 @@ export const NavigationServersCollection = ({
         </div>
       ))}
 
-      {ungroupedJoinedServers.length === 0 ? (
+      {joinedServers.length === 0 ? (
         <div className="mb-2 text-center text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-          N/A
+          None
         </div>
       ) : null}
     </div>

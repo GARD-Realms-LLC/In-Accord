@@ -2,11 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Ban, UserPlus } from "lucide-react";
 
+import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
 import { UserAvatar } from "@/components/user-avatar";
 
 interface PendingRequestItemProps {
   requestId: string;
+  profileId?: string | null;
   displayName: string;
   email: string | null;
   imageUrl: string | null;
@@ -16,6 +19,7 @@ interface PendingRequestItemProps {
 
 export const PendingRequestItem = ({
   requestId,
+  profileId,
   displayName,
   email,
   imageUrl,
@@ -61,7 +65,9 @@ export const PendingRequestItem = ({
       <div className="flex items-center gap-2">
         <UserAvatar src={imageUrl ?? undefined} className="h-8 w-8" />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-foreground">{displayName}</p>
+          <p className="truncate text-sm font-semibold text-foreground">
+            <ProfileNameWithServerTag name={displayName} profileId={profileId} />
+          </p>
           <p className="truncate text-xs text-muted-foreground">
             {email ?? "No email"} • {isIncoming ? "Incoming" : "Outgoing"}
             {isSpam ? " • Spam" : ""}
@@ -75,8 +81,9 @@ export const PendingRequestItem = ({
                 type="button"
                 onClick={() => handleAction("accept")}
                 disabled={isSubmitting}
-                className="rounded bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center gap-1 rounded bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
               >
+                <UserPlus className="h-3.5 w-3.5" aria-hidden="true" />
                 Accept
               </button>
               <button
@@ -91,8 +98,9 @@ export const PendingRequestItem = ({
                 type="button"
                 onClick={() => handleAction("block")}
                 disabled={isSubmitting}
-                className="rounded bg-destructive px-2 py-1 text-[11px] font-semibold text-destructive-foreground transition hover:bg-destructive/90 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center gap-1 rounded bg-destructive px-2 py-1 text-[11px] font-semibold text-destructive-foreground transition hover:bg-destructive/90 disabled:cursor-not-allowed disabled:opacity-60"
               >
+                <Ban className="h-3.5 w-3.5" aria-hidden="true" />
                 Block
               </button>
             </>

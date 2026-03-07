@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { MemberRole } from "@/lib/db/types";
 import { OnlineUsersList } from "@/components/server/online-users-list";
 import { currentProfile } from "@/lib/current-profile";
-import { isInAccordAdministrator } from "@/lib/in-accord-admin";
+import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 import { ensureServerRolesSchema } from "@/lib/server-roles";
 import { server } from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
@@ -84,8 +84,8 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
   const rows = (membersResult as unknown as { rows: RoleRow[] }).rows;
 
   const currentMemberRole = rows.find((row) => row.profileId === profile?.id)?.role;
-  const canSeeInvisibleMembers = isInAccordAdministrator(profile?.role) || currentMemberRole === MemberRole.ADMIN;
-  const canSeeInvisibleCount = Boolean(ownerRecord) || isInAccordAdministrator(profile?.role);
+  const canSeeInvisibleMembers = hasInAccordAdministrativeAccess(profile?.role) || currentMemberRole === MemberRole.ADMIN;
+  const canSeeInvisibleCount = Boolean(ownerRecord) || hasInAccordAdministrativeAccess(profile?.role);
 
   const totalMembersCount = rows.length;
   const onlineCount = rows.filter((row) => {

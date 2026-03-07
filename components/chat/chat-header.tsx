@@ -3,6 +3,7 @@ import { Hash } from "lucide-react";
 import { BotAppBadge } from "@/components/bot-app-badge";
 import { NewUserCloverBadge } from "@/components/new-user-clover-badge";
 import { MobileToggle } from "@/components/mobile-toggle";
+import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
 import { UserAvatar } from "@/components/user-avatar";
 
 import { ChatVideoButton } from "./chat-video-button";
@@ -13,6 +14,8 @@ interface ChatHeaderProps {
   topic?: string | null;
   type: "channel" | "conversation";
   imageUrl?: string;
+  profileId?: string;
+  memberId?: string;
   isBot?: boolean;
   profileCreatedAt?: Date | string | null;
 }
@@ -23,6 +26,8 @@ export const ChatHeader = ({
   topic,
   type,
   imageUrl,
+  profileId,
+  memberId,
   isBot,
   profileCreatedAt,
 }: ChatHeaderProps) => {
@@ -39,7 +44,16 @@ export const ChatHeader = ({
           <UserAvatar src={imageUrl} className="h-8 w-8 md:h-8 md:w-8 mr-2" />
         )}
         <div className="flex min-w-0 items-center gap-1.5">
-          <p className="truncate font-semibold text-md text-black dark:text-white">{name}</p>
+          {type === "conversation" ? (
+            <ProfileNameWithServerTag
+              name={name}
+              profileId={profileId}
+              memberId={memberId}
+              nameClassName="font-semibold text-md text-black dark:text-white"
+            />
+          ) : (
+            <p className="truncate font-semibold text-md text-black dark:text-white">{name}</p>
+          )}
           {type === "conversation" ? <NewUserCloverBadge createdAt={profileCreatedAt} className="text-sm" /> : null}
           {type === "conversation" && isBot ? <BotAppBadge className="h-4 px-1 text-[9px]" /> : null}
         </div>

@@ -1,10 +1,50 @@
-export const isInAccordAdministrator = (role: string | null | undefined) => {
-  const normalizedRole = (role ?? "").trim().toUpperCase();
+const IN_ACCORD_ADMIN_ROLE_ALIASES = new Set([
+  "ADMIN",
+  "ADMINISTRATOR",
+]);
 
-  return (
-    normalizedRole === "ADMINISTRATOR" ||
-    normalizedRole === "IN-ACCORD ADMINISTRATOR" ||
-    normalizedRole === "IN_ACCORD_ADMINISTRATOR" ||
-    normalizedRole === "ADMIN"
-  );
+const IN_ACCORD_DEVELOPER_ROLE_ALIASES = new Set([
+  "DEVELOPER",
+]);
+
+const IN_ACCORD_MODERATOR_ROLE_ALIASES = new Set([
+  "MODERATOR",
+  "MOD",
+]);
+
+export const normalizeInAccordRole = (role: string | null | undefined) =>
+  (role ?? "").trim().toUpperCase();
+
+export const isInAccordDeveloper = (role: string | null | undefined) => {
+  const normalizedRole = normalizeInAccordRole(role);
+  return IN_ACCORD_DEVELOPER_ROLE_ALIASES.has(normalizedRole);
+};
+
+export const isInAccordModerator = (role: string | null | undefined) => {
+  const normalizedRole = normalizeInAccordRole(role);
+  return IN_ACCORD_MODERATOR_ROLE_ALIASES.has(normalizedRole);
+};
+
+export const isInAccordAdministrator = (role: string | null | undefined) => {
+  const normalizedRole = normalizeInAccordRole(role);
+  return IN_ACCORD_ADMIN_ROLE_ALIASES.has(normalizedRole);
+};
+
+export const hasInAccordAdministrativeAccess = (role: string | null | undefined) =>
+  isInAccordAdministrator(role) || isInAccordDeveloper(role) || isInAccordModerator(role);
+
+export const getInAccordStaffLabel = (role: string | null | undefined) => {
+  if (isInAccordAdministrator(role)) {
+    return "Administrator";
+  }
+
+  if (isInAccordDeveloper(role)) {
+    return "Developer";
+  }
+
+  if (isInAccordModerator(role)) {
+    return "Moderator";
+  }
+
+  return null;
 };

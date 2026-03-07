@@ -172,12 +172,6 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
   const role = members.find(
     (member) => member.profileId === profile?.id
   )?.role;
-  const normalizedGlobalRole = (profile?.role ?? "").trim().toUpperCase();
-  const isInAccordAdministrator =
-    normalizedGlobalRole === "ADMINISTRATOR" ||
-    normalizedGlobalRole === "IN-ACCORD ADMINISTRATOR" ||
-    normalizedGlobalRole === "IN_ACCORD_ADMINISTRATOR" ||
-    normalizedGlobalRole === "ADMIN";
   const isServerOwner = !!profile?.id && currentServer.profileId === profile.id;
 
   const visibleChannelIds = role

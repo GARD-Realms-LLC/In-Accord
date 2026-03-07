@@ -51,7 +51,7 @@ export const SettingsButton = ({
       }
       className="rounded p-1 hover:bg-[#3f4248]"
     >
-      <Settings className="h-3.5 w-3.5" />
+      <Settings className="h-3.5 w-3.5" suppressHydrationWarning />
     </button>
   );
 };

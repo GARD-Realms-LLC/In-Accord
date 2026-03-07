@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
 import { and, asc, eq } from "drizzle-orm";
+import { v4 as uuidv4 } from "uuid";
 
 import { currentProfile } from "@/lib/current-profile";
-import { channel, db, member, server } from "@/lib/db";
+import { channel, ChannelType, db, member, server } from "@/lib/db";
 import { visibleChannelIdsForRole } from "@/lib/channel-permissions";
 
 interface ServerIdPageProps {
@@ -53,11 +54,34 @@ const ServerIdPage = async ({ params }: ServerIdPageProps) => {
     .where(and(eq(server.id, serverId), eq(server.profileId, profile.id)))
     .limit(1);
 
-  const serverChannels = await db
+  let serverChannels = await db
     .select({ id: channel.id, name: channel.name, createdAt: channel.createdAt })
     .from(channel)
     .where(eq(channel.serverId, serverId))
     .orderBy(asc(channel.createdAt));
+
+  if (serverChannels.length === 0) {
+    const now = new Date();
+    const fallbackChannelId = uuidv4();
+
+    await db.insert(channel).values({
+      id: fallbackChannelId,
+      name: "general",
+      type: ChannelType.TEXT,
+      profileId: profile.id,
+      serverId,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    serverChannels = [
+      {
+        id: fallbackChannelId,
+        name: "general",
+        createdAt: now,
+      },
+    ];
+  }
 
   const visibleIds = await visibleChannelIdsForRole({
     serverId,
@@ -71,7 +95,7 @@ const ServerIdPage = async ({ params }: ServerIdPageProps) => {
     visibleChannels.find((item) => item.name === "general") ?? visibleChannels[0] ?? null;
 
   if (!initialChannel?.id) {
-    return null;
+    return redirect("/");
   }
 
   return redirect(`/servers/${serverId}/channels/${initialChannel.id}`);

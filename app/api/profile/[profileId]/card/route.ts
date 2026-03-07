@@ -4,6 +4,8 @@ import { sql } from "drizzle-orm";
 import { currentProfile } from "@/lib/current-profile";
 import { db, member } from "@/lib/db";
 import { normalizePresenceStatus } from "@/lib/presence-status";
+import { ensureServerTagSchema, serverTagIconOptions } from "@/lib/server-tags";
+import { getUserPreferences } from "@/lib/user-preferences";
 import { getUserBanner } from "@/lib/user-banner-store";
 import { ensureUserProfileSchema } from "@/lib/user-profile";
 
@@ -39,6 +41,7 @@ export async function GET(
     }
 
     await ensureUserProfileSchema();
+    await ensureServerTagSchema();
 
     const result = await db.execute(sql`
       select
@@ -78,12 +81,56 @@ export async function GET(
     }
 
     const fallbackBanner = await getUserBanner(profileId);
+    const preferences = await getUserPreferences(profileId);
+
+    let selectedServerTag: {
+      serverId: string;
+      serverName: string;
+      tagCode: string;
+      iconKey: string;
+      iconEmoji: string;
+    } | null = null;
+
+    if (preferences.selectedServerTagServerId) {
+      const selectedTagResult = await db.execute(sql`
+        select
+          st."serverId" as "serverId",
+          s."name" as "serverName",
+          st."tagCode" as "tagCode",
+          st."iconKey" as "iconKey"
+        from "ServerTag" st
+        inner join "Server" s on s."id" = st."serverId"
+        inner join "Member" m on m."serverId" = st."serverId" and m."profileId" = ${profileId}
+        where st."serverId" = ${preferences.selectedServerTagServerId}
+        limit 1
+      `);
+
+      const selectedTagRow = (selectedTagResult as unknown as {
+        rows: Array<{
+          serverId: string;
+          serverName: string;
+          tagCode: string;
+          iconKey: string;
+        }>;
+      }).rows?.[0];
+
+      if (selectedTagRow) {
+        selectedServerTag = {
+          serverId: selectedTagRow.serverId,
+          serverName: selectedTagRow.serverName,
+          tagCode: selectedTagRow.tagCode,
+          iconKey: selectedTagRow.iconKey,
+          iconEmoji: serverTagIconOptions.find((item) => item.key === selectedTagRow.iconKey)?.emoji ?? "🏷️",
+        };
+      }
+    }
 
     return NextResponse.json({
       id: row.id,
       realName: row.realName,
       profileName: row.profileName,
       bannerUrl: row.bannerUrl ?? fallbackBanner,
+      selectedServerTag,
       presenceStatus: normalizePresenceStatus(row.presenceStatus),
       role: row.role,
       email: row.email ?? "",

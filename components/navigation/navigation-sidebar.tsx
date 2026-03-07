@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db } from "@/lib/db";
+import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { NavigationAction } from "@/components/navigation/navigation-action";
@@ -52,17 +53,12 @@ export const NavigationSidebar = async () => {
   const myServers = servers.filter((item) => item.profileId === profile.id);
   const joinedServers = servers.filter((item) => item.profileId !== profile.id);
 
-  const normalizedRole = (profile.role ?? "").trim().toUpperCase();
-  const isInAccordAdministrator =
-    normalizedRole === "ADMINISTRATOR" ||
-    normalizedRole === "IN-ACCORD ADMINISTRATOR" ||
-    normalizedRole === "IN_ACCORD_ADMINISTRATOR" ||
-    normalizedRole === "ADMIN";
+  const hasInAccordAdministratorAccess = hasInAccordAdministrativeAccess(profile.role);
 
   let totalMembers = 0;
   let totalServers = 0;
 
-  if (isInAccordAdministrator) {
+  if (hasInAccordAdministratorAccess) {
     const totalsResult = await db.execute(sql`
       select
         (select count(*)::int from "Member") as "totalMembers",
@@ -91,17 +87,19 @@ export const NavigationSidebar = async () => {
         In-Accord
       </div>
 
-      {isInAccordAdministrator ? (
+      {hasInAccordAdministratorAccess ? (
         <>
           <div className="w-full px-2 text-center text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-700 dark:text-zinc-300">
             <p className="mb-1">TOTALs</p>
             <p>Members: {totalMembers}</p>
             <p className="mt-1">Servers: {totalServers}</p>
           </div>
-          <div className="h-[2px] w-[85%] rounded bg-zinc-700 dark:bg-zinc-200" />
-          <NavigationUsersHomeButton />
         </>
       ) : null}
+
+      <div className="h-[2px] w-[85%] rounded bg-zinc-700 dark:bg-zinc-200" />
+
+      <NavigationUsersHomeButton />
 
       <Separator className="h-[2px] bg-zinc-300 dark:bg-zinc-700 rounded-md w-10 mx-auto" />
       <NavigationAction />

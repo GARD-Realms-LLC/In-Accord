@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db } from "@/lib/db";
-import { isInAccordAdministrator } from "@/lib/in-accord-admin";
+import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 import { ensureLocalAuthSchema } from "@/lib/local-auth";
 import { hashPassword } from "@/lib/password";
 import { normalizePresenceStatus } from "@/lib/presence-status";
@@ -25,6 +25,34 @@ type UserRow = {
   joinedServerCount: number | string | null;
 };
 
+const normalizeManagedUserRole = (role: unknown) => {
+  const normalized = String(role ?? "USER").trim().toUpperCase();
+
+  if (normalized === "USER") {
+    return "USER";
+  }
+
+  if (
+    normalized === "ADMIN" ||
+    normalized === "ADMINISTRATOR"
+  ) {
+    return "ADMINISTRATOR";
+  }
+
+  if (normalized === "DEVELOPER") {
+    return "DEVELOPER";
+  }
+
+  if (
+    normalized === "MODERATOR" ||
+    normalized === "MOD"
+  ) {
+    return "MODERATOR";
+  }
+
+  return null;
+};
+
 export async function GET() {
   try {
     const profile = await currentProfile();
@@ -33,7 +61,7 @@ export async function GET() {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    if (!isInAccordAdministrator(profile.role)) {
+    if (!hasInAccordAdministrativeAccess(profile.role)) {
       return new NextResponse("Forbidden", { status: 403 });
     }
 
@@ -78,7 +106,7 @@ export async function GET() {
       bannerUrl: row.bannerUrl ?? null,
       presenceStatus: normalizePresenceStatus(row.presenceStatus),
       email: row.email ?? "",
-      role: row.role ?? "USER",
+      role: normalizeManagedUserRole(row.role) ?? "USER",
       imageUrl: row.imageUrl ?? "/in-accord-steampunk-logo.png",
       joinedAt: row.joinedAt ? new Date(row.joinedAt).toISOString() : null,
       lastLogin: row.lastLogin ? new Date(row.lastLogin).toISOString() : null,
@@ -101,7 +129,7 @@ export async function POST(request: Request) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    if (!isInAccordAdministrator(profile.role)) {
+    if (!hasInAccordAdministrativeAccess(profile.role)) {
       return new NextResponse("Forbidden", { status: 403 });
     }
 
@@ -115,7 +143,7 @@ export async function POST(request: Request) {
     const name = String(body?.name ?? "").trim();
     const email = String(body?.email ?? "").trim().toLowerCase();
     const password = String(body?.password ?? "");
-    const role = String(body?.role ?? "USER").trim().toUpperCase() || "USER";
+    const role = normalizeManagedUserRole(body?.role);
 
     if (!name || !email || !password) {
       return new NextResponse("Name, email and password are required", { status: 400 });
@@ -123,6 +151,10 @@ export async function POST(request: Request) {
 
     if (password.length < 8) {
       return new NextResponse("Password must be at least 8 characters", { status: 400 });
+    }
+
+    if (!role) {
+      return new NextResponse("Invalid role. Allowed roles: USER, ADMINISTRATOR, DEVELOPER, MODERATOR", { status: 400 });
     }
 
     await ensureLocalAuthSchema();
@@ -141,7 +173,7 @@ export async function POST(request: Request) {
 
     const userId = await getNextIncrementalUserId();
     const now = new Date();
-    const normalizedRole = role || "USER";
+    const normalizedRole = role;
 
     await db.execute(sql`
       insert into "Users" (
@@ -197,6 +229,73 @@ export async function POST(request: Request) {
   }
 }
 
+export async function PATCH(request: Request) {
+  try {
+    const profile = await currentProfile();
+
+    if (!profile) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
+
+    if (!hasInAccordAdministrativeAccess(profile.role)) {
+      return new NextResponse("Forbidden", { status: 403 });
+    }
+
+    const body = (await request.json().catch(() => null)) as {
+      userId?: string;
+      role?: string;
+    } | null;
+
+    const userId = String(body?.userId ?? "").trim();
+    const role = normalizeManagedUserRole(body?.role);
+
+    if (!userId) {
+      return new NextResponse("userId is required", { status: 400 });
+    }
+
+    if (!role) {
+      return new NextResponse("Invalid role. Allowed roles: USER, ADMINISTRATOR, DEVELOPER, MODERATOR", { status: 400 });
+    }
+
+    if (userId === profile.id && role === "USER") {
+      return new NextResponse("You cannot downgrade your own account to USER.", { status: 400 });
+    }
+
+    const existingResult = await db.execute(sql`
+      select "userId", "email"
+      from "Users"
+      where "userId" = ${userId}
+      limit 1
+    `);
+
+    const existingRow = (existingResult as unknown as {
+      rows?: Array<{ userId: string; email: string | null }>;
+    }).rows?.[0];
+
+    if (!existingRow) {
+      return new NextResponse("User not found", { status: 404 });
+    }
+
+    await db.execute(sql`
+      update "Users"
+      set "role" = ${role}
+      where "userId" = ${userId}
+    `);
+
+    return NextResponse.json({
+      ok: true,
+      user: {
+        userId,
+        email: existingRow.email ?? "",
+        role,
+      },
+    });
+  } catch (error) {
+    console.error("[ADMIN_USERS_PATCH]", error);
+    return new NextResponse("Internal Error", { status: 500 });
+  }
+}
+
 export async function DELETE(request: Request) {
   try {
     const profile = await currentProfile();
@@ -205,7 +304,7 @@ export async function DELETE(request: Request) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    if (!isInAccordAdministrator(profile.role)) {
+    if (!hasInAccordAdministrativeAccess(profile.role)) {
       return new NextResponse("Forbidden", { status: 403 });
     }
 

@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db } from "@/lib/db";
 import { ensureFriendRelationsSchema } from "@/lib/friend-relations";
 
 type FriendRequestAction = "accept" | "decline" | "cancel" | "block";
+
+const revalidateUsersViews = () => {
+  revalidatePath("/users");
+  revalidatePath("/users", "layout");
+};
 
 export async function PATCH(
   req: Request,
@@ -125,6 +131,8 @@ export async function PATCH(
         }
       }
 
+      revalidateUsersViews();
+
       return NextResponse.json({ ok: true, action: "accept" });
     }
 
@@ -140,6 +148,8 @@ export async function PATCH(
         where "id" = ${requestId}
       `);
 
+      revalidateUsersViews();
+
       return NextResponse.json({ ok: true, action: "decline" });
     }
 
@@ -154,6 +164,8 @@ export async function PATCH(
             "updatedAt" = now()
         where "id" = ${requestId}
       `);
+
+      revalidateUsersViews();
 
       return NextResponse.json({ ok: true, action: "cancel" });
     }
@@ -171,6 +183,8 @@ export async function PATCH(
             "updatedAt" = now()
         where "id" = ${requestId}
       `);
+
+      revalidateUsersViews();
 
       return NextResponse.json({ ok: true, action: "block" });
     }
