@@ -100,6 +100,12 @@ export const ServerRouteShell = ({
   const GLOBAL_SERVERS_RAIL_WIDTH = 108;
   const CHANNELS_RAIL_WIDTH = 240;
   const TOPBAR_LEFT_GAP = 8;
+  const CHANNELS_TO_CHAT_GAP = 8;
+  const USER_BOX_HEIGHT = 84;
+  const USER_BOX_BOTTOM_GAP = 2;
+  const CHANNELS_TO_USERBOX_GAP = 10;
+  const CHANNELS_RAIL_LEFT = GLOBAL_SERVERS_RAIL_WIDTH + TOPBAR_LEFT_GAP;
+  const CONTENT_LEFT_PADDING = CHANNELS_RAIL_WIDTH + TOPBAR_LEFT_GAP + CHANNELS_TO_CHAT_GAP;
 
   const electronApi = typeof window !== "undefined" ? (window as any).electronAPI : null;
 
@@ -210,7 +216,7 @@ export const ServerRouteShell = ({
     <div className="h-full overflow-hidden">
       <header
         className="theme-server-topbar fixed right-0 top-0 z-40 flex h-12 items-center overflow-hidden rounded-b-xl border-b border-border bg-background px-4"
-        style={{ left: `${GLOBAL_SERVERS_RAIL_WIDTH + TOPBAR_LEFT_GAP}px` }}
+        style={{ left: `${CHANNELS_RAIL_LEFT}px` }}
       >
         {isProductionRuntime ? (
           <div className="absolute left-12 top-1/2 z-20 -translate-y-1/2">
@@ -335,19 +341,38 @@ export const ServerRouteShell = ({
       </header>
 
       <aside
-        className="fixed top-0 bottom-[84px] z-40"
-        style={{ left: `${GLOBAL_SERVERS_RAIL_WIDTH}px`, width: `${CHANNELS_RAIL_WIDTH}px` }}
+        className="fixed top-14 z-40"
+        style={{
+          left: `${CHANNELS_RAIL_LEFT}px`,
+          width: `${CHANNELS_RAIL_WIDTH}px`,
+          bottom: `${USER_BOX_HEIGHT + CHANNELS_TO_USERBOX_GAP}px`,
+        }}
       >
         {leftSidebar}
       </aside>
 
       {!isMembersCollapsed ? (
-        <aside className="settings-scrollbar fixed top-12 bottom-[84px] right-0 z-30 w-64 overflow-y-auto px-2 py-2">{rightSidebar}</aside>
+        <aside
+          className="settings-scrollbar fixed top-12 right-0 z-30 w-64 overflow-y-auto px-2 py-2"
+          style={{ bottom: `${USER_BOX_HEIGHT + USER_BOX_BOTTOM_GAP}px` }}
+        >
+          {rightSidebar}
+        </aside>
       ) : null}
 
-      <aside className="fixed bottom-0 right-0 h-[84px] w-64 z-30 px-2 pb-2 flex items-center justify-center">{rightFooter}</aside>
+      {rightFooter ? (
+        <aside
+          className="fixed right-0 h-[84px] w-64 z-30 px-2 pb-2 flex items-center justify-center"
+          style={{ bottom: `${USER_BOX_BOTTOM_GAP}px` }}
+        >
+          {rightFooter}
+        </aside>
+      ) : null}
 
-      <main className={`box-border h-full overflow-hidden pl-[240px] pt-14 p-2 ${isMembersCollapsed ? "pr-0" : "pr-[256px]"}`}>
+      <main
+        className={`box-border h-full overflow-hidden pt-14 p-2 ${isMembersCollapsed ? "pr-0" : "pr-[256px]"}`}
+        style={{ paddingLeft: `${CONTENT_LEFT_PADDING}px` }}
+      >
         {children}
       </main>
 

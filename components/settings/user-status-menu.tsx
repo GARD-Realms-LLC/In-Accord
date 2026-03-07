@@ -194,7 +194,8 @@ export const UserStatusMenu = ({
   };
 
   const onAddFriend = () => {
-    window.alert("Friend requests are coming soon.");
+    setIsPopoverOpen(false);
+    router.push("/users?view=friends&filter=pending&pendingBucket=requests");
   };
 
   const onStartDirectMessage = () => {

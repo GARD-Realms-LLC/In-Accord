@@ -158,7 +158,7 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
     };
 
     const onAddFriend = () => {
-      window.alert("Friend requests are coming soon.");
+      router.push("/users?view=friends&filter=pending&pendingBucket=requests");
     };
 
     return (

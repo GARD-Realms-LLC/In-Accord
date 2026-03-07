@@ -1,5 +1,8 @@
 "use client";
 
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+
 import { UserAvatar } from "@/components/user-avatar";
 
 interface PendingRequestItemProps {
@@ -8,6 +11,7 @@ interface PendingRequestItemProps {
   email: string | null;
   imageUrl: string | null;
   isIncoming: boolean;
+  isSpam?: boolean;
 }
 
 export const PendingRequestItem = ({
@@ -16,19 +20,102 @@ export const PendingRequestItem = ({
   email,
   imageUrl,
   isIncoming,
+  isSpam = false,
 }: PendingRequestItemProps) => {
+  const router = useRouter();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const handleAction = async (action: "accept" | "decline" | "cancel" | "block") => {
+    try {
+      setIsSubmitting(true);
+      setSubmitError(null);
+
+      const response = await fetch(`/api/friends/requests/${encodeURIComponent(requestId)}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ action }),
+      });
+
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || "Failed to update friend request.");
+      }
+
+      router.refresh();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to update friend request.";
+      setSubmitError(message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div
-      className="flex items-center gap-2 rounded-md bg-[#1e1f22] px-2 py-2"
+      className="rounded-md bg-muted/60 px-2 py-2"
       data-request-id={requestId}
     >
-      <UserAvatar src={imageUrl ?? undefined} className="h-8 w-8" />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-white">{displayName}</p>
-        <p className="truncate text-xs text-[#949ba4]">
-          {email ?? "No email"} • {isIncoming ? "Incoming" : "Outgoing"}
-        </p>
+      <div className="flex items-center gap-2">
+        <UserAvatar src={imageUrl ?? undefined} className="h-8 w-8" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-foreground">{displayName}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {email ?? "No email"} • {isIncoming ? "Incoming" : "Outgoing"}
+            {isSpam ? " • Spam" : ""}
+          </p>
+        </div>
+
+        <div className="ml-2 flex items-center gap-1">
+          {isIncoming ? (
+            <>
+              <button
+                type="button"
+                onClick={() => handleAction("accept")}
+                disabled={isSubmitting}
+                className="rounded bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Accept
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAction("decline")}
+                disabled={isSubmitting}
+                className="rounded bg-secondary px-2 py-1 text-[11px] font-semibold text-secondary-foreground transition hover:bg-secondary/80 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Ignore
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAction("block")}
+                disabled={isSubmitting}
+                className="rounded bg-destructive px-2 py-1 text-[11px] font-semibold text-destructive-foreground transition hover:bg-destructive/90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Block
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => handleAction("cancel")}
+              disabled={isSubmitting}
+              className="rounded bg-secondary px-2 py-1 text-[11px] font-semibold text-secondary-foreground transition hover:bg-secondary/80 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Cancel
+            </button>
+          )}
+        </div>
       </div>
+
+      {submitError ? (
+        <p className="mt-2 text-xs text-destructive">{submitError}</p>
+      ) : null}
+
+      {isSubmitting ? (
+        <p className="mt-2 text-[11px] text-muted-foreground">Updating…</p>
+      ) : null}
     </div>
   );
 };

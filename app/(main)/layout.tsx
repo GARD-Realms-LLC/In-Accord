@@ -4,17 +4,18 @@ import { Headphones, Mic } from "lucide-react";
 import { currentProfile } from "@/lib/current-profile";
 import { SettingsButton } from "@/components/settings/settings-button";
 import { UserStatusMenu } from "@/components/settings/user-status-menu";
+import { UserLocalTime } from "@/components/server/user-local-time";
 
 const MainLayout = async ({ children }: { children: React.ReactNode }) => {
   const profile = await currentProfile();
 
   return (
     <div className="h-full">
-      <div className="flex w-[108px] z-50 flex-col fixed top-0 bottom-[84px] left-0">
+      <div className="flex w-[108px] z-50 flex-col fixed top-0 bottom-[94px] left-0">
         <NavigationSidebar />
       </div>
       {profile ? (
-        <div className="fixed bottom-0 left-0 z-[90] w-[328px] rounded-t-[24px] border border-black/20 bg-[#232428] px-2 py-2 shadow-xl shadow-black/35">
+        <div className="fixed bottom-2 left-2 z-[90] w-[348px] rounded-[24px] border border-black/20 bg-[#232428] px-2 py-2 shadow-xl shadow-black/35">
           <div className="flex items-center justify-start rounded-[20px] bg-[#1e1f22] px-2 py-1.5">
             <UserStatusMenu
               profileId={profile.id}
@@ -46,6 +47,11 @@ const MainLayout = async ({ children }: { children: React.ReactNode }) => {
             </div>
           </div>
         </div>
+      ) : null}
+      {profile ? (
+        <aside className="fixed bottom-2 right-0 z-30 h-[84px] w-64 px-2 pb-2 flex items-center justify-center">
+          <UserLocalTime />
+        </aside>
       ) : null}
       <main className="pl-[108px] h-full">{children}</main>
     </div>

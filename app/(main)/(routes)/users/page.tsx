@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { and, asc, eq, sql } from "drizzle-orm";
-import { MessageCircle, Phone, Search, UserPlus, Video } from "lucide-react";
+import { Bell, MessageCircle, Phone, Search, UserPlus, Video } from "lucide-react";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db, directMessage, member } from "@/lib/db";
@@ -140,6 +140,18 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
     isBlocked: boolean;
   }> = [];
 
+  let allResolvedFriends: Array<{
+    memberId: string;
+    serverId: string;
+    displayName: string;
+    email: string | null;
+    imageUrl: string | null;
+    profileCreatedAt: Date | string | null;
+    status: ReturnType<typeof resolveAutoPresenceStatus>;
+    hasConversation: boolean;
+    isBlocked: boolean;
+  }> = [];
+
   let pendingRequests: Array<{
     requestId: string;
     displayName: string;
@@ -153,7 +165,6 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
   let pendingSpamCount = 0;
 
   if (
-    !selectedMemberId &&
     isFriendsView &&
     (normalizedFilter === "online" || normalizedFilter === "all" || normalizedFilter === "pending" || normalizedFilter === "blocked" || normalizedFilter === "add-friend")
   ) {
@@ -224,6 +235,8 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
         hasConversation: Boolean(row.hasConversation),
         isBlocked: Boolean(row.isBlocked),
       }));
+
+    allResolvedFriends = resolved;
 
     filteredFriends =
       normalizedFilter === "online"
@@ -315,6 +328,16 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
       });
     }
   }
+
+  const onlineFriendsForRail = allResolvedFriends
+    .filter(
+      (row) =>
+        row.hasConversation &&
+        !row.isBlocked &&
+        row.status !== "OFFLINE" &&
+        row.status !== "INVISIBLE"
+    )
+    .slice(0, 8);
 
   let selectedConversation:
     | {
@@ -449,9 +472,54 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
 
   return (
     <div className="theme-users-shell h-full bg-[#313338] text-[#dbdee1]">
-      <div className="grid h-full w-full grid-cols-[240px_1fr_260px] gap-2 p-2">
+      <header
+        className="fixed right-0 top-0 z-40 flex h-12 items-center overflow-hidden rounded-b-xl border-b border-border bg-card px-4"
+        style={{ left: "116px" }}
+      >
+        <h1
+          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 truncate text-center text-sm font-bold uppercase tracking-[0.08em] text-foreground"
+          style={{ left: "calc((100% - 256px) / 2)", maxWidth: "calc(100% - 560px)" }}
+        >
+          In-Accord
+        </h1>
 
-        <aside className="theme-users-left-rail rounded-2xl border border-black/20 bg-[#2b2d31] p-2.5 shadow-xl shadow-black/35">
+        <div className="absolute right-[276px] top-1/2 z-20 flex -translate-y-1/2 items-center gap-1 text-muted-foreground">
+          <button type="button" title="Start Call" className="rounded p-1.5 transition-colors hover:bg-accent hover:text-accent-foreground">
+            <Phone className="h-4 w-4" />
+          </button>
+          <button type="button" title="Start Video" className="rounded p-1.5 transition-colors hover:bg-accent hover:text-accent-foreground">
+            <Video className="h-4 w-4" />
+          </button>
+          <button type="button" title="Invite People" className="rounded p-1.5 transition-colors hover:bg-accent hover:text-accent-foreground">
+            <UserPlus className="h-4 w-4" />
+          </button>
+          <button type="button" title="Notifications" className="rounded p-1.5 transition-colors hover:bg-accent hover:text-accent-foreground">
+            <Bell className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div
+          className="absolute top-1/2 z-20 w-[163px] -translate-y-1/2 -translate-x-1/2 rounded-md border border-border bg-background"
+          style={{ left: "calc(100% - 128px)" }}
+        >
+          <div className="flex h-8 items-center px-2">
+            <Search className="h-3.5 w-3.5 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search"
+              aria-label="Search home"
+              className="ml-2 w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground outline-none"
+            />
+          </div>
+        </div>
+      </header>
+
+      <div className="grid box-border h-full w-full grid-cols-[240px_1fr_260px] gap-2 p-2 pt-14">
+
+        <aside
+          className="theme-users-left-rail self-start min-h-0 overflow-y-auto rounded-2xl border border-black/20 bg-[#2b2d31] p-2.5 shadow-xl shadow-black/35"
+          style={{ height: "calc(100% - 92px)" }}
+        >
           <div className="flex h-full flex-col">
             <div>
               <div className="mb-2 rounded-md bg-[#1e1f22] px-3 py-2 text-sm font-semibold text-[#f2f3f5]">
@@ -694,6 +762,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                               email={request.email}
                               imageUrl={request.imageUrl}
                               isIncoming={request.isIncoming}
+                              isSpam={request.isSpam}
                             />
                           ))}
                         </div>
@@ -746,17 +815,52 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
           </section>
         </main>
 
-        <aside className="theme-users-right-rail rounded-2xl border border-black/20 bg-[#2b2d31] p-4 shadow-xl shadow-black/35">
-          <h3 className="text-xs font-bold uppercase tracking-[0.08em] text-[#949ba4]">Active Now</h3>
-          <div className="mt-4 rounded-lg bg-[#1e1f22] p-4 text-center">
-            <p className="text-sm font-semibold text-white">It&apos;s quiet for now...</p>
-            <p className="mt-2 text-xs text-[#b5bac1]">
+        <aside
+          className="theme-users-right-rail self-start min-h-0 overflow-y-auto rounded-2xl border border-border bg-card p-4 shadow-xl shadow-black/20 dark:shadow-black/35"
+          style={{ height: "calc(100% - 94px)" }}
+        >
+          <h3 className="text-xs font-bold uppercase tracking-[0.08em] text-muted-foreground">Active Now</h3>
+          <div className="mt-4 rounded-lg bg-muted/60 p-4 text-center">
+            <p className="text-sm font-semibold text-foreground">It&apos;s quiet for now...</p>
+            <p className="mt-2 text-xs text-muted-foreground">
               When activity picks up, it will appear here.
             </p>
           </div>
 
-          <div className="mt-4 rounded-lg bg-[#1e1f22] p-3 text-xs text-[#b5bac1]">
-            Signed in as <span className="font-semibold text-[#f2f3f5]">{profile.name}</span>
+          <div className="mt-4 rounded-lg bg-muted/60 p-3">
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              Online Friends
+            </p>
+
+            {onlineFriendsForRail.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No online friends right now.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {onlineFriendsForRail.map((friend) => (
+                  <Link
+                    key={`online-rail-${friend.memberId}`}
+                    href={`/users?serverId=${encodeURIComponent(friend.serverId)}&memberId=${encodeURIComponent(friend.memberId)}`}
+                    className="flex items-center gap-2 rounded-md px-2 py-1.5 text-foreground transition hover:bg-accent"
+                    aria-label={`Open DM with ${friend.displayName}`}
+                  >
+                    <span className="relative inline-flex h-7 w-7 shrink-0">
+                      <UserAvatar src={friend.imageUrl ?? undefined} className="h-7 w-7" />
+                      <span
+                        className={`absolute -bottom-0.5 -right-0.5 inline-flex h-2.5 w-2.5 rounded-full border border-[#111214] ${presenceStatusDotClassMap[friend.status]}`}
+                        aria-hidden="true"
+                      />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-semibold text-foreground flex items-center gap-1">
+                        <span className="truncate">{friend.displayName}</span>
+                        <NewUserCloverBadge createdAt={friend.profileCreatedAt} className="text-[11px]" />
+                      </p>
+                      <p className="truncate text-[10px] text-muted-foreground">Online</p>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
         </aside>
       </div>

@@ -264,7 +264,8 @@ export const ChatItem = ({
   };
 
   const onAddFriend = () => {
-    window.alert("Friend requests are coming soon.");
+    setIsProfilePopoverOpen(false);
+    router.push("/users?view=friends&filter=pending&pendingBucket=requests");
   };
 
   const onQuoteMessage = () => {

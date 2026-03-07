@@ -5,7 +5,6 @@ import { db, member, server } from "@/lib/db";
 import { currentProfile } from "@/lib/current-profile";
 import { ServerSidebar } from "@/components/server/server-sidebar";
 import { ServerUserRolesRail } from "@/components/server/server-user-roles-rail";
-import { UserLocalTime } from "@/components/server/user-local-time";
 import { ServerRouteShell } from "@/components/server/server-route-shell";
 import { ChannelType, MemberRole } from "@/lib/db/types";
 import { isInAccordAdministrator } from "@/lib/in-accord-admin";
@@ -120,7 +119,7 @@ const ServerIdLayout = async ({
       }))}
       leftSidebar={<ServerSidebar serverId={serverId} />}
       rightSidebar={<ServerUserRolesRail serverId={serverId} />}
-      rightFooter={<UserLocalTime />}
+      rightFooter={null}
     >
       {children}
     </ServerRouteShell>
