@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, Crown, LogOut, MessageCircle, Settings, ShieldAlert, UserCircle2, UserPlus, Wrench } from "lucide-react";
+import { Copy, Crown, LogOut, MessageCircle, RefreshCw, Settings, ShieldAlert, UserCircle2, UserPlus, Wrench } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import axios from "axios";
@@ -46,7 +46,9 @@ export const UserStatusMenu = ({
   const [copied, setCopied] = useState(false);
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const [isProfileCardOpen, setIsProfileCardOpen] = useState(false);
+  const [isSwitchAccountsConfirmOpen, setIsSwitchAccountsConfirmOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isSwitchingAccounts, setIsSwitchingAccounts] = useState(false);
   const [isSavingStatus, setIsSavingStatus] = useState(false);
   const [menuRealName, setMenuRealName] = useState<string | null>(profileRealName ?? null);
   const [menuProfileName, setMenuProfileName] = useState<string | null>(profileName ?? null);
@@ -288,6 +290,26 @@ export const UserStatusMenu = ({
     }
   };
 
+  const onSwitchAccounts = () => {
+    if (isSwitchingAccounts || isLoggingOut) {
+      return;
+    }
+
+    setIsSwitchAccountsConfirmOpen(true);
+  };
+
+  const onConfirmSwitchAccounts = () => {
+    if (isSwitchingAccounts || isLoggingOut) {
+      return;
+    }
+
+    setIsSwitchingAccounts(true);
+    setIsSwitchAccountsConfirmOpen(false);
+    setIsPopoverOpen(false);
+    setIsProfileCardOpen(false);
+    window.location.assign("/api/auth/clear-session?next=/sign-in");
+  };
+
   const formatDate = (value?: string | null) => {
     if (!value) {
       return "";
@@ -473,8 +495,18 @@ export const UserStatusMenu = ({
 
           <button
             type="button"
+            onClick={onSwitchAccounts}
+            disabled={isSwitchingAccounts || isLoggingOut}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-amber-200 transition hover:bg-[#3a3520] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <RefreshCw className={`h-4 w-4 ${isSwitchingAccounts ? "animate-spin" : ""}`} />
+            {isSwitchingAccounts ? "Switching accounts..." : "Switch Accounts"}
+          </button>
+
+          <button
+            type="button"
             onClick={onLogoff}
-            disabled={isLoggingOut}
+            disabled={isLoggingOut || isSwitchingAccounts}
             className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-rose-300 transition hover:bg-[#3a1f24] disabled:cursor-not-allowed disabled:opacity-60"
           >
             <LogOut className="h-4 w-4" />
@@ -545,6 +577,41 @@ export const UserStatusMenu = ({
                 <MessageCircle className="h-4 w-4" />
               </button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isSwitchAccountsConfirmOpen} onOpenChange={setIsSwitchAccountsConfirmOpen}>
+        <DialogContent className="w-[420px] border-black/30 bg-[#111214] text-[#dbdee1]">
+          <DialogTitle className="text-base font-semibold text-white">Switch Accounts?</DialogTitle>
+
+          <div className="mt-2 space-y-2 text-sm text-[#b5bac1]">
+            <p>
+              This will clear your current session and send you to the sign-in page.
+            </p>
+            <p className="text-xs text-[#949ba4]">
+              Your local settings remain saved. You can sign back in anytime.
+            </p>
+          </div>
+
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setIsSwitchAccountsConfirmOpen(false)}
+              disabled={isSwitchingAccounts}
+              className="rounded-md border border-white/15 bg-[#1e1f22] px-3 py-2 text-sm text-[#dbdee1] transition hover:bg-[#2a2b30] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onConfirmSwitchAccounts}
+              disabled={isSwitchingAccounts}
+              className="inline-flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/15 px-3 py-2 text-sm font-medium text-amber-200 transition hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshCw className={`h-4 w-4 ${isSwitchingAccounts ? "animate-spin" : ""}`} />
+              {isSwitchingAccounts ? "Switching..." : "Switch Accounts"}
+            </button>
           </div>
         </DialogContent>
       </Dialog>
