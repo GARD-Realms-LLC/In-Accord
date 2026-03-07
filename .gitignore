@@ -13,6 +13,13 @@
 /out/
 /dist/
 /.cache/
+/.electron-cache/
+/.next-dev/
+/.next-win64/
+/Win-64/
+*.asar
+*.exe
+*.zip
 
 # production
 /build

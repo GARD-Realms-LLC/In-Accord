@@ -186,7 +186,7 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-3">
+      <div className="settings-scrollbar min-h-0 flex-1 overflow-auto p-3">
         <div className="rounded-md bg-[#1e1f22] p-2.5">
           {onlineUsers.length === 0 ? (
             <p className="text-xs text-[#6f7680]">N/A</p>

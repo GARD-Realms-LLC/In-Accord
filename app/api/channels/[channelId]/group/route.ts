@@ -7,9 +7,11 @@ import { ensureChannelGroupSchema } from "@/lib/channel-groups";
 
 export async function PATCH(
   req: Request,
-  { params }: { params: { channelId: string } }
+  { params }: { params: Promise<{ channelId: string }> }
 ) {
   try {
+    const { channelId: rawChannelId } = await params;
+
     const profile = await currentProfile();
 
     if (!profile) {
@@ -21,7 +23,7 @@ export async function PATCH(
       | null;
 
     const serverId = String(body?.serverId ?? "").trim();
-    const channelId = String(params.channelId ?? "").trim();
+    const channelId = String(rawChannelId ?? "").trim();
     const channelGroupId =
       typeof body?.channelGroupId === "string" && body.channelGroupId.trim().length > 0
         ? body.channelGroupId.trim()

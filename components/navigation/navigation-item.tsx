@@ -12,6 +12,9 @@ interface NavigationItemProps {
   imageUrl?: string | null;
   updatedAt?: string | Date | null;
   name: string;
+  draggable?: boolean;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
 }
 
 type ServerProfileCard = {
@@ -42,7 +45,15 @@ const formatDateTime = (value: string | null | undefined) => {
   return parsed.toLocaleString();
 };
 
-export const NavigationItem = ({ id, imageUrl, updatedAt, name }: NavigationItemProps) => {
+export const NavigationItem = ({
+  id,
+  imageUrl,
+  updatedAt,
+  name,
+  draggable = false,
+  onDragStart,
+  onDragEnd,
+}: NavigationItemProps) => {
   const params = useParams();
   const router = useRouter();
   const [imageFailed, setImageFailed] = useState(false);
@@ -140,6 +151,19 @@ export const NavigationItem = ({ id, imageUrl, updatedAt, name }: NavigationItem
       <PopoverTrigger asChild>
         <button
           onClick={onClick}
+          draggable={draggable}
+          onDragStart={(event) => {
+            if (!draggable) {
+              return;
+            }
+
+            event.dataTransfer.setData("text/plain", id);
+            event.dataTransfer.effectAllowed = "move";
+            onDragStart?.();
+          }}
+          onDragEnd={() => {
+            onDragEnd?.();
+          }}
           onMouseEnter={openPopover}
           onMouseLeave={scheduleClosePopover}
           className="group relative flex items-center shadow-none ring-0 outline-none border-0 bg-transparent"

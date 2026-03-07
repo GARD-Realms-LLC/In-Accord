@@ -1,13 +1,14 @@
 import { sql } from "drizzle-orm";
-import Link from "next/link";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db } from "@/lib/db";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { NavigationAction } from "@/components/navigation/navigation-action";
-import { NavigationItem } from "@/components/navigation/navigation-item";
 import { NavigationJoinAction } from "@/components/navigation/navigation-join-action";
+import { NavigationHomeButton } from "@/components/navigation/navigation-home-button";
+import { NavigationUsersHomeButton } from "@/components/navigation/navigation-users-home-button";
+import { NavigationServersCollection } from "@/components/navigation/navigation-servers-collection";
 
 export const NavigationSidebar = async () => {
   const profile = await currentProfile();
@@ -15,7 +16,7 @@ export const NavigationSidebar = async () => {
   if (!profile) {
     return (
       <div
-        className="theme-servers-rail space-y-4 flex h-full w-full flex-col items-center overflow-hidden rounded-2xl border border-border bg-card py-3 text-primary"
+        className="theme-servers-rail settings-scrollbar flex h-full min-h-0 w-full flex-col items-center space-y-4 overflow-hidden rounded-2xl border border-border bg-card py-3 text-primary"
         aria-label="Servers rail"
       />
     );
@@ -81,9 +82,11 @@ export const NavigationSidebar = async () => {
 
   return (
     <div
-      className="theme-servers-rail space-y-4 flex h-full w-full flex-col items-center overflow-hidden rounded-2xl border border-border bg-card py-3 text-primary"
+      className="theme-servers-rail settings-scrollbar flex h-full min-h-0 w-full flex-col items-center space-y-4 overflow-hidden rounded-2xl border border-border bg-card py-3 text-primary"
       aria-label="Servers rail"
     >
+      <NavigationHomeButton />
+
       <div className="text-center text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-700 dark:text-zinc-300">
         In-Accord
       </div>
@@ -96,64 +99,16 @@ export const NavigationSidebar = async () => {
             <p className="mt-1">Servers: {totalServers}</p>
           </div>
           <div className="h-[2px] w-[85%] rounded bg-zinc-700 dark:bg-zinc-200" />
+          <NavigationUsersHomeButton />
         </>
       ) : null}
-
-      <Link
-        href="/users"
-        className="group relative flex w-full items-center justify-center"
-        title="In-Accord Home"
-        aria-label="In-Accord Home"
-      >
-        <div className="absolute left-0 bg-primary rounded-r-full transition-all w-[4px] h-[8px] group-hover:h-[20px]" />
-        <div className="relative flex mx-3 h-[48px] w-[48px] rounded-[24px] group-hover:rounded-[16px] transition-all overflow-hidden bg-[#5865F2]">
-          <img
-            src="/in-accord-steampunk-logo.png"
-            alt="In-Accord"
-            className="h-full w-full object-cover"
-          />
-        </div>
-      </Link>
 
       <Separator className="h-[2px] bg-zinc-300 dark:bg-zinc-700 rounded-md w-10 mx-auto" />
       <NavigationAction />
       <NavigationJoinAction />
       <Separator className="h-[2px] bg-zinc-300 dark:bg-zinc-700 rounded-md w-10 mx-auto" />
-      <div className="text-center text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-700 dark:text-zinc-300">
-        My Servers
-      </div>
-      <ScrollArea className="flex-1 w-full">
-        {myServers.map(({ id, name, imageUrl, updatedAt }) => (
-          <div key={id} className="mb-4 flex justify-center">
-            <NavigationItem
-              id={id}
-              name={name}
-              imageUrl={imageUrl}
-              updatedAt={updatedAt}
-            />
-          </div>
-        ))}
-        <div className="mt-1 mb-2 flex justify-center">
-          <Separator className="h-[2px] bg-zinc-300 dark:bg-zinc-700 rounded-md w-10" />
-        </div>
-        <div className="mb-2 text-center text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-700 dark:text-zinc-300">
-          Joined Servers
-        </div>
-        {joinedServers.map(({ id, name, imageUrl, updatedAt }) => (
-          <div key={`joined-${id}`} className="mb-4 flex justify-center">
-            <NavigationItem
-              id={id}
-              name={name}
-              imageUrl={imageUrl}
-              updatedAt={updatedAt}
-            />
-          </div>
-        ))}
-        {joinedServers.length === 0 ? (
-          <div className="mb-2 text-center text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-            N/A
-          </div>
-        ) : null}
+      <ScrollArea className="settings-scrollbar min-h-0 flex-1 w-full">
+        <NavigationServersCollection myServers={myServers} joinedServers={joinedServers} />
       </ScrollArea>
 
       <div className="w-full px-3 pb-1 text-center text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">

@@ -5,19 +5,21 @@ import { currentProfile } from "@/lib/current-profile";
 import { db, server } from "@/lib/db";
 import { ensureServerRolesSchema, seedDefaultServerRoles } from "@/lib/server-roles";
 
-type Params = { params: { serverId: string; roleId: string } };
+type Params = { params: Promise<{ serverId: string; roleId: string }> };
 
 const colorRegex = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
 export async function PATCH(req: Request, { params }: Params) {
 	try {
+		const resolvedParams = await params;
+
 		const profile = await currentProfile();
 		if (!profile) {
 			return new NextResponse("Unauthorized", { status: 401 });
 		}
 
-		const serverId = String(params.serverId ?? "").trim();
-		const roleId = String(params.roleId ?? "").trim();
+		const serverId = String(resolvedParams.serverId ?? "").trim();
+		const roleId = String(resolvedParams.roleId ?? "").trim();
 
 		if (!serverId || !roleId) {
 			return new NextResponse("Server ID and Role ID are required", { status: 400 });

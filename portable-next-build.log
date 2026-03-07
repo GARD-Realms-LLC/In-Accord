@@ -1,0 +1,46 @@
+   ▲ Next.js 15.5.12
+   - Environments: .env
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 10.8s
+   Linting and checking validity of types ...
+
+./components/chat/chat-item.tsx
+329:6  Warning: React Hook useEffect has a missing dependency: 'form'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./components/mode-toggle.tsx
+579:23  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+./components/navigation/navigation-item.tsx
+164:15  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+209:21  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+./components/navigation/navigation-sidebar.tsx
+110:11  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+./components/server/server-header.tsx
+56:11  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+./lib/db.ts
+9:3  Warning: Unused eslint-disable directive (no problems were reported from 'no-var').
+
+./lib/silence-server-console.ts
+5:3  Warning: Unused eslint-disable directive (no problems were reported from 'no-var').
+7:3  Warning: Unused eslint-disable directive (no problems were reported from 'no-var').
+
+info  - Need to disable some ESLint rules? Learn more here: https://nextjs.org/docs/app/api-reference/config/eslint#disabling-rules
+Failed to compile.
+
+.next/types/app/(invite)/(routes)/invite/[inviteCode]/page.ts:34:29
+Type error: Type 'InviteCodeProps' does not satisfy the constraint 'PageProps'.
+  Types of property 'params' are incompatible.
+    Type '{ inviteCode?: string | undefined; }' is missing the following properties from type 'Promise<any>': then, catch, finally, [Symbol.toStringTag]
+
+[0m [90m 32 |[39m
+ [90m 33 |[39m [90m// Check the prop type of the entry function[39m
+[31m[1m>[22m[39m[90m 34 |[39m checkFields[33m<[39m[33mDiff[39m[33m<[39m[33mPageProps[39m[33m,[39m [33mFirstArg[39m[33m<[39m[33mTEntry[39m[[32m'default'[39m][33m>[39m[33m,[39m [32m'default'[39m[33m>>[39m()
+ [90m    |[39m                             [31m[1m^[22m[39m
+ [90m 35 |[39m
+ [90m 36 |[39m [90m// Check the arguments and return type of the generateMetadata function[39m
+ [90m 37 |[39m [36mif[39m ([32m'generateMetadata'[39m [36min[39m entry) {[0m
+Next.js build worker exited with code: 1 and signal: null

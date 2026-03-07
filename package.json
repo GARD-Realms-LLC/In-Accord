@@ -1,25 +1,38 @@
 {
   "name": "In-Accord",
-  "version": "0.1.0",
+  "version": "1.0.77",
   "main": "electron/main.cjs",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "clean:next": "node -e \"const fs=require('fs');const p=process.env.NEXT_DIST_DIR||'.next';fs.rmSync(p,{recursive:true,force:true})\"",
+    "dev": "set NEXT_DIST_DIR=.next-dev&& npm run clean:next && next dev",
     "dev:3000": "next dev -p 3000",
-    "build": "next build",
+    "cleanup:dist-locks": "node scripts/cleanup-dist-locks.cjs",
+    "prepare:win-fav-icon": "node scripts/prepare-win-fav-icon.cjs",
+    "generate:win-icon": "node scripts/generate-windows-icon.cjs",
+    "version:bump:patch": "node scripts/bump-version.cjs",
+    "build": "npm run cleanup:dist-locks && npm run clean:next && next build",
+    "build:dev:portable": "set \"BUILD_OUTPUT_DIR=dist\\Win Dev\"&& npm run cleanup:dist-locks && npm run clean:next && next build",
     "start": "next start",
     "lint": "next lint",
     "electron": "electron .",
     "electron:wait": "wait-on tcp:3000",
     "electron:dev": "concurrently -k \"npm run dev\" \"npm run electron:wait && npm run electron\"",
     "electron:start": "concurrently -k \"npm run start\" \"npm run electron:wait && npm run electron\"",
-    "electron:pack": "npm run build && electron-builder --dir",
-    "electron:dist": "npm run build && electron-builder --win nsis",
+    "preelectron:dist": "set BUILD_OUTPUT_DIR=dist\\win64&& npm run cleanup:dist-locks && npm run prepare:win-fav-icon",
+    "preelectron:pack": "set BUILD_OUTPUT_DIR=dist\\win64&& npm run cleanup:dist-locks && npm run prepare:win-fav-icon",
+    "preelectron:pack:dev": "set \"BUILD_OUTPUT_DIR=dist\\Win Dev\"&& npm run cleanup:dist-locks && npm run prepare:win-fav-icon",
+    "electron:pack": "npm run build && npm run prepare:win-fav-icon && node -e \"require('fs').mkdirSync('.electron-cache/tmp',{recursive:true})\" && set ELECTRON_CACHE=.electron-cache\\electron&& set ELECTRON_BUILDER_CACHE=.electron-cache\\builder&& set TEMP=%CD%\\.electron-cache\\tmp&& set TMP=%CD%\\.electron-cache\\tmp&& set BUILD_OUTPUT_DIR=dist\\win64&& electron-builder --dir --win --x64 -c.directories.output=dist/win64 -c.win.signAndEditExecutable=false",
+    "electron:pack:dev": "node scripts/pack-win-dev-guarded.cjs",
+    "electron:dist": "npm run version:bump:patch && npm run build && npm run prepare:win-fav-icon && node -e \"require('fs').mkdirSync('.electron-cache/tmp',{recursive:true})\" && set ELECTRON_CACHE=.electron-cache\\electron&& set ELECTRON_BUILDER_CACHE=.electron-cache\\builder&& set TEMP=%CD%\\.electron-cache\\tmp&& set TMP=%CD%\\.electron-cache\\tmp&& set BUILD_OUTPUT_DIR=dist\\win64&& electron-builder --win nsis --x64 -c.directories.output=dist/win64 -c.win.signAndEditExecutable=false",
+    "electron:dist:unblocked": "npm run version:bump:patch && npm run build && npm run prepare:win-fav-icon && node -e \"require('fs').mkdirSync('.electron-cache/tmp',{recursive:true})\" && set ELECTRON_CACHE=.electron-cache\\electron&& set ELECTRON_BUILDER_CACHE=.electron-cache\\builder&& set TEMP=%CD%\\.electron-cache\\tmp&& set TMP=%CD%\\.electron-cache\\tmp&& set BUILD_OUTPUT_DIR=dist\\win64&& electron-builder --win nsis --x64 -c.directories.output=dist/win64 -c.win.signAndEditExecutable=false",
+    "build:release:strict": "node scripts/build-release-strict.cjs",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@tailwindcss/postcss": "^4.1.13",
     "@aws-sdk/client-s3": "^3.1002.0",
     "@hookform/resolvers": "3.9.0",
     "@radix-ui/react-avatar": "1.1.1-rc.5",
@@ -35,33 +48,32 @@
     "@types/node": "20.5.6",
     "@types/react": "18.2.21",
     "@types/react-dom": "18.2.7",
-    "@uploadthing/react": "6.7.3-canary.eeb4a19",
-    "autoprefixer": "10.4.15",
-    "axios": "1.7.7",
+    "@uploadthing/react": "^7.3.3",
+    "autoprefixer": "^10.4.27",
+    "axios": "^1.13.6",
     "class-variance-authority": "0.7.1-canary.2",
     "clsx": "2.1.1",
-    "cmdk": "1.0.0",
+    "cmdk": "^1.1.1",
     "drizzle-orm": "^0.44.5",
-    "eslint": "8.48.0",
-    "eslint-config-next": "13.4.19",
+    "eslint-config-next": "^15.5.12",
     "lucide-react": "0.438.0",
-    "next": "^15.0.0-canary.138",
-    "next-intl": "^3.19.0",
-    "next-themes": "0.3.0",
+    "next": "^15.5.12",
+    "next-intl": "^4.8.3",
+    "next-themes": "^0.4.6",
     "pg": "^8.20.0",
-    "postcss": "8.4.28",
+    "postcss": "^8.5.8",
     "query-string": "9.1.0",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "react-dropzone": "14.2.3",
     "react-hook-form": "7.53.0",
-    "socket.io": "^4.7.5",
-    "socket.io-client": "4.7.5",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3",
     "tailwind-merge": "2.5.2-dev.a9aa5911cc624d0ddd2ee81bcce00b932a437aea",
-    "tailwindcss": "3.3.3",
+    "tailwindcss": "^4.1.13",
     "tailwindcss-animate": "1.0.7",
     "typescript": "5.2.2",
-    "uploadthing": "6.13.3-canary.eeb4a19",
+    "uploadthing": "^7.7.4",
     "uuid": "10.0.0",
     "zod": "3.24.0-canary.20240701T200529",
     "zustand": "5.0.0-rc.1"
@@ -71,43 +83,67 @@
     "@types/uuid": "10.0.0",
     "concurrently": "^9.1.2",
     "drizzle-kit": "^0.31.5",
-    "electron": "^36.3.2",
+    "electron": "35.7.5",
     "electron-builder": "^26.0.12",
+    "eslint": "^9.39.0",
+    "png-to-ico": "^3.0.1",
     "wait-on": "^8.0.3"
   },
   "build": {
-    "appId": "com.gardrealms.inaccord",
-    "productName": "In-Accord",
+    "appId": "com.gardrealms.inaccord.v2",
+    "productName": "In-Accord V2",
+    "icon": "dist/win64/fav.ico",
+    "artifactName": "In-Accord-V2 Setup v${version}-${arch}.${ext}",
     "asar": true,
+    "asarUnpack": [
+      "node_modules/**/*.node"
+    ],
     "files": [
       "electron/**/*",
+      "Images/**/*",
       ".next/**/*",
       "public/**/*",
-      "app/**/*",
-      "components/**/*",
-      "hooks/**/*",
-      "lib/**/*",
-      "pages/**/*",
       "package.json",
       "next.config.js",
-      "tsconfig.json",
-      "tailwind.config.js",
-      "postcss.config.js",
       "node_modules/**/*"
     ],
     "directories": {
-      "output": "dist"
+      "output": "dist/win64"
     },
+    "extraResources": [
+      {
+        "from": ".env",
+        "to": ".env"
+      },
+      {
+        "from": ".data",
+        "to": ".data"
+      }
+    ],
     "win": {
-      "icon": "app/favicon.ico",
+      "icon": "dist/win64/fav.ico",
+      "executableName": "In-Accord-V2",
       "signAndEditExecutable": false,
       "target": [
-        "nsis"
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
     },
     "nsis": {
+      "guid": "5a0f84d4-5250-4b4f-a071-c2031f6f6936",
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "runAfterFinish": false,
+      "buildUniversalInstaller": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "shortcutName": "In-Accord V2",
+      "installerIcon": "dist/win64/fav.ico"
     }
   }
 }

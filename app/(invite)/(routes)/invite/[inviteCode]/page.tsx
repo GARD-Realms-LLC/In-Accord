@@ -5,19 +5,23 @@ import { v4 as uuidv4 } from "uuid";
 import { db, member, MemberRole, server } from "@/lib/db";
 import { currentProfile } from "@/lib/current-profile";
 
+export const dynamic = "force-dynamic";
+
 interface InviteCodeProps {
-  params: {
-    inviteCode: string;
-  }
+  params: Promise<{
+    inviteCode?: string;
+  }>;
 }
 
 const InviteCodePage = async ({ params }: InviteCodeProps) => {
+  const { inviteCode } = await params;
+
   const profile = await currentProfile();
   if (!profile) {
     return redirect("/sign-in");
   }
 
-  if (!params.inviteCode) {
+  if (!inviteCode) {
     return redirect("/");
   }
 
@@ -28,7 +32,7 @@ const InviteCodePage = async ({ params }: InviteCodeProps) => {
       member,
       and(eq(member.serverId, server.id), eq(member.profileId, profile.id))
     )
-    .where(eq(server.inviteCode, params.inviteCode))
+    .where(eq(server.inviteCode, inviteCode))
     .limit(1);
 
   if (existingServer[0]) {
@@ -36,7 +40,7 @@ const InviteCodePage = async ({ params }: InviteCodeProps) => {
   }
 
   const inviteServer = await db.query.server.findFirst({
-    where: eq(server.inviteCode, params.inviteCode),
+    where: eq(server.inviteCode, inviteCode),
   });
 
   if (inviteServer) {
@@ -55,7 +59,7 @@ const InviteCodePage = async ({ params }: InviteCodeProps) => {
     return redirect(`/servers/${inviteServer.id}`);
   }
 
-  return null;
-}
+  return redirect("/");
+};
 
 export default InviteCodePage;

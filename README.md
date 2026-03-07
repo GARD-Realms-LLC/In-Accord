@@ -30,6 +30,8 @@ Create or update `.env` in the project root with at least:
 Optional:
 
 - `ELECTRON_START_URL` (override Electron target URL)
+- `INACCORD_UPDATE_MANIFEST_URL` (remote JSON manifest URL for desktop auto-updates)
+- `INACCORD_UPDATE_CHECK_INTERVAL_MS` (optional check interval in milliseconds)
 
 ## Install
 
@@ -81,3 +83,28 @@ Core brand image and icon outputs live under `Images/`, including:
 - `fav.ico`
 
 The app favicon/logo is wired to these assets via `app/favicon.ico` and public image references.
+
+## Desktop on-the-fly updater (Electron)
+
+The desktop app now includes a bootstrap-style updater that:
+
+- checks a remote manifest on startup (and periodically),
+- compares versions,
+- downloads a new installer,
+- verifies SHA-256 (if provided),
+- prompts to install and relaunch.
+
+Set in `.env`:
+
+- `INACCORD_UPDATE_MANIFEST_URL=https://your-domain/releases/inaccord-manifest.json`
+
+Example manifest:
+
+```json
+{
+	"version": "0.1.1",
+	"installerUrl": "https://your-domain/releases/In-Accord-Setup-0.1.1.exe",
+	"sha256": "<sha256-hex>",
+	"notes": "Bug fixes and UI improvements"
+}
+```

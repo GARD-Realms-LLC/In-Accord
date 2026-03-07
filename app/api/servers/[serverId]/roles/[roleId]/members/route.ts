@@ -5,21 +5,23 @@ import { currentProfile } from "@/lib/current-profile";
 import { db, member, server } from "@/lib/db";
 import { ensureServerRolesSchema, seedDefaultServerRoles } from "@/lib/server-roles";
 
-type Params = { params: { serverId: string; roleId: string } };
+type Params = { params: Promise<{ serverId: string; roleId: string }> };
 
-const getIds = (params: Params["params"]) => ({
+const getIds = (params: Awaited<Params["params"]>) => ({
   serverId: String(params.serverId ?? "").trim(),
   roleId: String(params.roleId ?? "").trim(),
 });
 
 export async function GET(_req: Request, { params }: Params) {
   try {
+    const resolvedParams = await params;
+
     const profile = await currentProfile();
     if (!profile) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { serverId, roleId } = getIds(params);
+    const { serverId, roleId } = getIds(resolvedParams);
     if (!serverId || !roleId) {
       return new NextResponse("Server ID and Role ID are required", { status: 400 });
     }
@@ -99,12 +101,14 @@ export async function GET(_req: Request, { params }: Params) {
 
 export async function POST(req: Request, { params }: Params) {
   try {
+    const resolvedParams = await params;
+
     const profile = await currentProfile();
     if (!profile) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { serverId, roleId } = getIds(params);
+    const { serverId, roleId } = getIds(resolvedParams);
     if (!serverId || !roleId) {
       return new NextResponse("Server ID and Role ID are required", { status: 400 });
     }
@@ -143,12 +147,14 @@ export async function POST(req: Request, { params }: Params) {
 
 export async function DELETE(req: Request, { params }: Params) {
   try {
+    const resolvedParams = await params;
+
     const profile = await currentProfile();
     if (!profile) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { serverId, roleId } = getIds(params);
+    const { serverId, roleId } = getIds(resolvedParams);
     if (!serverId || !roleId) {
       return new NextResponse("Server ID and Role ID are required", { status: 400 });
     }

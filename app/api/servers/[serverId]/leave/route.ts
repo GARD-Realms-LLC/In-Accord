@@ -6,21 +6,23 @@ import { db, member, server } from "@/lib/db";
 
 export async function PATCH(
   req: Request,
-  { params }: { params: { serverId: string } }
+  { params }: { params: Promise<{ serverId: string }> }
 ) {
   try {
+    const { serverId } = await params;
+
     const profile = await currentProfile();
 
     if (!profile) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    if (!params.serverId) {
+    if (!serverId) {
       return new NextResponse("Server ID missing", { status: 400 });
     }
 
     const targetServer = await db.query.server.findFirst({
-      where: and(eq(server.id, params.serverId), ne(server.profileId, profile.id)),
+      where: and(eq(server.id, serverId), ne(server.profileId, profile.id)),
     });
 
     if (!targetServer) {
@@ -28,7 +30,7 @@ export async function PATCH(
     }
 
     await db.delete(member).where(
-      and(eq(member.serverId, params.serverId), eq(member.profileId, profile.id))
+      and(eq(member.serverId, serverId), eq(member.profileId, profile.id))
     );
 
     return NextResponse.json(targetServer)

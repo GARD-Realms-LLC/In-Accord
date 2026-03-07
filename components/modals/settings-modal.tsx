@@ -45,6 +45,8 @@ import {
   DialogDescription,
   Dialog,
   DialogContent,
+  DialogHeader,
+  DialogFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useModal } from "@/hooks/use-modal-store";
@@ -211,6 +213,10 @@ const sectionIconMap: Record<SettingsSection, React.ComponentType<{ className?: 
   gameOverlay: Monitor,
 };
 
+const CUSTOM_CSS_STORAGE_KEY = "in-accord-custom-css";
+const CUSTOM_CSS_STYLE_ID = "in-accord-custom-css-style";
+const DOWNLOADED_PLUGINS_STORAGE_KEY = "in-accord-downloaded-plugins";
+
 export const SettingsModal = () => {
   const router = useRouter();
   const { isOpen, onClose, type, data } = useModal();
@@ -239,10 +245,24 @@ export const SettingsModal = () => {
   const [bannerUrl, setBannerUrl] = useState<string | null>(data.profileBannerUrl ?? null);
   const [resolvedProfileId, setResolvedProfileId] = useState<string | null>(data.profileId ?? null);
   const [mentionsEnabled, setMentionsEnabled] = useState(true);
+  const [customCss, setCustomCss] = useState("");
+  const [customCssStatus, setCustomCssStatus] = useState<string | null>(null);
+  const [isCustomCssEditorOpen, setIsCustomCssEditorOpen] = useState(false);
+  const [isPluginsInstalledPanelOpen, setIsPluginsInstalledPanelOpen] = useState(false);
+  const [isDownloadedPluginsPanelOpen, setIsDownloadedPluginsPanelOpen] = useState(false);
+  const [isPluginUploadsPanelOpen, setIsPluginUploadsPanelOpen] = useState(false);
+  const [downloadedPlugins, setDownloadedPlugins] = useState<string[]>([]);
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const bannerInputRef = useRef<HTMLInputElement | null>(null);
 
   const isModalOpen = isOpen && type === "settings";
+
+  const installedPluginsCount = useMemo(() => downloadedPlugins.length, [downloadedPlugins.length]);
+
+  const installedPluginsCountLabel = useMemo(
+    () => installedPluginsCount.toString().padStart(2, "0"),
+    [installedPluginsCount]
+  );
 
   const sections = useMemo<SettingsSection[]>(() => sectionGroups.flatMap((group) => group.sections), []);
 
@@ -280,6 +300,43 @@ export const SettingsModal = () => {
     setMentionsEnabled(next);
     writeMentionsEnabled(next);
     window.dispatchEvent(new Event("inaccord:mentions-setting-updated"));
+  };
+
+  const applyCustomCss = (cssText: string) => {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    let styleElement = document.getElementById(CUSTOM_CSS_STYLE_ID) as HTMLStyleElement | null;
+    if (!styleElement) {
+      styleElement = document.createElement("style");
+      styleElement.id = CUSTOM_CSS_STYLE_ID;
+      document.head.appendChild(styleElement);
+    }
+
+    styleElement.textContent = cssText;
+  };
+
+  const onSaveCustomCss = () => {
+    try {
+      applyCustomCss(customCss);
+      window.localStorage.setItem(CUSTOM_CSS_STORAGE_KEY, customCss);
+      setCustomCssStatus("Custom CSS saved and applied.");
+    } catch {
+      setCustomCssStatus("Could not save Custom CSS in this browser.");
+    }
+  };
+
+  const onResetCustomCss = () => {
+    setCustomCss("");
+    applyCustomCss("");
+    setCustomCssStatus("Custom CSS cleared.");
+
+    try {
+      window.localStorage.removeItem(CUSTOM_CSS_STORAGE_KEY);
+    } catch {
+      // ignore storage failures
+    }
   };
 
   useEffect(() => {
@@ -321,6 +378,39 @@ export const SettingsModal = () => {
       cancelled = true;
     };
   }, [data.profileRole, isModalOpen]);
+
+  useEffect(() => {
+    if (!isModalOpen) {
+      return;
+    }
+
+    try {
+      const storedCss = window.localStorage.getItem(CUSTOM_CSS_STORAGE_KEY) || "";
+      setCustomCss(storedCss);
+      applyCustomCss(storedCss);
+
+      const downloadedRaw = window.localStorage.getItem(DOWNLOADED_PLUGINS_STORAGE_KEY);
+      if (downloadedRaw) {
+        const parsed = JSON.parse(downloadedRaw) as unknown;
+        if (Array.isArray(parsed)) {
+          setDownloadedPlugins(
+            parsed.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+          );
+        } else {
+          setDownloadedPlugins([]);
+        }
+      } else {
+        setDownloadedPlugins([]);
+      }
+    } catch {
+      setCustomCss("");
+      setDownloadedPlugins([]);
+    }
+  }, [isModalOpen]);
+
+  useEffect(() => {
+    applyCustomCss(customCss);
+  }, [customCss]);
 
   const onSaveProfileName = async () => {
     const trimmedName = profileName.trim();
@@ -823,107 +913,291 @@ export const SettingsModal = () => {
           </div>
 
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
-            <p className="text-sm font-medium text-white">Theam Uploads</p>
+            <p className="text-sm font-medium text-white">Plugins - Comming Soon!</p>
             <p className="mt-1 text-xs text-[#949ba4]">
-              Manage uploads and review uploaded assets.
+              Manage Plugins and review uploaded plugin assets.
             </p>
 
             <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3">
               <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
-                Upload List
+                All Plugins
               </p>
 
               <ul className="mt-3 space-y-2 text-sm text-[#dbdee1]">
                 <li className="rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2">
-                  <span className="text-[#949ba4]">Avatar Upload:</span>{" "}
-                  {avatarUrl ? (
-                    <a
-                      href={avatarUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-[#c9cdfb] underline decoration-dotted underline-offset-2 hover:text-white"
+                  <div className="flex items-center justify-between gap-2">
+                    <span>
+                      <span className="text-[#949ba4]">Plugins Installed:</span>{" "}
+                      <span className="text-white">{installedPluginsCountLabel}</span>
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsPluginsInstalledPanelOpen(true)}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-black/20 text-[#dbdee1] transition hover:bg-white/10"
+                      aria-label="Open Plugins Installed panel"
+                      title="Open Plugins Installed panel"
                     >
-                      Available
-                    </a>
-                  ) : (
-                    <span className="text-white">None</span>
-                  )}
+                      <Puzzle className="h-4 w-4" />
+                    </button>
+                  </div>
                 </li>
 
                 <li className="rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2">
-                  <span className="text-[#949ba4]">Banner Upload:</span>{" "}
-                  {bannerUrl ? (
-                    <a
-                      href={bannerUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-[#c9cdfb] underline decoration-dotted underline-offset-2 hover:text-white"
+                  <div className="flex items-center justify-between gap-2">
+                    <span>
+                      <span className="text-[#949ba4]">Downloaded Plugins:</span>{" "}
+                      <span className="text-white">{downloadedPlugins.length.toString().padStart(2, "0")}</span>
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsDownloadedPluginsPanelOpen(true)}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-black/20 text-[#dbdee1] transition hover:bg-white/10"
+                      aria-label="Open Downloaded Plugins panel"
+                      title="Open Downloaded Plugins panel"
                     >
-                      Available
-                    </a>
-                  ) : (
-                    <span className="text-white">None</span>
-                  )}
+                      <Puzzle className="h-4 w-4" />
+                    </button>
+                  </div>
                 </li>
               </ul>
 
-              {!avatarUrl && !bannerUrl ? (
-                <p className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-xs text-[#949ba4]">
-                  No uploads found yet.
-                </p>
-              ) : null}
+              <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-xs text-[#949ba4]">
+                <span>No plugin uploads found yet.</span>
+
+                <button
+                  type="button"
+                  onClick={() => setIsPluginUploadsPanelOpen(true)}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-black/20 text-[#dbdee1] transition hover:bg-white/10"
+                  aria-label="Open Plugin Uploads panel"
+                  title="Open Plugin Uploads panel"
+                >
+                  <Puzzle className="h-4 w-4" />
+                </button>
+              </div>
             </div>
+
+            <Dialog open={isPluginsInstalledPanelOpen} onOpenChange={setIsPluginsInstalledPanelOpen}>
+              <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-[42rem]">
+                <DialogHeader>
+                  <DialogTitle>Plugins Installed</DialogTitle>
+                  <DialogDescription className="text-[#949ba4]">
+                    View plugins installed for this user.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                    Installed Plugins: {installedPluginsCountLabel}
+                  </p>
+
+                  {downloadedPlugins.length > 0 ? (
+                    <ul className="mt-3 space-y-2 text-sm text-[#dbdee1]">
+                      {downloadedPlugins.map((pluginName, index) => (
+                        <li
+                          key={`${pluginName}-${index}`}
+                          className="rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2"
+                        >
+                          {pluginName}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-xs text-[#949ba4]">
+                      No installed plugins found.
+                    </p>
+                  )}
+                </div>
+
+                <DialogFooter>
+                  <Button type="button" onClick={() => setIsPluginsInstalledPanelOpen(false)}>
+                    Close
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={isDownloadedPluginsPanelOpen} onOpenChange={setIsDownloadedPluginsPanelOpen}>
+              <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-[42rem]">
+                <DialogHeader>
+                  <DialogTitle>Downloaded Plugins</DialogTitle>
+                  <DialogDescription className="text-[#949ba4]">
+                    View downloaded plugins for this user.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                    Downloaded Plugins: {downloadedPlugins.length.toString().padStart(2, "0")}
+                  </p>
+
+                  {downloadedPlugins.length > 0 ? (
+                    <ul className="mt-3 space-y-2 text-sm text-[#dbdee1]">
+                      {downloadedPlugins.map((pluginName, index) => (
+                        <li
+                          key={`downloaded-${pluginName}-${index}`}
+                          className="rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2"
+                        >
+                          {pluginName}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-xs text-[#949ba4]">
+                      No downloaded plugins found.
+                    </p>
+                  )}
+                </div>
+
+                <DialogFooter>
+                  <Button type="button" onClick={() => setIsDownloadedPluginsPanelOpen(false)}>
+                    Close
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={isPluginUploadsPanelOpen} onOpenChange={setIsPluginUploadsPanelOpen}>
+              <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-[42rem]">
+                <DialogHeader>
+                  <DialogTitle>Plugin Uploads</DialogTitle>
+                  <DialogDescription className="text-[#949ba4]">
+                    View plugin upload status and uploaded assets.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                    Plugin Uploads
+                  </p>
+
+                  <ul className="mt-3 space-y-2 text-sm text-[#dbdee1]">
+                    <li className="rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2">
+                      <span className="text-[#949ba4]">Upload Queue:</span>{" "}
+                      <span className="text-white">Empty</span>
+                    </li>
+                    <li className="rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2">
+                      <span className="text-[#949ba4]">Last Upload:</span>{" "}
+                      <span className="text-white">None</span>
+                    </li>
+                  </ul>
+
+                  <p className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-xs text-[#949ba4]">
+                    No plugin uploads found yet.
+                  </p>
+                </div>
+
+                <DialogFooter>
+                  <Button type="button" onClick={() => setIsPluginUploadsPanelOpen(false)}>
+                    Close
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
 
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
-            <p className="text-sm font-medium text-white">Upload Plugins</p>
-            <p className="mt-1 text-xs text-[#949ba4]">
-              Manage plugin uploads and review uploaded plugin assets.
-            </p>
-
-            <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
-                Plugin Upload List
-              </p>
-
-              <ul className="mt-3 space-y-2 text-sm text-[#dbdee1]">
-                <li className="rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2">
-                  <span className="text-[#949ba4]">Plugin Package:</span>{" "}
-                  <span className="text-white">None</span>
-                </li>
-
-                <li className="rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2">
-                  <span className="text-[#949ba4]">Plugin Manifest:</span>{" "}
-                  <span className="text-white">None</span>
-                </li>
-              </ul>
-
-              <p className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-xs text-[#949ba4]">
-                No plugin uploads found yet.
-              </p>
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
-            <p className="text-sm font-medium text-white">Custome CSS</p>
+            <p className="text-sm font-medium text-white">Custom CSS</p>
             <p className="mt-1 text-xs text-[#949ba4]">
               Add CSS overrides to personalize your interface.
             </p>
-            <textarea
-              rows={15}
-              placeholder="/* Paste your custom CSS here */"
-              className="mt-3 w-full resize-y rounded-xl border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
-            />
             <div className="mt-3 flex justify-end">
               <Button
                 type="button"
-                disabled
-                className="bg-[#5865f2]/60 text-white hover:bg-[#5865f2]/60 disabled:cursor-not-allowed disabled:opacity-70"
+                variant="outline"
+                onClick={() => setIsCustomCssEditorOpen(true)}
+                className="border-white/20 bg-transparent text-white hover:bg-white/10"
               >
-                Save CSS (Coming Soon)
+                Pop Out Editor
+              </Button>
+            </div>
+            <textarea
+              rows={15}
+              value={customCss}
+              onChange={(event) => {
+                setCustomCss(event.target.value);
+                setCustomCssStatus(null);
+              }}
+              placeholder="/* Paste your custom CSS here */"
+              className="mt-3 w-full resize-y rounded-xl border border-black/25 bg-[#1a1b1e] px-3 py-2 font-mono text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+            />
+            {customCssStatus ? (
+              <p className="mt-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-[#b5bac1]">
+                {customCssStatus}
+              </p>
+            ) : null}
+            <div className="mt-3 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onResetCustomCss}
+                className="border-white/20 bg-transparent text-white hover:bg-white/10"
+              >
+                Reset CSS
+              </Button>
+              <Button
+                type="button"
+                onClick={onSaveCustomCss}
+                className="bg-[#5865f2] text-white hover:bg-[#4752c4]"
+              >
+                Save CSS
               </Button>
             </div>
           </div>
+
+          <Dialog open={isCustomCssEditorOpen} onOpenChange={setIsCustomCssEditorOpen}>
+            <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-[90vw]">
+              <DialogHeader>
+                <DialogTitle>Custom CSS Editor</DialogTitle>
+                <DialogDescription className="text-[#949ba4]">
+                  Edit your Custom CSS in a larger pop-out editor.
+                </DialogDescription>
+              </DialogHeader>
+
+              <textarea
+                rows={22}
+                value={customCss}
+                onChange={(event) => {
+                  setCustomCss(event.target.value);
+                  setCustomCssStatus(null);
+                }}
+                placeholder="/* Paste your custom CSS here */"
+                className="w-full resize-y rounded-xl border border-black/25 bg-[#1a1b1e] px-3 py-2 font-mono text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+              />
+
+              {customCssStatus ? (
+                <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-[#b5bac1]">
+                  {customCssStatus}
+                </p>
+              ) : null}
+
+              <DialogFooter className="gap-2 sm:justify-between">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={onResetCustomCss}
+                  className="border-white/20 bg-transparent text-white hover:bg-white/10"
+                >
+                  Reset CSS
+                </Button>
+
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsCustomCssEditorOpen(false)}
+                    className="border-white/20 bg-transparent text-white hover:bg-white/10"
+                  >
+                    Close
+                  </Button>
+                  <Button type="button" onClick={onSaveCustomCss} className="bg-[#5865f2] text-white hover:bg-[#4752c4]">
+                    Save CSS
+                  </Button>
+                </div>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       );
     }
@@ -990,8 +1264,8 @@ export const SettingsModal = () => {
         </DialogDescription>
 
         <div className="grid min-h-0 flex-1 grid-cols-[260px_1fr] overflow-hidden">
-          <aside className="theme-settings-left-rail flex h-full flex-col rounded-l-3xl border-r border-black/20 bg-[#232428] p-4 pt-2 shadow-2xl shadow-black/40">
-            <nav className="settings-scrollbar flex-1 space-y-3 overflow-y-auto pr-1">
+          <aside className="theme-settings-left-rail settings-scrollbar flex h-full min-h-0 flex-col overflow-y-auto rounded-l-3xl border-r border-black/20 bg-[#232428] p-4 pt-2 shadow-2xl shadow-black/40">
+            <nav className="settings-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
               {sectionGroups.map((group) => (
                 <div key={group.label} className="space-y-1">
                   <p className="px-3 text-[11px] font-bold uppercase tracking-[0.08em] text-[#949ba4]">

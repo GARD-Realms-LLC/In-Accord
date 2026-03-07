@@ -5,18 +5,20 @@ import { currentProfile } from "@/lib/current-profile";
 import { db, member, server } from "@/lib/db";
 import { ensureServerRolesSchema, seedDefaultServerRoles } from "@/lib/server-roles";
 
-type Params = { params: { serverId: string } };
+type Params = { params: Promise<{ serverId: string }> };
 
 const colorRegex = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
 export async function GET(_req: Request, { params }: Params) {
   try {
+    const { serverId: rawServerId } = await params;
+
     const profile = await currentProfile();
     if (!profile) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const serverId = String(params.serverId ?? "").trim();
+    const serverId = String(rawServerId ?? "").trim();
     if (!serverId) {
       return new NextResponse("Server ID is required", { status: 400 });
     }
@@ -91,12 +93,14 @@ export async function GET(_req: Request, { params }: Params) {
 
 export async function POST(req: Request, { params }: Params) {
   try {
+    const { serverId: rawServerId } = await params;
+
     const profile = await currentProfile();
     if (!profile) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const serverId = String(params.serverId ?? "").trim();
+    const serverId = String(rawServerId ?? "").trim();
     if (!serverId) {
       return new NextResponse("Server ID is required", { status: 400 });
     }

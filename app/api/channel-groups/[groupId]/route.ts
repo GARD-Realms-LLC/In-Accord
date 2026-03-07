@@ -7,9 +7,11 @@ import { ensureChannelGroupSchema } from "@/lib/channel-groups";
 
 export async function PATCH(
   req: Request,
-  { params }: { params: { groupId: string } }
+  { params }: { params: Promise<{ groupId: string }> }
 ) {
   try {
+    const { groupId: rawGroupId } = await params;
+
     const profile = await currentProfile();
 
     if (!profile) {
@@ -18,7 +20,7 @@ export async function PATCH(
 
     const body = (await req.json().catch(() => null)) as { name?: string } | null;
     const name = String(body?.name ?? "").trim();
-    const groupId = String(params.groupId ?? "").trim();
+    const groupId = String(rawGroupId ?? "").trim();
 
     if (!groupId) {
       return new NextResponse("Group ID missing", { status: 400 });

@@ -4,7 +4,6 @@ import { BotAppBadge } from "@/components/bot-app-badge";
 import { NewUserCloverBadge } from "@/components/new-user-clover-badge";
 import { MobileToggle } from "@/components/mobile-toggle";
 import { UserAvatar } from "@/components/user-avatar";
-import { SocketIndicator } from "@/components/socket-indicator";
 
 import { ChatVideoButton } from "./chat-video-button";
 
@@ -46,7 +45,6 @@ export const ChatHeader = ({
         </div>
         <div className="ml-auto flex items-center">
           {type === "conversation" && <ChatVideoButton />}
-          <SocketIndicator />
         </div>
       </div>
       {type === "channel" && normalizedTopic ? (

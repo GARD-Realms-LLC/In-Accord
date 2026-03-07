@@ -7,21 +7,23 @@ import { getServerBannerConfig, setServerBannerConfig } from "@/lib/server-banne
 
 export async function DELETE(
   req: Request,
-  { params }: { params: { serverId: string } }
+  { params }: { params: Promise<{ serverId: string }> }
 ) {
   try {
+    const { serverId } = await params;
+
     const profile = await currentProfile();
 
     if (!profile) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    if (!params.serverId) {
+    if (!serverId) {
       return new NextResponse("Server ID missing", { status: 400 });
     }
 
     const target = await db.query.server.findFirst({
-      where: and(eq(server.id, params.serverId), eq(server.profileId, profile.id)),
+      where: and(eq(server.id, serverId), eq(server.profileId, profile.id)),
     });
 
     if (!target) {
@@ -29,7 +31,7 @@ export async function DELETE(
     }
 
     await db.delete(server).where(
-      and(eq(server.id, params.serverId), eq(server.profileId, profile.id))
+      and(eq(server.id, serverId), eq(server.profileId, profile.id))
     );
 
     return NextResponse.json(target);
@@ -41,9 +43,11 @@ export async function DELETE(
 
 export async function PATCH(
   req: Request,
-  { params }: { params: { serverId: string } }
+  { params }: { params: Promise<{ serverId: string }> }
 ) {
   try {
+    const { serverId } = await params;
+
     const profile = await currentProfile();
     const { name, imageUrl, bannerUrl, bannerFit, bannerScale } = await req.json();
 
@@ -51,7 +55,7 @@ export async function PATCH(
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    if (!params.serverId) {
+    if (!serverId) {
       return new NextResponse("Server ID missing", { status: 400 });
     }
 
@@ -59,19 +63,19 @@ export async function PATCH(
         name,
         imageUrl,
         updatedAt: new Date(),
-      }).where(and(eq(server.id, params.serverId), eq(server.profileId, profile.id)));
+      }).where(and(eq(server.id, serverId), eq(server.profileId, profile.id)));
 
-    await setServerBannerConfig(params.serverId, {
+    await setServerBannerConfig(serverId, {
       url: bannerUrl,
       fit: bannerFit,
       scale: typeof bannerScale === "number" ? bannerScale : Number(bannerScale),
     });
 
     const updatedServer = await db.query.server.findFirst({
-      where: and(eq(server.id, params.serverId), eq(server.profileId, profile.id)),
+      where: and(eq(server.id, serverId), eq(server.profileId, profile.id)),
     });
 
-    const resolvedBanner = await getServerBannerConfig(params.serverId);
+    const resolvedBanner = await getServerBannerConfig(serverId);
 
     return NextResponse.json(
       updatedServer

@@ -227,7 +227,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
   return (
     <div className="theme-channels-rail flex h-full w-full flex-col overflow-hidden rounded-2xl border border-border bg-card text-primary">
       <ServerHeader server={serverWithBanner} role={role} isServerOwner={isServerOwner} />
-      <ScrollArea className="flex-1 px-3">
+      <ScrollArea className="settings-scrollbar min-h-0 flex-1 px-3">
         <Separator className="bg-zinc-200 dark:bg-zinc-700 rounded-md my-2" />
         {!!textChannelsUngrouped?.length && (
           <ChannelDropZone serverId={serverId} targetGroupId={null} className="mb-2">

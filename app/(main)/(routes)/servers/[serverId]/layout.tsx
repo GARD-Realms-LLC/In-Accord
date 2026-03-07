@@ -30,8 +30,10 @@ const ServerIdLayout = async ({
   params,
 }: {
   children: React.ReactNode;
-  params: { serverId: string };
+  params: Promise<{ serverId: string }>;
 }) => {
+  const { serverId } = await params;
+
   const profile = await currentProfile();
   if (!profile) {
     return redirect("/sign-in");
@@ -45,7 +47,7 @@ const ServerIdLayout = async ({
       and(
         eq(member.serverId, server.id),
         eq(member.profileId, profile.id),
-        eq(server.id, params.serverId)
+        eq(server.id, serverId)
       )
     )
     .limit(1);
@@ -62,7 +64,7 @@ const ServerIdLayout = async ({
       c."name" as "name",
       c."type" as "type"
     from "Channel" c
-    where c."serverId" = ${params.serverId}
+    where c."serverId" = ${serverId}
     order by c."createdAt" asc
   `);
 
@@ -77,7 +79,7 @@ const ServerIdLayout = async ({
     from "Member" m
     left join "Users" u on u."userId" = m."profileId"
     left join "UserProfile" up on up."userId" = m."profileId"
-    where m."serverId" = ${params.serverId}
+    where m."serverId" = ${serverId}
     order by
       case m."role"
         when 'ADMIN' then 1
@@ -107,7 +109,7 @@ const ServerIdLayout = async ({
   return (
     <ServerRouteShell
       serverName={currentServerName}
-      serverId={params.serverId}
+      serverId={serverId}
       textChannels={textChannels.map((channel) => ({ id: channel.id, name: channel.name }))}
       voiceChannels={voiceChannels.map((channel) => ({ id: channel.id, name: channel.name }))}
       videoChannels={videoChannels.map((channel) => ({ id: channel.id, name: channel.name }))}
@@ -116,8 +118,8 @@ const ServerIdLayout = async ({
         name: member.displayName,
         role: member.role,
       }))}
-      leftSidebar={<ServerSidebar serverId={params.serverId} />}
-      rightSidebar={<ServerUserRolesRail serverId={params.serverId} />}
+      leftSidebar={<ServerSidebar serverId={serverId} />}
+      rightSidebar={<ServerUserRolesRail serverId={serverId} />}
       rightFooter={<UserLocalTime />}
     >
       {children}

@@ -15,11 +15,8 @@ export const metadata: Metadata = {
   title: "In-Accord",
   description: "In-Accord — Social Your Way!",
   icons: {
-    icon: [
-      { url: "/in-accord-steampunk-logo.png", type: "image/png" },
-      { url: "/favicon.ico", type: "image/x-icon" },
-    ],
-    apple: [{ url: "/in-accord-steampunk-logo.png", type: "image/png" }],
+    icon: [{ url: "/favicon.ico", type: "image/x-icon" }],
+    apple: [{ url: "/favicon.ico", type: "image/x-icon" }],
   },
 };
 

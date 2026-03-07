@@ -36,17 +36,19 @@ const formatTimestamp = (value: Date) => {
 };
 
 interface UsersPageProps {
-  searchParams?: {
+  searchParams: Promise<{
     serverId?: string | string[];
     memberId?: string | string[];
     view?: string | string[];
     filter?: string | string[];
     q?: string | string[];
     pendingBucket?: string | string[];
-  };
+  }>;
 }
 
 const UsersPage = async ({ searchParams }: UsersPageProps) => {
+  const resolvedSearchParams = await searchParams;
+
   const profile = await currentProfile();
 
   if (!profile) {
@@ -56,51 +58,51 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
   const recentDms = await getGlobalRecentDmsForProfile({ profileId: profile.id });
 
   const selectedServerId =
-    typeof searchParams?.serverId === "string"
-      ? searchParams.serverId
-      : Array.isArray(searchParams?.serverId)
-        ? (searchParams?.serverId[0] ?? "")
+    typeof resolvedSearchParams?.serverId === "string"
+      ? resolvedSearchParams.serverId
+      : Array.isArray(resolvedSearchParams?.serverId)
+        ? (resolvedSearchParams?.serverId[0] ?? "")
         : "";
 
   const selectedMemberId =
-    typeof searchParams?.memberId === "string"
-      ? searchParams.memberId
-      : Array.isArray(searchParams?.memberId)
-        ? (searchParams?.memberId[0] ?? "")
+    typeof resolvedSearchParams?.memberId === "string"
+      ? resolvedSearchParams.memberId
+      : Array.isArray(resolvedSearchParams?.memberId)
+        ? (resolvedSearchParams?.memberId[0] ?? "")
         : "";
 
   const selectedView =
-    typeof searchParams?.view === "string"
-      ? searchParams.view
-      : Array.isArray(searchParams?.view)
-        ? (searchParams?.view[0] ?? "friends")
+    typeof resolvedSearchParams?.view === "string"
+      ? resolvedSearchParams.view
+      : Array.isArray(resolvedSearchParams?.view)
+        ? (resolvedSearchParams?.view[0] ?? "friends")
         : "friends";
 
   const isFriendsView = selectedView.toLowerCase() === "friends";
 
   const selectedFilter =
-    typeof searchParams?.filter === "string"
-      ? searchParams.filter
-      : Array.isArray(searchParams?.filter)
-        ? (searchParams?.filter[0] ?? "all")
+    typeof resolvedSearchParams?.filter === "string"
+      ? resolvedSearchParams.filter
+      : Array.isArray(resolvedSearchParams?.filter)
+        ? (resolvedSearchParams?.filter[0] ?? "all")
         : "all";
 
   const normalizedFilter = selectedFilter.toLowerCase();
 
   const searchQuery =
-    typeof searchParams?.q === "string"
-      ? searchParams.q
-      : Array.isArray(searchParams?.q)
-        ? (searchParams?.q[0] ?? "")
+    typeof resolvedSearchParams?.q === "string"
+      ? resolvedSearchParams.q
+      : Array.isArray(resolvedSearchParams?.q)
+        ? (resolvedSearchParams?.q[0] ?? "")
         : "";
 
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
 
   const selectedPendingBucket =
-    typeof searchParams?.pendingBucket === "string"
-      ? searchParams.pendingBucket
-      : Array.isArray(searchParams?.pendingBucket)
-        ? (searchParams?.pendingBucket[0] ?? "requests")
+    typeof resolvedSearchParams?.pendingBucket === "string"
+      ? resolvedSearchParams.pendingBucket
+      : Array.isArray(resolvedSearchParams?.pendingBucket)
+        ? (resolvedSearchParams?.pendingBucket[0] ?? "requests")
         : "requests";
 
   const normalizedPendingBucket = selectedPendingBucket.toLowerCase() === "spam" ? "spam" : "requests";

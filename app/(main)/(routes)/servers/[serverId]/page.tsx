@@ -6,12 +6,14 @@ import { channel, db, member, server } from "@/lib/db";
 import { visibleChannelIdsForRole } from "@/lib/channel-permissions";
 
 interface ServerIdPageProps {
-  params: {
+  params: Promise<{
     serverId: string;
-  }
+  }>;
 }
 
 const ServerIdPage = async ({ params }: ServerIdPageProps) => {
+  const { serverId } = await params;
+
   const profile = await currentProfile();
 
   if (!profile) {
@@ -26,7 +28,7 @@ const ServerIdPage = async ({ params }: ServerIdPageProps) => {
       and(
         eq(member.serverId, server.id),
         eq(member.profileId, profile.id),
-        eq(server.id, params.serverId)
+        eq(server.id, serverId)
       )
     )
     .limit(1);
@@ -38,7 +40,7 @@ const ServerIdPage = async ({ params }: ServerIdPageProps) => {
   const currentMember = await db
     .select({ role: member.role })
     .from(member)
-    .where(and(eq(member.serverId, params.serverId), eq(member.profileId, profile.id)))
+    .where(and(eq(member.serverId, serverId), eq(member.profileId, profile.id)))
     .limit(1);
 
   if (!currentMember[0]) {
@@ -48,17 +50,17 @@ const ServerIdPage = async ({ params }: ServerIdPageProps) => {
   const serverOwner = await db
     .select({ id: server.id })
     .from(server)
-    .where(and(eq(server.id, params.serverId), eq(server.profileId, profile.id)))
+    .where(and(eq(server.id, serverId), eq(server.profileId, profile.id)))
     .limit(1);
 
   const serverChannels = await db
     .select({ id: channel.id, name: channel.name, createdAt: channel.createdAt })
     .from(channel)
-    .where(eq(channel.serverId, params.serverId))
+    .where(eq(channel.serverId, serverId))
     .orderBy(asc(channel.createdAt));
 
   const visibleIds = await visibleChannelIdsForRole({
-    serverId: params.serverId,
+    serverId,
     role: currentMember[0].role,
     isServerOwner: !!serverOwner[0],
     channelIds: serverChannels.map((item) => item.id),
@@ -72,7 +74,7 @@ const ServerIdPage = async ({ params }: ServerIdPageProps) => {
     return null;
   }
 
-  return redirect(`/servers/${params.serverId}/channels/${initialChannel.id}`);
+  return redirect(`/servers/${serverId}/channels/${initialChannel.id}`);
 }
  
 export default ServerIdPage;

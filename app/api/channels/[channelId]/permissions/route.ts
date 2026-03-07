@@ -11,13 +11,15 @@ import {
 } from "@/lib/channel-permissions";
 
 type Params = {
-  params: {
+  params: Promise<{
     channelId: string;
-  };
+  }>;
 };
 
 export async function GET(req: Request, { params }: Params) {
   try {
+    const { channelId: rawChannelId } = await params;
+
     const profile = await currentProfile();
     if (!profile) {
       return new NextResponse("Unauthorized", { status: 401 });
@@ -25,7 +27,7 @@ export async function GET(req: Request, { params }: Params) {
 
     const { searchParams } = new URL(req.url);
     const serverId = String(searchParams.get("serverId") ?? "").trim();
-    const channelId = String(params.channelId ?? "").trim();
+    const channelId = String(rawChannelId ?? "").trim();
 
     if (!serverId || !channelId) {
       return new NextResponse("Server ID and channel ID are required", { status: 400 });
@@ -59,6 +61,8 @@ export async function GET(req: Request, { params }: Params) {
 
 export async function PATCH(req: Request, { params }: Params) {
   try {
+    const { channelId: rawChannelId } = await params;
+
     const profile = await currentProfile();
     if (!profile) {
       return new NextResponse("Unauthorized", { status: 401 });
@@ -77,7 +81,7 @@ export async function PATCH(req: Request, { params }: Params) {
       | null;
 
     const serverId = String(body?.serverId ?? "").trim();
-    const channelId = String(params.channelId ?? "").trim();
+    const channelId = String(rawChannelId ?? "").trim();
 
     if (!serverId || !channelId) {
       return new NextResponse("Server ID and channel ID are required", { status: 400 });

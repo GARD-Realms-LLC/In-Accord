@@ -9,16 +9,18 @@ import { ensureUserProfileSchema } from "@/lib/user-profile";
 
 export async function GET(
   req: Request,
-  { params }: { params: { profileId: string } }
+  { params }: { params: Promise<{ profileId: string }> }
 ) {
   try {
+    const { profileId: rawProfileId } = await params;
+
     const profile = await currentProfile();
 
     if (!profile) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const profileId = params.profileId?.trim();
+    const profileId = rawProfileId?.trim();
     if (!profileId) {
       return new NextResponse("Profile ID missing", { status: 400 });
     }

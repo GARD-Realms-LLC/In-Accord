@@ -7,21 +7,23 @@ import { getServerBannerConfig } from "@/lib/server-banner-store";
 
 export async function GET(
   _req: Request,
-  { params }: { params: { serverId: string } }
+  { params }: { params: Promise<{ serverId: string }> }
 ) {
   try {
+    const { serverId } = await params;
+
     const profile = await currentProfile();
 
     if (!profile) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    if (!params.serverId) {
+    if (!serverId) {
       return new NextResponse("Server ID missing", { status: 400 });
     }
 
     const membership = await db.query.member.findFirst({
-      where: and(eq(member.serverId, params.serverId), eq(member.profileId, profile.id)),
+      where: and(eq(member.serverId, serverId), eq(member.profileId, profile.id)),
     });
 
     if (!membership) {
@@ -51,7 +53,7 @@ export async function GET(
         ) as "channelCount"
       from "Server" s
       left join "Users" u on u."userId" = s."profileId"
-      where s."id" = ${params.serverId}
+      where s."id" = ${serverId}
       limit 1
     `);
 
@@ -75,7 +77,7 @@ export async function GET(
       return new NextResponse("Not found", { status: 404 });
     }
 
-    const bannerConfig = await getServerBannerConfig(params.serverId);
+    const bannerConfig = await getServerBannerConfig(serverId);
 
     return NextResponse.json({
       id: row.id,

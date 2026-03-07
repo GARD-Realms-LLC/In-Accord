@@ -17,13 +17,15 @@ import { ensureMessageReactionSchema } from "@/lib/message-reactions";
 import { ensureServerRolesSchema } from "@/lib/server-roles";
 
 interface ChannelIdPageProps {
-  params: {
+  params: Promise<{
     serverId: string;
     channelId: string;
-  };
+  }>;
 }
 
 const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
+  const { serverId, channelId } = await params;
+
   const profile = await currentProfile();
 
   if (!profile) {
@@ -33,12 +35,12 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
   await ensureChannelTopicSchema();
 
   const currentChannel = await db.query.channel.findFirst({
-    where: eq(channel.id, params.channelId),
+    where: eq(channel.id, channelId),
   });
 
   const currentMember = await db.query.member.findFirst({
     where: and(
-      eq(member.serverId, params.serverId),
+      eq(member.serverId, serverId),
       eq(member.profileId, profile.id)
     ),
   });
@@ -61,18 +63,18 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
 
   const memberContext = await resolveMemberContext({
     profileId: profile.id,
-    serverId: params.serverId,
+    serverId,
   });
 
   const channelPermissions = await computeChannelPermissionForRole({
-    serverId: params.serverId,
+    serverId,
     channelId: currentChannel.id,
     role: currentMember.role,
     isServerOwner: memberContext?.isServerOwner ?? false,
   });
 
   if (!channelPermissions.allowView) {
-    redirect(`/servers/${params.serverId}`);
+    redirect(`/servers/${serverId}`);
   }
 
   const channelMessages = await db.query.message.findMany({
@@ -133,7 +135,7 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
   );
 
   const serverMembers = await db.query.member.findMany({
-    where: eq(member.serverId, params.serverId),
+    where: eq(member.serverId, serverId),
     with: {
       profile: true,
     },
@@ -160,7 +162,7 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
   const roleRows = await db.execute(sql`
     select "id", "name"
     from "ServerRole"
-    where "serverId" = ${params.serverId}
+    where "serverId" = ${serverId}
     order by "position" asc, "name" asc
   `);
 

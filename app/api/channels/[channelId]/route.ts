@@ -10,9 +10,11 @@ import { ensureSystemChannelSchema } from "@/lib/system-channels";
 
 export async function DELETE(
   req: Request,
-  { params }: { params: { channelId: string } }
+  { params }: { params: Promise<{ channelId: string }> }
 ) {
   try {
+    const { channelId } = await params;
+
     const profile = await currentProfile();
     const { searchParams } = new URL(req.url);
 
@@ -26,7 +28,7 @@ export async function DELETE(
       return new NextResponse("Server ID missing", { status: 400 });
     }
 
-    if (!params.channelId) {
+    if (!channelId) {
       return new NextResponse("Channel ID missing", { status: 400 });
     }
 
@@ -52,7 +54,7 @@ export async function DELETE(
     const systemChannelResult = await db.execute(sql`
       select "id"
       from "Channel"
-      where "id" = ${params.channelId}
+      where "id" = ${channelId}
         and "serverId" = ${serverId}
         and "isSystem" = true
       limit 1
@@ -71,17 +73,17 @@ export async function DELETE(
 
       await tx.execute(sql`
         delete from "Message"
-        where "channelId" = ${params.channelId}
+        where "channelId" = ${channelId}
       `);
 
       await tx.execute(sql`
         delete from "ChannelTopic"
-        where "channelId" = ${params.channelId}
+        where "channelId" = ${channelId}
       `);
 
       await tx.delete(channel).where(
         and(
-          eq(channel.id, params.channelId),
+          eq(channel.id, channelId),
           eq(channel.serverId, serverId)
         )
       );
@@ -106,9 +108,11 @@ export async function DELETE(
 
 export async function PATCH(
   req: Request,
-  { params }: { params: { channelId: string } }
+  { params }: { params: Promise<{ channelId: string }> }
 ) {
   try {
+    const { channelId } = await params;
+
     const profile = await currentProfile();
     const { name, type, channelGroupId, topic } = await req.json();
     const { searchParams } = new URL(req.url);
@@ -123,7 +127,7 @@ export async function PATCH(
       return new NextResponse("Server ID missing", { status: 400 });
     }
 
-    if (!params.channelId) {
+    if (!channelId) {
       return new NextResponse("Channel ID missing", { status: 400 });
     }
 
@@ -150,7 +154,7 @@ export async function PATCH(
     const existingChannelResult = await db.execute(sql`
       select "id", "name"
       from "Channel"
-      where "id" = ${params.channelId}
+      where "id" = ${channelId}
         and "serverId" = ${serverId}
       limit 1
     `);
@@ -202,13 +206,13 @@ export async function PATCH(
         "type" = ${type},
         "channelGroupId" = ${normalizedGroupId},
         "updatedAt" = ${new Date()}
-      where "id" = ${params.channelId}
+      where "id" = ${channelId}
         and "serverId" = ${serverId}
     `);
 
     await db.execute(sql`
       insert into "ChannelTopic" ("channelId", "serverId", "topic", "createdAt", "updatedAt")
-      values (${params.channelId}, ${serverId}, ${nextTopic || null}, now(), now())
+      values (${channelId}, ${serverId}, ${nextTopic || null}, now(), now())
       on conflict ("channelId") do update
       set
         "topic" = excluded."topic",

@@ -11,19 +11,22 @@ import { ChatInput } from "@/components/chat/chat-input";
 // import { MediaRoom } from "@/components/media-room";
 
 interface MemberIdPageProps {
-  params: {
+  params: Promise<{
     memberId: string;
     serverId: string;
-  },
-  searchParams: {
+  }>;
+  searchParams: Promise<{
     video?: boolean;
-  }
+  }>;
 }
 
 const MemberIdPage = async ({
   params,
   searchParams,
 }: MemberIdPageProps) => {
+  const { memberId, serverId } = await params;
+  const resolvedSearchParams = await searchParams;
+
   const profile = await currentProfile();
 
   if (!profile) {
@@ -32,7 +35,7 @@ const MemberIdPage = async ({
 
   const currentMember = await db.query.member.findFirst({
     where: and(
-      eq(member.serverId, params.serverId),
+      eq(member.serverId, serverId),
       eq(member.profileId, profile.id)
     ),
   });
@@ -49,8 +52,8 @@ const MemberIdPage = async ({
       up."presenceStatus" as "presenceStatus"
     from "Member" m
     left join "UserProfile" up on up."userId" = m."profileId"
-    where m."id" = ${params.memberId}
-      and m."serverId" = ${params.serverId}
+    where m."id" = ${memberId}
+      and m."serverId" = ${serverId}
     limit 1
   `);
 
@@ -64,7 +67,7 @@ const MemberIdPage = async ({
   }).rows?.[0];
 
   if (!targetMemberRow) {
-    return redirect(`/servers/${params.serverId}`);
+    return redirect(`/servers/${serverId}`);
   }
 
   const normalizedGlobalRole = (profile.role ?? "").trim().toUpperCase();
@@ -78,19 +81,21 @@ const MemberIdPage = async ({
 
   if (targetMemberRow.profileId !== profile.id) {
     if (targetStatus === "DND") {
-      return redirect(`/servers/${params.serverId}`);
+      return redirect(`/servers/${serverId}`);
     }
 
     if (!canBypassPresenceRestrictions && targetStatus === "INVISIBLE") {
-      return redirect(`/servers/${params.serverId}`);
+      return redirect(`/servers/${serverId}`);
     }
   }
 
-  const conversation = await getOrCreateConversation(currentMember.id, params.memberId);
+  const conversation = await getOrCreateConversation(currentMember.id, memberId);
 
   if (!conversation) {
-    return redirect(`/servers/${params.serverId}`);
+    return redirect(`/servers/${serverId}`);
   }
+
+  void resolvedSearchParams;
 
   const { memberOne, memberTwo } = conversation;
 
@@ -107,7 +112,7 @@ const MemberIdPage = async ({
         name={otherMember.profile.name}
         isBot={isOtherMemberBot}
         profileCreatedAt={otherMember.profile.createdAt}
-        serverId={params.serverId}
+        serverId={serverId}
         type="conversation"
       />
       {/* {searchParams.video && (

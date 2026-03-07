@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
 export default function Page() {
@@ -74,7 +75,7 @@ export default function Page() {
         {loading ? "Signing in..." : "Sign in"}
       </button>
       <p className="text-xs text-zinc-300">
-        Need an account? <a href="/sign-up" className="underline">Sign up</a>
+        Need an account? <Link href="/sign-up" className="underline">Sign up</Link>
       </p>
     </form>
   );

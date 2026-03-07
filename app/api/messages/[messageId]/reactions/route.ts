@@ -58,8 +58,10 @@ const assertAccess = async (profileId: string, messageId: string, scope: Scope) 
   return Boolean((dmAccess as unknown as { rows?: Array<{ id: string }> }).rows?.[0]);
 };
 
-export async function GET(req: Request, { params }: { params: { messageId: string } }) {
+export async function GET(req: Request, { params }: { params: Promise<{ messageId: string }> }) {
   try {
+    const { messageId: rawMessageId } = await params;
+
     const profile = await currentProfile();
     if (!profile) {
       return new NextResponse("Unauthorized", { status: 401 });
@@ -68,7 +70,7 @@ export async function GET(req: Request, { params }: { params: { messageId: strin
     const { searchParams } = new URL(req.url);
     const scopeParam = searchParams.get("scope");
     const scope = scopeParam as Scope;
-    const messageId = String(params.messageId ?? "").trim();
+    const messageId = String(rawMessageId ?? "").trim();
 
     if (!messageId) {
       return new NextResponse("Message ID is required", { status: 400 });
@@ -92,8 +94,10 @@ export async function GET(req: Request, { params }: { params: { messageId: strin
   }
 }
 
-export async function POST(req: Request, { params }: { params: { messageId: string } }) {
+export async function POST(req: Request, { params }: { params: Promise<{ messageId: string }> }) {
   try {
+    const { messageId: rawMessageId } = await params;
+
     const profile = await currentProfile();
     if (!profile) {
       return new NextResponse("Unauthorized", { status: 401 });
@@ -104,7 +108,7 @@ export async function POST(req: Request, { params }: { params: { messageId: stri
       scope?: Scope;
     };
 
-    const messageId = String(params.messageId ?? "").trim();
+    const messageId = String(rawMessageId ?? "").trim();
     const emoji = String(body.emoji ?? "").trim();
     const scope = body.scope;
 
