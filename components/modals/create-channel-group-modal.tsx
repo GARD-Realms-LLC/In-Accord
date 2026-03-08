@@ -120,7 +120,7 @@ export const CreateChannelGroupModal = () => {
 
   return (
     <Dialog open={isModalOpen} onOpenChange={handleClose}>
-      <DialogContent className="overflow-hidden bg-white p-0 text-black dark:bg-[#313338] dark:text-white">
+      <DialogContent className="max-h-[90vh] overflow-y-auto bg-white p-0 text-black dark:bg-[#313338] dark:text-white">
         <DialogHeader className="px-6 pt-8">
           <DialogTitle className="text-center text-2xl font-bold">Create Channel Group</DialogTitle>
         </DialogHeader>
@@ -169,7 +169,7 @@ export const CreateChannelGroupModal = () => {
                       <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-300">
                         Free icon picks
                       </p>
-                      <div className="grid grid-cols-9 gap-1 rounded-md border border-black/10 bg-black/5 p-2 dark:border-black/20 dark:bg-black/10">
+                      <div className="grid grid-cols-6 gap-1 rounded-md border border-black/10 bg-black/5 p-2 sm:grid-cols-9 dark:border-black/20 dark:bg-black/10">
                         {FREE_GROUP_ICONS.map((icon) => (
                           <button
                             key={icon}

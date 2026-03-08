@@ -1360,7 +1360,7 @@ export const InAccordAdminModal = () => {
 
   const menuButtonClass = (section: AdminSection) =>
     cn(
-      "w-full rounded-md px-3 py-2 text-left text-sm transition",
+      "block w-full rounded-md px-3 py-2 text-left text-sm transition",
       activeSection === section
         ? "bg-indigo-500/15 font-medium text-indigo-700 hover:bg-indigo-500/20 dark:text-indigo-200"
         : "text-zinc-700 hover:bg-zinc-200/70 dark:text-zinc-200 dark:hover:bg-zinc-800"
@@ -1447,12 +1447,12 @@ export const InAccordAdminModal = () => {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid min-h-0 flex-1 grid-cols-[220px_minmax(0,1fr)] [direction:ltr]">
-          <aside className="order-1 border-r border-zinc-200 bg-zinc-50/80 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
+        <div dir="ltr" className="grid min-h-0 flex-1 grid-cols-[220px_minmax(0,1fr)]">
+          <aside dir="ltr" className="order-1 border-r border-zinc-200 bg-zinc-50/80 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
             <p className="px-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
               Admin Menu
             </p>
-            <nav className="mt-3 space-y-1">
+            <nav className="mt-3 flex flex-col gap-1">
               <button type="button" onClick={() => setActiveSection("general")} className={menuButtonClass("general")}>
                 General Settings
               </button>

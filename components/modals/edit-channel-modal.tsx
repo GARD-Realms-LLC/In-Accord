@@ -474,7 +474,7 @@ export const EditChannelModal = () => {
 
   return (
     <Dialog open={isModalOpen} onOpenChange={handleClose}>
-      <DialogContent className="inset-0! left-0! top-0! right-0! bottom-0! m-auto h-[80vh] w-[80vw] max-h-[80vh] max-w-[80vw] translate-x-0! translate-y-0! overflow-hidden border border-black/30 bg-[#313338] p-0 text-white">
+      <DialogContent className="h-[80vh] w-[80vw] max-h-[80vh] max-w-[80vw] overflow-hidden border border-black/30 bg-[#313338] p-0 text-white">
         <DialogTitle className="sr-only">Edit Channel Settings</DialogTitle>
         <div className="grid h-full grid-cols-[1fr_220px]">
           <div className="flex h-full flex-col">
@@ -575,7 +575,7 @@ export const EditChannelModal = () => {
                             <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500">
                               Free icon picks
                             </p>
-                            <div className="grid grid-cols-9 gap-1 rounded-md border border-black/20 bg-black/10 p-2">
+                            <div className="grid grid-cols-6 gap-1 rounded-md border border-black/20 bg-black/10 p-2 sm:grid-cols-9">
                               {FREE_CHANNEL_ICONS.map((icon) => (
                                 <button
                                   key={icon}
