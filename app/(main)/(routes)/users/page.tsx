@@ -25,6 +25,7 @@ import { ensureFriendRelationsSchema } from "@/lib/friend-relations";
 import { NewUserCloverBadge } from "@/components/new-user-clover-badge";
 import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
 import { ensureMessageReactionSchema } from "@/lib/message-reactions";
+import { SupportHelpControls } from "@/components/topbar/support-help-controls";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -571,43 +572,47 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
     <div className="theme-users-shell h-full bg-[#313338] text-[#dbdee1]">
       <UsersPageAutoRefresh />
       <header
-        className="fixed right-0 top-0 z-40 flex h-12 items-center overflow-hidden rounded-b-xl border-b border-border bg-card px-4"
+        className="theme-server-topbar fixed right-0 top-0 z-40 flex h-12 items-center overflow-hidden rounded-b-xl border-b border-border bg-background"
         style={{ left: "116px" }}
       >
+        <SupportHelpControls panelTop={56} />
+
         <h1
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 truncate text-center text-sm font-bold uppercase tracking-[0.08em] text-foreground"
+          className="absolute inset-y-0 z-10 flex -translate-x-1/2 items-center truncate text-center text-sm font-bold uppercase tracking-[0.08em] text-foreground"
           style={{ left: "calc((100% - 256px) / 2)", maxWidth: "calc(100% - 592px)" }}
         >
           In-Accord
         </h1>
 
-        <div className="absolute right-77 top-1/2 z-20 flex -translate-y-1/2 items-center gap-1 text-muted-foreground">
-          <button type="button" title="Start Call" className="rounded p-1.5 transition-colors hover:bg-accent hover:text-accent-foreground">
+        <div className="absolute inset-y-0 z-20 flex items-center gap-1 text-muted-foreground" style={{ right: "308px" }}>
+          <button type="button" title="Start Call" className="inline-flex h-8 w-8 items-center justify-center rounded transition-colors hover:bg-[#3f4248] hover:text-white">
             <Phone className="h-4 w-4" suppressHydrationWarning />
           </button>
-          <button type="button" title="Start Video" className="rounded p-1.5 transition-colors hover:bg-accent hover:text-accent-foreground">
+          <button type="button" title="Start Video" className="inline-flex h-8 w-8 items-center justify-center rounded transition-colors hover:bg-[#3f4248] hover:text-white">
             <Video className="h-4 w-4" suppressHydrationWarning />
           </button>
-          <button type="button" title="Invite People" className="rounded p-1.5 transition-colors hover:bg-accent hover:text-accent-foreground">
+          <button type="button" title="Invite People" className="inline-flex h-8 w-8 items-center justify-center rounded transition-colors hover:bg-[#3f4248] hover:text-white">
             <UserPlus className="h-4 w-4" suppressHydrationWarning />
           </button>
-          <button type="button" title="Notifications" className="rounded p-1.5 transition-colors hover:bg-accent hover:text-accent-foreground">
+          <button type="button" title="Notifications" className="inline-flex h-8 w-8 items-center justify-center rounded transition-colors hover:bg-[#3f4248] hover:text-white">
             <Bell className="h-4 w-4" suppressHydrationWarning />
           </button>
         </div>
 
         <div
-          className="absolute top-1/2 z-20 w-40.75 -translate-y-1/2 -translate-x-1/2 rounded-md border border-border bg-background"
-          style={{ left: "calc(100% - 144px)" }}
+          className="absolute inset-y-0 z-20 flex items-center"
+          style={{ right: "62.5px" }}
         >
-          <div className="flex h-8 items-center px-2">
-            <Search className="h-3.5 w-3.5 text-muted-foreground" suppressHydrationWarning />
-            <input
-              type="text"
-              placeholder="Search"
-              aria-label="Search home"
-              className="ml-2 w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground outline-none"
-            />
+          <div className="theme-server-search-shell w-40.75 rounded-md border border-border bg-card/90">
+            <div className="flex h-8 items-center px-2">
+              <Search className="h-3.5 w-3.5 text-muted-foreground" suppressHydrationWarning />
+              <input
+                type="text"
+                placeholder="Search"
+                aria-label="Search home"
+                className="ml-2 w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground outline-none"
+              />
+            </div>
           </div>
         </div>
       </header>

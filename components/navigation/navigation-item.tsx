@@ -54,6 +54,7 @@ export const NavigationItem = ({
   onDragStart,
   onDragEnd,
 }: NavigationItemProps) => {
+  const SERVER_TAB_DRAG_MIME = "application/x-inaccord-server-tab";
   const params = useParams();
   const router = useRouter();
   const [imageFailed, setImageFailed] = useState(false);
@@ -158,7 +159,15 @@ export const NavigationItem = ({
             }
 
             event.dataTransfer.setData("text/plain", id);
-            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData(
+              SERVER_TAB_DRAG_MIME,
+              JSON.stringify({
+                serverId: id,
+                serverName: name,
+                source: "server-rail",
+              })
+            );
+            event.dataTransfer.effectAllowed = "copyMove";
             onDragStart?.();
           }}
           onDragEnd={() => {

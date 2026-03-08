@@ -6,7 +6,7 @@
   "scripts": {
     "clean:next": "node -e \"const fs=require('fs');const p=process.env.NEXT_DIST_DIR||'.next';fs.rmSync(p,{recursive:true,force:true})\"",
     "dev": "set NEXT_DIST_DIR=.next-dev&& npm run clean:next && next dev",
-    "dev:3000": "next dev -p 3000",
+    "dev:3000": "set NEXT_DIST_DIR=.next&& npm run clean:next && next dev -p 3000",
     "cleanup:dist-locks": "node scripts/cleanup-dist-locks.cjs",
     "prepare:win-fav-icon": "node scripts/prepare-win-fav-icon.cjs",
     "generate:win-icon": "node scripts/generate-windows-icon.cjs",

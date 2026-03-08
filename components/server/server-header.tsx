@@ -89,16 +89,15 @@ export const ServerHeader = ({ server, role, isServerOwner = false }: ServerHead
         <div className="absolute inset-0 bg-[#1f2023]" />
       )}
 
-      <div className="absolute left-0 right-0 top-0 z-10 flex h-11 items-center justify-between bg-transparent px-2 text-white">
-
-        <div className="relative z-10 flex w-8 items-center justify-center">
+      <div className="absolute left-0 right-0 top-0 z-10 grid h-11 grid-cols-[2rem_minmax(0,1fr)_2rem] items-center gap-2 bg-transparent px-2 text-white">
+        <div className="relative z-10 flex h-8 w-8 items-center justify-center">
           <Star className="h-4 w-4 text-zinc-100" />
         </div>
 
         <DropdownMenu>
           <DropdownMenuTrigger className="focus:outline-none" asChild>
             <button
-              className="absolute left-1/2 top-1/2 z-10 flex w-[84%] max-w-55 -translate-x-1/2 -translate-y-1/2 items-center justify-center gap-2 rounded-md bg-black/20 px-3 py-1 text-sm font-semibold hover:bg-black/35 transition"
+              className="z-10 flex h-8 w-full items-center justify-center gap-2 rounded-md bg-black/20 px-3 py-1 text-sm font-semibold transition hover:bg-black/35"
             >
               <span className="truncate">{server.name}</span>
               <ChevronDown className="h-4 w-4 shrink-0" />
@@ -180,14 +179,14 @@ export const ServerHeader = ({ server, role, isServerOwner = false }: ServerHead
           <button
             type="button"
             onClick={() => onOpen("invite", { server })}
-            className="relative z-10 rounded-md bg-black/20 p-1.5 text-zinc-100 hover:bg-black/35 transition"
+            className="relative z-10 inline-flex h-8 w-8 items-center justify-center rounded-md bg-black/20 text-zinc-100 transition hover:bg-black/35"
             title="Invite People"
             aria-label="Invite People"
           >
             <UserPlus className="h-4 w-4" />
           </button>
         )}
-        {!isModerator && <div className="w-8" />}
+        {!isModerator && <div className="h-8 w-8" />}
       </div>
     </div>
   );

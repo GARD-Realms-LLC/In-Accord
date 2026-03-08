@@ -448,6 +448,7 @@ export const EditChannelModal = () => {
   return (
     <Dialog open={isModalOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-4xl overflow-hidden border border-black/30 bg-[#313338] p-0 text-white">
+        <DialogTitle className="sr-only">Edit Channel Settings</DialogTitle>
         <div className="grid min-h-[560px] grid-cols-[220px_1fr]">
           <aside className="border-r border-black/30 bg-[#2b2d31] p-3">
             <div className="mt-1 space-y-3">
@@ -491,9 +492,7 @@ export const EditChannelModal = () => {
 
           <div className="flex h-full flex-col">
             <div className="border-b border-black/30 px-6 py-4">
-              <DialogTitle asChild>
-                <h2 className="text-lg font-bold text-white">{tabLabelMap[activeTab]}</h2>
-              </DialogTitle>
+              <h2 className="text-lg font-bold text-white">{tabLabelMap[activeTab]}</h2>
               <p className="mt-0.5 text-xs text-zinc-400">{tabDescriptionMap[activeTab]}</p>
               <p className="text-xs text-zinc-400">Channel: #{channel?.name ?? "unknown"}</p>
             </div>
