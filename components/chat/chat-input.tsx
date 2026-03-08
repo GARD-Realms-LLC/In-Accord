@@ -6,7 +6,6 @@ import qs from "query-string";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Plus, Reply, X } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
@@ -40,6 +39,8 @@ const formSchema = z.object({
   content: z.string().min(1),
 });
 
+const POST_CREATED_EVENT = "inaccord:post-created";
+
 export const ChatInput = ({
   apiUrl,
   query,
@@ -51,7 +52,6 @@ export const ChatInput = ({
   mentionRoles = [],
 }: ChatInputProps) => {
   const { onOpen } = useModal();
-  const router = useRouter();
   const [sendError, setSendError] = useState<string | null>(null);
   const [mentionsEnabled, setMentionsEnabled] = useState(true);
   const [activeMentionStart, setActiveMentionStart] = useState<number | null>(null);
@@ -218,6 +218,10 @@ export const ChatInput = ({
     setActiveMentionIndex(0);
   };
 
+  const notifyPostCreated = () => {
+    window.dispatchEvent(new Event(POST_CREATED_EVENT));
+  };
+
   const detectMentionState = (value: string, caret: number | null | undefined) => {
     if (!mentionsEnabled || !mentionOptions.length || typeof caret !== "number") {
       clearMentionState();
@@ -303,7 +307,7 @@ export const ChatInput = ({
       form.reset();
       clearMentionState();
       setActiveQuote(null);
-      router.refresh();
+      notifyPostCreated();
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
         const dataMessage =
@@ -356,7 +360,7 @@ export const ChatInput = ({
       form.reset();
       clearMentionState();
       setActiveQuote(null);
-      router.refresh();
+      notifyPostCreated();
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
         const dataMessage =
@@ -397,7 +401,7 @@ export const ChatInput = ({
       form.reset();
       clearMentionState();
       setActiveQuote(null);
-      router.refresh();
+      notifyPostCreated();
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
         const dataMessage =
@@ -438,7 +442,7 @@ export const ChatInput = ({
       form.reset();
       clearMentionState();
       setActiveQuote(null);
-      router.refresh();
+      notifyPostCreated();
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
         const dataMessage =
@@ -479,7 +483,7 @@ export const ChatInput = ({
       form.reset();
       clearMentionState();
       setActiveQuote(null);
-      router.refresh();
+      notifyPostCreated();
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
         const dataMessage =
@@ -530,7 +534,7 @@ export const ChatInput = ({
                       <button
                         type="button"
                         disabled={isLoading}
-                        className="absolute left-8 top-7 flex h-[24px] w-[24px] items-center justify-center rounded-full bg-zinc-500 p-1 transition hover:bg-zinc-600 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-400 dark:hover:bg-zinc-300"
+                        className="absolute left-8 top-7 flex h-6 w-6 items-center justify-center rounded-full bg-zinc-500 p-1 transition hover:bg-zinc-600 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-400 dark:hover:bg-zinc-300"
                         aria-label="Open add menu"
                         title="Add"
                       >
@@ -610,7 +614,7 @@ export const ChatInput = ({
                     }}
                   />
                   {isMentionMenuOpen ? (
-                    <div className="absolute bottom-[64px] left-14 right-16 z-20 max-h-56 overflow-auto rounded-lg border border-black/30 bg-[#1e1f22] p-1 shadow-2xl shadow-black/45">
+                    <div className="absolute bottom-16 left-14 right-16 z-20 max-h-56 overflow-auto rounded-lg border border-black/30 bg-[#1e1f22] p-1 shadow-2xl shadow-black/45">
                       {filteredMentionOptions.map((option, index) => {
                         const isActive = index === activeMentionIndex;
                         return (
@@ -636,7 +640,7 @@ export const ChatInput = ({
                       })}
                     </div>
                   ) : null}
-                  <div className="absolute top-[26px] right-8 flex items-center gap-2">
+                  <div className="absolute top-6.5 right-8 flex items-center gap-2">
                     <EmotePicker onSelect={onEmoteSelect} serverId={stickerServerId} />
                     <StickerPicker onSelect={onStickerSelect} serverId={stickerServerId} />
                     <SoundEfxPicker onSelect={onSoundEfxSelect} serverId={stickerServerId} />

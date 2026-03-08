@@ -14,10 +14,14 @@ export const NavigationHomeButton = () => {
 
   return (
     <div
-      className="pointer-events-none relative flex w-full select-none items-center justify-center cursor-default"
+      className="pointer-events-none relative flex w-full select-none flex-col items-center justify-center cursor-default"
       aria-label={`In-Accord (${connectionQuality})`}
       role="img"
     >
+      <span className="mb-1 text-[11px] font-extrabold uppercase tracking-[0.08em] text-red-600 dark:text-red-400">
+        BETA!
+      </span>
+
       <div
         className={`relative mx-3 h-[56px] w-[56px] rounded-full ring-4 ${ringColorClass}`}
       >

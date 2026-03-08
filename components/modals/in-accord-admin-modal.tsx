@@ -130,7 +130,7 @@ type AdminReport = {
   reporterProfileId: string;
   reporterName: string;
   reporterEmail: string;
-  targetType: "USER" | "SERVER";
+  targetType: "USER" | "SERVER" | "MESSAGE";
   targetId: string;
   targetName: string;
   reason: string;
@@ -279,7 +279,7 @@ export const InAccordAdminModal = () => {
   const [isLoadingReports, setIsLoadingReports] = useState(false);
   const [reportsError, setReportsError] = useState<string | null>(null);
   const [reportStatusFilter, setReportStatusFilter] = useState<"ALL" | AdminReport["status"]>("ALL");
-  const [reportTargetTypeFilter, setReportTargetTypeFilter] = useState<"ALL" | "USER" | "SERVER">("ALL");
+  const [reportTargetTypeFilter, setReportTargetTypeFilter] = useState<"ALL" | "USER" | "SERVER" | "MESSAGE">("ALL");
   const [updatingReportId, setUpdatingReportId] = useState<string | null>(null);
   const [emojiStickerServers, setEmojiStickerServers] = useState<AdminEmojiStickerServer[]>([]);
   const [emojiStickerAssets, setEmojiStickerAssets] = useState<AdminEmojiStickerAsset[]>([]);
@@ -2268,6 +2268,7 @@ export const InAccordAdminModal = () => {
                     <option value="ALL">All targets</option>
                     <option value="USER">Users</option>
                     <option value="SERVER">Servers</option>
+                    <option value="MESSAGE">Messages</option>
                   </select>
 
                   <button
@@ -2310,7 +2311,11 @@ export const InAccordAdminModal = () => {
                               <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                                 <span className="inline-flex items-center gap-1">
                                   <Flag className="h-3.5 w-3.5" />
-                                  {report.targetType === "USER" ? "Reported User" : "Reported Server"}
+                                  {report.targetType === "USER"
+                                    ? "Reported User"
+                                    : report.targetType === "SERVER"
+                                      ? "Reported Server"
+                                      : "Reported Message"}
                                 </span>
                                 <span className="ml-2">{report.targetName}</span>
                               </p>

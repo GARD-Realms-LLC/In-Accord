@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 
 import { currentProfile } from "@/lib/current-profile";
 import { channel, db, member, message } from "@/lib/db";
+import { ensureChannelThreadSchema, markThreadRead, touchThreadActivity } from "@/lib/channel-threads";
 import { computeChannelPermissionForRole } from "@/lib/channel-permissions";
 
 export async function POST(req: Request) {
@@ -14,6 +15,7 @@ export async function POST(req: Request) {
 
     const serverId = searchParams.get("serverId");
     const channelId = searchParams.get("channelId");
+    const threadId = searchParams.get("threadId");
 
     if (!profile) {
       return new NextResponse("Unauthorized", { status: 401 });
@@ -26,6 +28,10 @@ export async function POST(req: Request) {
     if (!channelId) {
       return new NextResponse("Channel ID missing", { status: 400 });
     }
+
+    const normalizedThreadId = typeof threadId === "string" && threadId.trim().length > 0
+      ? threadId.trim()
+      : null;
 
     const currentMember = await db.query.member.findFirst({
       where: and(
@@ -64,6 +70,31 @@ export async function POST(req: Request) {
       return new NextResponse("You cannot send messages in this channel", { status: 403 });
     }
 
+    if (normalizedThreadId) {
+      await ensureChannelThreadSchema();
+
+      const threadResult = await db.execute(sql`
+        select "id", "archived"
+        from "ChannelThread"
+        where "id" = ${normalizedThreadId}
+          and "channelId" = ${currentChannel.id}
+          and "serverId" = ${serverId}
+        limit 1
+      `);
+
+      const threadRow = (threadResult as unknown as {
+        rows?: Array<{ id: string; archived: boolean }>;
+      }).rows?.[0];
+
+      if (!threadRow) {
+        return new NextResponse("Thread not found", { status: 404 });
+      }
+
+      if (threadRow.archived) {
+        return new NextResponse("Thread is archived", { status: 400 });
+      }
+    }
+
     const normalizedContent = typeof content === "string" ? content.trim() : "";
 
     if (!normalizedContent && !fileUrl) {
@@ -80,11 +111,23 @@ export async function POST(req: Request) {
         fileUrl: fileUrl ?? null,
         memberId: currentMember.id,
         channelId: currentChannel.id,
+        threadId: normalizedThreadId,
         deleted: false,
         createdAt: now,
         updatedAt: now,
       })
       .returning();
+
+    if (normalizedThreadId) {
+      await touchThreadActivity({
+        threadId: normalizedThreadId,
+      });
+
+      await markThreadRead({
+        threadId: normalizedThreadId,
+        profileId: profile.id,
+      });
+    }
 
     return NextResponse.json(inserted[0]);
   } catch (error) {

@@ -150,8 +150,8 @@ export const ServerRouteShell = ({
   const [isUpdaterActionPending, setIsUpdaterActionPending] = useState(false);
   const TAB_BAR_PRESETS: TabBarPreset[] = [
     {
-      id: "discord",
-      label: "Discord",
+      id: "classic",
+      label: "Classic",
       prefs: {
         tabMinWidth: 120,
         tabMaxWidth: 220,
@@ -321,6 +321,7 @@ export const ServerRouteShell = ({
   };
 
   const compactTabsForStorage = (tabs: ServerTabItem[]): ServerTabItem[] => {
+    const orderedIds: string[] = [];
     const deduped = new Map<string, ServerTabItem>();
 
     for (const tab of tabs) {
@@ -329,28 +330,35 @@ export const ServerRouteShell = ({
         continue;
       }
 
-      const name = String(tab.serverName ?? "").trim().slice(0, MAX_SERVER_NAME_LENGTH) || "Server";
-      const previous = deduped.get(id);
+      const normalized: ServerTabItem = {
+        serverId: id,
+        serverName: String(tab.serverName ?? "").trim().slice(0, MAX_SERVER_NAME_LENGTH) || "Server",
+        defaultChannelId:
+          typeof tab.defaultChannelId === "string" && tab.defaultChannelId.trim().length > 0
+            ? tab.defaultChannelId.trim()
+            : null,
+        lastVisitedAt:
+          typeof tab.lastVisitedAt === "number" && Number.isFinite(tab.lastVisitedAt)
+            ? tab.lastVisitedAt
+            : Date.now(),
+      };
 
-      if (!previous || (tab.lastVisitedAt ?? 0) >= (previous.lastVisitedAt ?? 0)) {
-        deduped.set(id, {
-          serverId: id,
-          serverName: name,
-          defaultChannelId:
-            typeof tab.defaultChannelId === "string" && tab.defaultChannelId.trim().length > 0
-              ? tab.defaultChannelId.trim()
-              : null,
-          lastVisitedAt:
-            typeof tab.lastVisitedAt === "number" && Number.isFinite(tab.lastVisitedAt)
-              ? tab.lastVisitedAt
-              : Date.now(),
-        });
+      if (!deduped.has(id)) {
+        orderedIds.push(id);
       }
+
+      deduped.set(id, normalized);
     }
 
-    return Array.from(deduped.values())
-      .sort((a, b) => (a.lastVisitedAt ?? 0) - (b.lastVisitedAt ?? 0))
-      .slice(-MAX_PERSISTED_TABS);
+    const stableTabs = orderedIds
+      .map((id) => deduped.get(id))
+      .filter((tab): tab is ServerTabItem => Boolean(tab));
+
+    if (stableTabs.length <= MAX_PERSISTED_TABS) {
+      return stableTabs;
+    }
+
+    return stableTabs.slice(stableTabs.length - MAX_PERSISTED_TABS);
   };
 
   const mutateTabsAndPersist = (updater: (baseTabs: ServerTabItem[]) => ServerTabItem[]) => {

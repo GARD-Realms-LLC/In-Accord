@@ -2971,7 +2971,7 @@ export const EditServerModal = () => {
 
                           <div className="max-h-[280px] space-y-2 overflow-y-auto overflow-x-hidden pr-1">
                             {onboardingConfig.prompts.length === 0 ? (
-                              <p className="text-xs text-zinc-400">No prompts yet. Add one to guide new members like Discord onboarding.</p>
+                              <p className="text-xs text-zinc-400">No prompts yet. Add one to guide new members through onboarding.</p>
                             ) : (
                               onboardingConfig.prompts.map((promptItem, promptIndex) => (
                                 <div key={promptItem.id} className="space-y-2 rounded-md border border-zinc-700 bg-[#1e1f22] p-3">

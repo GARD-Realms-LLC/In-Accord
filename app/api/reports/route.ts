@@ -74,6 +74,31 @@ export async function POST(req: Request) {
       }
     }
 
+    if (targetType === "MESSAGE") {
+      const targetMessageResult = await db.execute(sql`
+        select "id"
+        from "Message"
+        where "id" = ${targetId}
+        limit 1
+      `);
+
+      const targetDirectMessageResult = await db.execute(sql`
+        select "id"
+        from "DirectMessage"
+        where "id" = ${targetId}
+        limit 1
+      `);
+
+      const exists = Boolean(
+        (targetMessageResult as unknown as { rows?: Array<{ id: string }> }).rows?.[0]?.id ||
+        (targetDirectMessageResult as unknown as { rows?: Array<{ id: string }> }).rows?.[0]?.id
+      );
+
+      if (!exists) {
+        return NextResponse.json({ error: "Target message not found" }, { status: 404 });
+      }
+    }
+
     const reportId = uuidv4();
 
     await db.execute(sql`

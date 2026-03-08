@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { ChannelType } from "@/lib/db";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { ChatHeader } from "@/components/chat/chat-header";
@@ -14,9 +14,7 @@ import { computeChannelPermissionForRole } from "@/lib/channel-permissions";
 import { resolveMemberContext } from "@/lib/channel-permissions";
 import { getUserProfileNameMap } from "@/lib/user-profile";
 import type { Profile } from "@/lib/db/types";
-import { ensureChannelTopicSchema } from "@/lib/channel-topic";
-import { ensureMessageReactionSchema } from "@/lib/message-reactions";
-import { ensureServerRolesSchema } from "@/lib/server-roles";
+import { listThreadsForMessages } from "@/lib/channel-threads";
 
 interface ChannelIdPageProps {
   params: Promise<{
@@ -26,6 +24,8 @@ interface ChannelIdPageProps {
 }
 
 const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
+  const perfStart = Date.now();
+  const isPerfLoggingEnabled = process.env.NODE_ENV !== "production";
   const { serverId, channelId } = await params;
 
   const profile = await currentProfile();
@@ -34,7 +34,11 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
     return redirect("/sign-in");
   }
 
-  await ensureChannelTopicSchema();
+  if (isPerfLoggingEnabled) {
+    console.info(
+      `[PERF][ChannelPage] auth+params ${Date.now() - perfStart}ms server=${serverId} channel=${channelId}`
+    );
+  }
 
   const currentChannel = await db.query.channel.findFirst({
     where: eq(channel.id, channelId),
@@ -80,7 +84,7 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
   }
 
   const channelMessages = await db.query.message.findMany({
-    where: eq(message.channelId, currentChannel.id),
+    where: and(eq(message.channelId, currentChannel.id), isNull(message.threadId)),
     orderBy: [asc(message.createdAt)],
     with: {
       member: {
@@ -91,7 +95,11 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
     },
   });
 
-  await ensureMessageReactionSchema();
+  if (isPerfLoggingEnabled) {
+    console.info(
+      `[PERF][ChannelPage] messages ${Date.now() - perfStart}ms server=${serverId} channel=${channelId} count=${channelMessages.length}`
+    );
+  }
 
   const reactionRows = channelMessages.length
     ? await db.execute(sql`
@@ -159,8 +167,6 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
     };
   });
 
-  await ensureServerRolesSchema();
-
   const roleRows = await db.execute(sql`
     select "id", "name"
     from "ServerRole"
@@ -197,12 +203,26 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
     };
   });
 
+  const threadBySourceMessageId = await listThreadsForMessages({
+    serverId,
+    channelId: currentChannel.id,
+    sourceMessageIds: hydratedChannelMessages.map((item) => item.id),
+    viewerProfileId: profile.id,
+  });
+
+  if (isPerfLoggingEnabled) {
+    console.info(
+      `[PERF][ChannelPage] done ${Date.now() - perfStart}ms server=${serverId} channel=${channelId}`
+    );
+  }
+
   const lastChannelMessageId = hydratedChannelMessages[hydratedChannelMessages.length - 1]?.id ?? "none";
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
       <div className="theme-server-chat-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-border bg-background shadow-xl shadow-black/35">
         <ChatHeader
+          channelId={currentChannel.id}
           name={currentChannel.name}
           topic={channelTopic}
           serverId={currentChannel.serverId}
@@ -211,7 +231,7 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
 
         {currentChannel.type === ChannelType.TEXT ? (
           <>
-          <ChatLiveRefresh intervalMs={1000} />
+          <ChatLiveRefresh />
           <ChatScrollBox
             className="flex-1 overflow-y-auto"
             scrollKey={`${currentChannel.id}:${hydratedChannelMessages.length}:${lastChannelMessageId}`}
@@ -240,6 +260,9 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
                   }}
                   reactionScope="channel"
                   initialReactions={reactionMap.get(item.id) ?? []}
+                  serverId={currentChannel.serverId}
+                  channelId={currentChannel.id}
+                  thread={threadBySourceMessageId.get(item.id) ?? null}
                 />
               ))
             )}

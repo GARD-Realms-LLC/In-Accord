@@ -9,7 +9,7 @@ import { allowedReportStatuses, ensureReportSchema, type ReportStatus } from "@/
 type ReportRow = {
   id: string;
   reporterProfileId: string;
-  targetType: "USER" | "SERVER";
+  targetType: "USER" | "SERVER" | "MESSAGE";
   targetId: string;
   reason: string | null;
   details: string | null;
@@ -22,6 +22,7 @@ type ReportRow = {
   reporterEmail: string | null;
   targetUserName: string | null;
   targetServerName: string | null;
+  targetMessageContent: string | null;
 };
 
 export async function GET(req: Request) {
@@ -48,7 +49,7 @@ export async function GET(req: Request) {
         : sql``;
 
     const targetTypeSql =
-      targetTypeFilter === "USER" || targetTypeFilter === "SERVER"
+      targetTypeFilter === "USER" || targetTypeFilter === "SERVER" || targetTypeFilter === "MESSAGE"
         ? sql`and r."targetType" = ${targetTypeFilter}`
         : sql``;
 
@@ -68,13 +69,20 @@ export async function GET(req: Request) {
         coalesce(nullif(trim(up."profileName"), ''), nullif(trim(u."name"), ''), u."email", r."reporterProfileId") as "reporterName",
         u."email" as "reporterEmail",
         coalesce(nullif(trim(tup."profileName"), ''), nullif(trim(tu."name"), ''), tu."email", null) as "targetUserName",
-        s."name" as "targetServerName"
+        s."name" as "targetServerName",
+        coalesce(
+          nullif(trim(m."content"), ''),
+          nullif(trim(dm."content"), ''),
+          case when m."id" is not null or dm."id" is not null then '[attachment or empty message]' else null end
+        ) as "targetMessageContent"
       from "Report" r
       left join "Users" u on u."userId" = r."reporterProfileId"
       left join "UserProfile" up on up."userId" = r."reporterProfileId"
       left join "Users" tu on tu."userId" = r."targetId" and r."targetType" = 'USER'
       left join "UserProfile" tup on tup."userId" = tu."userId"
       left join "Server" s on s."id" = r."targetId" and r."targetType" = 'SERVER'
+      left join "Message" m on m."id" = r."targetId" and r."targetType" = 'MESSAGE'
+      left join "DirectMessage" dm on dm."id" = r."targetId" and r."targetType" = 'MESSAGE'
       where 1=1
       ${statusSql}
       ${targetTypeSql}
@@ -99,7 +107,9 @@ export async function GET(req: Request) {
       targetName:
         row.targetType === "USER"
           ? row.targetUserName ?? row.targetId
-          : row.targetServerName ?? row.targetId,
+          : row.targetType === "SERVER"
+            ? row.targetServerName ?? row.targetId
+            : row.targetMessageContent ?? row.targetId,
       reason: row.reason ?? "",
       details: row.details ?? "",
       status: row.status,

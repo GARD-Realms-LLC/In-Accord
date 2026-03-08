@@ -61,7 +61,7 @@ export const NavigationSidebar = async () => {
   if (hasInAccordAdministratorAccess) {
     const totalsResult = await db.execute(sql`
       select
-        (select count(*)::int from "Member") as "totalMembers",
+        (select count(distinct "profileId")::int from "Member") as "totalMembers",
         (select count(*)::int from "Server") as "totalServers"
     `);
 

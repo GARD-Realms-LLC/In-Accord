@@ -56,6 +56,7 @@ export interface Message {
   fileUrl: string | null;
   memberId: string;
   channelId: string;
+  threadId?: string | null;
   deleted: boolean;
   createdAt: Date;
   updatedAt: Date;

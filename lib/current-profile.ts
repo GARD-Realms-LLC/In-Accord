@@ -1,11 +1,58 @@
 import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { ensureRemovedInAccordRolesNormalized } from "@/lib/in-accord-admin-migration";
 import { normalizePresenceStatus } from "@/lib/presence-status";
 import { getSessionUserId } from "@/lib/session";
 import { getUserBanner } from "@/lib/user-banner-store";
-import { ensureUserProfileSchema } from "@/lib/user-profile";
+
+const CURRENT_PROFILE_CACHE_TTL_MS = 10_000;
+
+type CachedProfile = {
+  id: string;
+  userId: string;
+  name: string;
+  realName: string | null;
+  profileName: string | null;
+  profileNameStyle: string | null;
+  nameplateLabel: string | null;
+  nameplateColor: string | null;
+  nameplateImageUrl: string | null;
+  pronouns: string | null;
+  comment: string | null;
+  avatarDecorationUrl: string | null;
+  phoneNumber: string | null;
+  dateOfBirth: string | null;
+  bannerUrl: string | null;
+  presenceStatus: string;
+  role: string | null;
+  imageUrl: string;
+  email: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+const currentProfileCache = new Map<string, { value: CachedProfile | null; expiresAt: number }>();
+
+const getCachedCurrentProfile = (userId: string) => {
+  const cached = currentProfileCache.get(userId);
+  if (!cached) {
+    return null;
+  }
+
+  if (cached.expiresAt <= Date.now()) {
+    currentProfileCache.delete(userId);
+    return null;
+  }
+
+  return cached.value;
+};
+
+const setCachedCurrentProfile = (userId: string, value: CachedProfile | null) => {
+  currentProfileCache.set(userId, {
+    value,
+    expiresAt: Date.now() + CURRENT_PROFILE_CACHE_TTL_MS,
+  });
+};
 
 export const currentProfile = async () => {
   const userId = await getSessionUserId();
@@ -20,10 +67,12 @@ export const currentProfile = async () => {
     return null;
   }
 
-  try {
-    await ensureUserProfileSchema();
-    await ensureRemovedInAccordRolesNormalized();
+  const cachedProfile = getCachedCurrentProfile(userId);
+  if (cachedProfile) {
+    return cachedProfile;
+  }
 
+  try {
     const userResult = await db.execute(sql`
       select
         u."userId" as "userId",
@@ -80,7 +129,7 @@ export const currentProfile = async () => {
       ? user.bannerUrl ?? (await getUserBanner(user.userId))
       : null;
 
-    const current = user
+    const current: CachedProfile | null = user
       ? {
           id: user.userId,
           userId: user.userId,
@@ -105,6 +154,8 @@ export const currentProfile = async () => {
           updatedAt: user.lastLogin ? new Date(user.lastLogin) : new Date(0),
         }
       : null;
+
+    setCachedCurrentProfile(userId, current);
 
     return current;
   } catch (error) {

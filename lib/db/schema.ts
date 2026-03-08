@@ -103,12 +103,14 @@ export const message = pgTable("Message", {
   fileUrl: text("fileUrl"),
   memberId: varchar("memberId", { length: 191 }).notNull(),
   channelId: varchar("channelId", { length: 191 }).notNull(),
+  threadId: varchar("threadId", { length: 191 }),
   deleted: boolean("deleted").notNull(),
   createdAt: timestamp("createdAt", { mode: "date" }).notNull(),
   updatedAt: timestamp("updatedAt", { mode: "date" }).notNull(),
 }, (t) => ({
   memberIdIdx: index("Message_memberId_idx").on(t.memberId),
   channelIdIdx: index("Message_channelId_idx").on(t.channelId),
+  threadIdIdx: index("Message_threadId_idx").on(t.threadId),
 }));
 
 export const conversation = pgTable("Conversation", {

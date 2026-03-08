@@ -371,7 +371,7 @@ export const EditChannelModal = () => {
           <p className="text-sm font-semibold text-white">{tabLabelMap[tab]}</p>
           <p className="mt-1 text-xs text-zinc-400">{tabDescriptionMap[tab]}</p>
           <div className="mt-3 rounded-md border border-[#5865f2]/35 bg-[#5865f2]/10 px-3 py-2 text-xs text-[#cdd2ff]">
-            Discord-style menu is now in place. This section is ready for feature-specific wiring.
+            App-style menu is now in place. This section is ready for feature-specific wiring.
           </div>
         </div>
       </div>

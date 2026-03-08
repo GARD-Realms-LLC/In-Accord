@@ -54,7 +54,7 @@ export const PROFILE_NAME_EFFECT_OPTIONS: Array<{ key: ProfileNameEffectKey; lab
 
 export const PROFILE_NAME_COLOR_OPTIONS: Array<{ key: ProfileNameColorKey; label: string; description: string }> = [
   { key: "default", label: "Default", description: "Default text color." },
-  { key: "blurb", label: "Blurb", description: "Discord-inspired blurple accent." },
+  { key: "blurb", label: "Blurb", description: "Classic blurple accent." },
   { key: "sunset", label: "Sunset Gradient", description: "Warm premium-like gradient text." },
   { key: "frost", label: "Frost Gradient", description: "Cool cyan-to-blue gradient text." },
   { key: "ruby", label: "Ruby", description: "Strong ruby-red profile color." },
@@ -98,7 +98,7 @@ export const PROFILE_NAME_STYLE_OPTIONS: Array<{
   {
     key: "blurple",
     label: "Blurb",
-    description: "Discord-like blurple color with subtle emphasis.",
+    description: "Blurple color with subtle emphasis.",
   },
   {
     key: "sunset",

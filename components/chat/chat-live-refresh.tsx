@@ -5,10 +5,11 @@ import { useEffect } from "react";
 
 type ChatLiveRefreshProps = {
   enabled?: boolean;
-  intervalMs?: number;
 };
 
-export const ChatLiveRefresh = ({ enabled = true, intervalMs = 1500 }: ChatLiveRefreshProps) => {
+const POST_CREATED_EVENT = "inaccord:post-created";
+
+export const ChatLiveRefresh = ({ enabled = true }: ChatLiveRefreshProps) => {
   const router = useRouter();
 
   useEffect(() => {
@@ -16,7 +17,7 @@ export const ChatLiveRefresh = ({ enabled = true, intervalMs = 1500 }: ChatLiveR
       return;
     }
 
-    const refreshIfVisible = () => {
+    const refreshAfterPost = () => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") {
         return;
       }
@@ -24,20 +25,12 @@ export const ChatLiveRefresh = ({ enabled = true, intervalMs = 1500 }: ChatLiveR
       router.refresh();
     };
 
-    const onFocus = () => refreshIfVisible();
-    const onVisibilityChange = () => refreshIfVisible();
-
-    const timer = window.setInterval(refreshIfVisible, Math.max(800, intervalMs));
-
-    window.addEventListener("focus", onFocus);
-    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener(POST_CREATED_EVENT, refreshAfterPost as EventListener);
 
     return () => {
-      window.clearInterval(timer);
-      window.removeEventListener("focus", onFocus);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener(POST_CREATED_EVENT, refreshAfterPost as EventListener);
     };
-  }, [enabled, intervalMs, router]);
+  }, [enabled, router]);
 
   return null;
 };

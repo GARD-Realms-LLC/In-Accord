@@ -50,6 +50,16 @@ interface ChatItemProps {
     emoji: string;
     count: number;
   }>;
+  serverId?: string;
+  channelId?: string;
+  thread?: {
+    id: string;
+    title: string;
+    replyCount: number;
+    archived?: boolean;
+    participantCount?: number;
+    unreadCount?: number;
+  } | null;
 }
 
 const formSchema = z.object({
@@ -104,6 +114,114 @@ const reactionSummary = (items: PostEmoteItem[]) =>
 
 const notifiedMentionMessageIds = new Set<string>();
 const previewCache = new Map<string, LinkPreview | null>();
+const PROFILE_CARD_CACHE_TTL_MS = 120_000;
+
+type ProfileCardData = {
+  id: string;
+  realName: string | null;
+  profileName: string | null;
+  profileIcons?: ProfileIcon[];
+  nameplateLabel?: string | null;
+  nameplateColor?: string | null;
+  nameplateImageUrl?: string | null;
+  effectiveNameplateLabel?: string | null;
+  effectiveNameplateColor?: string | null;
+  effectiveNameplateImageUrl?: string | null;
+  pronouns?: string | null;
+  comment?: string | null;
+  effectiveProfileName?: string | null;
+  avatarDecorationUrl?: string | null;
+  effectiveAvatarDecorationUrl?: string | null;
+  bannerUrl: string | null;
+  effectiveBannerUrl?: string | null;
+  serverProfile?: {
+    serverId: string;
+    serverName: string;
+    profileName: string | null;
+    avatarDecorationUrl?: string | null;
+    bannerUrl: string | null;
+  } | null;
+  selectedServerTag?: {
+    serverId: string;
+    serverName: string;
+    tagCode: string;
+    iconKey: string;
+    iconEmoji: string;
+  } | null;
+  presenceStatus: string | null;
+  role: string | null;
+  email: string;
+  imageUrl: string;
+  createdAt: string | null;
+  lastLogonAt: string | null;
+};
+
+const profileCardCache = new Map<
+  string,
+  {
+    data: ProfileCardData | null;
+    expiresAt: number;
+  }
+>();
+const profileCardInFlight = new Map<string, Promise<ProfileCardData | null>>();
+
+const getProfileCardCacheKey = (profileId: string, memberId: string) => `${profileId}:${memberId}`;
+
+const getCachedProfileCard = (profileId: string, memberId: string) => {
+  const cacheKey = getProfileCardCacheKey(profileId, memberId);
+  const cached = profileCardCache.get(cacheKey);
+
+  if (!cached) {
+    return null;
+  }
+
+  if (cached.expiresAt <= Date.now()) {
+    profileCardCache.delete(cacheKey);
+    return null;
+  }
+
+  return cached.data;
+};
+
+const fetchProfileCardData = async ({
+  profileId,
+  memberId,
+}: {
+  profileId: string;
+  memberId: string;
+}) => {
+  const cacheKey = getProfileCardCacheKey(profileId, memberId);
+  const cached = getCachedProfileCard(profileId, memberId);
+
+  if (cached) {
+    return cached;
+  }
+
+  const inFlight = profileCardInFlight.get(cacheKey);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const request = axios
+    .get<ProfileCardData>(`/api/profile/${encodeURIComponent(profileId)}/card`, {
+      params: { memberId },
+    })
+    .then((response) => response.data)
+    .catch(() => null)
+    .then((data) => {
+      profileCardCache.set(cacheKey, {
+        data,
+        expiresAt: Date.now() + PROFILE_CARD_CACHE_TTL_MS,
+      });
+      return data;
+    })
+    .finally(() => {
+      profileCardInFlight.delete(cacheKey);
+    });
+
+  profileCardInFlight.set(cacheKey, request);
+  return request;
+};
 
 type LinkPreview = {
   url: string;
@@ -149,47 +267,10 @@ export const ChatItem = ({
   dmServerId,
   reactionScope = "channel",
   initialReactions,
+  serverId,
+  channelId,
+  thread,
 }: ChatItemProps) => {
-  type ProfileCardData = {
-    id: string;
-    realName: string | null;
-    profileName: string | null;
-    profileIcons?: ProfileIcon[];
-    nameplateLabel?: string | null;
-    nameplateColor?: string | null;
-    nameplateImageUrl?: string | null;
-    effectiveNameplateLabel?: string | null;
-    effectiveNameplateColor?: string | null;
-    effectiveNameplateImageUrl?: string | null;
-    pronouns?: string | null;
-    comment?: string | null;
-    effectiveProfileName?: string | null;
-    avatarDecorationUrl?: string | null;
-    effectiveAvatarDecorationUrl?: string | null;
-    bannerUrl: string | null;
-    effectiveBannerUrl?: string | null;
-    serverProfile?: {
-      serverId: string;
-      serverName: string;
-      profileName: string | null;
-      avatarDecorationUrl?: string | null;
-      bannerUrl: string | null;
-    } | null;
-    selectedServerTag?: {
-      serverId: string;
-      serverName: string;
-      tagCode: string;
-      iconKey: string;
-      iconEmoji: string;
-    } | null;
-    presenceStatus: string | null;
-    role: string | null;
-    email: string;
-    imageUrl: string;
-    createdAt: string | null;
-    lastLogonAt: string | null;
-  };
-
   const [isEditing, setIsEditing] = useState(false);
   const [isProfilePopoverOpen, setIsProfilePopoverOpen] = useState(false);
   const [profileCard, setProfileCard] = useState<ProfileCardData | null>(null);
@@ -200,6 +281,7 @@ export const ChatItem = ({
     createPostEmoteItemsFromReactions(initialReactions)
   );
   const [activePickerId, setActivePickerId] = useState<string | null>(null);
+  const [isThreadActionPending, setIsThreadActionPending] = useState(false);
   const { onOpen } = useModal();
   const params = useParams();
   const router = useRouter();
@@ -307,7 +389,23 @@ export const ChatItem = ({
   };
 
   const onMemberClick = () => {
+    const cached = getCachedProfileCard(member.profile.id, member.id);
+    if (cached) {
+      setProfileCard(cached);
+    }
+
     setIsProfilePopoverOpen((prev) => !prev);
+  };
+
+  const prefetchProfileCard = () => {
+    void fetchProfileCardData({
+      profileId: member.profile.id,
+      memberId: member.id,
+    }).then((data) => {
+      if (data && !isProfilePopoverOpen) {
+        setProfileCard((current) => current ?? data);
+      }
+    });
   };
 
   const onStartDirectMessage = () => {
@@ -381,6 +479,29 @@ export const ChatItem = ({
     }
   };
 
+  const onReportMessage = async () => {
+    if (deleted) {
+      return;
+    }
+
+    const sourceLabel = reactionScope === "direct" ? "direct message" : "channel message";
+
+    try {
+      await axios.post("/api/reports", {
+        targetType: "MESSAGE",
+        targetId: id,
+        reason: `Reported ${sourceLabel}`,
+        details: `Reported from ${sourceLabel} action bar`,
+      });
+      window.alert("Message report submitted.");
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Failed to submit report."
+        : "Failed to submit report.";
+      window.alert(message);
+    }
+  };
+
   const onQuoteMessage = () => {
     if (deleted) {
       return;
@@ -397,6 +518,46 @@ export const ChatItem = ({
         },
       })
     );
+  };
+
+  const onOpenThread = async () => {
+    if (deleted || !serverId || !channelId) {
+      return;
+    }
+
+    if (isThreadActionPending) {
+      return;
+    }
+
+    const existingThreadId = String(thread?.id ?? "").trim();
+
+    if (existingThreadId) {
+      router.push(`/servers/${serverId}/channels/${channelId}/threads/${existingThreadId}`);
+      return;
+    }
+
+    try {
+      setIsThreadActionPending(true);
+
+      const sourceTitle = getQuoteSnippetFromBody(extractQuotedContent(content).body || content);
+      const response = await axios.post(`/api/channels/${channelId}/threads`, {
+        serverId,
+        sourceMessageId: id,
+        title: sourceTitle,
+      });
+
+      const createdThreadId = String((response.data as { threadId?: string }).threadId ?? "").trim();
+      if (!createdThreadId) {
+        throw new Error("Thread creation response did not include threadId");
+      }
+
+      router.push(`/servers/${serverId}/channels/${channelId}/threads/${createdThreadId}`);
+    } catch (error) {
+      console.error("[CHAT_ITEM_OPEN_THREAD]", error);
+      window.alert("Unable to open thread right now.");
+    } finally {
+      setIsThreadActionPending(false);
+    }
   };
 
   useEffect(() => {
@@ -450,19 +611,22 @@ export const ChatItem = ({
     let cancelled = false;
 
     const loadProfileCard = async () => {
-      try {
-        const response = await axios.get<ProfileCardData>(
-          `/api/profile/${encodeURIComponent(member.profile.id)}/card`,
-          { params: { memberId: member.id } }
-        );
+      const cached = getCachedProfileCard(member.profile.id, member.id);
 
+      if (cached) {
         if (!cancelled) {
-          setProfileCard(response.data);
+          setProfileCard(cached);
         }
-      } catch {
-        if (!cancelled) {
-          setProfileCard(null);
-        }
+        return;
+      }
+
+      const data = await fetchProfileCardData({
+        profileId: member.profile.id,
+        memberId: member.id,
+      });
+
+      if (!cancelled) {
+        setProfileCard(data);
       }
     };
 
@@ -483,35 +647,6 @@ export const ChatItem = ({
 
     setActivePickerId(null);
   }, [id, initialReactions]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const syncReactions = async () => {
-      try {
-        const response = await axios.get<{ reactions?: Array<{ emoji: string; count: number }> }>(
-          `/api/messages/${id}/reactions`,
-          {
-            params: { scope: reactionScope },
-          }
-        );
-
-        if (!cancelled) {
-          applyServerReactions(response.data.reactions ?? []);
-        }
-      } catch {
-        // ignore polling failures
-      }
-    };
-
-    void syncReactions();
-    const timer = window.setInterval(syncReactions, 4000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [id, reactionScope]);
 
   useEffect(() => {
     const onProfileUpdated = (event: Event) => {
@@ -665,6 +800,25 @@ export const ChatItem = ({
   const renderedPreviews = messageUrls
     .map((url) => linkPreviews[url])
     .filter((item): item is LinkPreview => Boolean(item));
+  const threadIdFromSocketQuery =
+    typeof socketQuery?.threadId === "string" ? socketQuery.threadId.trim() : "";
+  const canUseThreads =
+    reactionScope === "channel" &&
+    !!serverId &&
+    !!channelId &&
+    !threadIdFromSocketQuery &&
+    !deleted;
+  const threadActionLabel = canUseThreads
+    ? thread?.id
+      ? "Open Thread"
+      : "Start Thread"
+    : "Threads only in channels";
+  const actionIconClassName =
+    "w-4 h-4 transition";
+  const actionIconEnabledClassName =
+    "cursor-pointer text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300";
+  const actionIconDisabledClassName =
+    "cursor-not-allowed text-zinc-400/70 dark:text-zinc-500/70";
 
   useEffect(() => {
     if (!isMentioningCurrentUser || deleted) {
@@ -783,6 +937,7 @@ export const ChatItem = ({
             <button
               type="button"
               onClick={onMemberClick}
+              onMouseEnter={prefetchProfileCard}
               className="cursor-pointer hover:drop-shadow-md transition"
               aria-label={`Open profile for ${displayName}`}
               title={`View ${displayName}'s profile`}
@@ -928,6 +1083,7 @@ export const ChatItem = ({
               <button
                 type="button"
                 onClick={onMemberClick}
+                onMouseEnter={prefetchProfileCard}
                 className="font-semibold text-sm hover:underline cursor-pointer"
               >
                 <ProfileNameWithServerTag
@@ -1172,34 +1328,69 @@ export const ChatItem = ({
         </div>
       </div>
       {!deleted && (
-        <div className="hidden group-hover:flex items-center gap-x-2 absolute p-1 -top-2 right-5 bg-white dark:bg-zinc-800 border rounded-sm">
+        <div className="flex items-center gap-x-2 absolute p-1 -top-2 right-5 bg-white/95 dark:bg-zinc-800/95 border rounded-sm shadow-sm">
+          <ActionTooltip label={threadActionLabel} align="center">
+            <MessageCircle
+              onClick={() => {
+                if (canUseThreads) {
+                  void onOpenThread();
+                }
+              }}
+              className={cn(
+                actionIconClassName,
+                canUseThreads && !isThreadActionPending
+                  ? actionIconEnabledClassName
+                  : actionIconDisabledClassName
+              )}
+            />
+          </ActionTooltip>
+
           <ActionTooltip label="Reply" align="center">
             <Reply
               onClick={onQuoteMessage}
-              className="cursor-pointer ml-auto w-4 h-4 text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition"
+              className={cn(actionIconClassName, actionIconEnabledClassName)}
             />
           </ActionTooltip>
-          {canEditMessage && (
-            <ActionTooltip label="Edit" align="center">
-              <Edit
-                onClick={() => setIsEditing(true)}
-                className="cursor-pointer ml-auto w-4 h-4 text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition"
-              />
-            </ActionTooltip>
-          )}
-          {canDeleteMessage && (
-            <ActionTooltip label="Delete" align="center">
-              <Trash
-                onClick={() =>
+
+          <ActionTooltip label={canEditMessage ? "Edit" : "Edit unavailable"} align="center">
+            <Edit
+              onClick={() => {
+                if (canEditMessage) {
+                  setIsEditing(true);
+                }
+              }}
+              className={cn(
+                actionIconClassName,
+                canEditMessage ? actionIconEnabledClassName : actionIconDisabledClassName
+              )}
+            />
+          </ActionTooltip>
+
+          <ActionTooltip label={canDeleteMessage ? "Delete" : "Delete unavailable"} align="center">
+            <Trash
+              onClick={() => {
+                if (canDeleteMessage) {
                   onOpen("deleteMessage", {
                     apiUrl: `${socketUrl}/${id}`,
                     query: socketQuery,
-                  })
+                  });
                 }
-                className="cursor-pointer ml-auto w-4 h-4 text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition"
-              />
-            </ActionTooltip>
-          )}
+              }}
+              className={cn(
+                actionIconClassName,
+                canDeleteMessage ? actionIconEnabledClassName : actionIconDisabledClassName
+              )}
+            />
+          </ActionTooltip>
+
+          <ActionTooltip label="Report" align="center">
+            <Flag
+              onClick={() => {
+                void onReportMessage();
+              }}
+              className={cn(actionIconClassName, actionIconEnabledClassName)}
+            />
+          </ActionTooltip>
         </div>
       )}
     </div>

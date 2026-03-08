@@ -26,6 +26,7 @@ import { NewUserCloverBadge } from "@/components/new-user-clover-badge";
 import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
 import { ensureMessageReactionSchema } from "@/lib/message-reactions";
 import { SupportHelpControls } from "@/components/topbar/support-help-controls";
+import { ThreadsToastButton } from "@/components/topbar/threads-toast-button";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -588,6 +589,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
           <button type="button" title="Start Call" className="inline-flex h-8 w-8 items-center justify-center rounded transition-colors hover:bg-[#3f4248] hover:text-white">
             <Phone className="h-4 w-4" suppressHydrationWarning />
           </button>
+          <ThreadsToastButton className="inline-flex h-8 w-8 items-center justify-center rounded transition-colors hover:bg-[#3f4248] hover:text-white" />
           <button type="button" title="Start Video" className="inline-flex h-8 w-8 items-center justify-center rounded transition-colors hover:bg-[#3f4248] hover:text-white">
             <Video className="h-4 w-4" suppressHydrationWarning />
           </button>
@@ -774,7 +776,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                     scrollKey={`${selectedConversation.conversationId}:${selectedConversation.messages.length}:${selectedConversation.messages[selectedConversation.messages.length - 1]?.id ?? "none"}`}
                     forceStickToBottom
                   >
-                    <ChatLiveRefresh intervalMs={1000} />
+                    <ChatLiveRefresh />
                     {selectedConversation.messages.length === 0 ? (
                       <div className="p-6 text-sm text-zinc-500 dark:text-zinc-400">
                         No direct messages yet. Say hello to {selectedConversation.otherMember.name}.

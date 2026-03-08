@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Hash } from "lucide-react";
 
 import { BotAppBadge } from "@/components/bot-app-badge";
@@ -10,6 +11,7 @@ import { ChatVideoButton } from "./chat-video-button";
 
 interface ChatHeaderProps {
   serverId: string;
+  channelId?: string;
   name: string;
   topic?: string | null;
   type: "channel" | "conversation";
@@ -22,6 +24,7 @@ interface ChatHeaderProps {
 
 export const ChatHeader = ({
   serverId,
+  channelId,
   name,
   topic,
   type,
@@ -59,6 +62,14 @@ export const ChatHeader = ({
           {type === "conversation" && isBot ? <BotAppBadge className="h-4 px-1 text-[9px]" /> : null}
         </div>
         <div className="ml-auto flex items-center">
+          {type === "channel" && channelId ? (
+            <Link
+              href={`/servers/${serverId}/channels/${channelId}/threads`}
+              className="mr-2 inline-flex items-center rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            >
+              Threads
+            </Link>
+          ) : null}
           {type === "conversation" && <ChatVideoButton />}
         </div>
       </div>
