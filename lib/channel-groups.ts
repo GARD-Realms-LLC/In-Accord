@@ -27,6 +27,11 @@ export const ensureChannelGroupSchema = async () => {
   `);
 
   await db.execute(sql`
+    alter table "ChannelGroup"
+    add column if not exists "icon" varchar(32)
+  `);
+
+  await db.execute(sql`
     with ranked as (
       select
         g."id",
@@ -55,6 +60,11 @@ export const ensureChannelGroupSchema = async () => {
   await db.execute(sql`
     alter table "Channel"
     add column if not exists "channelGroupId" varchar(191)
+  `);
+
+  await db.execute(sql`
+    alter table "Channel"
+    add column if not exists "icon" varchar(32)
   `);
 
   await db.execute(sql`

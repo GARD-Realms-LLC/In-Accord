@@ -10,7 +10,7 @@ import { ensureChannelGroupSchema } from "@/lib/channel-groups";
 export async function POST(req: Request) {
   try {
     const profile = await currentProfile();
-    const { name, type, channelGroupId } = await req.json();
+    const { name, type, channelGroupId, icon } = await req.json();
     const { searchParams } = new URL(req.url);
 
     const serverId = searchParams.get("serverId");
@@ -52,6 +52,10 @@ export async function POST(req: Request) {
       typeof channelGroupId === "string" && channelGroupId.trim().length > 0
         ? channelGroupId.trim()
         : null;
+    const normalizedIcon =
+      typeof icon === "string" && icon.trim().length > 0
+        ? icon.trim().slice(0, 16)
+        : null;
 
     if (normalizedGroupId) {
       const groupResult = await db.execute(sql`
@@ -92,6 +96,7 @@ export async function POST(req: Request) {
         "profileId",
         "serverId",
         "channelGroupId",
+        "icon",
         "sortOrder",
         "createdAt",
         "updatedAt"
@@ -103,6 +108,7 @@ export async function POST(req: Request) {
         ${profile.id},
         ${serverId},
         ${normalizedGroupId},
+        ${normalizedIcon},
         ${nextSortOrder},
         ${now},
         ${now}
@@ -121,6 +127,7 @@ export async function POST(req: Request) {
       channel: {
         id,
         name,
+        icon: normalizedIcon,
         type,
         serverId,
         channelGroupId: normalizedGroupId,

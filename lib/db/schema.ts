@@ -87,6 +87,7 @@ export const member = pgTable("Member", {
 export const channel = pgTable("Channel", {
   id: varchar("id", { length: 191 }).primaryKey(),
   name: varchar("name", { length: 191 }).notNull(),
+  icon: varchar("icon", { length: 32 }),
   type: channelTypeEnum("type").notNull(),
   profileId: varchar("profileId", { length: 191 }).notNull(),
   serverId: varchar("serverId", { length: 191 }).notNull(),

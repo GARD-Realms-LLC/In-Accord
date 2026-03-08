@@ -13,6 +13,11 @@ const nextConfig = {
         protocol: "https",
         hostname: "uploadthing.com",
       },
+      {
+        protocol: "https",
+        hostname: "cdn.jsdelivr.net",
+        pathname: "/gh/twitter/twemoji@*/assets/72x72/**",
+      },
     ],
   },
 }

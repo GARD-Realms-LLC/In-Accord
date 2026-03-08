@@ -24,6 +24,7 @@ interface ServerSidebarProps {
 type ChannelRow = {
   id: string;
   name: string;
+  icon: string | null;
   topic: string | null;
   type: ChannelType;
   profileId: string;
@@ -37,6 +38,7 @@ type ChannelRow = {
 type ChannelGroupRow = {
   id: string;
   name: string;
+  icon: string | null;
   sortOrder: number | string | null;
 };
 
@@ -69,6 +71,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
     select
       c."id" as "id",
       c."name" as "name",
+      c."icon" as "icon",
       ct."topic" as "topic",
       c."type" as "type",
       c."profileId" as "profileId",
@@ -86,6 +89,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
   const channels = ((channelsResult as unknown as { rows: ChannelRow[] }).rows ?? []).map((row) => ({
     id: row.id,
     name: row.name,
+    icon: row.icon,
     topic: row.topic,
     type: row.type,
     profileId: row.profileId,
@@ -100,6 +104,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
     select
       cg."id" as "id",
       cg."name" as "name",
+      cg."icon" as "icon",
       cg."sortOrder" as "sortOrder"
     from "ChannelGroup" cg
     where cg."serverId" = ${serverId}
@@ -199,6 +204,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
   const groupedChannels = channelGroups.map((group) => ({
     id: group.id,
     name: group.name,
+    icon: group.icon,
     channels: visibleChannels.filter((item) => item.channelGroupId === group.id),
   }));
   const groupedChannelIds = new Set(

@@ -114,7 +114,7 @@ export async function PATCH(
     const { channelId } = await params;
 
     const profile = await currentProfile();
-    const { name, type, channelGroupId, topic } = await req.json();
+    const { name, type, channelGroupId, topic, icon } = await req.json();
     const { searchParams } = new URL(req.url);
 
     const serverId = searchParams.get("serverId");
@@ -190,6 +190,10 @@ export async function PATCH(
     const incomingName = String(name ?? "").trim();
     const nextName = incomingName;
     const nextTopic = typeof topic === "string" ? topic.trim() : "";
+    const nextIcon =
+      typeof icon === "string" && icon.trim().length > 0
+        ? icon.trim().slice(0, 16)
+        : null;
 
     if (!nextName) {
       return new NextResponse("Name is required", { status: 400 });
@@ -205,6 +209,7 @@ export async function PATCH(
         "name" = ${nextName},
         "type" = ${type},
         "channelGroupId" = ${normalizedGroupId},
+        "icon" = ${nextIcon},
         "updatedAt" = ${new Date()}
       where "id" = ${channelId}
         and "serverId" = ${serverId}

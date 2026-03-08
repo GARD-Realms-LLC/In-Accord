@@ -8,11 +8,13 @@ import { useModal } from "@/hooks/use-modal-store";
 interface ChannelGroupSettingsButtonProps {
   groupId: string;
   groupName: string;
+  groupIcon?: string | null;
 }
 
 export const ChannelGroupSettingsButton = ({
   groupId,
   groupName,
+  groupIcon,
 }: ChannelGroupSettingsButtonProps) => {
   const { onOpen } = useModal();
 
@@ -25,6 +27,7 @@ export const ChannelGroupSettingsButton = ({
             channelGroup: {
               id: groupId,
               name: groupName,
+              icon: groupIcon ?? null,
             },
           })
         }

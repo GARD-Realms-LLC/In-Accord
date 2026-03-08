@@ -18,8 +18,12 @@ export async function PATCH(
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const body = (await req.json().catch(() => null)) as { name?: string } | null;
+    const body = (await req.json().catch(() => null)) as { name?: string; icon?: string } | null;
     const name = String(body?.name ?? "").trim();
+    const icon =
+      typeof body?.icon === "string" && body.icon.trim().length > 0
+        ? body.icon.trim().slice(0, 16)
+        : null;
     const groupId = String(rawGroupId ?? "").trim();
 
     if (!groupId) {
@@ -71,11 +75,12 @@ export async function PATCH(
       update "ChannelGroup"
       set
         "name" = ${name},
+        "icon" = ${icon},
         "updatedAt" = ${new Date()}
       where "id" = ${groupId}
     `);
 
-    return NextResponse.json({ ok: true, id: groupId, name });
+    return NextResponse.json({ ok: true, id: groupId, name, icon });
   } catch (error) {
     console.error("[CHANNEL_GROUP_PATCH]", error);
 

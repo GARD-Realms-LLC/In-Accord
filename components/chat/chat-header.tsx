@@ -13,6 +13,7 @@ import { ChatVideoButton } from "./chat-video-button";
 interface ChatHeaderProps {
   serverId: string;
   channelId?: string;
+  channelIcon?: string | null;
   name: string;
   topic?: string | null;
   type: "channel" | "conversation";
@@ -26,6 +27,7 @@ interface ChatHeaderProps {
 export const ChatHeader = ({
   serverId,
   channelId,
+  channelIcon,
   name,
   topic,
   type,
@@ -36,13 +38,20 @@ export const ChatHeader = ({
   profileCreatedAt,
 }: ChatHeaderProps) => {
   const normalizedTopic = typeof topic === "string" ? topic.trim() : "";
+  const normalizedChannelIcon = typeof channelIcon === "string" ? channelIcon.trim() : "";
 
   return (
     <div className="pl-0 pr-3 border-neutral-200 dark:border-neutral-800 border-b-2">
       <div className="text-md font-semibold flex items-center h-12">
         {type === "conversation" && <MobileToggle serverId={serverId} />}
         {type === "channel" && (
-          <Hash className="w-5 h-5 text-zinc-500 dark:text-zinc-400 mr-2" />
+          normalizedChannelIcon ? (
+            <span className="mr-2 inline-flex h-5 w-5 items-center justify-center text-base leading-none text-zinc-500 dark:text-zinc-300">
+              {normalizedChannelIcon}
+            </span>
+          ) : (
+            <Hash className="w-5 h-5 text-zinc-500 dark:text-zinc-400 mr-2" />
+          )
         )}
         {type === "conversation" && (
           <UserAvatar src={imageUrl} className="h-8 w-8 md:h-8 md:w-8 mr-2" />

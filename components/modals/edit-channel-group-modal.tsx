@@ -28,7 +28,29 @@ import { useModal } from "@/hooks/use-modal-store";
 
 const formSchema = z.object({
   name: z.string().min(1, { message: "Group name is required." }),
+  icon: z.string().max(16, { message: "Icon must be 16 characters or fewer." }).optional(),
 });
+
+const FREE_GROUP_ICONS = [
+  "📁",
+  "📂",
+  "🗂️",
+  "⭐",
+  "🎮",
+  "🎵",
+  "🎨",
+  "🧪",
+  "🤖",
+  "📚",
+  "💼",
+  "🛠️",
+  "🌟",
+  "📝",
+  "📌",
+  "🚀",
+  "🎬",
+  "🧩",
+];
 
 export const EditChannelGroupModal = () => {
   const { isOpen, onClose, type, data } = useModal();
@@ -42,12 +64,14 @@ export const EditChannelGroupModal = () => {
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: "",
+      icon: "",
     },
   });
 
   useEffect(() => {
     form.setValue("name", group?.name ?? "");
-  }, [form, group?.name]);
+    form.setValue("icon", group?.icon ?? "");
+  }, [form, group?.icon, group?.name]);
 
   const isLoading = form.formState.isSubmitting;
 
@@ -61,6 +85,7 @@ export const EditChannelGroupModal = () => {
       setSubmitError(null);
       await axios.patch(`/api/channel-groups/${group.id}`, {
         name: values.name,
+        icon: (values.icon ?? "").trim() || null,
       });
 
       form.reset();
@@ -112,6 +137,49 @@ export const EditChannelGroupModal = () => {
                         {...field}
                       />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="icon"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-bold uppercase text-zinc-500 dark:text-zinc-300">
+                      Group icon
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        disabled={isLoading}
+                        maxLength={16}
+                        className="border-0 bg-zinc-200/70 text-black focus-visible:ring-0 focus-visible:ring-offset-0 dark:bg-zinc-700/50 dark:text-zinc-100"
+                        placeholder="e.g. 📂"
+                        {...field}
+                        value={field.value ?? ""}
+                      />
+                    </FormControl>
+                    <div className="space-y-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-300">
+                        Free icon picks
+                      </p>
+                      <div className="grid grid-cols-9 gap-1 rounded-md border border-black/10 bg-black/5 p-2 dark:border-black/20 dark:bg-black/10">
+                        {FREE_GROUP_ICONS.map((icon) => (
+                          <button
+                            key={icon}
+                            type="button"
+                            onClick={() => form.setValue("icon", icon, { shouldDirty: true, shouldValidate: true })}
+                            className={`inline-flex h-8 w-8 items-center justify-center rounded text-base transition hover:bg-zinc-700/20 dark:hover:bg-zinc-700/50 ${
+                              (field.value ?? "") === icon ? "bg-zinc-700/30 ring-1 ring-indigo-400/80 dark:bg-zinc-700/70" : ""
+                            }`}
+                            aria-label={`Use ${icon} as group icon`}
+                            title={`Use ${icon}`}
+                          >
+                            {icon}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}

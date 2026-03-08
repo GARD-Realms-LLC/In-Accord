@@ -37,6 +37,7 @@ export const ServerChannel = ({
   const isDraggingRef = useRef(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isReordering, setIsReordering] = useState(false);
+  const customIcon = String((channel as { icon?: string | null }).icon ?? "").trim();
   const normalizedName = (channel.name ?? "").trim().toLowerCase();
   const isProtectedChannel = normalizedName === "general" || normalizedName === "rules";
   const canReorder = !!role && role !== MemberRole.GUEST && draggable;
@@ -147,7 +148,7 @@ export const ServerChannel = ({
       onDragLeave={onDragLeave}
       onDrop={onDrop}
       className={cn(
-        "group px-2 py-2 rounded-md flex items-center gap-x-0 w-full text-left hover:bg-zinc-700/10 dark:hover:bg-zinc-700/50 transition mb-1",
+        "group px-2 py-2 rounded-md flex items-center gap-x-2 w-full text-left hover:bg-zinc-700/10 dark:hover:bg-zinc-700/50 transition mb-1",
         canReorder && "cursor-grab active:cursor-grabbing",
         isDragOver && "ring-1 ring-indigo-400/70 bg-indigo-500/10",
         params?.channelId === channel.id && "bg-zinc-700/20 dark:bg-zinc-700"
@@ -164,10 +165,16 @@ export const ServerChannel = ({
           </span>
         </ActionTooltip>
       ) : null}
-      <Icon className="h-5 w-5 shrink-0 text-zinc-500 dark:text-zinc-400" />
+      {customIcon ? (
+        <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-sm leading-none text-zinc-500 dark:text-zinc-300">
+          {customIcon}
+        </span>
+      ) : (
+        <Icon className="h-5 w-5 shrink-0 text-zinc-500 dark:text-zinc-400" />
+      )}
       <p
         className={cn(
-          "-ml-1 line-clamp-1 min-w-0 flex-1 text-left text-sm font-semibold text-zinc-500 transition group-hover:text-zinc-600 dark:text-zinc-400 dark:group-hover:text-zinc-300",
+          "line-clamp-1 min-w-0 flex-1 text-left text-sm font-semibold text-zinc-500 transition group-hover:text-zinc-600 dark:text-zinc-400 dark:group-hover:text-zinc-300",
           params?.channelId === channel.id &&
             "text-primary dark:text-zinc-200 dark:group-hover:text-white"
         )}

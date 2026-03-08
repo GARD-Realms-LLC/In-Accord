@@ -34,15 +34,17 @@ export async function GET(req: Request) {
       select
         cg."id" as "id",
         cg."name" as "name",
+        cg."icon" as "icon",
         cg."sortOrder" as "sortOrder"
       from "ChannelGroup" cg
       where cg."serverId" = ${serverId}
       order by cg."sortOrder" asc, cg."createdAt" asc
     `);
 
-    const groups = ((result as unknown as { rows: Array<{ id: string; name: string; sortOrder: number | string | null }> }).rows ?? []).map((row) => ({
+    const groups = ((result as unknown as { rows: Array<{ id: string; name: string; icon: string | null; sortOrder: number | string | null }> }).rows ?? []).map((row) => ({
       id: row.id,
       name: row.name,
+      icon: row.icon,
       sortOrder: Number(row.sortOrder ?? 0),
     }));
 
@@ -63,10 +65,14 @@ export async function POST(req: Request) {
 
     const { searchParams } = new URL(req.url);
     const body = (await req.json().catch(() => null)) as
-      | { name?: string; serverId?: string }
+      | { name?: string; icon?: string; serverId?: string }
       | null;
 
     const name = String(body?.name ?? "").trim();
+    const icon =
+      typeof body?.icon === "string" && body.icon.trim().length > 0
+        ? body.icon.trim().slice(0, 16)
+        : null;
     const serverId = String(body?.serverId ?? searchParams.get("serverId") ?? "").trim();
 
     if (!name) {
@@ -113,14 +119,15 @@ export async function POST(req: Request) {
       ) + 1;
 
     await db.execute(sql`
-      insert into "ChannelGroup" ("id", "name", "serverId", "profileId", "sortOrder", "createdAt", "updatedAt")
-      values (${id}, ${name}, ${serverId}, ${profile.id}, ${nextSortOrder}, ${now}, ${now})
+      insert into "ChannelGroup" ("id", "name", "icon", "serverId", "profileId", "sortOrder", "createdAt", "updatedAt")
+      values (${id}, ${name}, ${icon}, ${serverId}, ${profile.id}, ${nextSortOrder}, ${now}, ${now})
     `);
 
     return NextResponse.json({
       group: {
         id,
         name,
+        icon,
       },
     });
   } catch (error) {

@@ -255,6 +255,7 @@ const ThreadPage = async ({ params }: ThreadPageProps) => {
       <div className="theme-server-chat-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-border bg-background shadow-xl shadow-black/35">
         <ChatHeader
           channelId={channelId}
+          channelIcon={(currentChannel as { icon?: string | null }).icon ?? null}
           name={threadRow.title}
           topic={`Thread in #${currentChannel.name}`}
           serverId={serverId}

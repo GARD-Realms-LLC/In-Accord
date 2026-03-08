@@ -49,6 +49,9 @@ const formSchema = z.object({
     .min(1, {
       message: "Channel name is required.",
     }),
+  icon: z.string().max(16, {
+    message: "Icon must be 16 characters or fewer.",
+  }).optional(),
   topic: z
     .string()
     .max(500, {
@@ -143,6 +146,27 @@ const tabIconMap: Record<ChannelSettingsTab, React.ComponentType<{ className?: s
   danger: Trash2,
 };
 
+const FREE_CHANNEL_ICONS = [
+  "💬",
+  "📢",
+  "✅",
+  "📌",
+  "⭐",
+  "🔥",
+  "🎮",
+  "🎵",
+  "🎬",
+  "📚",
+  "🧠",
+  "🛠️",
+  "🤖",
+  "🧪",
+  "🎨",
+  "📷",
+  "📰",
+  "🧩",
+];
+
 export const EditChannelModal = () => {
   const { isOpen, onClose, onOpen, type, data } = useModal();
   const router = useRouter();
@@ -166,6 +190,7 @@ export const EditChannelModal = () => {
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: "",
+      icon: "",
       topic: "",
       type: channel?.type || ChannelType.TEXT,
       channelGroupId: null,
@@ -175,6 +200,7 @@ export const EditChannelModal = () => {
   useEffect(() => {
     if (channel) {
       form.setValue("name", channel.name);
+      form.setValue("icon", ((channel as { icon?: string | null })?.icon ?? ""));
       form.setValue("topic", ((channel as { topic?: string | null })?.topic ?? ""));
       form.setValue("type", channel.type);
       form.setValue("channelGroupId", ((channel as { channelGroupId?: string | null })?.channelGroupId ?? null));
@@ -282,6 +308,7 @@ export const EditChannelModal = () => {
       });
       await axios.patch(url, {
         ...values,
+        icon: (values.icon ?? "").trim() || null,
         topic: (values.topic ?? "").trim(),
         channelGroupId:
           typeof values.channelGroupId === "string" && values.channelGroupId.length > 0
@@ -523,6 +550,50 @@ export const EditChannelModal = () => {
                               ))}
                             </SelectContent>
                           </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="icon"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs font-bold uppercase text-zinc-400">Channel Icon</FormLabel>
+                          <FormControl>
+                            <Input
+                              disabled={isLoading}
+                              maxLength={16}
+                              className="border-0 bg-zinc-700/50 text-zinc-100 focus-visible:ring-0 focus-visible:ring-offset-0"
+                              placeholder="e.g. 🔥"
+                              {...field}
+                              value={field.value ?? ""}
+                            />
+                          </FormControl>
+                          <div className="space-y-2">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500">
+                              Free icon picks
+                            </p>
+                            <div className="grid grid-cols-9 gap-1 rounded-md border border-black/20 bg-black/10 p-2">
+                              {FREE_CHANNEL_ICONS.map((icon) => (
+                                <button
+                                  key={icon}
+                                  type="button"
+                                  onClick={() => form.setValue("icon", icon, { shouldDirty: true, shouldValidate: true })}
+                                  className={cn(
+                                    "inline-flex h-8 w-8 items-center justify-center rounded text-base transition hover:bg-zinc-700/50",
+                                    (field.value ?? "") === icon && "bg-zinc-700/70 ring-1 ring-indigo-400/80"
+                                  )}
+                                  aria-label={`Use ${icon} as channel icon`}
+                                  title={`Use ${icon}`}
+                                >
+                                  {icon}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <p className="text-[11px] text-zinc-500">Optional emoji or short text shown before the channel name.</p>
                           <FormMessage />
                         </FormItem>
                       )}

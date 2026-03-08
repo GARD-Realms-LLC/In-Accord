@@ -26,6 +26,7 @@ interface ModalData {
   channelGroup?: {
     id: string;
     name: string;
+    icon?: string | null;
   };
   channelType?: ChannelType;
   channelGroupId?: string | null;

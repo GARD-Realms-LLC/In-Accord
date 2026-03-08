@@ -14,6 +14,7 @@ import { ServerChannel } from "./server-channel";
 interface GroupWithChannels {
   id: string;
   name: string;
+  icon?: string | null;
   channels: Channel[];
 }
 
@@ -168,11 +169,12 @@ export const ChannelGroupsList = ({
                     </span>
                   ) : null}
                   <p className="min-w-0 flex-1 truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
+                    {group.icon ? `${group.icon} ` : ""}
                     {group.name} - {group.channels.length}
                   </p>
                   <div className="ml-auto flex items-center gap-1 pl-2">
                     {role !== MemberRole.GUEST ? (
-                      <ChannelGroupSettingsButton groupId={group.id} groupName={group.name} />
+                      <ChannelGroupSettingsButton groupId={group.id} groupName={group.name} groupIcon={group.icon} />
                     ) : null}
                     <span className="text-[10px] text-zinc-500 transition group-open/details:rotate-180 dark:text-zinc-400">
                       ⌄
