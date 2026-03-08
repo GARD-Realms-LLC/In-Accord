@@ -232,7 +232,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
               label="Channels"
               server={serverWithMembers}
             />
-            <div className="space-y-[2px]">
+            <div className="space-y-0.5">
               {textChannelsUngrouped.map((channel) => (
                 <ServerChannel
                   key={channel.id}
@@ -254,7 +254,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
               label="Voice Channels"
               server={serverWithMembers}
             />
-            <div className="space-y-[2px]">
+            <div className="space-y-0.5">
               {audioChannelsUngrouped.map((channel) => (
                 <ServerChannel
                   key={channel.id}
@@ -276,7 +276,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
               label="Video Channels"
               server={serverWithMembers}
             />
-            <div className="space-y-[2px]">
+            <div className="space-y-0.5">
               {videoChannelsUngrouped.map((channel) => (
                 <ServerChannel
                   key={channel.id}
@@ -296,7 +296,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
               sectionType="channels"
               channelType={ChannelType.TEXT}
               role={role}
-              label="Channel Groups"
+              label={`Channel Groups - ${channelGroups.length}`}
               server={serverWithMembers}
             />
             <ChannelGroupsList

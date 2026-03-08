@@ -227,9 +227,9 @@ export const NavigationItem = ({
               ) : null}
             </div>
 
-            <div className="relative p-3 pt-7">
-              <div className="absolute -top-5 left-3 rounded-full border-4 border-[#111214]">
-                <div className="h-10 w-10 overflow-hidden rounded-full">
+            <div className="relative p-3 pt-14">
+              <div className="absolute -top-10 left-3 rounded-full border-4 border-[#111214]">
+                <div className="h-20 w-20 overflow-hidden rounded-full">
                   {showImage ? (
                     <img
                       src={resolvedImageSrc}

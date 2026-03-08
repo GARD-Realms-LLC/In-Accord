@@ -47,6 +47,7 @@ export const DirectMessageListItem = ({
             name={displayName}
             profileId={profileId}
             memberId={memberId}
+            showNameplate
           />
           <NewUserCloverBadge createdAt={profileCreatedAt} className="text-[11px]" />
         </p>

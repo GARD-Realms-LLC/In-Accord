@@ -16,6 +16,7 @@ import { InAccordAdminModal } from "@/components/modals/in-accord-admin-modal";
 import { JoinServerModal } from "@/components/modals/join-server-modal";
 import { CreateChannelGroupModal } from "@/components/modals/create-channel-group-modal";
 import { EditChannelGroupModal } from "@/components/modals/edit-channel-group-modal";
+import { MessageFileModal } from "@/components/modals/message-file-modal";
 
 export const ModalProvider = () => {
   const [isMounted, setIsMounted] = useState(false);
@@ -42,6 +43,7 @@ export const ModalProvider = () => {
       <DeleteServerModal />
       <DeleteChannelModal />
       <EditChannelModal />
+      <MessageFileModal />
       <SettingsModal />
       <InAccordAdminModal />
     </>

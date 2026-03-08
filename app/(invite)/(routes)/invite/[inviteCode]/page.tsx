@@ -4,6 +4,8 @@ import { v4 as uuidv4 } from "uuid";
 
 import { db, member, MemberRole, server } from "@/lib/db";
 import { currentProfile } from "@/lib/current-profile";
+import { recordServerInviteUse } from "@/lib/server-invite-store";
+import { isServerIntegrationBotBanned } from "@/lib/server-integration-bot-store";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +46,11 @@ const InviteCodePage = async ({ params }: InviteCodeProps) => {
   });
 
   if (inviteServer) {
+    const isBanned = await isServerIntegrationBotBanned(inviteServer.id, profile.id);
+    if (isBanned) {
+      return redirect("/");
+    }
+
     const now = new Date();
     await db.insert(member).values({
       id: uuidv4(),
@@ -53,6 +60,8 @@ const InviteCodePage = async ({ params }: InviteCodeProps) => {
       createdAt: now,
       updatedAt: now,
     });
+
+    await recordServerInviteUse(inviteServer.id, inviteCode, profile.id);
   }
 
   if (inviteServer) {

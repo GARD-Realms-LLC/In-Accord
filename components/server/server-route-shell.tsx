@@ -102,6 +102,8 @@ export const ServerRouteShell = ({
   const CHANNELS_RAIL_WIDTH = 240;
   const TOPBAR_LEFT_GAP = 8;
   const CHANNELS_TO_CHAT_GAP = 8;
+  const RIGHT_RAIL_WIDTH = 288;
+  const SEARCH_SHELL_WIDTH = 163;
   const USER_BOX_HEIGHT = 84;
   const USER_BOX_BOTTOM_GAP = 2;
   const CHANNELS_TO_USERBOX_GAP = 10;
@@ -154,8 +156,8 @@ export const ServerRouteShell = ({
 
   const headerTitleStyle = useMemo(
     () => ({
-      left: "calc((100% - 256px) / 2)",
-      maxWidth: isMembersCollapsed ? "calc(100% - 304px)" : "calc(100% - 560px)",
+      left: "50%",
+      maxWidth: isMembersCollapsed ? "calc(100% - 352px)" : `calc(100% - ${RIGHT_RAIL_WIDTH + 352}px)`,
     }),
     [isMembersCollapsed]
   );
@@ -224,7 +226,7 @@ export const ServerRouteShell = ({
   return (
     <div className="h-full overflow-hidden" suppressHydrationWarning>
       <header
-        className="theme-server-topbar fixed right-0 top-0 z-40 flex h-12 items-center overflow-hidden rounded-b-xl border-b border-border bg-background px-4"
+        className="theme-server-topbar fixed right-0 top-0 z-40 flex h-12 items-center overflow-hidden rounded-b-xl border-b border-border bg-background"
         style={{ left: `${CHANNELS_RAIL_LEFT}px` }}
       >
         {isProductionRuntime ? (
@@ -254,49 +256,53 @@ export const ServerRouteShell = ({
         ) : null}
 
         <h1
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 truncate text-center text-sm font-bold uppercase tracking-[0.08em] text-foreground"
+          className="absolute inset-y-0 z-10 flex -translate-x-1/2 items-center truncate text-center text-sm font-bold uppercase tracking-[0.08em] text-foreground"
           style={headerTitleStyle}
         >
           {serverName}
         </h1>
 
-        <div className="absolute right-[276px] top-1/2 z-20 flex -translate-y-1/2 items-center gap-1 text-muted-foreground">
-          <button type="button" title="Start Call" className="rounded p-1.5 hover:bg-[#3f4248] hover:text-white transition-colors">
+        <div
+          className="absolute inset-y-0 z-20 flex items-center gap-1 text-muted-foreground"
+          style={{ right: `${RIGHT_RAIL_WIDTH + 20}px` }}
+        >
+          <button type="button" title="Start Call" className="inline-flex h-8 w-8 items-center justify-center rounded hover:bg-[#3f4248] hover:text-white transition-colors">
             <PhoneCall className="h-4 w-4" />
           </button>
-          <button type="button" title="Start Video" className="rounded p-1.5 hover:bg-[#3f4248] hover:text-white transition-colors">
+          <button type="button" title="Start Video" className="inline-flex h-8 w-8 items-center justify-center rounded hover:bg-[#3f4248] hover:text-white transition-colors">
             <Video className="h-4 w-4" />
           </button>
-          <button type="button" title="Invite People" className="rounded p-1.5 hover:bg-[#3f4248] hover:text-white transition-colors">
+          <button type="button" title="Invite People" className="inline-flex h-8 w-8 items-center justify-center rounded hover:bg-[#3f4248] hover:text-white transition-colors">
             <UserPlus className="h-4 w-4" />
           </button>
-          <button type="button" title="Notifications" className="rounded p-1.5 hover:bg-[#3f4248] hover:text-white transition-colors">
+          <button type="button" title="Notifications" className="inline-flex h-8 w-8 items-center justify-center rounded hover:bg-[#3f4248] hover:text-white transition-colors">
             <Bell className="h-4 w-4" />
           </button>
         </div>
 
         <div
-          className="absolute top-1/2 z-20 -translate-y-1/2 text-muted-foreground"
-          style={{ left: "calc(100% - 252px)" }}
+          className="absolute inset-y-0 z-20 flex items-center text-muted-foreground"
+          style={{ right: `${RIGHT_RAIL_WIDTH - 4}px` }}
         >
           <button
             type="button"
             title={isMembersCollapsed ? "Expand Online Members" : "Collapse Online Members"}
             onClick={() => setIsMembersCollapsed((prev) => !prev)}
-            className="rounded p-1.5 hover:bg-[#3f4248] hover:text-white transition-colors"
+            className="inline-flex h-8 w-8 items-center justify-center rounded hover:bg-[#3f4248] hover:text-white transition-colors"
           >
             {isMembersCollapsed ? <PanelRightOpen className="h-4 w-4" /> : <PanelRightClose className="h-4 w-4" />}
           </button>
         </div>
 
         <div
-          className="theme-server-search-shell absolute top-1/2 z-20 w-[163px] -translate-y-1/2 -translate-x-1/2 rounded-md border border-border bg-card/90"
-          style={{ left: "calc(100% - 128px)" }}
+          className="absolute inset-y-0 z-20 flex items-center"
+          style={{ right: `${(RIGHT_RAIL_WIDTH - SEARCH_SHELL_WIDTH) / 2}px` }}
         >
-          <ServerSearch
-            serverId={serverId}
-            serverName={serverName}
-            data={[
+          <div className="theme-server-search-shell w-40.75 rounded-md border border-border bg-card/90">
+            <ServerSearch
+              serverId={serverId}
+              serverName={serverName}
+              data={[
               {
                 label: "Server",
                 type: "server",
@@ -344,8 +350,9 @@ export const ServerRouteShell = ({
                   icon: roleIconMap[member.role],
                 })),
               },
-            ]}
-          />
+              ]}
+            />
+          </div>
         </div>
       </header>
 
@@ -362,8 +369,8 @@ export const ServerRouteShell = ({
 
       {!isMembersCollapsed ? (
         <aside
-          className="settings-scrollbar fixed top-12 right-0 z-30 w-64 overflow-y-auto px-2 py-2"
-          style={{ bottom: `${USER_BOX_HEIGHT + USER_BOX_BOTTOM_GAP}px` }}
+          className="settings-scrollbar fixed top-12 right-0 z-30 overflow-y-auto px-2 py-2"
+          style={{ width: `${RIGHT_RAIL_WIDTH}px`, bottom: `${USER_BOX_HEIGHT + USER_BOX_BOTTOM_GAP}px` }}
         >
           {rightSidebar}
         </aside>
@@ -371,16 +378,19 @@ export const ServerRouteShell = ({
 
       {rightFooter ? (
         <aside
-          className="fixed right-0 h-[84px] w-64 z-30 px-2 pb-2 flex items-center justify-center"
-          style={{ bottom: `${USER_BOX_BOTTOM_GAP}px` }}
+          className="fixed right-0 z-30 flex h-21 items-center justify-center px-2 pb-2"
+          style={{ width: `${RIGHT_RAIL_WIDTH}px`, bottom: `${USER_BOX_BOTTOM_GAP}px` }}
         >
           {rightFooter}
         </aside>
       ) : null}
 
       <main
-        className={`box-border h-full overflow-hidden pt-14 p-2 ${isMembersCollapsed ? "pr-0" : "pr-[256px]"}`}
-        style={{ paddingLeft: `${CONTENT_LEFT_PADDING}px` }}
+        className="box-border h-full overflow-hidden p-2 pt-14"
+        style={{
+          paddingLeft: `${CONTENT_LEFT_PADDING}px`,
+          paddingRight: isMembersCollapsed ? "0px" : `${RIGHT_RAIL_WIDTH}px`,
+        }}
       >
         {children}
       </main>
@@ -438,7 +448,7 @@ export const ServerRouteShell = ({
             {updaterState.releaseNotes ? (
               <div className="rounded-lg border border-black/20 bg-[#15161a] px-3 py-2 text-xs text-[#b5bac1]">
                 <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">Release notes</p>
-                <p className="whitespace-pre-wrap break-words">{updaterState.releaseNotes}</p>
+                <p className="whitespace-pre-wrap wrap-break-word">{updaterState.releaseNotes}</p>
               </div>
             ) : null}
           </div>

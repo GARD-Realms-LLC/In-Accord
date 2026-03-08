@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
 } from "@/components/ui/dialog";
 import {
   Form,
@@ -490,7 +491,9 @@ export const EditChannelModal = () => {
 
           <div className="flex h-full flex-col">
             <div className="border-b border-black/30 px-6 py-4">
-              <h2 className="text-lg font-bold text-white">{tabLabelMap[activeTab]}</h2>
+              <DialogTitle asChild>
+                <h2 className="text-lg font-bold text-white">{tabLabelMap[activeTab]}</h2>
+              </DialogTitle>
               <p className="mt-0.5 text-xs text-zinc-400">{tabDescriptionMap[activeTab]}</p>
               <p className="text-xs text-zinc-400">Channel: #{channel?.name ?? "unknown"}</p>
             </div>

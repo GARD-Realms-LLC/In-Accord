@@ -38,6 +38,8 @@ import {
   UserPlus,
   Wrench,
   LockKeyhole,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import axios from "axios";
 import Image from "next/image";
@@ -47,7 +49,9 @@ import { ModeToggle } from "@/components/mode-toggle";
 import { ModeratorLineIcon } from "@/components/moderator-line-icon";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { NameplatePill } from "@/components/nameplate-pill";
 import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
+import { ProfileIconRow } from "@/components/profile-icon-row";
 import { UserAvatar } from "@/components/user-avatar";
 import {
   DialogDescription,
@@ -60,7 +64,21 @@ import {
 import { useModal } from "@/hooks/use-modal-store";
 import { getInAccordStaffLabel, isInAccordAdministrator, isInAccordDeveloper, isInAccordModerator } from "@/lib/in-accord-admin";
 import { writeMentionsEnabled } from "@/lib/mentions";
+import {
+  composeProfileNameStyleValue,
+  DEFAULT_PROFILE_NAME_STYLE,
+  getProfileNameStyleClass,
+  getProfileNameStyleParts,
+  normalizeProfileNameStyleValue,
+  PROFILE_NAME_COLOR_OPTIONS,
+  PROFILE_NAME_EFFECT_OPTIONS,
+  PROFILE_NAME_FONT_OPTIONS,
+  type ProfileNameColorKey,
+  type ProfileNameEffectKey,
+  type ProfileNameFontKey,
+} from "@/lib/profile-name-styles";
 import { normalizePresenceStatus, presenceStatusLabelMap } from "@/lib/presence-status";
+import { resolveProfileIcons } from "@/lib/profile-icons";
 
 type SettingsSection =
   | "myAccount"
@@ -147,7 +165,6 @@ const sectionLabelMap: Record<SettingsSection, string> = {
   friendRequests: "Blocked Users",
   nitro: "Nitro",
   serverBoost: "SERVER TAGS",
-  
   subscriptions: "Subscriptions",
   giftInventory: "Gift Inventory",
   billing: "Billing",
@@ -168,30 +185,30 @@ const sectionLabelMap: Record<SettingsSection, string> = {
 };
 
 const sectionDescriptionMap: Record<SettingsSection, string> = {
-  myAccount: "Manage your In-Accord profile information and account actions.",
+  myAccount: "Manage your account details and security settings.",
   profiles: "Set profile customization per identity and server context.",
-  contentSocial: "Control content display and social discovery preferences.",
+  contentSocial: "Control social and content visibility preferences.",
   dataPrivacy: "Review data, privacy, and safety controls.",
-  familyCenter: "Family and supervised account controls.",
-  authorizedApps: "Manage third-party apps connected to your account.",
-  devices: "Review and manage signed-in devices.",
+  familyCenter: "Configure family center and parental controls.",
+  authorizedApps: "Review third-party authorized app access.",
+  devices: "Manage signed-in devices and sessions.",
   connections: "Connect and manage linked external accounts.",
-  friendRequests: "Manage users you have blocked and unblock them when needed.",
-  nitro: "Manage premium perks and benefits.",
-  serverBoost: "Configure server-owned tags and choose one to show beside your profile name.",
-  subscriptions: "Review and manage recurring subscriptions.",
-  giftInventory: "View and redeem your gift inventory.",
+  friendRequests: "Manage blocked users and request interactions.",
+  nitro: "View Nitro settings and perks.",
+  serverBoost: "Configure server tags and profile tag display.",
+  subscriptions: "Review active and available subscriptions.",
+  giftInventory: "Manage account gifts and inventory.",
   billing: "Manage payment methods and billing details.",
   appearance: "Customize how In-Accord looks and feels.",
-  accessibility: "Accessibility preferences for contrast, motion, and readability.",
-  voiceVideo: "Configure input/output devices and voice processing.",
-  textImages: "Choose how text and media are displayed.",
-  emoji: "Manage your emoji options and quick reactions.",
-  stickers: "Manage sticker behavior and sticker display preferences.",
-  notifications: "Control when and how you get notified.",
-  keybinds: "Customize keyboard shortcuts and hotkeys.",
-  language: "Set language and regional preferences.",
-  streamerMode: "Configure streamer-safe and privacy-focused options.",
+  accessibility: "Accessibility options for readability and input.",
+  voiceVideo: "Configure voice and video preferences.",
+  textImages: "Manage text, embeds, and media display behavior.",
+  emoji: "Emoji picker and emoji behavior preferences.",
+  stickers: "Sticker packs and sticker behavior settings.",
+  notifications: "Tune notification behavior and alert routing.",
+  keybinds: "Set keybinds and keyboard shortcuts.",
+  language: "Choose your preferred display language.",
+  streamerMode: "Control streamer mode privacy options.",
   advanced: "Advanced application behavior and diagnostics options.",
   activityPrivacy: "Control how your activity is shared.",
   registeredGames: "Manage detected and manually-added games.",
@@ -201,10 +218,10 @@ const sectionDescriptionMap: Record<SettingsSection, string> = {
 const sectionIconMap: Record<SettingsSection, React.ComponentType<{ className?: string }>> = {
   myAccount: User,
   profiles: IdCard,
-  contentSocial: ImageIcon,
-  dataPrivacy: Shield,
+  contentSocial: Smile,
+  dataPrivacy: LockKeyhole,
   familyCenter: Baby,
-  authorizedApps: Puzzle,
+  authorizedApps: ShieldCheck,
   devices: Smartphone,
   connections: Link2,
   friendRequests: UserPlus,
@@ -243,6 +260,144 @@ const languageOptions = [
   { value: "zh-CN", label: "中文（简体）" },
 ] as const;
 
+const NAMEPLATE_COLOR_PRESETS = [
+  { key: "blurple", label: "Blurple", color: "#5865f2" },
+  { key: "rose", label: "Rose", color: "#eb459e" },
+  { key: "emerald", label: "Emerald", color: "#3ba55d" },
+  { key: "gold", label: "Gold", color: "#f1c40f" },
+  { key: "sky", label: "Sky", color: "#3498db" },
+  { key: "slate", label: "Slate", color: "#99aab5" },
+] as const;
+
+type CustomThemeColors = {
+  background: string;
+  card: string;
+  secondary: string;
+  accent: string;
+  primary: string;
+  foreground: string;
+  mutedForeground: string;
+  border: string;
+};
+
+const defaultDisplayStyleColors: CustomThemeColors = {
+  background: "#101419",
+  card: "#172028",
+  secondary: "#1f2b36",
+  accent: "#274054",
+  primary: "#22c6b9",
+  foreground: "#f3fbff",
+  mutedForeground: "#b4d2da",
+  border: "#2d5a66",
+};
+
+const displayStylePresets: Array<{ key: string; label: string; colors: CustomThemeColors }> = [
+  {
+    key: "ocean",
+    label: "Ocean",
+    colors: {
+      background: "#101419",
+      card: "#172028",
+      secondary: "#1f2b36",
+      accent: "#274054",
+      primary: "#22c6b9",
+      foreground: "#f3fbff",
+      mutedForeground: "#b4d2da",
+      border: "#2d5a66",
+    },
+  },
+  {
+    key: "sunset",
+    label: "Sunset",
+    colors: {
+      background: "#2b1117",
+      card: "#3a1822",
+      secondary: "#4a2130",
+      accent: "#5a2a3d",
+      primary: "#ff7a59",
+      foreground: "#fff2f0",
+      mutedForeground: "#f2c4bc",
+      border: "#7a3c4d",
+    },
+  },
+  {
+    key: "neon",
+    label: "Neon",
+    colors: {
+      background: "#0b1020",
+      card: "#111a2f",
+      secondary: "#162241",
+      accent: "#1d2d54",
+      primary: "#6df5ff",
+      foreground: "#eaf7ff",
+      mutedForeground: "#9ec1d9",
+      border: "#2b4770",
+    },
+  },
+];
+
+const displayStyleColorFields: Array<{ key: keyof CustomThemeColors; label: string }> = [
+  { key: "background", label: "Main Background" },
+  { key: "card", label: "Card Background" },
+  { key: "secondary", label: "Secondary Surface" },
+  { key: "accent", label: "Accent Surface" },
+  { key: "primary", label: "Primary Accent" },
+  { key: "foreground", label: "Primary Text" },
+  { key: "mutedForeground", label: "Muted Text" },
+  { key: "border", label: "Border" },
+];
+
+const hexToHslTokens = (hex: string) => {
+  const normalized = hex.replace("#", "");
+
+  const safeHex =
+    normalized.length === 3
+      ? normalized
+          .split("")
+          .map((chunk) => `${chunk}${chunk}`)
+          .join("")
+      : normalized;
+
+  if (!/^[0-9a-fA-F]{6}$/.test(safeHex)) {
+    return "0 0% 0%";
+  }
+
+  const r = Number.parseInt(safeHex.slice(0, 2), 16) / 255;
+  const g = Number.parseInt(safeHex.slice(2, 4), 16) / 255;
+  const b = Number.parseInt(safeHex.slice(4, 6), 16) / 255;
+
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const delta = max - min;
+
+  let h = 0;
+  const l = (max + min) / 2;
+  const s =
+    delta === 0
+      ? 0
+      : delta / (1 - Math.abs(2 * l - 1));
+
+  if (delta !== 0) {
+    switch (max) {
+      case r:
+        h = 60 * (((g - b) / delta) % 6);
+        break;
+      case g:
+        h = 60 * ((b - r) / delta + 2);
+        break;
+      default:
+        h = 60 * ((r - g) / delta + 4);
+        break;
+    }
+  }
+
+  if (h < 0) {
+    h += 360;
+  }
+
+  return `${Math.round(h)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
+};
+
 type BlockedProfileSummary = {
   profileId: string;
   displayName: string;
@@ -277,6 +432,27 @@ type MemberServerTag = {
   iconKey: string;
   iconEmoji: string;
   isSelected: boolean;
+};
+
+type MemberServerProfileOption = {
+  serverId: string;
+  serverName: string;
+  profileName: string | null;
+  profileNameStyle?: string | null;
+  comment?: string | null;
+  nameplateLabel?: string | null;
+  nameplateColor?: string | null;
+  nameplateImageUrl?: string | null;
+  avatarDecorationUrl?: string | null;
+  bannerUrl: string | null;
+  effectiveProfileName?: string | null;
+  effectiveProfileNameStyle?: string | null;
+  effectiveComment?: string | null;
+  effectiveNameplateLabel?: string | null;
+  effectiveNameplateColor?: string | null;
+  effectiveNameplateImageUrl?: string | null;
+  effectiveAvatarDecorationUrl?: string | null;
+  effectiveBannerUrl?: string | null;
 };
 
 const connectionProviders: ConnectionProvider[] = [
@@ -320,24 +496,71 @@ export const SettingsModal = () => {
   const [isSectionVisible, setIsSectionVisible] = useState(true);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isUploadingBanner, setIsUploadingBanner] = useState(false);
+  const [isUploadingServerBanner, setIsUploadingServerBanner] = useState(false);
+  const [isUploadingNameplateImage, setIsUploadingNameplateImage] = useState(false);
+  const [isUploadingServerNameplateImage, setIsUploadingServerNameplateImage] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSavingProfileName, setIsSavingProfileName] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [realName, setRealName] = useState(data.profileRealName ?? "");
   const [profileName, setProfileName] = useState("");
+  const [pronouns, setPronouns] = useState("");
+  const [comment, setComment] = useState("");
+  const [nameplateLabel, setNameplateLabel] = useState("");
+  const [nameplateColor, setNameplateColor] = useState("#5865f2");
+  const [nameplateImageUrl, setNameplateImageUrl] = useState<string | null>(null);
+  const [nameplateLabelInput, setNameplateLabelInput] = useState("");
+  const [nameplateColorInput, setNameplateColorInput] = useState("");
+  const [nameplateImageUrlInput, setNameplateImageUrlInput] = useState("");
+  const [isSavingNameplate, setIsSavingNameplate] = useState(false);
+  const [nameplateStatus, setNameplateStatus] = useState<string | null>(null);
+  const [avatarDecorationUrl, setAvatarDecorationUrl] = useState<string | null>(null);
+  const [avatarDecorationInput, setAvatarDecorationInput] = useState("");
+  const [isSavingAvatarDecoration, setIsSavingAvatarDecoration] = useState(false);
+  const [avatarDecorationStatus, setAvatarDecorationStatus] = useState<string | null>(null);
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
   const [profileRole, setProfileRole] = useState<string | null>(data.profileRole ?? null);
   const [profilePresenceStatus, setProfilePresenceStatus] = useState(
     normalizePresenceStatus(data.profilePresenceStatus)
   );
   const [profileNameError, setProfileNameError] = useState<string | null>(null);
   const [profileNameSuccess, setProfileNameSuccess] = useState<string | null>(null);
+  const [isEditingDefaultProfileNameInline, setIsEditingDefaultProfileNameInline] = useState(false);
+  const [defaultProfileNameDraft, setDefaultProfileNameDraft] = useState("");
+  const [defaultProfileNameStyle, setDefaultProfileNameStyle] = useState<string>(DEFAULT_PROFILE_NAME_STYLE);
+  const [defaultProfileNameFont, setDefaultProfileNameFont] = useState<ProfileNameFontKey>("default");
+  const [defaultProfileNameEffect, setDefaultProfileNameEffect] = useState<ProfileNameEffectKey>("solid");
+  const [defaultProfileNameColor, setDefaultProfileNameColor] = useState<ProfileNameColorKey>("default");
+  const [isSavingDefaultProfileNameStyle, setIsSavingDefaultProfileNameStyle] = useState(false);
+  const [defaultProfileNameStyleStatus, setDefaultProfileNameStyleStatus] = useState<string | null>(null);
+  const [isEditingPronounsInline, setIsEditingPronounsInline] = useState(false);
+  const [pronounsDraft, setPronounsDraft] = useState("");
+  const [isSavingPronouns, setIsSavingPronouns] = useState(false);
+  const [pronounsStatus, setPronounsStatus] = useState<string | null>(null);
+  const [isEditingCommentInline, setIsEditingCommentInline] = useState(false);
+  const [commentDraft, setCommentDraft] = useState("");
+  const [isSavingComment, setIsSavingComment] = useState(false);
+  const [commentStatus, setCommentStatus] = useState<string | null>(null);
+  const [isEditingPhoneNumberInline, setIsEditingPhoneNumberInline] = useState(false);
+  const [phoneNumberDraft, setPhoneNumberDraft] = useState("");
+  const [isSavingPhoneNumber, setIsSavingPhoneNumber] = useState(false);
+  const [phoneNumberStatus, setPhoneNumberStatus] = useState<string | null>(null);
+  const [dateOfBirthDraft, setDateOfBirthDraft] = useState("");
+  const [isSavingDateOfBirth, setIsSavingDateOfBirth] = useState(false);
+  const [dateOfBirthStatus, setDateOfBirthStatus] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(data.profileImageUrl ?? null);
   const [bannerUrl, setBannerUrl] = useState<string | null>(data.profileBannerUrl ?? null);
+  const [uploadedAvatarThumbnails, setUploadedAvatarThumbnails] = useState<string[]>([]);
+  const [uploadedBannerThumbnails, setUploadedBannerThumbnails] = useState<string[]>([]);
   const [resolvedProfileId, setResolvedProfileId] = useState<string | null>(data.profileId ?? null);
   const [mentionsEnabled, setMentionsEnabled] = useState(true);
   const [languagePreference, setLanguagePreference] = useState<string>("system");
@@ -348,6 +571,22 @@ export const SettingsModal = () => {
   const [connectionsStatus, setConnectionsStatus] = useState<string | null>(null);
   const [ownedServerTags, setOwnedServerTags] = useState<OwnedServerTag[]>([]);
   const [memberServerTags, setMemberServerTags] = useState<MemberServerTag[]>([]);
+  const [memberProfileServers, setMemberProfileServers] = useState<MemberServerProfileOption[]>([]);
+  const [selectedProfileSettingsServerId, setSelectedProfileSettingsServerId] = useState<string>("");
+  const [serverProfileNameInput, setServerProfileNameInput] = useState("");
+  const [serverProfileNameStyleInput, setServerProfileNameStyleInput] = useState<string>("");
+  const [serverProfileNameFontInput, setServerProfileNameFontInput] = useState<ProfileNameFontKey>("default");
+  const [serverProfileNameEffectInput, setServerProfileNameEffectInput] = useState<ProfileNameEffectKey>("solid");
+  const [serverProfileNameColorInput, setServerProfileNameColorInput] = useState<ProfileNameColorKey>("default");
+  const [serverProfileCommentInput, setServerProfileCommentInput] = useState("");
+  const [serverProfileNameplateLabelInput, setServerProfileNameplateLabelInput] = useState("");
+  const [serverProfileNameplateColorInput, setServerProfileNameplateColorInput] = useState("");
+  const [serverProfileNameplateImageUrlInput, setServerProfileNameplateImageUrlInput] = useState("");
+  const [serverProfileAvatarDecorationInput, setServerProfileAvatarDecorationInput] = useState("");
+  const [serverProfileBannerInput, setServerProfileBannerInput] = useState("");
+  const [isLoadingServerProfiles, setIsLoadingServerProfiles] = useState(false);
+  const [isSavingServerProfile, setIsSavingServerProfile] = useState(false);
+  const [serverProfileStatus, setServerProfileStatus] = useState<string | null>(null);
   const [selectedOwnedServerId, setSelectedOwnedServerId] = useState<string>("");
   const [selectedProfileServerId, setSelectedProfileServerId] = useState<string>("");
   const [ownerTagCodeInput, setOwnerTagCodeInput] = useState("");
@@ -359,6 +598,14 @@ export const SettingsModal = () => {
   const [customCss, setCustomCss] = useState("");
   const [customCssStatus, setCustomCssStatus] = useState<string | null>(null);
   const [isCustomCssEditorOpen, setIsCustomCssEditorOpen] = useState(false);
+  const [isDefaultProfileNameStylesPanelOpen, setIsDefaultProfileNameStylesPanelOpen] = useState(false);
+  const [isServerProfileNameStylesPanelOpen, setIsServerProfileNameStylesPanelOpen] = useState(false);
+  const [isAvatarPanelOpen, setIsAvatarPanelOpen] = useState(false);
+  const [isNameplatePanelOpen, setIsNameplatePanelOpen] = useState(false);
+  const [isDefaultBannerPanelOpen, setIsDefaultBannerPanelOpen] = useState(false);
+  const [isServerBannerPanelOpen, setIsServerBannerPanelOpen] = useState(false);
+  const [isServerNameplatePanelOpen, setIsServerNameplatePanelOpen] = useState(false);
+  const [isServerAvatarDecorationPanelOpen, setIsServerAvatarDecorationPanelOpen] = useState(false);
   const [isPluginsInstalledPanelOpen, setIsPluginsInstalledPanelOpen] = useState(false);
   const [isDownloadedPluginsPanelOpen, setIsDownloadedPluginsPanelOpen] = useState(false);
   const [isPluginUploadsPanelOpen, setIsPluginUploadsPanelOpen] = useState(false);
@@ -368,7 +615,11 @@ export const SettingsModal = () => {
   const [blockedProfilesError, setBlockedProfilesError] = useState<string | null>(null);
   const [unblockingProfileId, setUnblockingProfileId] = useState<string | null>(null);
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
+  const avatarPanelInputRef = useRef<HTMLInputElement | null>(null);
   const bannerInputRef = useRef<HTMLInputElement | null>(null);
+  const serverBannerInputRef = useRef<HTMLInputElement | null>(null);
+  const nameplateImageInputRef = useRef<HTMLInputElement | null>(null);
+  const serverNameplateImageInputRef = useRef<HTMLInputElement | null>(null);
 
   const isModalOpen = isOpen && type === "settings";
 
@@ -381,6 +632,70 @@ export const SettingsModal = () => {
 
   const sections = useMemo<SettingsSection[]>(() => sectionGroups.flatMap((group) => group.sections), []);
 
+  const bannerHistoryStorageKey = useMemo(() => {
+    const scopeId = String(data.profileId ?? resolvedProfileId ?? "anonymous").trim() || "anonymous";
+    return `inaccord:banner-history:${scopeId}`;
+  }, [data.profileId, resolvedProfileId]);
+
+  const avatarHistoryStorageKey = useMemo(() => {
+    const scopeId = String(data.profileId ?? resolvedProfileId ?? "anonymous").trim() || "anonymous";
+    return `inaccord:avatar-history:${scopeId}`;
+  }, [data.profileId, resolvedProfileId]);
+
+  const rememberUploadedAvatar = useCallback((url?: string | null) => {
+    const normalized = String(url ?? "").trim();
+    if (!normalized) {
+      return;
+    }
+
+    setUploadedAvatarThumbnails((prev) => {
+      const next = [normalized, ...prev.filter((item) => item !== normalized)].slice(0, 16);
+
+      try {
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(avatarHistoryStorageKey, JSON.stringify(next));
+        }
+      } catch {
+        // ignore storage failures
+      }
+
+      void axios.patch("/api/profile/preferences", {
+        avatarUploads: next,
+      }).catch(() => {
+        // ignore preference persistence failures
+      });
+
+      return next;
+    });
+  }, [avatarHistoryStorageKey]);
+
+  const rememberUploadedBanner = useCallback((url?: string | null) => {
+    const normalized = String(url ?? "").trim();
+    if (!normalized) {
+      return;
+    }
+
+    setUploadedBannerThumbnails((prev) => {
+      const next = [normalized, ...prev.filter((item) => item !== normalized)].slice(0, 16);
+
+      try {
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(bannerHistoryStorageKey, JSON.stringify(next));
+        }
+      } catch {
+        // ignore storage failures
+      }
+
+      void axios.patch("/api/profile/preferences", {
+        bannerUploads: next,
+      }).catch(() => {
+        // ignore preference persistence failures
+      });
+
+      return next;
+    });
+  }, [bannerHistoryStorageKey]);
+
   const normalizeOwnerTagCode = (value: string) => value.trim().toUpperCase();
 
   useEffect(() => {
@@ -388,16 +703,143 @@ export const SettingsModal = () => {
   }, [data.profileImageUrl]);
 
   useEffect(() => {
+    const initialDecoration = (data as { profileAvatarDecorationUrl?: string | null }).profileAvatarDecorationUrl ?? null;
+    setAvatarDecorationUrl(initialDecoration);
+    setAvatarDecorationInput(initialDecoration ?? "");
+  }, [data]);
+
+  useEffect(() => {
+    const initialNameplateLabel = (data as { profileNameplateLabel?: string | null }).profileNameplateLabel ?? "";
+    const initialNameplateColor = (data as { profileNameplateColor?: string | null }).profileNameplateColor ?? "";
+    const initialNameplateImageUrl = (data as { profileNameplateImageUrl?: string | null }).profileNameplateImageUrl ?? null;
+    setNameplateLabel(initialNameplateLabel);
+    setNameplateColor(initialNameplateColor || "");
+    setNameplateImageUrl(initialNameplateImageUrl);
+    setNameplateLabelInput(initialNameplateLabel);
+    setNameplateColorInput(initialNameplateColor || "");
+    setNameplateImageUrlInput(initialNameplateImageUrl ?? "");
+    setNameplateStatus(null);
+  }, [data]);
+
+  useEffect(() => {
     setBannerUrl(data.profileBannerUrl ?? null);
   }, [data.profileBannerUrl]);
 
   useEffect(() => {
+    const normalized = String(avatarUrl ?? "").trim();
+    if (!normalized) {
+      return;
+    }
+
+    setUploadedAvatarThumbnails((prev) =>
+      prev.includes(normalized) ? prev : [normalized, ...prev].slice(0, 16)
+    );
+  }, [avatarUrl]);
+
+  useEffect(() => {
+    const normalized = String(bannerUrl ?? "").trim();
+    if (!normalized) {
+      return;
+    }
+
+    setUploadedBannerThumbnails((prev) =>
+      prev.includes(normalized) ? prev : [normalized, ...prev].slice(0, 16)
+    );
+  }, [bannerUrl]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      const raw = window.localStorage.getItem(bannerHistoryStorageKey);
+      if (!raw) {
+        return;
+      }
+
+      const parsed = JSON.parse(raw) as unknown;
+      const normalized = Array.isArray(parsed)
+        ? parsed
+            .filter((item): item is string => typeof item === "string")
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0)
+            .slice(0, 16)
+        : [];
+
+      setUploadedBannerThumbnails((prev) => {
+        const merged = [...prev, ...normalized]
+          .filter((value, index, arr) => arr.indexOf(value) === index)
+          .slice(0, 16);
+        return merged;
+      });
+    } catch {
+      // ignore local storage failures
+    }
+  }, [bannerHistoryStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      const raw = window.localStorage.getItem(avatarHistoryStorageKey);
+      if (!raw) {
+        return;
+      }
+
+      const parsed = JSON.parse(raw) as unknown;
+      const normalized = Array.isArray(parsed)
+        ? parsed
+            .filter((item): item is string => typeof item === "string")
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0)
+            .slice(0, 16)
+        : [];
+
+      setUploadedAvatarThumbnails((prev) => {
+        const merged = [...prev, ...normalized]
+          .filter((value, index, arr) => arr.indexOf(value) === index)
+          .slice(0, 16);
+        return merged;
+      });
+    } catch {
+      // ignore local storage failures
+    }
+  }, [avatarHistoryStorageKey]);
+
+  useEffect(() => {
     setRealName(data.profileRealName ?? "");
     setProfileName("");
+    setDefaultProfileNameDraft("");
+    setPronouns("");
+    setComment("");
+    setNameplateLabel("");
+    setNameplateColor("#5865f2");
+    setNameplateLabelInput("");
+    setNameplateColorInput("#5865f2");
+    setNameplateStatus(null);
+    setAvatarDecorationUrl(null);
+    setAvatarDecorationInput("");
+    setAvatarDecorationStatus(null);
+    setPronounsDraft("");
+    setIsEditingPronounsInline(false);
+    setCommentDraft("");
+    setIsEditingCommentInline(false);
+    setPhoneNumber("");
+    setPhoneNumberDraft("");
+    setIsEditingPhoneNumberInline(false);
+    setDateOfBirth("");
+    setDateOfBirthDraft("");
     setProfileRole(data.profileRole ?? null);
     setProfilePresenceStatus(normalizePresenceStatus(data.profilePresenceStatus));
     setProfileNameError(null);
     setProfileNameSuccess(null);
+    setPronounsStatus(null);
+    setCommentStatus(null);
+    setPhoneNumberStatus(null);
+    setDateOfBirthStatus(null);
   }, [data.profileName, data.profilePresenceStatus, data.profileRealName, data.profileRole, isModalOpen]);
 
   useEffect(() => {
@@ -418,7 +860,10 @@ export const SettingsModal = () => {
           languagePreference?: string;
           connectedAccounts?: unknown;
           customCss?: string;
+          customThemeColors?: Partial<CustomThemeColors> | null;
           downloadedPlugins?: unknown;
+          bannerUploads?: unknown;
+          avatarUploads?: unknown;
         }>("/api/profile/preferences");
 
         if (cancelled) {
@@ -443,7 +888,20 @@ export const SettingsModal = () => {
               (value): value is string => typeof value === "string" && value.trim().length > 0
             )
           : [];
-
+        const persistedBannerUploads = Array.isArray(response.data?.bannerUploads)
+          ? response.data.bannerUploads
+              .filter((value): value is string => typeof value === "string")
+              .map((value) => value.trim())
+              .filter((value) => value.length > 0)
+              .slice(0, 16)
+          : [];
+        const persistedAvatarUploads = Array.isArray(response.data?.avatarUploads)
+          ? response.data.avatarUploads
+              .filter((value): value is string => typeof value === "string")
+              .map((value) => value.trim())
+              .filter((value) => value.length > 0)
+              .slice(0, 16)
+          : [];
         writeMentionsEnabled(mentions);
         setMentionsEnabled(mentions);
         setLanguagePreference(language);
@@ -452,6 +910,18 @@ export const SettingsModal = () => {
         setConnectionsStatus(null);
         setCustomCss(css);
         setDownloadedPlugins(plugins);
+        setUploadedBannerThumbnails((prev) => {
+          const merged = [...persistedBannerUploads, ...prev]
+            .filter((value, index, arr) => arr.indexOf(value) === index)
+            .slice(0, 16);
+          return merged;
+        });
+        setUploadedAvatarThumbnails((prev) => {
+          const merged = [...persistedAvatarUploads, ...prev]
+            .filter((value, index, arr) => arr.indexOf(value) === index)
+            .slice(0, 16);
+          return merged;
+        });
         applyCustomCss(css);
       } catch {
         if (cancelled) {
@@ -710,6 +1180,222 @@ export const SettingsModal = () => {
     }
   };
 
+  const hydrateServerProfiles = useCallback(async () => {
+    try {
+      setIsLoadingServerProfiles(true);
+      setServerProfileStatus(null);
+
+      const response = await axios.get<{ servers?: MemberServerProfileOption[] }>("/api/profile/server");
+      const servers = Array.isArray(response.data?.servers)
+        ? response.data.servers.filter(
+            (item): item is MemberServerProfileOption =>
+              typeof item?.serverId === "string" && typeof item?.serverName === "string"
+          )
+        : [];
+
+      setMemberProfileServers(servers);
+
+      const nextSelectedServerId =
+        selectedProfileSettingsServerId &&
+        servers.some((item) => item.serverId === selectedProfileSettingsServerId)
+          ? selectedProfileSettingsServerId
+          : (servers[0]?.serverId ?? "");
+
+      setSelectedProfileSettingsServerId(nextSelectedServerId);
+
+      const selectedServer = servers.find((item) => item.serverId === nextSelectedServerId);
+      setServerProfileNameInput(selectedServer?.profileName ?? "");
+      const normalizedServerStyle = normalizeProfileNameStyleValue(selectedServer?.profileNameStyle ?? "");
+      const serverStyleParts = getProfileNameStyleParts(normalizedServerStyle);
+      setServerProfileNameStyleInput(selectedServer?.profileNameStyle ?? "");
+      setServerProfileNameFontInput(serverStyleParts.font);
+      setServerProfileNameEffectInput(serverStyleParts.effect);
+      setServerProfileNameColorInput(serverStyleParts.color);
+      setServerProfileCommentInput(selectedServer?.comment ?? "");
+      setServerProfileNameplateLabelInput(selectedServer?.nameplateLabel ?? "");
+      setServerProfileNameplateColorInput(selectedServer?.nameplateColor ?? "");
+      setServerProfileNameplateImageUrlInput(selectedServer?.nameplateImageUrl ?? "");
+      setServerProfileAvatarDecorationInput(selectedServer?.avatarDecorationUrl ?? "");
+      setServerProfileBannerInput(selectedServer?.bannerUrl ?? "");
+    } catch {
+      setServerProfileStatus("Could not load per-server profiles.");
+      setMemberProfileServers([]);
+      setSelectedProfileSettingsServerId("");
+      setServerProfileNameInput("");
+      setServerProfileNameStyleInput("");
+      setServerProfileNameFontInput("default");
+      setServerProfileNameEffectInput("solid");
+      setServerProfileNameColorInput("default");
+      setServerProfileCommentInput("");
+      setServerProfileNameplateLabelInput("");
+      setServerProfileNameplateColorInput("");
+      setServerProfileNameplateImageUrlInput("");
+      setServerProfileAvatarDecorationInput("");
+      setServerProfileBannerInput("");
+    } finally {
+      setIsLoadingServerProfiles(false);
+    }
+  }, [selectedProfileSettingsServerId]);
+
+  useEffect(() => {
+    if (!isModalOpen || activeSection !== "profiles") {
+      return;
+    }
+
+    void hydrateServerProfiles();
+  }, [activeSection, hydrateServerProfiles, isModalOpen]);
+
+  const onChangeProfileSettingsServer = (serverId: string) => {
+    setSelectedProfileSettingsServerId(serverId);
+    setServerProfileStatus(null);
+
+    const selectedServer = memberProfileServers.find((item) => item.serverId === serverId);
+    setServerProfileNameInput(selectedServer?.profileName ?? "");
+    const normalizedServerStyle = normalizeProfileNameStyleValue(selectedServer?.profileNameStyle ?? "");
+    const serverStyleParts = getProfileNameStyleParts(normalizedServerStyle);
+    setServerProfileNameStyleInput(selectedServer?.profileNameStyle ?? "");
+    setServerProfileNameFontInput(serverStyleParts.font);
+    setServerProfileNameEffectInput(serverStyleParts.effect);
+    setServerProfileNameColorInput(serverStyleParts.color);
+    setServerProfileCommentInput(selectedServer?.comment ?? "");
+    setServerProfileNameplateLabelInput(selectedServer?.nameplateLabel ?? "");
+    setServerProfileNameplateColorInput(selectedServer?.nameplateColor ?? "");
+    setServerProfileNameplateImageUrlInput(selectedServer?.nameplateImageUrl ?? "");
+    setServerProfileAvatarDecorationInput(selectedServer?.avatarDecorationUrl ?? "");
+    setServerProfileBannerInput(selectedServer?.bannerUrl ?? "");
+  };
+
+  const onSaveServerProfile = async () => {
+    if (!selectedProfileSettingsServerId) {
+      setServerProfileStatus("Select a server first.");
+      return;
+    }
+
+    const trimmedProfileName = serverProfileNameInput.trim();
+    const trimmedProfileNameStyle = serverProfileNameStyleInput.trim().length > 0
+      ? composeProfileNameStyleValue({
+          font: serverProfileNameFontInput,
+          effect: serverProfileNameEffectInput,
+          color: serverProfileNameColorInput,
+        })
+      : "";
+    const trimmedComment = serverProfileCommentInput.trim();
+    const trimmedNameplateImageUrl = serverProfileNameplateImageUrlInput.trim();
+    const inferredServerNameplateLabel = (
+      trimmedProfileName ||
+      memberProfileServers.find((item) => item.serverId === selectedProfileSettingsServerId)?.effectiveProfileName ||
+      profileName ||
+      realName ||
+      "User"
+    )
+      .trim()
+      .slice(0, 40);
+    const trimmedNameplateLabel =
+      serverProfileNameplateColorInput.trim().length > 0 || trimmedNameplateImageUrl.length > 0
+        ? inferredServerNameplateLabel
+        : "";
+    const trimmedNameplateColor = serverProfileNameplateColorInput.trim();
+    const trimmedAvatarDecorationUrl = serverProfileAvatarDecorationInput.trim();
+    const trimmedBannerUrl = serverProfileBannerInput.trim();
+
+    if (trimmedProfileName.length > 80) {
+      setServerProfileStatus("Profile name must be 80 characters or fewer.");
+      return;
+    }
+
+    if (trimmedComment.length > 280) {
+      setServerProfileStatus("Comment must be 280 characters or fewer.");
+      return;
+    }
+
+    if (trimmedNameplateColor.length > 0 && !/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(trimmedNameplateColor)) {
+      setServerProfileStatus("Nameplate color must be a valid hex color.");
+      return;
+    }
+
+    if (trimmedNameplateImageUrl.length > 2048) {
+      setServerProfileStatus("Nameplate image URL is too long.");
+      return;
+    }
+
+    try {
+      setIsSavingServerProfile(true);
+      setServerProfileStatus(null);
+
+      await axios.patch("/api/profile/server", {
+        serverId: selectedProfileSettingsServerId,
+        profileName: trimmedProfileName || null,
+        profileNameStyle: trimmedProfileNameStyle || null,
+        comment: trimmedComment || null,
+        nameplateLabel: trimmedNameplateLabel || null,
+        nameplateColor: trimmedNameplateLabel ? (trimmedNameplateColor || "#5865f2") : null,
+        nameplateImageUrl: trimmedNameplateImageUrl || null,
+        avatarDecorationUrl: trimmedAvatarDecorationUrl || null,
+        bannerUrl: trimmedBannerUrl || null,
+      });
+
+      await hydrateServerProfiles();
+      setServerProfileStatus(
+        trimmedProfileName ||
+          trimmedProfileNameStyle ||
+          trimmedComment ||
+          trimmedNameplateLabel ||
+          trimmedNameplateImageUrl ||
+          trimmedAvatarDecorationUrl ||
+          trimmedBannerUrl
+          ? "Server profile saved."
+          : "Server profile reset to your global profile."
+      );
+
+      window.dispatchEvent(new CustomEvent("inaccord:profile-card-refresh"));
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Could not save server profile."
+        : "Could not save server profile.";
+      setServerProfileStatus(message);
+    } finally {
+      setIsSavingServerProfile(false);
+    }
+  };
+
+  const onResetServerProfile = async () => {
+    if (!selectedProfileSettingsServerId) {
+      setServerProfileStatus("Select a server first.");
+      return;
+    }
+
+    try {
+      setIsSavingServerProfile(true);
+      setServerProfileStatus(null);
+
+      await axios.patch("/api/profile/server", {
+        serverId: selectedProfileSettingsServerId,
+        profileName: null,
+        profileNameStyle: null,
+        comment: null,
+        nameplateLabel: null,
+        nameplateColor: null,
+        nameplateImageUrl: null,
+        avatarDecorationUrl: null,
+        bannerUrl: null,
+      });
+
+      await hydrateServerProfiles();
+      setServerProfileNameFontInput("default");
+      setServerProfileNameEffectInput("solid");
+      setServerProfileNameColorInput("default");
+      setServerProfileStatus("Server profile reset to your global profile.");
+      window.dispatchEvent(new CustomEvent("inaccord:profile-card-refresh"));
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Could not reset server profile."
+        : "Could not reset server profile.";
+      setServerProfileStatus(message);
+    } finally {
+      setIsSavingServerProfile(false);
+    }
+  };
+
   const applyCustomCss = (cssText: string) => {
     if (typeof document === "undefined") {
       return;
@@ -770,6 +1456,15 @@ export const SettingsModal = () => {
           name?: string;
           realName?: string;
           profileName?: string | null;
+          profileNameStyle?: string | null;
+          nameplateLabel?: string | null;
+          nameplateColor?: string | null;
+          nameplateImageUrl?: string | null;
+          pronouns?: string | null;
+          comment?: string | null;
+          avatarDecorationUrl?: string | null;
+          phoneNumber?: string | null;
+          dateOfBirth?: string | null;
           bannerUrl?: string | null;
           role?: string | null;
           presenceStatus?: string | null;
@@ -778,6 +1473,41 @@ export const SettingsModal = () => {
           setResolvedProfileId(response.data?.id ?? null);
           setRealName(response.data?.realName ?? response.data?.name ?? "");
           setProfileName(response.data?.profileName ?? "");
+          setDefaultProfileNameDraft(response.data?.profileName ?? "");
+          const normalizedDefaultStyle = normalizeProfileNameStyleValue(response.data?.profileNameStyle);
+          const defaultStyleParts = getProfileNameStyleParts(normalizedDefaultStyle);
+          setDefaultProfileNameStyle(normalizedDefaultStyle);
+          setDefaultProfileNameFont(defaultStyleParts.font);
+          setDefaultProfileNameEffect(defaultStyleParts.effect);
+          setDefaultProfileNameColor(defaultStyleParts.color);
+          setDefaultProfileNameStyleStatus(null);
+          const hydratedPronouns = response.data?.pronouns ?? "";
+          setPronouns(hydratedPronouns);
+          setPronounsDraft(hydratedPronouns);
+          const hydratedComment = response.data?.comment ?? "";
+          setComment(hydratedComment);
+          setCommentDraft(hydratedComment);
+          const hydratedNameplateLabel = response.data?.nameplateLabel ?? "";
+          const hydratedNameplateColor = response.data?.nameplateColor ?? "";
+          const hydratedNameplateImageUrl = response.data?.nameplateImageUrl ?? null;
+          setNameplateLabel(hydratedNameplateLabel);
+          setNameplateColor(hydratedNameplateColor || "");
+          setNameplateImageUrl(hydratedNameplateImageUrl);
+          setNameplateLabelInput(hydratedNameplateLabel);
+          setNameplateColorInput(hydratedNameplateColor || "");
+          setNameplateImageUrlInput(hydratedNameplateImageUrl ?? "");
+          setNameplateStatus(null);
+          const hydratedAvatarDecorationUrl = response.data?.avatarDecorationUrl ?? null;
+          setAvatarDecorationUrl(hydratedAvatarDecorationUrl);
+          setAvatarDecorationInput(hydratedAvatarDecorationUrl ?? "");
+          setAvatarDecorationStatus(null);
+          const hydratedPhoneNumber = response.data?.phoneNumber ?? "";
+          setPhoneNumber(hydratedPhoneNumber);
+          setPhoneNumberDraft(hydratedPhoneNumber);
+          const hydratedDateOfBirth = response.data?.dateOfBirth ?? "";
+          setDateOfBirth(hydratedDateOfBirth);
+          setDateOfBirthDraft(hydratedDateOfBirth);
+          setDateOfBirthStatus(null);
           setBannerUrl(response.data?.bannerUrl ?? null);
           setProfileRole(response.data?.role ?? data.profileRole ?? null);
           setProfilePresenceStatus(normalizePresenceStatus(response.data?.presenceStatus));
@@ -854,20 +1584,20 @@ export const SettingsModal = () => {
     }
   };
 
-  const onSaveProfileName = async () => {
-    const trimmedName = profileName.trim();
+  const onSaveProfileName = async (nameOverride?: string) => {
+    const trimmedName = (nameOverride ?? profileName).trim();
 
     setProfileNameError(null);
     setProfileNameSuccess(null);
 
     if (!trimmedName) {
       setProfileNameError("Profile Name is required.");
-      return;
+      return false;
     }
 
     if (trimmedName.length > 80) {
       setProfileNameError("Profile Name must be 80 characters or fewer.");
-      return;
+      return false;
     }
 
     try {
@@ -879,6 +1609,7 @@ export const SettingsModal = () => {
 
       const savedName = response.data?.profileName ?? trimmedName;
       setProfileName(savedName);
+      setDefaultProfileNameDraft(savedName);
       setProfileNameSuccess("Profile Name updated.");
       window.dispatchEvent(
         new CustomEvent("inaccord:profile-updated", {
@@ -889,6 +1620,7 @@ export const SettingsModal = () => {
         })
       );
       router.refresh();
+      return true;
     } catch (error) {
       if (axios.isAxiosError(error)) {
         const message =
@@ -899,10 +1631,223 @@ export const SettingsModal = () => {
       } else {
         setProfileNameError("Failed to update Profile Name");
       }
+      return false;
     } finally {
       setIsSavingProfileName(false);
     }
   };
+
+  const onSaveDefaultProfileNameStyle = async () => {
+    try {
+      setIsSavingDefaultProfileNameStyle(true);
+      setDefaultProfileNameStyleStatus(null);
+
+      const composedStyleValue = composeProfileNameStyleValue({
+        font: defaultProfileNameFont,
+        effect: defaultProfileNameEffect,
+        color: defaultProfileNameColor,
+      });
+
+      const response = await axios.patch<{ ok: boolean; profileNameStyle: string }>(
+        "/api/profile/name-style",
+        {
+          profileNameStyle: composedStyleValue,
+        }
+      );
+
+      const savedStyle = normalizeProfileNameStyleValue(response.data?.profileNameStyle);
+      const savedParts = getProfileNameStyleParts(savedStyle);
+
+      setDefaultProfileNameStyle(savedStyle);
+      setDefaultProfileNameFont(savedParts.font);
+      setDefaultProfileNameEffect(savedParts.effect);
+      setDefaultProfileNameColor(savedParts.color);
+      setDefaultProfileNameStyleStatus("Default profile name style saved.");
+      window.dispatchEvent(new CustomEvent("inaccord:profile-card-refresh"));
+      router.refresh();
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          error.message ||
+          "Failed to save profile name style";
+        setDefaultProfileNameStyleStatus(message);
+      } else {
+        setDefaultProfileNameStyleStatus("Failed to save profile name style");
+      }
+    } finally {
+      setIsSavingDefaultProfileNameStyle(false);
+    }
+  };
+
+  const onSavePronouns = async (pronounsOverride?: string) => {
+    const trimmedPronouns = (pronounsOverride ?? pronouns).trim();
+
+    if (trimmedPronouns.length > 40) {
+      setPronounsStatus("Pronouns must be 40 characters or fewer.");
+      return false;
+    }
+
+    try {
+      setIsSavingPronouns(true);
+      setPronounsStatus(null);
+
+      const response = await axios.patch<{ ok: boolean; pronouns: string | null }>(
+        "/api/profile/pronouns",
+        {
+          pronouns: trimmedPronouns || null,
+        }
+      );
+
+      const savedPronouns = response.data?.pronouns ?? "";
+      setPronouns(savedPronouns);
+      setPronounsDraft(savedPronouns);
+      setPronounsStatus(trimmedPronouns ? "Pronouns updated." : "Pronouns cleared.");
+      window.dispatchEvent(new CustomEvent("inaccord:profile-card-refresh"));
+      router.refresh();
+      return true;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          error.message ||
+          "Failed to update pronouns";
+        setPronounsStatus(message);
+      } else {
+        setPronounsStatus("Failed to update pronouns");
+      }
+      return false;
+    } finally {
+      setIsSavingPronouns(false);
+    }
+  };
+
+  const onSaveComment = async (commentOverride?: string) => {
+    const trimmedComment = (commentOverride ?? comment).trim();
+
+    if (trimmedComment.length > 280) {
+      setCommentStatus("Comment must be 280 characters or fewer.");
+      return false;
+    }
+
+    try {
+      setIsSavingComment(true);
+      setCommentStatus(null);
+
+      const response = await axios.patch<{ ok: boolean; comment: string | null }>(
+        "/api/profile/comment",
+        {
+          comment: trimmedComment || null,
+        }
+      );
+
+      const savedComment = response.data?.comment ?? "";
+      setComment(savedComment);
+      setCommentDraft(savedComment);
+      setCommentStatus(trimmedComment ? "Comment updated." : "Comment cleared.");
+      window.dispatchEvent(new CustomEvent("inaccord:profile-card-refresh"));
+      router.refresh();
+      return true;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          error.message ||
+          "Failed to update comment";
+        setCommentStatus(message);
+      } else {
+        setCommentStatus("Failed to update comment");
+      }
+      return false;
+    } finally {
+      setIsSavingComment(false);
+    }
+  };
+
+  const onSavePhoneNumber = async (phoneNumberOverride?: string) => {
+    const trimmedPhoneNumber = (phoneNumberOverride ?? phoneNumber).trim();
+
+    if (trimmedPhoneNumber.length > 32) {
+      setPhoneNumberStatus("Phone Number must be 32 characters or fewer.");
+      return false;
+    }
+
+    try {
+      setIsSavingPhoneNumber(true);
+      setPhoneNumberStatus(null);
+
+      const response = await axios.patch<{ ok: boolean; phoneNumber: string | null }>(
+        "/api/profile/phone",
+        {
+          phoneNumber: trimmedPhoneNumber || null,
+        }
+      );
+
+      const savedPhoneNumber = response.data?.phoneNumber ?? "";
+      setPhoneNumber(savedPhoneNumber);
+      setPhoneNumberDraft(savedPhoneNumber);
+      setPhoneNumberStatus(trimmedPhoneNumber ? "Phone Number updated." : "Phone Number cleared.");
+      router.refresh();
+      return true;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          error.message ||
+          "Failed to update Phone Number";
+        setPhoneNumberStatus(message);
+      } else {
+        setPhoneNumberStatus("Failed to update Phone Number");
+      }
+      return false;
+    } finally {
+      setIsSavingPhoneNumber(false);
+    }
+  };
+
+  const onSaveDateOfBirth = async (dateOfBirthOverride?: string) => {
+    const trimmedDateOfBirth = (dateOfBirthOverride ?? dateOfBirth).trim();
+
+    if (trimmedDateOfBirth.length > 0 && !/^\d{4}-\d{2}-\d{2}$/.test(trimmedDateOfBirth)) {
+      setDateOfBirthStatus("Date Of Birth must use YYYY-MM-DD format.");
+      return false;
+    }
+
+    try {
+      setIsSavingDateOfBirth(true);
+      setDateOfBirthStatus(null);
+
+      const response = await axios.patch<{ ok: boolean; dateOfBirth: string | null }>(
+        "/api/profile/dob",
+        {
+          dateOfBirth: trimmedDateOfBirth || null,
+        }
+      );
+
+      const savedDateOfBirth = response.data?.dateOfBirth ?? "";
+      setDateOfBirth(savedDateOfBirth);
+      setDateOfBirthDraft(savedDateOfBirth);
+      setDateOfBirthStatus(trimmedDateOfBirth ? "Date Of Birth updated." : "Date Of Birth cleared.");
+      router.refresh();
+      return true;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          error.message ||
+          "Failed to update Date Of Birth";
+        setDateOfBirthStatus(message);
+      } else {
+        setDateOfBirthStatus("Failed to update Date Of Birth");
+      }
+      return false;
+    } finally {
+      setIsSavingDateOfBirth(false);
+    }
+  };
+
+  const canEditDateOfBirth = isInAccordAdministrator(profileRole ?? data.profileRole) || !dateOfBirth;
+  const hasDateOfBirthChanges = canEditDateOfBirth && dateOfBirthDraft !== dateOfBirth;
 
   useEffect(() => {
     if (activeSection === displaySection) {
@@ -925,6 +1870,14 @@ export const SettingsModal = () => {
     }
 
     avatarInputRef.current?.click();
+  };
+
+  const onPickAvatarFromPanel = () => {
+    if (isUploadingAvatar) {
+      return;
+    }
+
+    avatarPanelInputRef.current?.click();
   };
 
   const onAvatarChange = async (file?: File) => {
@@ -951,6 +1904,7 @@ export const SettingsModal = () => {
       });
 
       setAvatarUrl(upload.data.url);
+      rememberUploadedAvatar(upload.data.url);
       window.dispatchEvent(
         new CustomEvent("inaccord:profile-updated", {
           detail: {
@@ -980,12 +1934,247 @@ export const SettingsModal = () => {
     }
   };
 
+  const onAvatarPanelChange = async (file?: File) => {
+    if (!file) {
+      return;
+    }
+
+    try {
+      setIsUploadingAvatar(true);
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const upload = await axios.post<{ url: string }>(
+        "/api/r2/upload?type=userImage",
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        }
+      );
+
+      await axios.patch("/api/profile/avatar", {
+        imageUrl: upload.data.url,
+      });
+
+      setAvatarUrl(upload.data.url);
+      rememberUploadedAvatar(upload.data.url);
+      window.dispatchEvent(
+        new CustomEvent("inaccord:profile-updated", {
+          detail: {
+            profileId: resolvedProfileId,
+            imageUrl: upload.data.url,
+          },
+        })
+      );
+      router.refresh();
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          error.message ||
+          "Upload failed";
+        console.error("[SETTINGS_AVATAR_UPLOAD]", error.response?.data ?? error.message);
+        window.alert(message);
+      } else {
+        console.error("[SETTINGS_AVATAR_UPLOAD]", error);
+        window.alert("Upload failed");
+      }
+    } finally {
+      setIsUploadingAvatar(false);
+      if (avatarPanelInputRef.current) {
+        avatarPanelInputRef.current.value = "";
+      }
+    }
+  };
+
+  const onRemoveAvatarFromPanel = async () => {
+    try {
+      setIsUploadingAvatar(true);
+
+      await axios.patch("/api/profile/avatar", {
+        imageUrl: null,
+      });
+
+      setAvatarUrl(null);
+      window.dispatchEvent(
+        new CustomEvent("inaccord:profile-updated", {
+          detail: {
+            profileId: resolvedProfileId,
+            imageUrl: null,
+          },
+        })
+      );
+      router.refresh();
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          error.message ||
+          "Failed to remove avatar";
+        console.error("[SETTINGS_AVATAR_REMOVE]", error.response?.data ?? error.message);
+        window.alert(message);
+      } else {
+        console.error("[SETTINGS_AVATAR_REMOVE]", error);
+        window.alert("Failed to remove avatar");
+      }
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
+  const onSaveAvatarDecoration = async () => {
+    const trimmedAvatarDecorationUrl = avatarDecorationInput.trim();
+
+    try {
+      setIsSavingAvatarDecoration(true);
+      setAvatarDecorationStatus(null);
+
+      const response = await axios.patch<{ ok: boolean; avatarDecorationUrl: string | null }>(
+        "/api/profile/avatar-decoration",
+        {
+          avatarDecorationUrl: trimmedAvatarDecorationUrl || null,
+        }
+      );
+
+      const savedAvatarDecorationUrl = response.data?.avatarDecorationUrl ?? null;
+      setAvatarDecorationUrl(savedAvatarDecorationUrl);
+      setAvatarDecorationInput(savedAvatarDecorationUrl ?? "");
+      setAvatarDecorationStatus(savedAvatarDecorationUrl ? "Avatar decoration updated." : "Avatar decoration cleared.");
+      window.dispatchEvent(
+        new CustomEvent("inaccord:profile-updated", {
+          detail: {
+            profileId: resolvedProfileId,
+            avatarDecorationUrl: savedAvatarDecorationUrl,
+          },
+        })
+      );
+      window.dispatchEvent(new CustomEvent("inaccord:profile-card-refresh"));
+      router.refresh();
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          error.message ||
+          "Failed to update avatar decoration";
+        setAvatarDecorationStatus(message);
+      } else {
+        setAvatarDecorationStatus("Failed to update avatar decoration");
+      }
+    } finally {
+      setIsSavingAvatarDecoration(false);
+    }
+  };
+
+  const onSaveNameplate = async (labelOverride?: string, colorOverride?: string, imageOverride?: string) => {
+    const trimmedNameplateLabel = (labelOverride ?? nameplateLabelInput).trim();
+    const trimmedNameplateColor = (colorOverride ?? nameplateColorInput).trim();
+    const trimmedNameplateImageUrl = (imageOverride ?? nameplateImageUrlInput).trim();
+
+    if (trimmedNameplateLabel.length > 40) {
+      setNameplateStatus("Nameplate label must be 40 characters or fewer.");
+      return false;
+    }
+
+    if (trimmedNameplateColor.length > 0 && !/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(trimmedNameplateColor)) {
+      setNameplateStatus("Nameplate color must be a valid hex color.");
+      return false;
+    }
+
+    if (trimmedNameplateImageUrl.length > 2048) {
+      setNameplateStatus("Nameplate image URL is too long.");
+      return false;
+    }
+
+    try {
+      setIsSavingNameplate(true);
+      setNameplateStatus(null);
+
+      const response = await axios.patch<{
+        ok: boolean;
+        nameplateLabel: string | null;
+        nameplateColor: string | null;
+        nameplateImageUrl: string | null;
+      }>(
+        "/api/profile/nameplate",
+        {
+          nameplateLabel: trimmedNameplateLabel || null,
+          nameplateColor: trimmedNameplateLabel ? (trimmedNameplateColor || "#5865f2") : null,
+          nameplateImageUrl: trimmedNameplateImageUrl || null,
+        }
+      );
+
+      const savedNameplateLabel = response.data?.nameplateLabel ?? "";
+      const savedNameplateColor = response.data?.nameplateColor ?? "";
+      const savedNameplateImageUrl = response.data?.nameplateImageUrl ?? null;
+
+      setNameplateLabel(savedNameplateLabel);
+      setNameplateColor(savedNameplateColor || "");
+      setNameplateImageUrl(savedNameplateImageUrl);
+      setNameplateLabelInput(savedNameplateLabel);
+      setNameplateColorInput(savedNameplateColor || "");
+      setNameplateImageUrlInput(savedNameplateImageUrl ?? "");
+      setNameplateStatus(savedNameplateLabel ? "Nameplate updated." : "Nameplate cleared.");
+
+      window.dispatchEvent(
+        new CustomEvent("inaccord:profile-updated", {
+          detail: {
+            profileId: resolvedProfileId,
+            nameplateLabel: savedNameplateLabel || null,
+            nameplateColor: savedNameplateLabel ? (savedNameplateColor || "#5865f2") : null,
+            nameplateImageUrl: savedNameplateImageUrl,
+          },
+        })
+      );
+      window.dispatchEvent(new CustomEvent("inaccord:profile-card-refresh"));
+      router.refresh();
+      return true;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          error.message ||
+          "Failed to update nameplate";
+        setNameplateStatus(message);
+      } else {
+        setNameplateStatus("Failed to update nameplate");
+      }
+      return false;
+    } finally {
+      setIsSavingNameplate(false);
+    }
+  };
+
   const onPickBanner = () => {
     if (isUploadingBanner) {
       return;
     }
 
     bannerInputRef.current?.click();
+  };
+
+  const onPickServerBanner = () => {
+    if (isUploadingServerBanner) {
+      return;
+    }
+
+    serverBannerInputRef.current?.click();
+  };
+
+  const onPickNameplateImage = () => {
+    if (isUploadingNameplateImage) {
+      return;
+    }
+
+    nameplateImageInputRef.current?.click();
+  };
+
+  const onPickServerNameplateImage = () => {
+    if (isUploadingServerNameplateImage) {
+      return;
+    }
+
+    serverNameplateImageInputRef.current?.click();
   };
 
   const onBannerChange = async (file?: File) => {
@@ -1012,6 +2201,7 @@ export const SettingsModal = () => {
       });
 
       setBannerUrl(upload.data.url);
+      rememberUploadedBanner(upload.data.url);
       window.dispatchEvent(
         new CustomEvent("inaccord:profile-updated", {
           detail: {
@@ -1037,6 +2227,141 @@ export const SettingsModal = () => {
       setIsUploadingBanner(false);
       if (bannerInputRef.current) {
         bannerInputRef.current.value = "";
+      }
+    }
+  };
+
+  const onServerBannerChange = async (file?: File) => {
+    if (!file) {
+      return;
+    }
+
+    try {
+      setIsUploadingServerBanner(true);
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const upload = await axios.post<{ url: string }>(
+        "/api/r2/upload?type=userBanner",
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        }
+      );
+
+      const uploadedUrl = String(upload.data?.url ?? "").trim();
+      if (!uploadedUrl) {
+        throw new Error("Upload did not return a valid URL.");
+      }
+
+      setServerProfileBannerInput(uploadedUrl);
+      setServerProfileStatus("Banner uploaded. Save server profile to apply.");
+      rememberUploadedBanner(uploadedUrl);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          error.message ||
+          "Banner upload failed";
+        setServerProfileStatus(message);
+      } else {
+        setServerProfileStatus("Banner upload failed");
+      }
+    } finally {
+      setIsUploadingServerBanner(false);
+      if (serverBannerInputRef.current) {
+        serverBannerInputRef.current.value = "";
+      }
+    }
+  };
+
+  const onNameplateImageChange = async (file?: File) => {
+    if (!file) {
+      return;
+    }
+
+    try {
+      setIsUploadingNameplateImage(true);
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const upload = await axios.post<{ url: string }>(
+        "/api/r2/upload?type=userBanner",
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        }
+      );
+
+      const uploadedUrl = String(upload.data?.url ?? "").trim();
+      if (!uploadedUrl) {
+        throw new Error("Upload did not return a valid URL.");
+      }
+
+      setNameplateImageUrlInput(uploadedUrl);
+      setNameplateStatus("Custom nameplate image uploaded. Save to apply.");
+      rememberUploadedBanner(uploadedUrl);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          error.message ||
+          "Nameplate image upload failed";
+        setNameplateStatus(message);
+      } else {
+        setNameplateStatus("Nameplate image upload failed");
+      }
+    } finally {
+      setIsUploadingNameplateImage(false);
+      if (nameplateImageInputRef.current) {
+        nameplateImageInputRef.current.value = "";
+      }
+    }
+  };
+
+  const onServerNameplateImageChange = async (file?: File) => {
+    if (!file) {
+      return;
+    }
+
+    try {
+      setIsUploadingServerNameplateImage(true);
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const upload = await axios.post<{ url: string }>(
+        "/api/r2/upload?type=userBanner",
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        }
+      );
+
+      const uploadedUrl = String(upload.data?.url ?? "").trim();
+      if (!uploadedUrl) {
+        throw new Error("Upload did not return a valid URL.");
+      }
+
+      setServerProfileNameplateImageUrlInput(uploadedUrl);
+      setServerProfileStatus("Custom nameplate image uploaded. Save server profile to apply.");
+      rememberUploadedBanner(uploadedUrl);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          error.message ||
+          "Nameplate image upload failed";
+        setServerProfileStatus(message);
+      } else {
+        setServerProfileStatus("Nameplate image upload failed");
+      }
+    } finally {
+      setIsUploadingServerNameplateImage(false);
+      if (serverNameplateImageInputRef.current) {
+        serverNameplateImageInputRef.current.value = "";
       }
     }
   };
@@ -1181,6 +2506,12 @@ export const SettingsModal = () => {
   const hasDeveloperWrench = isInAccordDeveloper(profileRole ?? data.profileRole);
   const hasModeratorShield = isInAccordModerator(profileRole ?? data.profileRole);
   const inAccordStaffRoleLabel = getInAccordStaffLabel(profileRole ?? data.profileRole);
+  const profileIcons = resolveProfileIcons({
+    userId: resolvedProfileId,
+    role: profileRole ?? data.profileRole,
+    email: data.profileEmail ?? null,
+    createdAt: data.profileJoinedAt ?? null,
+  });
 
   const renderComingSoonSection = (title: string, subtitle: string) => {
     return (
@@ -1221,27 +2552,60 @@ export const SettingsModal = () => {
                 Password Settings
               </p>
 
-              <input
-                type="password"
-                value={currentPassword}
-                onChange={(event) => setCurrentPassword(event.target.value)}
-                placeholder="Current password"
-                className="w-full rounded-xl border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
-              />
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
-                placeholder="New password (min 8 chars)"
-                className="w-full rounded-xl border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
-              />
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-                placeholder="Confirm new password"
-                className="w-full rounded-xl border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
-              />
+              <div className="relative">
+                <input
+                  type={showCurrentPassword ? "text" : "password"}
+                  value={currentPassword}
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                  placeholder="Current password"
+                  className="w-full rounded-xl border border-black/25 bg-[#1a1b1e] px-3 py-2 pr-10 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCurrentPassword((current) => !current)}
+                  className="absolute inset-y-0 right-0 inline-flex w-10 items-center justify-center text-[#a4aab4] transition hover:text-white"
+                  aria-label={showCurrentPassword ? "Hide current password" : "Show current password"}
+                  title={showCurrentPassword ? "Hide current password" : "Show current password"}
+                >
+                  {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <div className="relative">
+                <input
+                  type={showNewPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                  placeholder="New password (min 8 chars)"
+                  className="w-full rounded-xl border border-black/25 bg-[#1a1b1e] px-3 py-2 pr-10 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword((current) => !current)}
+                  className="absolute inset-y-0 right-0 inline-flex w-10 items-center justify-center text-[#a4aab4] transition hover:text-white"
+                  aria-label={showNewPassword ? "Hide new password" : "Show new password"}
+                  title={showNewPassword ? "Hide new password" : "Show new password"}
+                >
+                  {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <div className="relative">
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  placeholder="Confirm new password"
+                  className="w-full rounded-xl border border-black/25 bg-[#1a1b1e] px-3 py-2 pr-10 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((current) => !current)}
+                  className="absolute inset-y-0 right-0 inline-flex w-10 items-center justify-center text-[#a4aab4] transition hover:text-white"
+                  aria-label={showConfirmPassword ? "Hide confirmation password" : "Show confirmation password"}
+                  title={showConfirmPassword ? "Hide confirmation password" : "Show confirmation password"}
+                >
+                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
 
               {passwordError ? (
                 <p className="rounded-xl border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
@@ -1355,6 +2719,925 @@ export const SettingsModal = () => {
                 <div className="h-[6px] w-full rounded-full bg-[#d9d9d9] shadow-[0_0_10px_rgba(217,217,217,0.45)]" />
               </div>
             </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (displaySection === "profiles") {
+      const selectedServer = memberProfileServers.find(
+        (item) => item.serverId === selectedProfileSettingsServerId
+      );
+      const previewDisplayName =
+        serverProfileNameInput.trim() || selectedServer?.effectiveProfileName || profileName || realName || "User";
+      const previewProfileNameStyle =
+        serverProfileNameStyleInput.trim() ||
+        selectedServer?.effectiveProfileNameStyle ||
+        defaultProfileNameStyle;
+      const previewComment =
+        serverProfileCommentInput.trim() || selectedServer?.effectiveComment || comment || "";
+      const previewNameplateLabel =
+        serverProfileNameplateLabelInput.trim() || selectedServer?.effectiveNameplateLabel || nameplateLabel || "";
+      const previewNameplateColor =
+        serverProfileNameplateColorInput.trim() || selectedServer?.effectiveNameplateColor || nameplateColor || "#5865f2";
+      const previewNameplateImageUrl =
+        serverProfileNameplateImageUrlInput.trim() || selectedServer?.effectiveNameplateImageUrl || nameplateImageUrl || null;
+      const previewAvatarDecorationUrl =
+        serverProfileAvatarDecorationInput.trim() ||
+        selectedServer?.effectiveAvatarDecorationUrl ||
+        avatarDecorationUrl ||
+        null;
+      const previewBannerUrl =
+        serverProfileBannerInput.trim() || selectedServer?.effectiveBannerUrl || bannerUrl || null;
+
+      return (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
+            <p className="text-sm font-medium text-white">Per-Server Profiles</p>
+            <p className="mt-1 text-xs text-[#949ba4]">
+              Customize how your profile appears in each server you&apos;re a member of.
+            </p>
+
+            {isLoadingServerProfiles ? (
+              <p className="mt-3 inline-flex items-center gap-2 text-xs text-[#b5bac1]">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Loading server profiles...
+              </p>
+            ) : memberProfileServers.length === 0 ? (
+              <p className="mt-3 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-[#949ba4]">
+                Join a server to configure a per-server profile.
+              </p>
+            ) : (
+              <div className="mt-3 space-y-3 rounded-xl border border-white/10 bg-black/20 p-3">
+                <div>
+                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                    Server
+                  </label>
+                  <select
+                    value={selectedProfileSettingsServerId}
+                    onChange={(event) => onChangeProfileSettingsServer(event.target.value)}
+                    disabled={isSavingServerProfile}
+                    className="h-9 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {memberProfileServers.map((item) => (
+                      <option key={item.serverId} value={item.serverId}>
+                        {item.serverName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid gap-3 lg:grid-cols-2">
+                  <div className="rounded-xl border border-white/10 bg-[#1a1b1e] p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                      Live Preview
+                    </p>
+
+                    <div className="mt-2 overflow-hidden rounded-xl border border-white/10 bg-[#111214] text-[#dbdee1] shadow-lg shadow-black/40">
+                      <div className="relative h-24 bg-linear-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
+                        {previewBannerUrl ? (
+                          <Image
+                            src={previewBannerUrl}
+                            alt="Profile preview banner"
+                            fill
+                            className="object-cover"
+                            unoptimized
+                          />
+                        ) : null}
+                      </div>
+
+                      <div className="relative p-3 pt-9">
+                        <div className="absolute -top-10 left-3 rounded-full border-4 border-[#111214]">
+                          <UserAvatar
+                            src={avatarUrl ?? undefined}
+                            decorationSrc={previewAvatarDecorationUrl}
+                            className="h-20 w-20"
+                          />
+                        </div>
+
+                        <div className="min-w-0">
+                          <ProfileIconRow icons={profileIcons} className="mb-1" />
+                          <NameplatePill
+                            label={previewNameplateLabel}
+                            color={previewNameplateColor}
+                            imageUrl={previewNameplateImageUrl}
+                            className="mb-1"
+                          />
+                          <ProfileNameWithServerTag
+                            name={previewDisplayName}
+                            profileId={resolvedProfileId}
+                            nameClassName={`text-base font-bold text-white ${getProfileNameStyleClass(
+                              previewProfileNameStyle
+                            )}`}
+                          />
+                          <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">
+                            In-Accord Profile Preview
+                          </p>
+                        </div>
+
+                        <div className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] p-3 text-xs">
+                          <div className="space-y-1 text-[#dbdee1]">
+                            <p>Name: {previewDisplayName}</p>
+                            <p>Pronouns: {pronouns.trim() || "Not set"}</p>
+                            <p>Comment: {previewComment || "Not set"}</p>
+                            <p>Server: {selectedServer?.serverName ?? "Selected server"}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="mt-2 text-[11px] text-[#949ba4]">
+                      Preview updates as you edit name/banner values.
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                        profile tweaks
+                      </label>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          type="button"
+                          onClick={() => setIsServerBannerPanelOpen(true)}
+                          disabled={isSavingServerProfile}
+                          className="h-8 border border-white/15 bg-[#1a1b1e] px-3 text-xs text-[#dbdee1] hover:bg-[#2a2b30] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          BANNER
+                        </Button>
+                        <Button
+                          type="button"
+                          onClick={() => setIsServerProfileNameStylesPanelOpen(true)}
+                          disabled={isSavingServerProfile}
+                          className="h-8 border border-white/15 bg-[#1a1b1e] px-3 text-xs text-[#dbdee1] hover:bg-[#2a2b30] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Profile Name Styles
+                        </Button>
+                        <Button
+                          type="button"
+                          onClick={() => setIsServerNameplatePanelOpen(true)}
+                          disabled={isSavingServerProfile}
+                          className="h-8 border border-white/15 bg-[#1a1b1e] px-3 text-xs text-[#dbdee1] hover:bg-[#2a2b30] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Nameplate
+                        </Button>
+                        <Button
+                          type="button"
+                          onClick={() => setIsServerAvatarDecorationPanelOpen(true)}
+                          disabled={isSavingServerProfile}
+                          className="h-8 border border-white/15 bg-[#1a1b1e] px-3 text-xs text-[#dbdee1] hover:bg-[#2a2b30] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Avatar Decoration
+                        </Button>
+                      </div>
+                      {serverProfileBannerInput.trim() ? (
+                        <p className="mt-1 text-[11px] text-[#949ba4]">Custom URL set.</p>
+                      ) : null}
+                      {serverProfileAvatarDecorationInput.trim() ? (
+                        <p className="mt-1 text-[11px] text-[#949ba4]">Custom decoration set.</p>
+                      ) : null}
+                      {serverProfileNameplateLabelInput.trim() ? (
+                        <p className="mt-1 text-[11px] text-[#949ba4]">Custom nameplate set.</p>
+                      ) : null}
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                        Server profile name
+                      </label>
+                      <input
+                        type="text"
+                        value={serverProfileNameInput}
+                        onChange={(event) => {
+                          setServerProfileNameInput(event.target.value);
+                          setServerProfileStatus(null);
+                        }}
+                        maxLength={80}
+                        placeholder={profileName || realName || "Use global profile name"}
+                        disabled={isSavingServerProfile}
+                        className="w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35 disabled:cursor-not-allowed disabled:opacity-60"
+                      />
+                      <p className="mt-1 text-[11px] text-[#949ba4]">Leave blank to use your global profile name.</p>
+
+                      <div className="mt-3">
+                        <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                          Pronouns
+                        </label>
+                        <input
+                          type="text"
+                          value={pronouns}
+                          onChange={(event) => {
+                            setPronouns(event.target.value);
+                            setPronounsStatus(null);
+                          }}
+                          maxLength={40}
+                          placeholder="e.g. she/her"
+                          disabled={isSavingPronouns}
+                          className="w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35 disabled:cursor-not-allowed disabled:opacity-60"
+                        />
+                        <div className="mt-2 flex items-center justify-between gap-2">
+                          <p className="text-[11px] text-[#949ba4]">Optional and shown on your profile card.</p>
+                          <Button
+                            type="button"
+                            onClick={() => void onSavePronouns()}
+                            disabled={isSavingPronouns}
+                            className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {isSavingPronouns ? (
+                              <span className="inline-flex items-center gap-2">
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                Saving...
+                              </span>
+                            ) : (
+                              "Save Pronouns"
+                            )}
+                          </Button>
+                        </div>
+
+                        {pronounsStatus ? (
+                          <p className="mt-2 rounded-md border border-white/10 bg-[#1a1b1e] px-3 py-2 text-xs text-[#b5bac1]">
+                            {pronounsStatus}
+                          </p>
+                        ) : null}
+
+                        <label className="mt-3 mb-1 block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                          Server comment
+                        </label>
+                        <textarea
+                          value={serverProfileCommentInput}
+                          onChange={(event) => {
+                            setServerProfileCommentInput(event.target.value);
+                            setServerProfileStatus(null);
+                          }}
+                          maxLength={280}
+                          rows={4}
+                          placeholder="Add a server-specific comment"
+                          disabled={isSavingServerProfile}
+                          className="w-full resize-y rounded-md border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35 disabled:cursor-not-allowed disabled:opacity-60"
+                        />
+                        <p className="mt-1 text-[11px] text-[#949ba4]">Leave blank to use your global comment.</p>
+
+                      </div>
+                    </div>
+
+                    <div className="rounded-md border border-white/10 bg-[#1a1b1e] px-3 py-2 text-xs text-[#dbdee1]">
+                      <p>
+                        Current for {selectedServer?.serverName ?? "selected server"}: {" "}
+                        <span className="font-semibold text-white">
+                          {selectedServer?.effectiveProfileName || "Global profile name"}
+                        </span>
+                      </p>
+                      <p className="mt-1 text-[#b5bac1]">
+                        Nameplate: {selectedServer?.nameplateLabel ? "Custom nameplate set" : (selectedServer?.effectiveNameplateLabel ? "Global nameplate" : "No nameplate")}
+                      </p>
+                      <p className="mt-1 text-[#b5bac1]">
+                        Decoration: {selectedServer?.avatarDecorationUrl ? "Custom decoration set" : (selectedServer?.effectiveAvatarDecorationUrl ? "Global decoration" : "No decoration")}
+                      </p>
+                      <p className="mt-1 text-[#b5bac1]">
+                        Banner: {selectedServer?.bannerUrl ? "Custom banner set" : (selectedServer?.effectiveBannerUrl ? "Global banner" : "No banner")}
+                      </p>
+                      <p className="mt-1 text-[#b5bac1]">
+                        Comment: {selectedServer?.comment ? "Custom comment set" : (selectedServer?.effectiveComment ? "Global comment" : "No comment")}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <Button
+                        type="button"
+                        onClick={onResetServerProfile}
+                        disabled={isSavingServerProfile}
+                        className="border border-rose-500/35 bg-rose-500/15 text-rose-200 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Reset to Global
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={onSaveServerProfile}
+                        disabled={isSavingServerProfile}
+                        className="bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isSavingServerProfile ? (
+                          <span className="inline-flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Saving...
+                          </span>
+                        ) : (
+                          "Save Server Profile"
+                        )}
+                      </Button>
+                    </div>
+
+                    <Dialog open={isServerBannerPanelOpen} onOpenChange={setIsServerBannerPanelOpen}>
+                      <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
+                        <DialogHeader>
+                          <DialogTitle>Edit Server Banner URL</DialogTitle>
+                          <DialogDescription className="text-[#949ba4]">
+                            Set a server-specific banner URL. Leave blank to fall back to your global banner.
+                          </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="overflow-hidden rounded-xl border border-white/10 bg-[#111214]">
+                          <div className="relative h-28 bg-linear-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
+                            {(serverProfileBannerInput.trim() || selectedServer?.effectiveBannerUrl || bannerUrl) ? (
+                              <Image
+                                src={serverProfileBannerInput.trim() || selectedServer?.effectiveBannerUrl || bannerUrl || ""}
+                                alt="Server banner preview"
+                                fill
+                                className="object-cover"
+                                unoptimized
+                              />
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <input
+                          type="text"
+                          value={serverProfileBannerInput}
+                          onChange={(event) => {
+                            setServerProfileBannerInput(event.target.value);
+                            setServerProfileStatus(null);
+                          }}
+                          placeholder="https://..."
+                          disabled={isSavingServerProfile}
+                          className="w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35 disabled:cursor-not-allowed disabled:opacity-60"
+                        />
+
+                        <input
+                          ref={serverBannerInputRef}
+                          className="hidden"
+                          type="file"
+                          accept="image/*"
+                          onChange={(event) => onServerBannerChange(event.target.files?.[0])}
+                        />
+
+                        {uploadedBannerThumbnails.length > 0 ? (
+                          <div className="rounded-lg border border-white/10 bg-black/20 p-2">
+                            <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                              Uploaded Banners
+                            </p>
+                            <div className="grid grid-cols-4 gap-2">
+                              {uploadedBannerThumbnails.map((thumbnailUrl) => (
+                                <button
+                                  key={`server-banner-thumb-${thumbnailUrl}`}
+                                  type="button"
+                                  onClick={() => {
+                                    setServerProfileBannerInput(thumbnailUrl);
+                                    setServerProfileStatus(null);
+                                  }}
+                                  className="overflow-hidden rounded-md border border-white/15 bg-[#111214] transition hover:border-[#5865f2]/60"
+                                  title="Use this uploaded banner"
+                                >
+                                  <div className="relative h-10 w-full">
+                                    <Image
+                                      src={thumbnailUrl}
+                                      alt="Uploaded banner thumbnail"
+                                      fill
+                                      className="object-cover"
+                                      unoptimized
+                                    />
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        <DialogFooter className="gap-2 sm:justify-between">
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => {
+                                setServerProfileBannerInput("");
+                                setServerProfileStatus(null);
+                              }}
+                              disabled={isUploadingServerBanner}
+                            >
+                              Remove
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={onPickServerBanner}
+                              disabled={isUploadingServerBanner}
+                              className="bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {isUploadingServerBanner ? (
+                                <span className="inline-flex items-center gap-2">
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  Uploading...
+                                </span>
+                              ) : (
+                                "Upload Banner"
+                              )}
+                            </Button>
+                          </div>
+                          <Button
+                            type="button"
+                            onClick={() => setIsServerBannerPanelOpen(false)}
+                            className="bg-[#5865f2] text-white hover:bg-[#4752c4]"
+                          >
+                            Done
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+
+                    <Dialog open={isServerAvatarDecorationPanelOpen} onOpenChange={setIsServerAvatarDecorationPanelOpen}>
+                      <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
+                        <DialogHeader>
+                          <DialogTitle>Edit Server Avatar Decoration URL</DialogTitle>
+                          <DialogDescription className="text-[#949ba4]">
+                            Set a server-specific avatar decoration overlay URL. Leave blank to use your global decoration.
+                          </DialogDescription>
+                        </DialogHeader>
+
+                        <input
+                          type="text"
+                          value={serverProfileAvatarDecorationInput}
+                          onChange={(event) => {
+                            setServerProfileAvatarDecorationInput(event.target.value);
+                            setServerProfileStatus(null);
+                          }}
+                          placeholder="https://..."
+                          disabled={isSavingServerProfile}
+                          className="w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35 disabled:cursor-not-allowed disabled:opacity-60"
+                        />
+
+                        <DialogFooter className="gap-2 sm:justify-between">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                              setServerProfileAvatarDecorationInput("");
+                              setServerProfileStatus(null);
+                            }}
+                          >
+                            Clear
+                          </Button>
+                          <Button
+                            type="button"
+                            onClick={() => setIsServerAvatarDecorationPanelOpen(false)}
+                            className="bg-[#5865f2] text-white hover:bg-[#4752c4]"
+                          >
+                            Done
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+
+                    <Dialog open={isServerNameplatePanelOpen} onOpenChange={setIsServerNameplatePanelOpen}>
+                      <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
+                        <DialogHeader>
+                          <DialogTitle>Edit Server Nameplate</DialogTitle>
+                          <DialogDescription className="text-[#949ba4]">
+                            Create a server nameplate banner behind your profile name.
+                          </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="space-y-3">
+
+                          <input
+                            ref={serverNameplateImageInputRef}
+                            className="hidden"
+                            type="file"
+                            accept="image/*"
+                            onChange={(event) => onServerNameplateImageChange(event.target.files?.[0])}
+                          />
+
+                          <div>
+                            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                              Banner color
+                            </label>
+                            <div className="grid grid-cols-3 gap-2">
+                              {NAMEPLATE_COLOR_PRESETS.map((preset) => {
+                                const isActive = (serverProfileNameplateColorInput || "#5865f2").toLowerCase() === preset.color.toLowerCase();
+
+                                return (
+                                  <button
+                                    key={`server-nameplate-preset-${preset.key}`}
+                                    type="button"
+                                    disabled={isSavingServerProfile}
+                                    onClick={() => {
+                                      setServerProfileNameplateColorInput(preset.color);
+                                      setServerProfileStatus(null);
+                                    }}
+                                    className={`overflow-hidden rounded-md border text-left transition ${
+                                      isActive
+                                        ? "border-white/70 ring-2 ring-white/25"
+                                        : "border-white/15 hover:border-white/35"
+                                    } disabled:cursor-not-allowed disabled:opacity-60`}
+                                  >
+                                    <span className="block h-6" style={{ backgroundColor: preset.color }} />
+                                    <span className="block bg-[#1a1b1e] px-2 py-1 text-[10px] text-[#dbdee1]">{preset.label}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          <div className="rounded-lg border border-white/10 bg-black/20 p-2">
+                            <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                              Custom Nameplate Image
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                onClick={onPickServerNameplateImage}
+                                disabled={isUploadingServerNameplateImage}
+                                className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {isUploadingServerNameplateImage ? "Uploading..." : "Upload Image"}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                  setServerProfileNameplateImageUrlInput("");
+                                  setServerProfileStatus(null);
+                                }}
+                                disabled={isUploadingServerNameplateImage}
+                              >
+                                Remove Image
+                              </Button>
+                            </div>
+
+                            {uploadedBannerThumbnails.length > 0 ? (
+                              <div className="mt-2 grid grid-cols-4 gap-2">
+                                {uploadedBannerThumbnails.map((thumbnailUrl) => (
+                                  <button
+                                    key={`server-nameplate-thumb-${thumbnailUrl}`}
+                                    type="button"
+                                    onClick={() => {
+                                      setServerProfileNameplateImageUrlInput(thumbnailUrl);
+                                      setServerProfileStatus(null);
+                                    }}
+                                    className="overflow-hidden rounded-md border border-white/15 bg-[#111214] transition hover:border-[#5865f2]/60"
+                                    title="Use this uploaded image"
+                                  >
+                                    <div className="relative h-10 w-full">
+                                      <Image
+                                        src={thumbnailUrl}
+                                        alt="Uploaded nameplate thumbnail"
+                                        fill
+                                        className="object-cover"
+                                        unoptimized
+                                      />
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+
+                          <div className="rounded-lg border border-white/10 bg-[#15161a] p-2">
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                              Live Nameplate Preview
+                            </p>
+                            <div
+                              className="relative mt-2 overflow-hidden rounded-md border border-white/10 bg-[#111214] px-3 py-2"
+                              style={
+                                serverProfileNameplateImageUrlInput.trim()
+                                  ? {
+                                      backgroundImage: `url(${serverProfileNameplateImageUrlInput.trim()})`,
+                                      backgroundSize: "cover",
+                                      backgroundPosition: "center",
+                                    }
+                                  : undefined
+                              }
+                            >
+                              <span
+                                className="absolute inset-0"
+                                style={{
+                                  backgroundColor: `${(serverProfileNameplateColorInput || "#5865f2").trim()}33`,
+                                }}
+                              />
+                              <span
+                                className="absolute inset-y-0 left-0 w-1.5"
+                                style={{
+                                  backgroundColor: (serverProfileNameplateColorInput || "#5865f2").trim(),
+                                }}
+                              />
+                              <p className="relative truncate pl-1 text-sm font-semibold text-white">
+                                    {previewDisplayName}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <DialogFooter className="gap-2 sm:justify-between">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                              setServerProfileNameplateLabelInput("");
+                              setServerProfileNameplateColorInput("");
+                              setServerProfileNameplateImageUrlInput("");
+                              setServerProfileStatus(null);
+                            }}
+                          >
+                            Clear
+                          </Button>
+                          <Button
+                            type="button"
+                            onClick={() => setIsServerNameplatePanelOpen(false)}
+                            className="bg-[#5865f2] text-white hover:bg-[#4752c4]"
+                          >
+                            Done
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+
+                    <Dialog
+                      open={isServerProfileNameStylesPanelOpen}
+                      onOpenChange={setIsServerProfileNameStylesPanelOpen}
+                    >
+                      <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
+                        <DialogHeader>
+                          <DialogTitle>Profile Name Styles (Server)</DialogTitle>
+                          <DialogDescription className="text-[#949ba4]">
+                            Make your profile name look fancy in this server. This is separate from your default profile style.
+                          </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="space-y-3">
+                          <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                                Server profile style override
+                              </p>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                  if (serverProfileNameStyleInput.trim()) {
+                                    setServerProfileNameStyleInput("");
+                                    const fallbackParts = getProfileNameStyleParts(defaultProfileNameStyle);
+                                    setServerProfileNameFontInput(fallbackParts.font);
+                                    setServerProfileNameEffectInput(fallbackParts.effect);
+                                    setServerProfileNameColorInput(fallbackParts.color);
+                                  } else {
+                                    setServerProfileNameStyleInput(
+                                      composeProfileNameStyleValue({
+                                        font: serverProfileNameFontInput,
+                                        effect: serverProfileNameEffectInput,
+                                        color: serverProfileNameColorInput,
+                                      })
+                                    );
+                                  }
+                                  setServerProfileStatus(null);
+                                }}
+                                disabled={isSavingServerProfile}
+                                className="h-7 px-2 text-[11px]"
+                              >
+                                {serverProfileNameStyleInput.trim() ? "Use Default" : "Override"}
+                              </Button>
+                            </div>
+
+                            <p className="mt-1 text-[11px] text-[#949ba4]">
+                              Server: {selectedServer?.serverName ?? "Selected server"}
+                            </p>
+
+                            <div className="mt-3 space-y-3">
+                              <div>
+                                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                                  Font
+                                </label>
+                                <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
+                                  {PROFILE_NAME_FONT_OPTIONS.map((option) => {
+                                    const isActive = serverProfileNameFontInput === option.key;
+                                    const iconClass =
+                                      option.key === "bold"
+                                        ? "font-black"
+                                        : option.key === "italic"
+                                        ? "italic font-semibold"
+                                        : option.key === "mono"
+                                        ? "font-mono"
+                                        : option.key === "serif"
+                                        ? "font-serif"
+                                        : "";
+
+                                    return (
+                                      <button
+                                        key={`server-font-${option.key}`}
+                                        type="button"
+                                        disabled={isSavingServerProfile}
+                                        onClick={() => {
+                                          const next = option.key as ProfileNameFontKey;
+                                          setServerProfileNameFontInput(next);
+                                          setServerProfileNameStyleInput(
+                                            composeProfileNameStyleValue({
+                                              font: next,
+                                              effect: serverProfileNameEffectInput,
+                                              color: serverProfileNameColorInput,
+                                            })
+                                          );
+                                          setServerProfileStatus(null);
+                                        }}
+                                        title={option.description}
+                                        className={`aspect-square rounded-md border p-1 text-[10px] leading-tight transition flex flex-col items-center justify-center text-center ${
+                                          isActive
+                                            ? "border-[#5865f2]/70 bg-[#5865f2]/20 text-white"
+                                            : "border-white/15 bg-[#1a1b1e] text-[#c8ccd1] hover:bg-[#2a2b30]"
+                                        } disabled:cursor-not-allowed disabled:opacity-60`}
+                                      >
+                                        <span className={`block text-4xl leading-none ${iconClass}`}>Aa</span>
+                                        <span className="mt-0.5 block truncate">{option.label}</span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                                  Effect
+                                </label>
+                                <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
+                                  {PROFILE_NAME_EFFECT_OPTIONS.map((option) => {
+                                    const isActive = serverProfileNameEffectInput === option.key;
+                                    const icon =
+                                      option.key === "solid"
+                                        ? "⬤"
+                                        : option.key === "gradient"
+                                        ? "🌈"
+                                        : option.key === "neon"
+                                        ? "✨"
+                                        : option.key === "toon"
+                                        ? "🎭"
+                                        : "💥";
+
+                                    return (
+                                      <button
+                                        key={`server-effect-${option.key}`}
+                                        type="button"
+                                        disabled={isSavingServerProfile}
+                                        onClick={() => {
+                                          const next = option.key as ProfileNameEffectKey;
+                                          setServerProfileNameEffectInput(next);
+                                          setServerProfileNameStyleInput(
+                                            composeProfileNameStyleValue({
+                                              font: serverProfileNameFontInput,
+                                              effect: next,
+                                              color: serverProfileNameColorInput,
+                                            })
+                                          );
+                                          setServerProfileStatus(null);
+                                        }}
+                                        title={option.description}
+                                        className={`aspect-square rounded-md border p-1 text-[10px] leading-tight transition flex flex-col items-center justify-center text-center ${
+                                          isActive
+                                            ? "border-[#5865f2]/70 bg-[#5865f2]/20 text-white"
+                                            : "border-white/15 bg-[#1a1b1e] text-[#c8ccd1] hover:bg-[#2a2b30]"
+                                        } disabled:cursor-not-allowed disabled:opacity-60`}
+                                      >
+                                        <span className="block text-4xl leading-none">{icon}</span>
+                                        <span className="mt-0.5 block truncate">{option.label}</span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                                  Color
+                                </label>
+                                <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
+                                  {PROFILE_NAME_COLOR_OPTIONS.map((option) => {
+                                    const isActive = serverProfileNameColorInput === option.key;
+                                    const dotClass =
+                                      option.key === "blurb"
+                                        ? "bg-[#7b88ff]"
+                                        : option.key === "sunset"
+                                        ? "bg-[#ff8a5b]"
+                                        : option.key === "frost"
+                                        ? "bg-[#66d9ff]"
+                                        : option.key === "ruby"
+                                        ? "bg-[#ff6b81]"
+                                        : "bg-white/70";
+
+                                    return (
+                                      <button
+                                        key={`server-color-${option.key}`}
+                                        type="button"
+                                        disabled={isSavingServerProfile}
+                                        onClick={() => {
+                                          const next = option.key as ProfileNameColorKey;
+                                          setServerProfileNameColorInput(next);
+                                          setServerProfileNameStyleInput(
+                                            composeProfileNameStyleValue({
+                                              font: serverProfileNameFontInput,
+                                              effect: serverProfileNameEffectInput,
+                                              color: next,
+                                            })
+                                          );
+                                          setServerProfileStatus(null);
+                                        }}
+                                        title={option.description}
+                                        className={`aspect-square rounded-md border p-1 text-[10px] leading-tight transition flex flex-col items-center justify-center text-center ${
+                                          isActive
+                                            ? "border-[#5865f2]/70 bg-[#5865f2]/20 text-white"
+                                            : "border-white/15 bg-[#1a1b1e] text-[#c8ccd1] hover:bg-[#2a2b30]"
+                                        } disabled:cursor-not-allowed disabled:opacity-60`}
+                                      >
+                                        <span className={`mx-auto block h-7 w-7 rounded-full ${dotClass}`} />
+                                        <span className="mt-0.5 block truncate">{option.label}</span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-xs text-[#b5bac1]">
+                            Preview:{" "}
+                            <span
+                              className={`text-sm text-white ${getProfileNameStyleClass(
+                                serverProfileNameStyleInput.trim()
+                                  ? composeProfileNameStyleValue({
+                                      font: serverProfileNameFontInput,
+                                      effect: serverProfileNameEffectInput,
+                                      color: serverProfileNameColorInput,
+                                    })
+                                  : defaultProfileNameStyle
+                              )}`}
+                            >
+                              {previewDisplayName}
+                            </span>
+                          </div>
+
+                          <div className="rounded-lg border border-white/10 bg-[#15161a] px-3 py-2">
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                              Live Sample
+                            </p>
+                            <p
+                              className={`mt-1 text-sm text-white ${getProfileNameStyleClass(
+                                serverProfileNameStyleInput.trim()
+                                  ? composeProfileNameStyleValue({
+                                      font: serverProfileNameFontInput,
+                                      effect: serverProfileNameEffectInput,
+                                      color: serverProfileNameColorInput,
+                                    })
+                                  : defaultProfileNameStyle
+                              )}`}
+                            >
+                              The quick brown fox jumps over the lazy dog.
+                            </p>
+                          </div>
+
+                          <DialogFooter className="gap-2 sm:justify-between">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => {
+                                const resetStyle = selectedServer?.profileNameStyle ?? "";
+                                const normalizedResetStyle = normalizeProfileNameStyleValue(
+                                  resetStyle || defaultProfileNameStyle
+                                );
+                                const resetParts = getProfileNameStyleParts(normalizedResetStyle);
+                                setServerProfileNameStyleInput(resetStyle);
+                                setServerProfileNameFontInput(resetParts.font);
+                                setServerProfileNameEffectInput(resetParts.effect);
+                                setServerProfileNameColorInput(resetParts.color);
+                                setServerProfileStatus(null);
+                              }}
+                              disabled={isSavingServerProfile}
+                            >
+                              Reset Style
+                            </Button>
+                            <div className="flex gap-2">
+                              <Button
+                                type="button"
+                                onClick={() => void onSaveServerProfile()}
+                                disabled={isSavingServerProfile}
+                                className="bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {isSavingServerProfile ? "Saving..." : "Save Server Style"}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setIsServerProfileNameStylesPanelOpen(false)}
+                              >
+                                Close
+                              </Button>
+                            </div>
+                          </DialogFooter>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {serverProfileStatus ? (
+              <p className="mt-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-[#b5bac1]">
+                {serverProfileStatus}
+              </p>
+            ) : null}
           </div>
         </div>
       );
@@ -2148,8 +4431,8 @@ export const SettingsModal = () => {
           Edit account, appearance, notification, and privacy settings.
         </DialogDescription>
 
-        <div className="grid min-h-0 flex-1 grid-cols-[260px_1fr] overflow-hidden">
-          <aside className="theme-settings-left-rail settings-scrollbar flex h-full min-h-0 flex-col overflow-y-auto rounded-l-3xl border-r border-black/20 bg-[#232428] p-4 pt-2 shadow-2xl shadow-black/40">
+        <div className="grid min-h-0 flex-1 grid-cols-[1fr_260px] overflow-hidden">
+          <aside className="theme-settings-rail settings-scrollbar order-2 flex h-full min-h-0 flex-col overflow-y-auto rounded-r-3xl border-l border-black/20 bg-[#232428] p-4 pt-2 shadow-2xl shadow-black/40">
             <nav className="settings-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
               {sectionGroups.map((group) => (
                 <div key={group.label} className="space-y-1">
@@ -2182,7 +4465,7 @@ export const SettingsModal = () => {
             </nav>
 
             <p className="mt-4 rounded-2xl border border-black/20 bg-[#1e1f22] px-3 py-2 text-xs leading-5 text-[#949ba4] whitespace-normal break-words shadow-lg shadow-black/35">
-              Choose a category on the left and edit details on the right.
+              Choose a category on the right and edit details on the left.
             </p>
 
             <button
@@ -2200,13 +4483,13 @@ export const SettingsModal = () => {
             </button>
           </aside>
 
-          <section className="theme-settings-main-panel min-h-0 overflow-hidden">
+          <section className="theme-settings-content order-1 min-h-0 overflow-hidden">
             <div
               className={`transition-all duration-200 ${
                 isSectionVisible ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0"
               }`}
             >
-              <div className="theme-settings-main-header sticky top-0 z-10 border-b border-black/20 bg-[#2b2d31]/95 px-6 py-4 shadow-lg shadow-black/35 backdrop-blur">
+              <div className="theme-settings-content-header sticky top-0 z-10 border-b border-black/20 bg-[#2b2d31]/95 px-6 py-4 shadow-lg shadow-black/35 backdrop-blur">
                 <h3 className={`text-xl font-bold text-white ${displaySection === "myAccount" ? "text-center" : ""}`}>
                   {sectionLabelMap[displaySection]}
                 </h3>
@@ -2215,193 +4498,1127 @@ export const SettingsModal = () => {
                 </p>
               </div>
 
-              <div className="settings-scrollbar theme-settings-main-content h-[calc(85vh-78px)] overflow-y-auto px-6 py-5">
+              <div className="settings-scrollbar theme-settings-content-body h-[calc(85vh-78px)] overflow-y-auto px-6 py-5">
                 {displaySection === "myAccount" ? (
                   <div className="mx-auto mb-6 w-full max-w-[28rem] overflow-hidden rounded-[2.5rem] border border-white/15 bg-[#1f2024] p-4 shadow-2xl shadow-black/45">
-                    <div className="mb-4 overflow-hidden rounded-2xl border border-black/25 bg-[#141518]">
-                      <div className="relative h-40 w-full bg-[#2a2d33]">
-                        {bannerUrl ? (
-                          <Image
-                            src={bannerUrl}
-                            alt="User banner"
-                            fill
-                            className="object-cover"
-                            unoptimized
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center bg-gradient-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
-                            <span className="text-xs font-semibold uppercase tracking-[0.08em] text-white/85">
-                              No banner
+                    <div className="mx-auto w-full max-w-[24rem] space-y-3">
+                      <input
+                        ref={bannerInputRef}
+                        className="hidden"
+                        type="file"
+                        accept="image/*"
+                        onChange={(event) => onBannerChange(event.target.files?.[0])}
+                      />
+
+                      <input
+                        ref={avatarInputRef}
+                        className="hidden"
+                        type="file"
+                        accept="image/*"
+                        onChange={(event) => onAvatarChange(event.target.files?.[0])}
+                      />
+
+                      <p className="text-center text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                        Account Information
+                      </p>
+
+                      <div className="rounded-lg border border-white/10 bg-[#1a1b1e] p-3 text-xs">
+                        <div className="space-y-1 text-[#dbdee1]">
+                          <p>
+                            <span className="text-[#949ba4]">Name:</span>{" "}
+                            <span className="text-white">
+                              {realName || profileName || data.profileEmail?.split("@")[0] || resolvedProfileId || "Unknown User"}
                             </span>
+                          </p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[#949ba4]">Date Of Birth:</span>
+                            <input
+                              type="date"
+                              value={dateOfBirthDraft}
+                              onChange={(event) => {
+                                setDateOfBirthDraft(event.target.value);
+                                setDateOfBirthStatus(null);
+                              }}
+                              disabled={isSavingDateOfBirth || !canEditDateOfBirth}
+                              className="h-6 rounded-md border border-black/25 bg-[#111214] px-2.5 text-[11px] text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35 disabled:cursor-not-allowed disabled:opacity-60"
+                            />
+                            {canEditDateOfBirth && (hasDateOfBirthChanges || isSavingDateOfBirth) ? (
+                              <>
+                                <Button
+                                  type="button"
+                                  onClick={() => {
+                                    void onSaveDateOfBirth(dateOfBirthDraft);
+                                  }}
+                                  disabled={isSavingDateOfBirth}
+                                  className="h-6 bg-[#5865f2] px-2.5 text-[11px] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {isSavingDateOfBirth ? "Saving..." : "Save"}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  onClick={() => {
+                                    setDateOfBirthDraft(dateOfBirth || "");
+                                    setDateOfBirthStatus(null);
+                                  }}
+                                  disabled={isSavingDateOfBirth}
+                                  className="h-6 border border-white/15 bg-[#1a1b1e] px-2.5 text-[11px] text-[#dbdee1] hover:bg-[#2a2b30] disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  Cancel
+                                </Button>
+                              </>
+                            ) : null}
                           </div>
-                        )}
+                          {!canEditDateOfBirth ? (
+                            <p className="text-[10px] text-[#b5bac1]">
+                              Date Of Birth is locked after first save. Only an Administrator can edit it.
+                            </p>
+                          ) : null}
+                          {dateOfBirthStatus ? (
+                            <p className="text-[10px] text-[#b5bac1]">{dateOfBirthStatus}</p>
+                          ) : null}
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[#949ba4]">Phone Number:</span>
+                            {isEditingPhoneNumberInline ? (
+                              <>
+                                <input
+                                  type="text"
+                                  value={phoneNumberDraft}
+                                  style={{ width: "6rem", minWidth: "6rem", maxWidth: "6rem" }}
+                                  onChange={(event) => {
+                                    setPhoneNumberDraft(event.target.value);
+                                    setPhoneNumberStatus(null);
+                                  }}
+                                  onKeyDown={(event) => {
+                                    if (event.key === "Escape") {
+                                      setPhoneNumberDraft(phoneNumber || "");
+                                      setPhoneNumberStatus(null);
+                                      setIsEditingPhoneNumberInline(false);
+                                      return;
+                                    }
 
-                        <div className="absolute inset-x-0 bottom-0 flex items-center justify-end gap-2 bg-black/30 px-3 py-2 backdrop-blur-sm">
-                          <Button
-                            type="button"
-                            onClick={onPickBanner}
-                            disabled={isUploadingBanner}
-                            className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            {isUploadingBanner ? (
-                              <span className="inline-flex items-center gap-1.5">
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                Uploading...
-                              </span>
+                                    if (event.key === "Enter") {
+                                      event.preventDefault();
+                                      void (async () => {
+                                        const isSaved = await onSavePhoneNumber(phoneNumberDraft);
+                                        if (isSaved) {
+                                          setIsEditingPhoneNumberInline(false);
+                                        }
+                                      })();
+                                    }
+                                  }}
+                                  maxLength={32}
+                                  placeholder="Phone Number"
+                                  disabled={isSavingPhoneNumber}
+                                  className="h-5 rounded-md border border-black/25 bg-[#111214] px-2.5 text-[11px] text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35 disabled:cursor-not-allowed disabled:opacity-60"
+                                />
+                                <Button
+                                  type="button"
+                                  onClick={() => {
+                                    void (async () => {
+                                      const isSaved = await onSavePhoneNumber(phoneNumberDraft);
+                                      if (isSaved) {
+                                        setIsEditingPhoneNumberInline(false);
+                                      }
+                                    })();
+                                  }}
+                                  disabled={isSavingPhoneNumber}
+                                  className="h-6 bg-[#5865f2] px-2.5 text-[11px] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {isSavingPhoneNumber ? "Saving..." : "Save"}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  onClick={() => {
+                                    setPhoneNumberDraft(phoneNumber || "");
+                                    setPhoneNumberStatus(null);
+                                    setIsEditingPhoneNumberInline(false);
+                                  }}
+                                  className="h-6 border border-white/15 bg-[#1a1b1e] px-2.5 text-[11px] text-[#dbdee1] hover:bg-[#2a2b30]"
+                                >
+                                  Cancel
+                                </Button>
+                              </>
                             ) : (
-                              <span className="inline-flex items-center gap-1.5">
-                                <Camera className="h-3.5 w-3.5" />
-                                {bannerUrl ? "Change banner" : "Upload banner"}
-                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPhoneNumberDraft(phoneNumber || "");
+                                  setPhoneNumberStatus(null);
+                                  setIsEditingPhoneNumberInline(true);
+                                }}
+                                style={{ width: "6rem", minWidth: "6rem", maxWidth: "6rem" }}
+                                className="h-6 rounded-md border border-black/25 bg-[#111214] px-2.5 text-left text-[11px] text-white transition hover:border-[#5865f2]/70 hover:bg-[#17181b]"
+                                title="Click to edit phone number"
+                              >
+                                {phoneNumber.trim() || "Not set"}
+                              </button>
                             )}
-                          </Button>
+                          </div>
+                          {phoneNumberStatus ? (
+                            <p className="text-[10px] text-[#b5bac1]">{phoneNumberStatus}</p>
+                          ) : null}
+                          <p>
+                            <span className="text-[#949ba4]">Email:</span>{" "}
+                            <span className="text-white">{data.profileEmail || "No email"}</span>
+                          </p>
+                          <p>
+                            <span className="text-[#949ba4]">Status:</span>{" "}
+                            <span className="text-white">{presenceStatusLabelMap[profilePresenceStatus]}</span>
+                          </p>
+                          <p>
+                            <span className="text-[#949ba4]">Role:</span>{" "}
+                            <span className="text-white">{inAccordStaffRoleLabel ?? "Member"}</span>
+                          </p>
+                          <p>
+                            <span className="text-[#949ba4]">Last logon:</span>{" "}
+                            <span className="text-white">{lastLogonDisplay}</span>
+                          </p>
+                          <p>
+                            <span className="text-[#949ba4]">Created:</span>{" "}
+                            <span className="text-white">{joinedDisplay}</span>
+                          </p>
+                        </div>
+                      </div>
 
-                          {bannerUrl ? (
+                    </div>
+                  </div>
+                ) : null}
+
+                {displaySection === "myAccount" ? (
+                  <div className="mx-auto mb-6 w-full max-w-5xl rounded-xl border border-white/10 bg-black/20 p-3">
+                    <p className="text-sm font-medium text-white">Default Profile</p>
+                    <p className="mt-1 text-xs text-[#949ba4]">
+                      Edit your global profile using the same layout as server profile edits.
+                    </p>
+
+                    <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                      <div className="rounded-xl border border-white/10 bg-[#1a1b1e] p-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                          Live Preview
+                        </p>
+
+                        <div className="mt-2 overflow-hidden rounded-xl border border-white/10 bg-[#111214] text-[#dbdee1] shadow-lg shadow-black/40">
+                          <div className="relative h-24 bg-linear-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
+                            {bannerUrl ? (
+                              <Image
+                                src={bannerUrl}
+                                alt="Default profile preview banner"
+                                fill
+                                className="object-cover"
+                                unoptimized
+                              />
+                            ) : null}
+                          </div>
+
+                          <div className="relative p-3 pt-9">
+                            <div className="absolute -top-10 left-3 rounded-full border-4 border-[#111214]">
+                              <UserAvatar
+                                src={avatarUrl ?? undefined}
+                                decorationSrc={avatarDecorationInput.trim() || avatarDecorationUrl}
+                                className="h-20 w-20"
+                              />
+                            </div>
+
+                            <div className="min-w-0">
+                              <ProfileIconRow icons={profileIcons} className="mb-1" />
+                              <NameplatePill
+                                label={nameplateLabelInput.trim() || nameplateLabel}
+                                color={nameplateColorInput || nameplateColor}
+                                imageUrl={nameplateImageUrlInput || nameplateImageUrl}
+                                className="mb-1"
+                              />
+                              <ProfileNameWithServerTag
+                                name={defaultProfileNameDraft.trim() || profileName || realName || "User"}
+                                profileId={resolvedProfileId}
+                                nameClassName={`text-base font-bold text-white ${getProfileNameStyleClass(
+                                  composeProfileNameStyleValue({
+                                    font: defaultProfileNameFont,
+                                    effect: defaultProfileNameEffect,
+                                    color: defaultProfileNameColor,
+                                  })
+                                )}`}
+                              />
+                              <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">
+                                Global Profile Preview
+                              </p>
+                            </div>
+
+                            <div className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] p-3 text-xs">
+                              <div className="space-y-1 text-[#dbdee1]">
+                                <p>Pronouns: {pronounsDraft.trim() || pronouns.trim() || "Not set"}</p>
+                                <p>Comment: {commentDraft.trim() || comment.trim() || "Not set"}</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <p className="mt-2 text-[11px] text-[#949ba4]">
+                          Preview updates as you edit your default profile values.
+                        </p>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div>
+                          <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                            profile tweaks
+                          </label>
+                          <div className="flex flex-wrap items-center gap-2">
                             <Button
                               type="button"
-                              onClick={onRemoveBanner}
+                              onClick={() => setIsDefaultBannerPanelOpen(true)}
                               disabled={isUploadingBanner}
-                              className="h-8 border border-rose-500/35 bg-rose-500/15 px-3 text-xs text-rose-200 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                              className="h-8 border border-white/15 bg-[#1a1b1e] px-3 text-xs text-[#dbdee1] hover:bg-[#2a2b30] disabled:cursor-not-allowed disabled:opacity-60"
                             >
-                              Remove
+                              BANNER
                             </Button>
+                            <Button
+                              type="button"
+                              onClick={() => setIsAvatarPanelOpen(true)}
+                              className="h-8 border border-white/15 bg-[#1a1b1e] px-3 text-xs text-[#dbdee1] hover:bg-[#2a2b30]"
+                            >
+                              Avatar
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={() => setIsDefaultProfileNameStylesPanelOpen(true)}
+                              className="h-8 border border-white/15 bg-[#1a1b1e] px-3 text-xs text-[#dbdee1] hover:bg-[#2a2b30]"
+                            >
+                              Profile Name Styles
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={() => setIsNameplatePanelOpen(true)}
+                              className="h-8 border border-white/15 bg-[#1a1b1e] px-3 text-xs text-[#dbdee1] hover:bg-[#2a2b30]"
+                            >
+                              Nameplate
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={() => setIsAvatarPanelOpen(true)}
+                              className="h-8 border border-white/15 bg-[#1a1b1e] px-3 text-xs text-[#dbdee1] hover:bg-[#2a2b30]"
+                            >
+                              Avatar Decoration
+                            </Button>
+                          </div>
+                          {nameplateLabelInput.trim() || nameplateLabel ? (
+                            <p className="mt-1 text-[11px] text-[#949ba4]">Nameplate set.</p>
+                          ) : null}
+                          {nameplateStatus ? (
+                            <p className="mt-1 text-[11px] text-[#949ba4]">{nameplateStatus}</p>
                           ) : null}
                         </div>
 
-                        <input
-                          ref={bannerInputRef}
-                          className="hidden"
-                          type="file"
-                          accept="image/*"
-                          onChange={(event) => onBannerChange(event.target.files?.[0])}
-                        />
-                      </div>
-                    </div>
+                        <div>
+                          <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                            Default profile name
+                          </label>
+                          <input
+                            type="text"
+                            value={defaultProfileNameDraft}
+                            onChange={(event) => {
+                              setDefaultProfileNameDraft(event.target.value);
+                              setProfileNameError(null);
+                              setProfileNameSuccess(null);
+                            }}
+                            maxLength={80}
+                            placeholder={realName || "Use your account name"}
+                            disabled={isSavingProfileName}
+                            className="w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35 disabled:cursor-not-allowed disabled:opacity-60"
+                          />
+                          <div className="mt-2 flex justify-end">
+                            <Button
+                              type="button"
+                              onClick={() => void onSaveProfileName(defaultProfileNameDraft)}
+                              disabled={isSavingProfileName}
+                              className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {isSavingProfileName ? "Saving..." : "Save Name"}
+                            </Button>
+                          </div>
+                          {profileNameError ? (
+                            <p className="mt-2 rounded-md border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+                              {profileNameError}
+                            </p>
+                          ) : null}
+                          {profileNameSuccess ? (
+                            <p className="mt-2 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+                              {profileNameSuccess}
+                            </p>
+                          ) : null}
+                        </div>
 
-                    <div className="mb-5 flex justify-center">
-                      <div className="relative">
-                        <button
-                          type="button"
-                          onClick={onPickAvatar}
-                          disabled={isUploadingAvatar}
-                          className="group relative rounded-full focus:outline-none focus:ring-2 focus:ring-[#5865f2] focus:ring-offset-2 focus:ring-offset-[#2b2d31]"
-                          aria-label="Add or edit user icon"
+                        <div>
+                          <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                            Pronouns
+                          </label>
+                          <input
+                            type="text"
+                            value={pronounsDraft}
+                            onChange={(event) => {
+                              setPronounsDraft(event.target.value);
+                              setPronounsStatus(null);
+                            }}
+                            maxLength={40}
+                            placeholder="e.g. she/her"
+                            disabled={isSavingPronouns}
+                            className="w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35 disabled:cursor-not-allowed disabled:opacity-60"
+                          />
+                          <div className="mt-2 flex justify-end">
+                            <Button
+                              type="button"
+                              onClick={() => void onSavePronouns(pronounsDraft)}
+                              disabled={isSavingPronouns}
+                              className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {isSavingPronouns ? "Saving..." : "Save Pronouns"}
+                            </Button>
+                          </div>
+                          {pronounsStatus ? (
+                            <p className="mt-2 rounded-md border border-white/10 bg-[#1a1b1e] px-3 py-2 text-xs text-[#b5bac1]">
+                              {pronounsStatus}
+                            </p>
+                          ) : null}
+                        </div>
+
+                        <div>
+                          <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                            Default comment
+                          </label>
+                          <textarea
+                            value={commentDraft}
+                            onChange={(event) => {
+                              setCommentDraft(event.target.value);
+                              setCommentStatus(null);
+                            }}
+                            maxLength={280}
+                            rows={4}
+                            placeholder="Add a default comment"
+                            disabled={isSavingComment}
+                            className="w-full resize-y rounded-md border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35 disabled:cursor-not-allowed disabled:opacity-60"
+                          />
+                          <div className="mt-2 flex justify-end">
+                            <Button
+                              type="button"
+                              onClick={() => void onSaveComment(commentDraft)}
+                              disabled={isSavingComment}
+                              className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {isSavingComment ? "Saving..." : "Save Comment"}
+                            </Button>
+                          </div>
+                          {commentStatus ? (
+                            <p className="mt-2 rounded-md border border-white/10 bg-[#1a1b1e] px-3 py-2 text-xs text-[#b5bac1]">
+                              {commentStatus}
+                            </p>
+                          ) : null}
+                        </div>
+
+                        <Dialog open={isNameplatePanelOpen} onOpenChange={setIsNameplatePanelOpen}>
+                          <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
+                            <DialogHeader>
+                              <DialogTitle>Edit Nameplate</DialogTitle>
+                              <DialogDescription className="text-[#949ba4]">
+                                Create a banner nameplate behind your profile name.
+                              </DialogDescription>
+                            </DialogHeader>
+
+                            <div className="space-y-3">
+                              <input
+                                ref={nameplateImageInputRef}
+                                className="hidden"
+                                type="file"
+                                accept="image/*"
+                                onChange={(event) => onNameplateImageChange(event.target.files?.[0])}
+                              />
+
+                              <div>
+                                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                                  Banner color
+                                </label>
+                                <div className="grid grid-cols-3 gap-2">
+                                  {NAMEPLATE_COLOR_PRESETS.map((preset) => {
+                                    const isActive = (nameplateColorInput || "#5865f2").toLowerCase() === preset.color.toLowerCase();
+
+                                    return (
+                                      <button
+                                        key={`default-nameplate-preset-${preset.key}`}
+                                        type="button"
+                                        disabled={isSavingNameplate}
+                                        onClick={() => {
+                                          setNameplateColorInput(preset.color);
+                                          setNameplateStatus(null);
+                                        }}
+                                        className={`overflow-hidden rounded-md border text-left transition ${
+                                          isActive
+                                            ? "border-white/70 ring-2 ring-white/25"
+                                            : "border-white/15 hover:border-white/35"
+                                        } disabled:cursor-not-allowed disabled:opacity-60`}
+                                      >
+                                        <span className="block h-6" style={{ backgroundColor: preset.color }} />
+                                        <span className="block bg-[#1a1b1e] px-2 py-1 text-[10px] text-[#dbdee1]">{preset.label}</span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+
+                              <div className="rounded-lg border border-white/10 bg-black/20 p-2">
+                                <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                                  Custom Nameplate Image
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                  <Button
+                                    type="button"
+                                    onClick={onPickNameplateImage}
+                                    disabled={isUploadingNameplateImage}
+                                    className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    {isUploadingNameplateImage ? "Uploading..." : "Upload Image"}
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setNameplateImageUrlInput("");
+                                      setNameplateStatus(null);
+                                    }}
+                                    disabled={isUploadingNameplateImage}
+                                  >
+                                    Remove Image
+                                  </Button>
+                                </div>
+
+                                {uploadedBannerThumbnails.length > 0 ? (
+                                  <div className="mt-2 grid grid-cols-4 gap-2">
+                                    {uploadedBannerThumbnails.map((thumbnailUrl) => (
+                                      <button
+                                        key={`default-nameplate-thumb-${thumbnailUrl}`}
+                                        type="button"
+                                        onClick={() => {
+                                          setNameplateImageUrlInput(thumbnailUrl);
+                                          setNameplateStatus(null);
+                                        }}
+                                        className="overflow-hidden rounded-md border border-white/15 bg-[#111214] transition hover:border-[#5865f2]/60"
+                                        title="Use this uploaded image"
+                                      >
+                                        <div className="relative h-10 w-full">
+                                          <Image
+                                            src={thumbnailUrl}
+                                            alt="Uploaded nameplate thumbnail"
+                                            fill
+                                            className="object-cover"
+                                            unoptimized
+                                          />
+                                        </div>
+                                      </button>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </div>
+
+                              <div className="rounded-lg border border-white/10 bg-[#15161a] p-2">
+                                <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                                  Live Nameplate Preview
+                                </p>
+                                <div
+                                  className="relative mt-2 overflow-hidden rounded-md border border-white/10 bg-[#111214] px-3 py-2"
+                                  style={
+                                    nameplateImageUrlInput.trim()
+                                      ? {
+                                          backgroundImage: `url(${nameplateImageUrlInput.trim()})`,
+                                          backgroundSize: "cover",
+                                          backgroundPosition: "center",
+                                        }
+                                      : undefined
+                                  }
+                                >
+                                  <span
+                                    className="absolute inset-0"
+                                    style={{
+                                      backgroundColor: `${(nameplateColorInput || "#5865f2").trim()}33`,
+                                    }}
+                                  />
+                                  <span
+                                    className="absolute inset-y-0 left-0 w-1.5"
+                                    style={{
+                                      backgroundColor: (nameplateColorInput || "#5865f2").trim(),
+                                    }}
+                                  />
+                                  <p className="relative truncate pl-1 text-sm font-semibold text-white">
+                                    {defaultProfileNameDraft.trim() || profileName || realName || "User"}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {nameplateStatus ? (
+                                <p className="rounded-md border border-white/10 bg-[#1a1b1e] px-3 py-2 text-xs text-[#b5bac1]">
+                                  {nameplateStatus}
+                                </p>
+                              ) : null}
+                            </div>
+
+                            <DialogFooter className="gap-2 sm:justify-between">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                  setNameplateLabelInput("");
+                                  setNameplateColorInput("");
+                                  setNameplateImageUrlInput("");
+                                  setNameplateStatus(null);
+                                }}
+                                disabled={isSavingNameplate}
+                              >
+                                Clear
+                              </Button>
+                              <div className="flex gap-2">
+                                <Button
+                                  type="button"
+                                  onClick={() =>
+                                    void onSaveNameplate(
+                                      nameplateColorInput.trim() || nameplateImageUrlInput.trim()
+                                        ? (defaultProfileNameDraft.trim() || profileName || realName || "User").slice(0, 40)
+                                        : "",
+                                      nameplateColorInput,
+                                      nameplateImageUrlInput
+                                    )
+                                  }
+                                  disabled={isSavingNameplate}
+                                  className="bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {isSavingNameplate ? "Saving..." : "Save"}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => setIsNameplatePanelOpen(false)}
+                                >
+                                  Close
+                                </Button>
+                              </div>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+
+                        <Dialog open={isDefaultBannerPanelOpen} onOpenChange={setIsDefaultBannerPanelOpen}>
+                          <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
+                            <DialogHeader>
+                              <DialogTitle>Edit Banner</DialogTitle>
+                              <DialogDescription className="text-[#949ba4]">
+                                Manage your global profile banner from this panel.
+                              </DialogDescription>
+                            </DialogHeader>
+
+                            <div className="space-y-4">
+                              <div className="overflow-hidden rounded-xl border border-white/10 bg-[#111214]">
+                                <div className="relative h-28 bg-linear-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
+                                  {bannerUrl ? (
+                                    <Image
+                                      src={bannerUrl}
+                                      alt="Default profile banner preview"
+                                      fill
+                                      className="object-cover"
+                                      unoptimized
+                                    />
+                                  ) : null}
+                                </div>
+                              </div>
+
+                              {uploadedBannerThumbnails.length > 0 ? (
+                                <div className="rounded-lg border border-white/10 bg-black/20 p-2">
+                                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                                    Uploaded Banners
+                                  </p>
+                                  <div className="grid grid-cols-4 gap-2">
+                                    {uploadedBannerThumbnails.map((thumbnailUrl) => (
+                                      <button
+                                        key={`default-banner-thumb-${thumbnailUrl}`}
+                                        type="button"
+                                        onClick={() => {
+                                          setBannerUrl(thumbnailUrl);
+                                          void axios.patch("/api/profile/banner", { bannerUrl: thumbnailUrl });
+                                          window.dispatchEvent(
+                                            new CustomEvent("inaccord:profile-updated", {
+                                              detail: {
+                                                profileId: resolvedProfileId,
+                                                bannerUrl: thumbnailUrl,
+                                              },
+                                            })
+                                          );
+                                        }}
+                                        className="overflow-hidden rounded-md border border-white/15 bg-[#111214] transition hover:border-[#5865f2]/60"
+                                        title="Use this uploaded banner"
+                                      >
+                                        <div className="relative h-10 w-full">
+                                          <Image
+                                            src={thumbnailUrl}
+                                            alt="Uploaded banner thumbnail"
+                                            fill
+                                            className="object-cover"
+                                            unoptimized
+                                          />
+                                        </div>
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
+
+                              <div className="flex flex-wrap justify-end gap-2">
+                                {bannerUrl ? (
+                                  <Button
+                                    type="button"
+                                    onClick={() => void onRemoveBanner()}
+                                    disabled={isUploadingBanner}
+                                    className="border border-rose-500/35 bg-rose-500/15 text-rose-200 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    Remove Banner
+                                  </Button>
+                                ) : null}
+
+                                <Button
+                                  type="button"
+                                  onClick={onPickBanner}
+                                  disabled={isUploadingBanner}
+                                  className="bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {isUploadingBanner ? (
+                                    <span className="inline-flex items-center gap-2">
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                      Uploading...
+                                    </span>
+                                  ) : (
+                                    "Upload Banner"
+                                  )}
+                                </Button>
+
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => setIsDefaultBannerPanelOpen(false)}
+                                >
+                                  Close
+                                </Button>
+                              </div>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+
+                        <Dialog
+                          open={isDefaultProfileNameStylesPanelOpen}
+                          onOpenChange={setIsDefaultProfileNameStylesPanelOpen}
                         >
-                          <Avatar className="h-[min(22vh,12rem)] w-[min(22vh,12rem)] border-2 border-black/20 shadow-lg ring-2 ring-[#5865f2]/35">
-                            <AvatarImage src={avatarUrl || undefined} alt={data.profileName || "User"} />
-                            <AvatarFallback className="bg-[#5865f2] text-5xl font-bold text-white">
-                              {(data.profileName || "U").slice(0, 1).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
+                          <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-2xl">
+                            <DialogHeader>
+                              <DialogTitle>Profile Name Styles (Default)</DialogTitle>
+                              <DialogDescription className="text-[#949ba4]">
+                                Make your default profile name look fancy. Server profile styles are configured separately.
+                              </DialogDescription>
+                            </DialogHeader>
 
-                          <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 text-transparent transition-all group-hover:bg-black/35 group-hover:text-white">
-                            {isUploadingAvatar ? (
-                              <Loader2 className="h-8 w-8 animate-spin" />
-                            ) : (
-                              <Camera className="h-8 w-8" />
-                            )}
-                          </span>
-                        </button>
+                            <div className="space-y-3">
+                              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                                  Default profile name style sections
+                                </p>
 
-                        <input
-                          ref={avatarInputRef}
-                          className="hidden"
-                          type="file"
-                          accept="image/*"
-                          onChange={(event) => onAvatarChange(event.target.files?.[0])}
-                        />
-                      </div>
-                    </div>
+                                <div className="mt-3 space-y-3">
+                                  <div>
+                                    <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                                      Font
+                                    </label>
+                                    <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
+                                      {PROFILE_NAME_FONT_OPTIONS.map((option) => {
+                                        const isActive = defaultProfileNameFont === option.key;
+                                        const iconClass =
+                                          option.key === "bold"
+                                            ? "font-black"
+                                            : option.key === "italic"
+                                            ? "italic font-semibold"
+                                            : option.key === "mono"
+                                            ? "font-mono"
+                                            : option.key === "serif"
+                                            ? "font-serif"
+                                            : "";
 
-                    <div className="mx-auto w-full max-w-[24rem] rounded-3xl border border-black/20 bg-[#1e1f22] p-4 shadow-xl shadow-black/35">
-                      <p className="text-xs uppercase tracking-[0.08em] text-[#949ba4]">In-Accord Profile</p>
-                      <div className="mt-3 space-y-2 text-sm">
-                        <p>
-                          <span className="text-[#949ba4]">Users ID:</span>{" "}
-                          <span className="text-white">{resolvedProfileId || "Unknown ID"}</span>
-                        </p>
-                        <p>
-                          <span className="text-[#949ba4]">Name:</span>{" "}
-                          <span className="text-white">
-                            {realName || profileName || data.profileEmail?.split("@")[0] || resolvedProfileId || "Unknown User"}
-                          </span>
-                        </p>
-                        <p>
-                          <span className="text-[#949ba4]">In-Accord Profile Name:</span>{" "}
-                          <span className="inline-flex items-center gap-1.5 text-white">
-                            <ProfileNameWithServerTag
-                              name={profileName || "Not set"}
-                              profileId={resolvedProfileId}
-                              nameClassName=""
-                            />
-                            {hasAdminCrown ? (
-                              hasDeveloperWrench
-                                ? <Wrench className="h-3.5 w-3.5 shrink-0 text-cyan-400" aria-label={inAccordStaffRoleLabel ?? "In-Accord Staff"} />
-                                : <Crown className="h-3.5 w-3.5 shrink-0 text-rose-500" aria-label={inAccordStaffRoleLabel ?? "In-Accord Staff"} />
-                            ) : hasModeratorShield ? (
-                              <ModeratorLineIcon className="h-3.5 w-3.5 shrink-0 text-indigo-500" aria-label={inAccordStaffRoleLabel ?? "Moderator"} />
-                            ) : null}
-                          </span>
-                        </p>
-                        <p>
-                          <span className="text-[#949ba4]">Email:</span>{" "}
-                          <span className="text-white">{data.profileEmail || "No email"}</span>
-                        </p>
-                        <p>
-                          <span className="text-[#949ba4]">Status:</span>{" "}
-                          <span className="text-white">{presenceStatusLabelMap[profilePresenceStatus]}</span>
-                        </p>
-                        <p>
-                          <span className="text-[#949ba4]">Last logon:</span>{" "}
-                          <span className="text-white">{lastLogonDisplay}</span>
-                        </p>
-                        <p>
-                          <span className="text-[#949ba4]">Created:</span>{" "}
-                          <span className="text-white">{joinedDisplay}</span>
-                        </p>
-                      </div>
+                                        return (
+                                          <button
+                                            key={`default-font-${option.key}`}
+                                            type="button"
+                                            disabled={isSavingDefaultProfileNameStyle}
+                                            onClick={() => {
+                                              const next = option.key as ProfileNameFontKey;
+                                              setDefaultProfileNameFont(next);
+                                              setDefaultProfileNameStyle(
+                                                composeProfileNameStyleValue({
+                                                  font: next,
+                                                  effect: defaultProfileNameEffect,
+                                                  color: defaultProfileNameColor,
+                                                })
+                                              );
+                                              setDefaultProfileNameStyleStatus(null);
+                                            }}
+                                            title={option.description}
+                                            className={`aspect-square rounded-md border p-1 text-[10px] leading-tight transition flex flex-col items-center justify-center text-center ${
+                                              isActive
+                                                ? "border-[#5865f2]/70 bg-[#5865f2]/20 text-white"
+                                                : "border-white/15 bg-[#1a1b1e] text-[#c8ccd1] hover:bg-[#2a2b30]"
+                                            } disabled:cursor-not-allowed disabled:opacity-60`}
+                                          >
+                                            <span className={`block text-4xl leading-none ${iconClass}`}>Aa</span>
+                                            <span className="mt-0.5 block truncate">{option.label}</span>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
 
-                      <div className="mt-4 space-y-2 rounded-2xl border border-black/20 bg-[#16171a] p-3">
-                        <p className="text-xs uppercase tracking-[0.08em] text-[#949ba4]">In-Accord Profile Name</p>
-                        <input
-                          type="text"
-                          value={profileName}
-                          onChange={(event) => {
-                            setProfileName(event.target.value);
-                            setProfileNameError(null);
-                            setProfileNameSuccess(null);
-                          }}
-                          placeholder="Enter In-Accord Profile Name"
-                          className="w-full rounded-xl border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
-                        />
+                                  <div>
+                                    <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                                      Effect
+                                    </label>
+                                    <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
+                                      {PROFILE_NAME_EFFECT_OPTIONS.map((option) => {
+                                        const isActive = defaultProfileNameEffect === option.key;
+                                        const icon =
+                                          option.key === "solid"
+                                            ? "⬤"
+                                            : option.key === "gradient"
+                                            ? "🌈"
+                                            : option.key === "neon"
+                                            ? "✨"
+                                            : option.key === "toon"
+                                            ? "🎭"
+                                            : "💥";
 
-                        {profileNameError ? (
-                          <p className="rounded-xl border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
-                            {profileNameError}
-                          </p>
-                        ) : null}
+                                        return (
+                                          <button
+                                            key={`default-effect-${option.key}`}
+                                            type="button"
+                                            disabled={isSavingDefaultProfileNameStyle}
+                                            onClick={() => {
+                                              const next = option.key as ProfileNameEffectKey;
+                                              setDefaultProfileNameEffect(next);
+                                              setDefaultProfileNameStyle(
+                                                composeProfileNameStyleValue({
+                                                  font: defaultProfileNameFont,
+                                                  effect: next,
+                                                  color: defaultProfileNameColor,
+                                                })
+                                              );
+                                              setDefaultProfileNameStyleStatus(null);
+                                            }}
+                                            title={option.description}
+                                            className={`aspect-square rounded-md border p-1 text-[10px] leading-tight transition flex flex-col items-center justify-center text-center ${
+                                              isActive
+                                                ? "border-[#5865f2]/70 bg-[#5865f2]/20 text-white"
+                                                : "border-white/15 bg-[#1a1b1e] text-[#c8ccd1] hover:bg-[#2a2b30]"
+                                            } disabled:cursor-not-allowed disabled:opacity-60`}
+                                          >
+                                            <span className="block text-4xl leading-none">{icon}</span>
+                                            <span className="mt-0.5 block truncate">{option.label}</span>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
 
-                        {profileNameSuccess ? (
-                          <p className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
-                            {profileNameSuccess}
-                          </p>
-                        ) : null}
+                                  <div>
+                                    <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                                      Color
+                                    </label>
+                                    <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
+                                      {PROFILE_NAME_COLOR_OPTIONS.map((option) => {
+                                        const isActive = defaultProfileNameColor === option.key;
+                                        const dotClass =
+                                          option.key === "blurb"
+                                            ? "bg-[#7b88ff]"
+                                            : option.key === "sunset"
+                                            ? "bg-[#ff8a5b]"
+                                            : option.key === "frost"
+                                            ? "bg-[#66d9ff]"
+                                            : option.key === "ruby"
+                                            ? "bg-[#ff6b81]"
+                                            : "bg-white/70";
 
-                        <Button
-                          type="button"
-                          onClick={onSaveProfileName}
-                          disabled={isSavingProfileName}
-                          className="w-full bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {isSavingProfileName ? (
-                            <span className="inline-flex items-center gap-2">
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              Saving...
-                            </span>
-                          ) : (
-                            "Save In-Accord Profile Name"
-                          )}
-                        </Button>
+                                        return (
+                                          <button
+                                            key={`default-color-${option.key}`}
+                                            type="button"
+                                            disabled={isSavingDefaultProfileNameStyle}
+                                            onClick={() => {
+                                              const next = option.key as ProfileNameColorKey;
+                                              setDefaultProfileNameColor(next);
+                                              setDefaultProfileNameStyle(
+                                                composeProfileNameStyleValue({
+                                                  font: defaultProfileNameFont,
+                                                  effect: defaultProfileNameEffect,
+                                                  color: next,
+                                                })
+                                              );
+                                              setDefaultProfileNameStyleStatus(null);
+                                            }}
+                                            title={option.description}
+                                            className={`aspect-square rounded-md border p-1 text-[10px] leading-tight transition flex flex-col items-center justify-center text-center ${
+                                              isActive
+                                                ? "border-[#5865f2]/70 bg-[#5865f2]/20 text-white"
+                                                : "border-white/15 bg-[#1a1b1e] text-[#c8ccd1] hover:bg-[#2a2b30]"
+                                            } disabled:cursor-not-allowed disabled:opacity-60`}
+                                          >
+                                            <span className={`mx-auto block h-7 w-7 rounded-full ${dotClass}`} />
+                                            <span className="mt-0.5 block truncate">{option.label}</span>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="mt-2 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-xs text-[#b5bac1]">
+                                  Preview:{" "}
+                                  <span
+                                    className={`text-sm text-white ${getProfileNameStyleClass(
+                                      composeProfileNameStyleValue({
+                                        font: defaultProfileNameFont,
+                                        effect: defaultProfileNameEffect,
+                                        color: defaultProfileNameColor,
+                                      })
+                                    )}`}
+                                  >
+                                    {defaultProfileNameDraft.trim() || profileName || realName || "User"}
+                                  </span>
+                                </div>
+                                <div className="mt-2 rounded-lg border border-white/10 bg-[#15161a] px-3 py-2">
+                                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                                    Live Sample
+                                  </p>
+                                  <p
+                                    className={`mt-1 text-sm text-white ${getProfileNameStyleClass(
+                                      composeProfileNameStyleValue({
+                                        font: defaultProfileNameFont,
+                                        effect: defaultProfileNameEffect,
+                                        color: defaultProfileNameColor,
+                                      })
+                                    )}`}
+                                  >
+                                    The quick brown fox jumps over the lazy dog.
+                                  </p>
+                                </div>
+                              </div>
+
+                              {defaultProfileNameStyleStatus ? (
+                                <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-[#b5bac1]">
+                                  {defaultProfileNameStyleStatus}
+                                </p>
+                              ) : null}
+
+                              <div className="flex flex-wrap justify-end gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => {
+                                    const resetParts = getProfileNameStyleParts(DEFAULT_PROFILE_NAME_STYLE);
+                                    setDefaultProfileNameStyle(DEFAULT_PROFILE_NAME_STYLE);
+                                    setDefaultProfileNameFont(resetParts.font);
+                                    setDefaultProfileNameEffect(resetParts.effect);
+                                    setDefaultProfileNameColor(resetParts.color);
+                                    setDefaultProfileNameStyleStatus(null);
+                                  }}
+                                  disabled={isSavingDefaultProfileNameStyle}
+                                >
+                                  Reset Style
+                                </Button>
+                                <Button
+                                  type="button"
+                                  onClick={() => void onSaveDefaultProfileNameStyle()}
+                                  disabled={isSavingDefaultProfileNameStyle}
+                                  className="bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {isSavingDefaultProfileNameStyle ? (
+                                    <span className="inline-flex items-center gap-2">
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                      Saving...
+                                    </span>
+                                  ) : (
+                                    "Save Default Style"
+                                  )}
+                                </Button>
+                                <Button type="button" variant="outline" onClick={() => setIsDefaultProfileNameStylesPanelOpen(false)}>
+                                  Close
+                                </Button>
+                              </div>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+
+                        <Dialog open={isAvatarPanelOpen} onOpenChange={setIsAvatarPanelOpen}>
+                          <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
+                            <DialogHeader>
+                              <DialogTitle>Avatar</DialogTitle>
+                              <DialogDescription className="text-[#949ba4]">
+                                Upload a global avatar used when a server profile avatar is not set.
+                              </DialogDescription>
+                            </DialogHeader>
+
+                            <div className="space-y-4">
+                              <div className="rounded-xl border border-white/10 bg-[#1a1b1e] p-4">
+                                <div className="flex items-center gap-3">
+                                  <UserAvatar
+                                    src={avatarUrl ?? undefined}
+                                    decorationSrc={avatarDecorationUrl}
+                                    className="h-14 w-14"
+                                  />
+                                  <div>
+                                    <p className="text-sm font-semibold text-white">Current Avatar</p>
+                                    <p className="text-xs text-[#949ba4]">Global profile avatar</p>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                                  Avatar Decoration URL
+                                </p>
+                                <input
+                                  type="text"
+                                  value={avatarDecorationInput}
+                                  onChange={(event) => {
+                                    setAvatarDecorationInput(event.target.value);
+                                    setAvatarDecorationStatus(null);
+                                  }}
+                                  placeholder="https://..."
+                                  disabled={isSavingAvatarDecoration}
+                                  className="mt-2 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35 disabled:cursor-not-allowed disabled:opacity-60"
+                                />
+
+                                {avatarDecorationStatus ? (
+                                  <p className="mt-2 rounded-md border border-white/10 bg-[#1a1b1e] px-3 py-2 text-xs text-[#b5bac1]">
+                                    {avatarDecorationStatus}
+                                  </p>
+                                ) : null}
+
+                                <div className="mt-2 flex flex-wrap justify-end gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setAvatarDecorationInput("");
+                                      setAvatarDecorationStatus(null);
+                                    }}
+                                    disabled={isSavingAvatarDecoration}
+                                  >
+                                    Clear
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    onClick={() => void onSaveAvatarDecoration()}
+                                    disabled={isSavingAvatarDecoration}
+                                    className="bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    {isSavingAvatarDecoration ? (
+                                      <span className="inline-flex items-center gap-2">
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        Saving...
+                                      </span>
+                                    ) : (
+                                      "Save Decoration"
+                                    )}
+                                  </Button>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center justify-end gap-2">
+                                {uploadedAvatarThumbnails.length > 0 ? (
+                                  <div className="mr-auto rounded-lg border border-white/10 bg-black/20 p-2">
+                                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                                      Uploaded Avatars
+                                    </p>
+                                    <div className="grid grid-cols-6 gap-2">
+                                      {uploadedAvatarThumbnails.map((thumbnailUrl) => (
+                                        <button
+                                          key={`avatar-thumb-${thumbnailUrl}`}
+                                          type="button"
+                                          onClick={() => {
+                                            setAvatarUrl(thumbnailUrl);
+                                            rememberUploadedAvatar(thumbnailUrl);
+                                            void axios.patch("/api/profile/avatar", {
+                                              imageUrl: thumbnailUrl,
+                                            }).then(() => {
+                                              window.dispatchEvent(
+                                                new CustomEvent("inaccord:profile-updated", {
+                                                  detail: {
+                                                    profileId: resolvedProfileId,
+                                                    imageUrl: thumbnailUrl,
+                                                  },
+                                                })
+                                              );
+                                              router.refresh();
+                                            });
+                                          }}
+                                          className="overflow-hidden rounded-full border border-white/15 bg-[#111214] transition hover:border-[#5865f2]/60"
+                                          title="Use this uploaded avatar"
+                                        >
+                                          <div className="relative h-10 w-10">
+                                            <Image
+                                              src={thumbnailUrl}
+                                              alt="Uploaded avatar thumbnail"
+                                              fill
+                                              className="object-cover"
+                                              unoptimized
+                                            />
+                                          </div>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : null}
+
+                                {avatarUrl ? (
+                                  <Button
+                                    type="button"
+                                    onClick={() => void onRemoveAvatarFromPanel()}
+                                    disabled={isUploadingAvatar}
+                                    className="border border-rose-500/35 bg-rose-500/15 text-rose-200 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    Remove Avatar
+                                  </Button>
+                                ) : null}
+
+                                <Button
+                                  type="button"
+                                  onClick={onPickAvatarFromPanel}
+                                  disabled={isUploadingAvatar}
+                                  className="bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {isUploadingAvatar ? (
+                                    <span className="inline-flex items-center gap-2">
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                      Uploading...
+                                    </span>
+                                  ) : (
+                                    "Upload Avatar"
+                                  )}
+                                </Button>
+
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => setIsAvatarPanelOpen(false)}
+                                >
+                                  Close
+                                </Button>
+                              </div>
+
+                              <input
+                                ref={avatarPanelInputRef}
+                                className="hidden"
+                                type="file"
+                                accept="image/*"
+                                onChange={(event) => onAvatarPanelChange(event.target.files?.[0])}
+                              />
+                            </div>
+                          </DialogContent>
+                        </Dialog>
                       </div>
                     </div>
                   </div>

@@ -39,6 +39,8 @@ export async function PATCH(req: Request) {
       serverTags?: unknown;
       customThemeColors?: unknown;
       downloadedPlugins?: unknown;
+      bannerUploads?: unknown;
+      avatarUploads?: unknown;
     };
 
     const updates: Parameters<typeof updateUserPreferences>[1] = {};
@@ -73,6 +75,20 @@ export async function PATCH(req: Request) {
 
     if (Array.isArray(body.downloadedPlugins)) {
       updates.downloadedPlugins = body.downloadedPlugins
+        .filter((value): value is string => typeof value === "string")
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0);
+    }
+
+    if (Array.isArray(body.bannerUploads)) {
+      updates.bannerUploads = body.bannerUploads
+        .filter((value): value is string => typeof value === "string")
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0);
+    }
+
+    if (Array.isArray(body.avatarUploads)) {
+      updates.avatarUploads = body.avatarUploads
         .filter((value): value is string => typeof value === "string")
         .map((value) => value.trim())
         .filter((value) => value.length > 0);

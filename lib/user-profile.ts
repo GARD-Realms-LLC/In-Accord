@@ -13,6 +13,13 @@ export const ensureUserProfileSchema = async () => {
     create table if not exists "UserProfile" (
       "userId" varchar(191) primary key,
       "profileName" varchar(80) not null,
+      "profileNameStyle" varchar(128),
+      "nameplateLabel" varchar(40),
+      "nameplateColor" varchar(20),
+      "nameplateImageUrl" text,
+      "pronouns" varchar(40),
+      "comment" varchar(280),
+      "avatarDecorationUrl" text,
       "bannerUrl" text,
       "presenceStatus" varchar(16) not null default 'ONLINE',
       "createdAt" timestamp not null,
@@ -22,12 +29,52 @@ export const ensureUserProfileSchema = async () => {
 
   await db.execute(sql`
     alter table "UserProfile"
+    add column if not exists "avatarDecorationUrl" text
+  `);
+
+  await db.execute(sql`
+    alter table "UserProfile"
     add column if not exists "bannerUrl" text
   `);
 
   await db.execute(sql`
     alter table "UserProfile"
+    add column if not exists "profileNameStyle" varchar(128)
+  `);
+
+  await db.execute(sql`
+    alter table "UserProfile"
+    alter column "profileNameStyle" type varchar(128)
+  `);
+
+  await db.execute(sql`
+    alter table "UserProfile"
+    add column if not exists "nameplateLabel" varchar(40)
+  `);
+
+  await db.execute(sql`
+    alter table "UserProfile"
+    add column if not exists "nameplateColor" varchar(20)
+  `);
+
+  await db.execute(sql`
+    alter table "UserProfile"
+    add column if not exists "nameplateImageUrl" text
+  `);
+
+  await db.execute(sql`
+    alter table "UserProfile"
     add column if not exists "presenceStatus" varchar(16) not null default 'ONLINE'
+  `);
+
+  await db.execute(sql`
+    alter table "UserProfile"
+    add column if not exists "pronouns" varchar(40)
+  `);
+
+  await db.execute(sql`
+    alter table "UserProfile"
+    add column if not exists "comment" varchar(280)
   `);
 
   await db.execute(sql`

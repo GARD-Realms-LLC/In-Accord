@@ -15,6 +15,7 @@ import { UserAvatar } from "@/components/user-avatar";
 import { BotAppBadge } from "@/components/bot-app-badge";
 import { NewUserCloverBadge } from "@/components/new-user-clover-badge";
 import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
+import { ProfileIconRow } from "@/components/profile-icon-row";
 import { ActionTooltip } from "@/components/action-tooltip";
 import { ModeratorLineIcon } from "@/components/moderator-line-icon";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,7 @@ import { isBotUser } from "@/lib/is-bot-user";
 import { extractQuotedContent, getQuoteSnippetFromBody } from "@/lib/message-quotes";
 import { parseMentionSegments } from "@/lib/mentions";
 import { extractUrlsFromText, splitTextWithUrls } from "@/lib/link-previews";
+import { resolveProfileIcons, type ProfileIcon } from "@/lib/profile-icons";
 
 interface ChatItemProps {
   id: string;
@@ -152,7 +154,27 @@ export const ChatItem = ({
     id: string;
     realName: string | null;
     profileName: string | null;
+    profileIcons?: ProfileIcon[];
+    nameplateLabel?: string | null;
+    nameplateColor?: string | null;
+    nameplateImageUrl?: string | null;
+    effectiveNameplateLabel?: string | null;
+    effectiveNameplateColor?: string | null;
+    effectiveNameplateImageUrl?: string | null;
+    pronouns?: string | null;
+    comment?: string | null;
+    effectiveProfileName?: string | null;
+    avatarDecorationUrl?: string | null;
+    effectiveAvatarDecorationUrl?: string | null;
     bannerUrl: string | null;
+    effectiveBannerUrl?: string | null;
+    serverProfile?: {
+      serverId: string;
+      serverName: string;
+      profileName: string | null;
+      avatarDecorationUrl?: string | null;
+      bannerUrl: string | null;
+    } | null;
     selectedServerTag?: {
       serverId: string;
       serverName: string;
@@ -520,6 +542,8 @@ export const ChatItem = ({
         if (normalizedImageUrl) {
           setDisplayImageUrl(normalizedImageUrl);
         }
+      } else if (customEvent.detail?.imageUrl === null) {
+        setDisplayImageUrl("/in-accord-steampunk-logo.png");
       }
     };
 
@@ -536,6 +560,11 @@ export const ChatItem = ({
   const isSticker =
     !!fileUrl &&
     (content.trim().toLowerCase() === "[sticker]" || /\/stickers\//i.test(fileUrl));
+  const isSoundEfx =
+    !!fileUrl &&
+    (content.trim().toLowerCase() === "[sound_efx]" ||
+      /^data:audio\//i.test(fileUrl) ||
+      /\.(mp3|wav|ogg|m4a|aac|flac)(\?|$)/i.test(fileUrl));
 
   const isAdmin = currentMember.role === MemberRole.ADMIN;
   const isModerator = currentMember.role === MemberRole.MODERATOR;
@@ -543,7 +572,7 @@ export const ChatItem = ({
   const canDeleteMessage = !deleted && (isAdmin || isModerator || isOwner);
   const canEditMessage = !deleted && isOwner && !fileUrl;
   const isPDF = fileType === "pdf" && fileUrl;
-  const isImage = !isPDF && fileUrl;
+  const isImage = !isPDF && !isSoundEfx && fileUrl;
   const showBotBadge = isBotUser({
     name: displayName,
     email: member.profile.email,
@@ -576,12 +605,40 @@ export const ChatItem = ({
           : isInAccordModerator(member.role)
             ? "Moderator"
             : null;
+    const roleAndMetaIcons = (
+      <>
+        <NewUserCloverBadge createdAt={member.profile.createdAt} className="text-xs" />
+        {showBotBadge ? <BotAppBadge className="ml-1.5 h-4 px-1 text-[9px]" /> : null}
+        {highestRoleIcon && highestRoleLabel ? (
+          <ActionTooltip label={highestRoleLabel} align="center">
+            {highestRoleIcon}
+          </ActionTooltip>
+        ) : null}
+      </>
+    );
   const displayMemberRole = isInAccordAdministrator(member.role)
     ? "Administrator"
     : isInAccordModerator(member.role)
       ? "Moderator"
       : String(member.role ?? "User");
-  const effectiveBannerUrl = profileCard?.bannerUrl ?? null;
+  const effectiveBannerUrl = profileCard?.effectiveBannerUrl ?? profileCard?.bannerUrl ?? null;
+  const effectiveAvatarDecorationUrl =
+    profileCard?.effectiveAvatarDecorationUrl ?? profileCard?.avatarDecorationUrl ?? null;
+  const effectiveProfileIcons =
+    profileCard?.profileIcons && profileCard.profileIcons.length > 0
+      ? profileCard.profileIcons
+      : resolveProfileIcons({
+          userId: member.profile.id,
+          role: effectiveGlobalRole,
+          email: member.profile.email,
+          createdAt: member.profile.createdAt,
+        });
+  const effectiveNameplateLabel =
+    profileCard?.effectiveNameplateLabel ?? profileCard?.nameplateLabel ?? null;
+  const effectiveNameplateColor =
+    profileCard?.effectiveNameplateColor ?? profileCard?.nameplateColor ?? null;
+  const effectiveNameplateImageUrl =
+    profileCard?.effectiveNameplateImageUrl ?? profileCard?.nameplateImageUrl ?? null;
   const memberCreatedDate = profileCard?.createdAt
     ? new Date(profileCard.createdAt)
     : member.profile.createdAt
@@ -750,34 +807,48 @@ export const ChatItem = ({
               ) : null}
             </div>
 
-            <div className="relative p-3 pt-7">
-              <div className="absolute -top-5 left-3 rounded-full border-4 border-[#111214]">
-                <UserAvatar src={displayImageUrl} className="h-10 w-10" />
+            <div className="relative p-3 pt-9">
+              <div className="absolute -top-10 left-3 rounded-full border-4 border-[#111214]">
+                <UserAvatar
+                  src={displayImageUrl}
+                  decorationSrc={effectiveAvatarDecorationUrl}
+                  className="h-20 w-20"
+                />
               </div>
 
-              <div className="flex min-w-0 items-center gap-1.5">
-                <ProfileNameWithServerTag
-                  name={displayName || "Unknown User"}
-                  profileId={member.profile.id}
-                  memberId={member.id}
-                  nameClassName="text-base font-bold text-white"
-                />
-                {highestRoleIcon && highestRoleLabel ? (
-                  <ActionTooltip label={highestRoleLabel} align="center">
-                    {highestRoleIcon}
-                  </ActionTooltip>
-                ) : null}
-                <NewUserCloverBadge createdAt={member.profile.createdAt} className="text-sm" />
-                {showBotBadge ? <BotAppBadge className="h-4 px-1 text-[9px]" /> : null}
+              <div className="min-w-0">
+                <ProfileIconRow icons={effectiveProfileIcons} className="mb-1" />
+                <div className="flex w-full min-w-0 items-center gap-1.5">
+                  <ProfileNameWithServerTag
+                    name={displayName || "Unknown User"}
+                    profileId={member.profile.id}
+                    memberId={member.id}
+                    pronouns={profileCard?.pronouns?.trim() || null}
+                    containerClassName="w-full min-w-0"
+                    nameClassName="text-base font-bold text-white"
+                    showNameplate
+                    nameplateClassName="mb-0 h-20 w-full max-w-full"
+                    plateMetaIcons={roleAndMetaIcons}
+                    stretchTagUnderPlate
+                  />
+                </div>
               </div>
-              <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">In-Accord Profile</p>
+              <div className="mt-2 min-h-36 w-full max-w-55 resize-y overflow-auto rounded-md border border-white/10 bg-[#1a1b1e] px-2.5 py-2">
+                <p
+                  className="whitespace-pre-wrap wrap-break-word align-top text-[11px] text-[#dbdee1]"
+                  style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
+                >
+                  {profileCard?.comment?.trim() || "No comment set"}
+                </p>
+              </div>
 
               <div className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] p-3 text-xs">
                 <div className="space-y-1 text-[#dbdee1]">
-                  <p>Users ID: {member.profile.id || "N/A"}</p>
                   <p>
-                    Name: {profileCard?.realName || profileCard?.profileName || displayName || member.profile.email?.split("@")[0] || member.profile.id || "Unknown User"}
+                    Name: {profileCard?.effectiveProfileName || profileCard?.realName || profileCard?.profileName || displayName || member.profile.email?.split("@")[0] || member.profile.id || "Unknown User"}
                   </p>
+                  <p>Pronouns: {profileCard?.pronouns || "Not set"}</p>
+                  <p>Comment: {profileCard?.comment || "Not set"}</p>
                   <p>Email: {profileCard?.email || member.profile.email || "N/A"}</p>
                   <p>Role: {displayMemberRole}</p>
                   <p>Created: {memberCreatedDisplay}</p>
@@ -794,7 +865,6 @@ export const ChatItem = ({
                     >
                       <span>{profileCard.selectedServerTag.iconEmoji}</span>
                       <span>{profileCard.selectedServerTag.tagCode}</span>
-                      <span className="text-[#bfc5ff]">{profileCard.selectedServerTag.serverName}</span>
                     </span>
                   </div>
                 </div>
@@ -865,15 +935,11 @@ export const ChatItem = ({
                   profileId={member.profile.id}
                   memberId={member.id}
                   nameClassName="font-semibold text-sm"
+                  showNameplate
+                  plateMetaIcons={roleAndMetaIcons}
+                  stretchTagUnderPlate
                 />
               </button>
-              {highestRoleIcon && highestRoleLabel ? (
-                <ActionTooltip label={highestRoleLabel} align="center">
-                  {highestRoleIcon}
-                </ActionTooltip>
-              ) : null}
-              <NewUserCloverBadge createdAt={member.profile.createdAt} className="text-xs" />
-              {showBotBadge ? <BotAppBadge className="ml-1.5 h-4 px-1 text-[9px]" /> : null}
             </div>
             <span className="text-xs text-zinc-500 dark:text-zinc-400">
               {timestamp}
@@ -923,6 +989,16 @@ export const ChatItem = ({
               </a>
             </div>
           )}
+          {isSoundEfx && fileUrl ? (
+            <div className="mt-2 w-full max-w-md rounded-md border border-zinc-300/70 bg-zinc-100/80 p-2 dark:border-zinc-700 dark:bg-zinc-900/80">
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
+                Sound EFX
+              </p>
+              <audio controls preload="none" className="w-full" src={fileUrl}>
+                Your browser does not support the audio element.
+              </audio>
+            </div>
+          ) : null}
           {!fileUrl && !isEditing && (
             <div>
               {quotedMessage ? (
@@ -934,7 +1010,7 @@ export const ChatItem = ({
 
               <p
                 className={cn(
-                  "text-sm text-zinc-600 dark:text-zinc-300",
+                  "chat-wrap-text text-sm text-zinc-600 dark:text-zinc-300",
                   deleted &&
                     "italic text-zinc-500 dark:text-zinc-400 text-xs mt-1"
                 )}

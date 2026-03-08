@@ -54,7 +54,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Target profile not found" }, { status: 404 });
     }
 
-    if (targetProfileId === profile.id) {
+    const isSelfFriendRequest = targetProfileId === profile.id;
+    const canSelfFriendForTesting = process.env.NODE_ENV !== "production";
+
+    if (isSelfFriendRequest && !canSelfFriendForTesting) {
       return NextResponse.json({ error: "You cannot friend yourself" }, { status: 400 });
     }
 

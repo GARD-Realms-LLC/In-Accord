@@ -68,9 +68,9 @@ export const ServerProfilePopover = ({ server }: ServerProfilePopoverProps) => {
           ) : null}
         </div>
 
-        <div className="relative p-3 pt-7">
-          <div className="absolute -top-5 left-3 rounded-full border-4 border-[#111214]">
-            <UserAvatar src={server.imageUrl} className="h-10 w-10" />
+        <div className="relative p-3 pt-14">
+          <div className="absolute -top-10 left-3 rounded-full border-4 border-[#111214]">
+            <UserAvatar src={server.imageUrl} className="h-20 w-20" />
           </div>
 
           <p className="truncate text-base font-bold text-white">{server.name}</p>

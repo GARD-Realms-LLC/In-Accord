@@ -45,7 +45,7 @@ export const ServerHeader = ({ server, role, isServerOwner = false }: ServerHead
       : "cover";
   const bannerScale =
     typeof server.bannerScale === "number" && !Number.isNaN(server.bannerScale)
-      ? Math.min(2, Math.max(1, server.bannerScale))
+      ? Math.min(2, Math.max(0.25, server.bannerScale))
       : 1;
 
   const isAdmin = isServerOwner || role === MemberRole.ADMIN;

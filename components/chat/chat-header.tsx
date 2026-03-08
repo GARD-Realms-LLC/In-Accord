@@ -50,6 +50,7 @@ export const ChatHeader = ({
               profileId={profileId}
               memberId={memberId}
               nameClassName="font-semibold text-md text-black dark:text-white"
+              showNameplate
             />
           ) : (
             <p className="truncate font-semibold text-md text-black dark:text-white">{name}</p>

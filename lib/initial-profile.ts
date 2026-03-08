@@ -11,14 +11,9 @@ export const initialProfile = async () => {
     return redirect("/sign-in");
   }
 
-  const liveConnectionUrl = process.env.LIVE_DATABASE_URL?.trim() ?? "";
-  const fallbackConnectionUrl = process.env.DATABASE_URL?.trim() ?? "";
-  const connectionUrl =
-    liveConnectionUrl && !/^replace_/i.test(liveConnectionUrl)
-      ? liveConnectionUrl
-      : fallbackConnectionUrl;
+  const connectionUrl = process.env.LIVE_DATABASE_URL?.trim() ?? "";
 
-  if (!/^postgres(ql)?:\/\//i.test(connectionUrl)) {
+  if (!connectionUrl || /^replace_/i.test(connectionUrl) || !/^postgres(ql)?:\/\//i.test(connectionUrl)) {
     await clearSessionUserId();
     return redirect("/sign-in");
   }

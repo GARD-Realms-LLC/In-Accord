@@ -10,22 +10,19 @@ import { ensureUserProfileSchema } from "@/lib/user-profile";
 
 export async function POST(request: Request) {
   try {
-    const liveConnectionUrl = process.env.LIVE_DATABASE_URL?.trim() ?? "";
-    const fallbackConnectionUrl = process.env.DATABASE_URL?.trim() ?? "";
-    const connectionUrl =
-      liveConnectionUrl && !/^replace_/i.test(liveConnectionUrl)
-        ? liveConnectionUrl
-        : fallbackConnectionUrl;
+    const connectionUrl = process.env.LIVE_DATABASE_URL?.trim() ?? "";
 
-    if (!/^postgres(ql)?:\/\//i.test(connectionUrl)) {
+    if (!connectionUrl || /^replace_/i.test(connectionUrl) || !/^postgres(ql)?:\/\//i.test(connectionUrl)) {
       return new NextResponse(
-        "Database unavailable. Configure LIVE_DATABASE_URL (preferred) or DATABASE_URL with a PostgreSQL connection string.",
+        "Database unavailable. Configure LIVE_DATABASE_URL with a PostgreSQL connection string.",
         { status: 503 }
       );
     }
 
     const body = await request.json().catch(() => null);
     const name = String(body?.name || "").trim();
+    const phoneNumberInput = String(body?.phoneNumber || "").trim();
+    const dateOfBirthInput = String(body?.dateOfBirth || "").trim();
     const email = String(body?.email || "").trim().toLowerCase();
     const password = String(body?.password || "");
 
@@ -36,6 +33,36 @@ export async function POST(request: Request) {
     if (password.length < 8) {
       return new NextResponse("Password must be at least 8 characters", { status: 400 });
     }
+
+    if (phoneNumberInput.length > 32) {
+      return new NextResponse("Phone Number must be 32 characters or fewer", { status: 400 });
+    }
+
+    let normalizedDateOfBirth: string | null = null;
+    if (dateOfBirthInput.length > 0) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirthInput)) {
+        return new NextResponse("Date Of Birth must be in YYYY-MM-DD format", { status: 400 });
+      }
+
+      const [yearPart, monthPart, dayPart] = dateOfBirthInput.split("-");
+      const year = Number(yearPart);
+      const month = Number(monthPart);
+      const day = Number(dayPart);
+      const parsedDateOfBirth = new Date(`${dateOfBirthInput}T00:00:00.000Z`);
+
+      if (
+        Number.isNaN(parsedDateOfBirth.getTime()) ||
+        parsedDateOfBirth.getUTCFullYear() !== year ||
+        parsedDateOfBirth.getUTCMonth() + 1 !== month ||
+        parsedDateOfBirth.getUTCDate() !== day
+      ) {
+        return new NextResponse("Date Of Birth is invalid", { status: 400 });
+      }
+
+      normalizedDateOfBirth = dateOfBirthInput;
+    }
+
+    const normalizedPhoneNumber = phoneNumberInput.length > 0 ? phoneNumberInput : null;
 
     await ensureLocalAuthSchema();
 
@@ -56,10 +83,22 @@ export async function POST(request: Request) {
     const now = new Date();
 
     await db.execute(sql`
+      alter table "Users"
+      add column if not exists "phone" varchar(32)
+    `);
+
+    await db.execute(sql`
+      alter table "Users"
+      add column if not exists "dob" date
+    `);
+
+    await db.execute(sql`
       insert into "Users" (
         "userId",
         "name",
         "email",
+        "phone",
+        "dob",
         "avatarUrl",
         "role",
         "account.created",
@@ -69,6 +108,8 @@ export async function POST(request: Request) {
         ${userId},
         ${null},
         ${email},
+        ${normalizedPhoneNumber},
+        ${normalizedDateOfBirth},
         ${"/in-accord-steampunk-logo.png"},
         ${"USER"},
         ${now},

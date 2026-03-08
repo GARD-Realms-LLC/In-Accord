@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { Crown, Flag, Link2, ScrollText, ShieldAlert, ShieldCheck, Smile, Sticker, Trash2, Webhook, Wrench } from "lucide-react";
+import { Crown, Eye, EyeOff, Flag, Link2, ScrollText, ShieldAlert, ShieldCheck, Smile, Sticker, Trash2, Webhook, Wrench } from "lucide-react";
 import Image from "next/image";
 
 import {
@@ -15,10 +15,12 @@ import { BotAppBadge } from "@/components/bot-app-badge";
 import { ModeratorLineIcon } from "@/components/moderator-line-icon";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
+import { ProfileIconRow } from "@/components/profile-icon-row";
 import { ServerProfilePopover } from "@/components/modals/server-profile-popover";
 import { UserAvatar } from "@/components/user-avatar";
 import { useModal } from "@/hooks/use-modal-store";
 import { getInAccordStaffLabel, isInAccordAdministrator, isInAccordDeveloper, isInAccordModerator } from "@/lib/in-accord-admin";
+import { resolveProfileIcons } from "@/lib/profile-icons";
 import { isBotUser } from "@/lib/is-bot-user";
 import { normalizePresenceStatus, presenceStatusLabelMap } from "@/lib/presence-status";
 import { cn } from "@/lib/utils";
@@ -43,10 +45,14 @@ type AdminUser = {
   userId: string;
   name: string;
   profileName: string | null;
+  pronouns: string | null;
+  comment: string | null;
   bannerUrl: string | null;
   presenceStatus: string;
   email: string;
   role: string;
+  phoneNumber: string;
+  dateOfBirth: string | null;
   imageUrl: string;
   joinedAt: string | null;
   lastLogin: string | null;
@@ -249,13 +255,17 @@ export const InAccordAdminModal = () => {
   const [newUserName, setNewUserName] = useState("");
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserPassword, setNewUserPassword] = useState("");
+  const [showNewUserPassword, setShowNewUserPassword] = useState(false);
   const [newUserRole, setNewUserRole] = useState("USER");
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [createUserError, setCreateUserError] = useState<string | null>(null);
   const [createUserSuccess, setCreateUserSuccess] = useState<string | null>(null);
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [updatingUserRoleId, setUpdatingUserRoleId] = useState<string | null>(null);
+  const [updatingUserDetailsId, setUpdatingUserDetailsId] = useState<string | null>(null);
   const [userRoleDrafts, setUserRoleDrafts] = useState<Record<string, string>>({});
+  const [userPhoneDrafts, setUserPhoneDrafts] = useState<Record<string, string>>({});
+  const [userDateOfBirthDrafts, setUserDateOfBirthDrafts] = useState<Record<string, string>>({});
   const [securitySummary, setSecuritySummary] = useState<AdminSecuritySummary | null>(null);
   const [securityRecentLogins, setSecurityRecentLogins] = useState<AdminRecentLogin[]>([]);
   const [isLoadingSecurity, setIsLoadingSecurity] = useState(false);
@@ -316,11 +326,25 @@ export const InAccordAdminModal = () => {
           return acc;
         }, {})
       );
+      setUserPhoneDrafts(
+        nextUsers.reduce<Record<string, string>>((acc, user) => {
+          acc[user.userId] = user.phoneNumber ?? "";
+          return acc;
+        }, {})
+      );
+      setUserDateOfBirthDrafts(
+        nextUsers.reduce<Record<string, string>>((acc, user) => {
+          acc[user.userId] = user.dateOfBirth ?? "";
+          return acc;
+        }, {})
+      );
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_USERS_LOAD]", error);
       setUsersError("Unable to load users right now.");
       setUsers([]);
       setUserRoleDrafts({});
+      setUserPhoneDrafts({});
+      setUserDateOfBirthDrafts({});
     } finally {
       setIsLoadingUsers(false);
     }
@@ -670,13 +694,17 @@ export const InAccordAdminModal = () => {
       setNewUserName("");
       setNewUserEmail("");
       setNewUserPassword("");
+      setShowNewUserPassword(false);
       setNewUserRole("USER");
       setCreateUserError(null);
       setCreateUserSuccess(null);
       setIsCreatingUser(false);
       setDeletingUserId(null);
       setUpdatingUserRoleId(null);
+      setUpdatingUserDetailsId(null);
       setUserRoleDrafts({});
+      setUserPhoneDrafts({});
+      setUserDateOfBirthDrafts({});
       setSecuritySummary(null);
       setSecurityRecentLogins([]);
       setIsLoadingSecurity(false);
@@ -939,6 +967,20 @@ export const InAccordAdminModal = () => {
     }));
   };
 
+  const onChangeUserPhoneDraft = (userId: string, phone: string) => {
+    setUserPhoneDrafts((current) => ({
+      ...current,
+      [userId]: phone,
+    }));
+  };
+
+  const onChangeUserDateOfBirthDraft = (userId: string, dateOfBirth: string) => {
+    setUserDateOfBirthDrafts((current) => ({
+      ...current,
+      [userId]: dateOfBirth,
+    }));
+  };
+
   const onUpdateUserRole = async (user: AdminUser) => {
     const role = normalizeAdminRoleForDisplay(userRoleDrafts[user.userId] ?? user.role);
 
@@ -975,6 +1017,61 @@ export const InAccordAdminModal = () => {
       setCreateUserError(error instanceof Error ? error.message : "Unable to update user role.");
     } finally {
       setUpdatingUserRoleId(null);
+    }
+  };
+
+  const onUpdateUserDetails = async (user: AdminUser) => {
+    const phoneNumber = (userPhoneDrafts[user.userId] ?? user.phoneNumber ?? "").trim();
+    const dateOfBirth = (userDateOfBirthDrafts[user.userId] ?? user.dateOfBirth ?? "").trim();
+    const canEditDateOfBirth = isInAccordAdministrator(data.profileRole);
+
+    const hasPhoneChanged = phoneNumber !== (user.phoneNumber ?? "");
+    const hasDateOfBirthChanged = dateOfBirth !== (user.dateOfBirth ?? "");
+
+    setCreateUserError(null);
+    setCreateUserSuccess(null);
+
+    if (!hasPhoneChanged && !hasDateOfBirthChanged) {
+      return;
+    }
+
+    if (phoneNumber.length > 32) {
+      setCreateUserError("Phone number must be 32 characters or less.");
+      return;
+    }
+
+    if (hasDateOfBirthChanged && !canEditDateOfBirth) {
+      setCreateUserError("Only Administrators can edit Date Of Birth.");
+      return;
+    }
+
+    try {
+      setUpdatingUserDetailsId(user.userId);
+
+      const response = await fetch("/api/admin/users", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: user.userId,
+          phoneNumber,
+          dateOfBirth,
+        }),
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Failed to update user details (${response.status})`;
+        throw new Error(message);
+      }
+
+      setCreateUserSuccess(`Updated profile details for ${user.email || user.userId}.`);
+      await loadUsers();
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_UPDATE_USER_DETAILS]", error);
+      setCreateUserError(error instanceof Error ? error.message : "Unable to update user details.");
+    } finally {
+      setUpdatingUserDetailsId(null);
     }
   };
 
@@ -1335,6 +1432,7 @@ export const InAccordAdminModal = () => {
   };
 
   const normalizedNewUserRole = normalizeAdminRoleForDisplay(newUserRole);
+  const canEditUsersDateOfBirth = isInAccordAdministrator(data.profileRole);
 
   return (
     <Dialog open={isModalOpen} onOpenChange={onClose}>
@@ -1476,13 +1574,24 @@ export const InAccordAdminModal = () => {
                       placeholder="Email"
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                     />
-                    <input
-                      type="password"
-                      value={newUserPassword}
-                      onChange={(event) => setNewUserPassword(event.target.value)}
-                      placeholder="Password"
-                      className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showNewUserPassword ? "text" : "password"}
+                        value={newUserPassword}
+                        onChange={(event) => setNewUserPassword(event.target.value)}
+                        placeholder="Password"
+                        className="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 pr-10 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewUserPassword((current) => !current)}
+                        className="absolute inset-y-0 right-0 inline-flex w-10 items-center justify-center text-zinc-500 transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                        aria-label={showNewUserPassword ? "Hide password" : "Show password"}
+                        title={showNewUserPassword ? "Hide password" : "Show password"}
+                      >
+                        {showNewUserPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
                     <select
                       value={newUserRole}
                       onChange={(event) => setNewUserRole(event.target.value)}
@@ -1597,7 +1706,7 @@ export const InAccordAdminModal = () => {
                             />
                           </div>
                           <div className="relative pr-2">
-                            <p>joined_at</p>
+                            <p>joined / profile</p>
                             <button
                               type="button"
                               aria-label="Resize joined_at column"
@@ -1630,6 +1739,19 @@ export const InAccordAdminModal = () => {
                                 name: user.profileName || user.name,
                                 email: user.email,
                               });
+                              const profileIcons = resolveProfileIcons({
+                                userId: user.userId,
+                                role: user.role,
+                                email: user.email,
+                                createdAt: user.joinedAt,
+                              });
+                              const phoneNumberDraft = userPhoneDrafts[user.userId] ?? user.phoneNumber ?? "";
+                              const dateOfBirthDraft = userDateOfBirthDrafts[user.userId] ?? user.dateOfBirth ?? "";
+                              const hasDetailsChanges =
+                                phoneNumberDraft.trim() !== (user.phoneNumber ?? "") ||
+                                dateOfBirthDraft.trim() !== (user.dateOfBirth ?? "");
+                              const isSavingRole = updatingUserRoleId === user.userId;
+                              const isSavingDetails = updatingUserDetailsId === user.userId;
                               return (
                             <div
                               key={user.id}
@@ -1670,11 +1792,12 @@ export const InAccordAdminModal = () => {
                                       ) : null}
                                     </div>
 
-                                    <div className="relative p-3 pt-7">
-                                      <div className="absolute -top-5 left-3 rounded-full border-4 border-[#111214]">
-                                        <UserAvatar src={user.imageUrl} className="h-10 w-10" />
+                                    <div className="relative p-3 pt-9">
+                                      <div className="absolute -top-10 left-3 rounded-full border-4 border-[#111214]">
+                                        <UserAvatar src={user.imageUrl} className="h-20 w-20" />
                                       </div>
 
+                                      <ProfileIconRow icons={profileIcons} />
                                       <div className="flex min-w-0 items-center gap-1.5">
                                         <ProfileNameWithServerTag
                                           name={user.profileName || user.name}
@@ -1690,11 +1813,18 @@ export const InAccordAdminModal = () => {
                                           <ModeratorLineIcon className="h-4 w-4 shrink-0 text-indigo-500" aria-label={inAccordStaffRoleLabel ?? "Moderator"} />
                                         ) : null}
                                       </div>
-                                      <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">In-Accord Profile</p>
+                                      <p className="mt-0.5 text-[11px] text-[#949ba4]">{user.pronouns?.trim() || "Pronouns not set"}</p>
+                                      <div className="mt-2 min-h-36 w-full max-w-55 resize-y overflow-auto rounded-md border border-white/10 bg-[#1a1b1e] px-2.5 py-2">
+                                        <p
+                                          className="whitespace-pre-wrap wrap-break-word align-top text-[11px] text-[#dbdee1]"
+                                          style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
+                                        >
+                                          {user.comment?.trim() || "No comment set"}
+                                        </p>
+                                      </div>
 
                                       <div className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] p-3 text-xs">
                                         <div className="space-y-1 text-[#dbdee1]">
-                                          <p>In-Accord User ID: {user.userId}</p>
                                           <p>Name: {user.name}</p>
                                           <p>Profile Name: {user.profileName || "Not set"}</p>
                                           <p>Status: {presenceStatusLabelMap[normalizedPresenceStatus]}</p>
@@ -1748,16 +1878,56 @@ export const InAccordAdminModal = () => {
                                   type="button"
                                   onClick={() => void onUpdateUserRole(user)}
                                   disabled={
-                                    updatingUserRoleId === user.userId ||
+                                    isSavingRole ||
+                                    isSavingDetails ||
                                     deletingUserId === user.userId ||
                                     normalizeAdminRoleForDisplay(userRoleDrafts[user.userId] ?? user.role) === normalizeAdminRoleForDisplay(user.role)
                                   }
                                   className="h-7 rounded-md bg-indigo-600 px-2 text-[10px] font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
-                                  {updatingUserRoleId === user.userId ? "Saving..." : "Save"}
+                                  {isSavingRole ? "Saving..." : "Save"}
                                 </button>
                               </div>
-                              <p className="truncate" title={formatDateTime(user.joinedAt)}>{formatDateTime(user.joinedAt)}</p>
+                              <div className="space-y-1 text-[10px] leading-tight">
+                                <p className="truncate" title={formatDateTime(user.joinedAt)}>{formatDateTime(user.joinedAt)}</p>
+                                <input
+                                  type="text"
+                                  value={phoneNumberDraft}
+                                  onChange={(event) => onChangeUserPhoneDraft(user.userId, event.target.value)}
+                                  maxLength={32}
+                                  placeholder="Phone"
+                                  disabled={isSavingRole || isSavingDetails || deletingUserId === user.userId}
+                                  className="h-6 w-full rounded-md border border-zinc-300 bg-white px-2 text-[10px] text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                                />
+                                <input
+                                  type="date"
+                                  value={dateOfBirthDraft}
+                                  onChange={(event) => onChangeUserDateOfBirthDraft(user.userId, event.target.value)}
+                                  disabled={
+                                    isSavingRole ||
+                                    isSavingDetails ||
+                                    deletingUserId === user.userId ||
+                                    !canEditUsersDateOfBirth
+                                  }
+                                  className="h-6 w-full rounded-md border border-zinc-300 bg-white px-2 text-[10px] text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => void onUpdateUserDetails(user)}
+                                  disabled={
+                                    isSavingRole ||
+                                    isSavingDetails ||
+                                    deletingUserId === user.userId ||
+                                    !hasDetailsChanges
+                                  }
+                                  className="h-6 w-full rounded-md bg-zinc-900 px-2 text-[10px] font-semibold text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+                                >
+                                  {isSavingDetails ? "Saving..." : "Save details"}
+                                </button>
+                                {!canEditUsersDateOfBirth ? (
+                                  <p className="text-[9px] text-amber-500">DOB edit: Administrator only</p>
+                                ) : null}
+                              </div>
                               <p>{user.ownedServerCount}</p>
                               <p>{user.joinedServerCount}</p>
                             </div>

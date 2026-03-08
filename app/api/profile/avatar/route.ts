@@ -12,9 +12,15 @@ export async function PATCH(req: Request) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { imageUrl } = await req.json();
+    const body = (await req.json()) as { imageUrl?: string | null };
+    const imageUrl =
+      body.imageUrl === null
+        ? null
+        : typeof body.imageUrl === "string"
+          ? body.imageUrl.trim()
+          : undefined;
 
-    if (typeof imageUrl !== "string" || !imageUrl.trim()) {
+    if (imageUrl === undefined) {
       return new NextResponse("imageUrl is required", { status: 400 });
     }
 

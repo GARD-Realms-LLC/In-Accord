@@ -14,14 +14,9 @@ export const currentProfile = async () => {
     return null;
   }
 
-  const liveConnectionUrl = process.env.LIVE_DATABASE_URL?.trim() ?? "";
-  const fallbackConnectionUrl = process.env.DATABASE_URL?.trim() ?? "";
-  const connectionUrl =
-    liveConnectionUrl && !/^replace_/i.test(liveConnectionUrl)
-      ? liveConnectionUrl
-      : fallbackConnectionUrl;
+  const connectionUrl = process.env.LIVE_DATABASE_URL?.trim() ?? "";
 
-  if (!/^postgres(ql)?:\/\//i.test(connectionUrl)) {
+  if (!connectionUrl || /^replace_/i.test(connectionUrl) || !/^postgres(ql)?:\/\//i.test(connectionUrl)) {
     return null;
   }
 
@@ -34,6 +29,15 @@ export const currentProfile = async () => {
         u."userId" as "userId",
         u."name" as "realName",
         up."profileName" as "profileName",
+        up."profileNameStyle" as "profileNameStyle",
+        up."nameplateLabel" as "nameplateLabel",
+        up."nameplateColor" as "nameplateColor",
+        up."nameplateImageUrl" as "nameplateImageUrl",
+        up."pronouns" as "pronouns",
+        up."comment" as "comment",
+        up."avatarDecorationUrl" as "avatarDecorationUrl",
+        nullif(trim(to_jsonb(u)->>'phone'), '') as "phoneNumber",
+        nullif(trim(to_jsonb(u)->>'dob'), '') as "dateOfBirth",
         up."bannerUrl" as "bannerUrl",
         up."presenceStatus" as "presenceStatus",
         u."role" as "role",
@@ -52,6 +56,15 @@ export const currentProfile = async () => {
         userId: string;
         realName: string | null;
         profileName: string | null;
+        profileNameStyle: string | null;
+        nameplateLabel: string | null;
+        nameplateColor: string | null;
+        nameplateImageUrl: string | null;
+        pronouns: string | null;
+        comment: string | null;
+        avatarDecorationUrl: string | null;
+        phoneNumber: string | null;
+        dateOfBirth: string | null;
         bannerUrl: string | null;
         presenceStatus: string | null;
         role: string | null;
@@ -74,6 +87,15 @@ export const currentProfile = async () => {
           name: user.profileName ?? user.realName ?? "User",
           realName: user.realName ?? null,
           profileName: user.profileName ?? null,
+          profileNameStyle: user.profileNameStyle ?? null,
+          nameplateLabel: user.nameplateLabel ?? null,
+          nameplateColor: user.nameplateColor ?? null,
+          nameplateImageUrl: user.nameplateImageUrl ?? null,
+          pronouns: user.pronouns ?? null,
+          comment: user.comment ?? null,
+          avatarDecorationUrl: user.avatarDecorationUrl ?? null,
+          phoneNumber: user.phoneNumber ?? null,
+          dateOfBirth: user.dateOfBirth ?? null,
           bannerUrl: resolvedBannerUrl,
           presenceStatus: normalizePresenceStatus(user.presenceStatus),
           role: user.role ?? null,

@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, Crown, LogOut, MessageCircle, RefreshCw, Settings, ShieldAlert, UserCircle2, UserPlus, Wrench } from "lucide-react";
+import { Copy, Crown, LogOut, MessageCircle, RefreshCw, Settings, ShieldAlert, UserPlus, Wrench } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import axios from "axios";
@@ -11,18 +11,26 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ModeratorLineIcon } from "@/components/moderator-line-icon";
 import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
+import { ProfileIconRow } from "@/components/profile-icon-row";
 import { UserAvatar } from "@/components/user-avatar";
 import { useModal } from "@/hooks/use-modal-store";
 import { hasInAccordAdministrativeAccess, isInAccordAdministrator, isInAccordDeveloper, isInAccordModerator } from "@/lib/in-accord-admin";
+import { resolveProfileIcons, type ProfileIcon } from "@/lib/profile-icons";
 import { PresenceStatus, presenceStatusLabelMap, normalizePresenceStatus, presenceStatusValues } from "@/lib/presence-status";
 
 interface UserStatusMenuProps {
   profileId?: string | null;
   profileRealName?: string | null;
   profileName?: string | null;
+  profilePronouns?: string | null;
+  profileComment?: string | null;
   profileRole?: string | null;
   profileEmail?: string | null;
   profileImageUrl?: string | null;
+  profileAvatarDecorationUrl?: string | null;
+  profileNameplateLabel?: string | null;
+  profileNameplateColor?: string | null;
+  profileNameplateImageUrl?: string | null;
   profileBannerUrl?: string | null;
   profilePresenceStatus?: string | null;
   profileJoinedAt?: string | null;
@@ -33,9 +41,15 @@ export const UserStatusMenu = ({
   profileId,
   profileRealName,
   profileName,
+  profilePronouns,
+  profileComment,
   profileRole,
   profileEmail,
   profileImageUrl,
+  profileAvatarDecorationUrl,
+  profileNameplateLabel,
+  profileNameplateColor,
+  profileNameplateImageUrl,
   profileBannerUrl,
   profilePresenceStatus,
   profileJoinedAt,
@@ -45,13 +59,26 @@ export const UserStatusMenu = ({
   const router = useRouter();
   const [copied, setCopied] = useState(false);
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
-  const [isProfileCardOpen, setIsProfileCardOpen] = useState(false);
   const [isSwitchAccountsConfirmOpen, setIsSwitchAccountsConfirmOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isSwitchingAccounts, setIsSwitchingAccounts] = useState(false);
   const [isSavingStatus, setIsSavingStatus] = useState(false);
   const [menuRealName, setMenuRealName] = useState<string | null>(profileRealName ?? null);
   const [menuProfileName, setMenuProfileName] = useState<string | null>(profileName ?? null);
+  const [menuPronouns, setMenuPronouns] = useState<string | null>(profilePronouns ?? null);
+  const [menuComment, setMenuComment] = useState<string | null>(profileComment ?? null);
+  const [menuAvatarDecorationUrl, setMenuAvatarDecorationUrl] = useState<string | null>(profileAvatarDecorationUrl ?? null);
+  const [menuNameplateLabel, setMenuNameplateLabel] = useState<string | null>(profileNameplateLabel ?? null);
+  const [menuNameplateColor, setMenuNameplateColor] = useState<string | null>(profileNameplateColor ?? null);
+  const [menuNameplateImageUrl, setMenuNameplateImageUrl] = useState<string | null>(profileNameplateImageUrl ?? null);
+  const [menuProfileIcons, setMenuProfileIcons] = useState<ProfileIcon[]>(
+    resolveProfileIcons({
+      userId: profileId,
+      role: profileRole,
+      email: profileEmail,
+      createdAt: profileJoinedAt,
+    })
+  );
   const [menuBannerUrl, setMenuBannerUrl] = useState<string | null>(profileBannerUrl ?? null);
   const [menuProfileRole, setMenuProfileRole] = useState<string | null>(profileRole ?? null);
   const [menuPresenceStatus, setMenuPresenceStatus] = useState<PresenceStatus>(
@@ -61,10 +88,24 @@ export const UserStatusMenu = ({
   useEffect(() => {
     setMenuRealName(profileRealName ?? null);
     setMenuProfileName(profileName ?? null);
+    setMenuPronouns(profilePronouns ?? null);
+    setMenuComment(profileComment ?? null);
+    setMenuAvatarDecorationUrl(profileAvatarDecorationUrl ?? null);
+    setMenuNameplateLabel(profileNameplateLabel ?? null);
+    setMenuNameplateColor(profileNameplateColor ?? null);
+    setMenuNameplateImageUrl(profileNameplateImageUrl ?? null);
+    setMenuProfileIcons(
+      resolveProfileIcons({
+        userId: profileId,
+        role: profileRole,
+        email: profileEmail,
+        createdAt: profileJoinedAt,
+      })
+    );
     setMenuBannerUrl(profileBannerUrl ?? null);
     setMenuProfileRole(profileRole ?? null);
     setMenuPresenceStatus(normalizePresenceStatus(profilePresenceStatus));
-  }, [profileBannerUrl, profileName, profilePresenceStatus, profileRealName, profileRole]);
+  }, [profileAvatarDecorationUrl, profileBannerUrl, profileComment, profileEmail, profileId, profileJoinedAt, profileName, profileNameplateColor, profileNameplateImageUrl, profileNameplateLabel, profilePresenceStatus, profilePronouns, profileRealName, profileRole]);
 
   useEffect(() => {
     if (!isPopoverOpen) {
@@ -87,6 +128,13 @@ export const UserStatusMenu = ({
         const payload = (await response.json()) as {
           realName?: string | null;
           profileName?: string | null;
+          pronouns?: string | null;
+          comment?: string | null;
+          profileIcons?: ProfileIcon[];
+          avatarDecorationUrl?: string | null;
+          nameplateLabel?: string | null;
+          nameplateColor?: string | null;
+          nameplateImageUrl?: string | null;
           bannerUrl?: string | null;
           role?: string | null;
           presenceStatus?: string | null;
@@ -95,6 +143,22 @@ export const UserStatusMenu = ({
         if (!cancelled) {
           setMenuRealName(payload.realName?.trim() || null);
           setMenuProfileName(payload.profileName ?? null);
+          setMenuPronouns(payload.pronouns ?? null);
+          setMenuComment(payload.comment ?? null);
+          setMenuNameplateLabel(payload.nameplateLabel ?? null);
+          setMenuNameplateColor(payload.nameplateColor ?? null);
+          setMenuNameplateImageUrl(payload.nameplateImageUrl ?? null);
+          setMenuProfileIcons(
+            Array.isArray(payload.profileIcons)
+              ? payload.profileIcons
+              : resolveProfileIcons({
+                  userId: profileId,
+                  role: payload.role ?? profileRole,
+                  email: profileEmail,
+                  createdAt: profileJoinedAt,
+                })
+          );
+          setMenuAvatarDecorationUrl(payload.avatarDecorationUrl ?? null);
           setMenuBannerUrl(payload.bannerUrl ?? null);
           setMenuProfileRole(payload.role ?? profileRole ?? null);
           setMenuPresenceStatus(normalizePresenceStatus(payload.presenceStatus));
@@ -109,7 +173,7 @@ export const UserStatusMenu = ({
     return () => {
       cancelled = true;
     };
-  }, [isPopoverOpen, profileRole]);
+  }, [isPopoverOpen, profileEmail, profileId, profileJoinedAt, profileRole]);
 
   useEffect(() => {
     const handleProfileUpdated = (event: Event) => {
@@ -117,6 +181,10 @@ export const UserStatusMenu = ({
         realName?: string;
         profileName?: string;
         bannerUrl?: string | null;
+        avatarDecorationUrl?: string | null;
+        nameplateLabel?: string | null;
+        nameplateColor?: string | null;
+        nameplateImageUrl?: string | null;
         profileRole?: string | null;
         presenceStatus?: string;
       }>;
@@ -133,8 +201,32 @@ export const UserStatusMenu = ({
         setMenuBannerUrl(customEvent.detail.bannerUrl ?? null);
       }
 
+      if (customEvent.detail?.avatarDecorationUrl === null || typeof customEvent.detail?.avatarDecorationUrl === "string") {
+        setMenuAvatarDecorationUrl(customEvent.detail.avatarDecorationUrl ?? null);
+      }
+
+      if (customEvent.detail?.nameplateLabel === null || typeof customEvent.detail?.nameplateLabel === "string") {
+        setMenuNameplateLabel(customEvent.detail.nameplateLabel ?? null);
+      }
+
+      if (customEvent.detail?.nameplateColor === null || typeof customEvent.detail?.nameplateColor === "string") {
+        setMenuNameplateColor(customEvent.detail.nameplateColor ?? null);
+      }
+
+      if (customEvent.detail?.nameplateImageUrl === null || typeof customEvent.detail?.nameplateImageUrl === "string") {
+        setMenuNameplateImageUrl(customEvent.detail.nameplateImageUrl ?? null);
+      }
+
       if (customEvent.detail?.profileRole === null || typeof customEvent.detail?.profileRole === "string") {
         setMenuProfileRole(customEvent.detail.profileRole ?? null);
+        setMenuProfileIcons(
+          resolveProfileIcons({
+            userId: profileId,
+            role: customEvent.detail.profileRole ?? null,
+            email: profileEmail,
+            createdAt: profileJoinedAt,
+          })
+        );
       }
 
       if (typeof customEvent.detail?.presenceStatus === "string") {
@@ -171,6 +263,9 @@ export const UserStatusMenu = ({
       profileRole: menuProfileRole ?? profileRole,
       profileEmail,
       profileImageUrl,
+      profileAvatarDecorationUrl: menuAvatarDecorationUrl,
+      profileNameplateLabel: menuNameplateLabel,
+      profileNameplateColor: menuNameplateColor,
       profileBannerUrl,
       profilePresenceStatus: menuPresenceStatus,
       profileJoinedAt,
@@ -186,15 +281,13 @@ export const UserStatusMenu = ({
       profileRole: menuProfileRole ?? profileRole,
       profileEmail,
       profileImageUrl,
+      profileAvatarDecorationUrl: menuAvatarDecorationUrl,
+      profileNameplateLabel: menuNameplateLabel,
+      profileNameplateColor: menuNameplateColor,
       profileBannerUrl: menuBannerUrl,
       profileJoinedAt,
       profileLastLogonAt,
     });
-  };
-
-  const openProfileCardPopup = () => {
-    setIsPopoverOpen(false);
-    setIsProfileCardOpen(true);
   };
 
   const onAddFriend = () => {
@@ -270,7 +363,6 @@ export const UserStatusMenu = ({
       setIsLoggingOut(true);
       await axios.post("/api/auth/logout");
       setIsPopoverOpen(false);
-      setIsProfileCardOpen(false);
       router.push("/sign-in");
       router.refresh();
     } catch (error) {
@@ -306,7 +398,6 @@ export const UserStatusMenu = ({
     setIsSwitchingAccounts(true);
     setIsSwitchAccountsConfirmOpen(false);
     setIsPopoverOpen(false);
-    setIsProfileCardOpen(false);
     window.location.assign("/api/auth/clear-session?next=/sign-in");
   };
 
@@ -337,6 +428,7 @@ export const UserStatusMenu = ({
       : isGlobalModerator
         ? <ModeratorLineIcon className="h-4 w-4 shrink-0 text-indigo-500" aria-label="Moderator" suppressHydrationWarning />
         : null;
+  const roleMetaOnPlate = highestRoleIcon ? <span className="inline-flex items-center">{highestRoleIcon}</span> : null;
   const fallbackNameFromEmail = profileEmail?.split("@")[0]?.trim() || "";
   const displayStatusName =
     menuProfileName?.trim() ||
@@ -359,11 +451,12 @@ export const UserStatusMenu = ({
           className="group flex min-w-0 items-center gap-4 rounded-xl px-1 py-1 text-left transition hover:bg-[#2a2b2f]"
           aria-label="Open user menu"
         >
-          <UserAvatar src={profileImageUrl ?? undefined} className="h-10 w-10" />
+          <UserAvatar
+            src={profileImageUrl ?? undefined}
+            decorationSrc={menuAvatarDecorationUrl}
+            className="h-20 w-20"
+          />
           <div className="min-w-0">
-            <p className="truncate text-[10px] uppercase tracking-[0.08em] text-[#949ba4]">
-              Users ID: {profileId}
-            </p>
             <div className="flex min-w-0 items-center gap-1.5">
               <ProfileNameWithServerTag
                 name={displayStatusName}
@@ -383,7 +476,7 @@ export const UserStatusMenu = ({
         sideOffset={10}
         className="w-[320px] overflow-hidden rounded-xl border border-black/30 bg-[#111214] p-0 text-[#dbdee1] shadow-2xl shadow-black/50"
       >
-        <div className="relative h-24 bg-gradient-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
+        <div className="relative h-24 bg-linear-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
           {menuBannerUrl ? (
             <Image
               src={menuBannerUrl}
@@ -395,24 +488,40 @@ export const UserStatusMenu = ({
           ) : null}
         </div>
 
-        <div className="relative p-3 pt-7">
-          <div className="absolute -top-5 left-3 rounded-full border-4 border-[#111214]">
-            <UserAvatar src={profileImageUrl ?? undefined} className="h-10 w-10" />
+        <div className="relative p-3 pt-9">
+          <div className="absolute -top-10 left-3 rounded-full border-4 border-[#111214]">
+            <UserAvatar
+              src={profileImageUrl ?? undefined}
+              decorationSrc={menuAvatarDecorationUrl}
+              className="h-20 w-20"
+            />
           </div>
 
-          <div className="flex min-w-0 items-center gap-1.5">
+          <ProfileIconRow icons={menuProfileIcons} />
+          <div className="flex w-full min-w-0 items-center gap-1.5">
             <ProfileNameWithServerTag
               name={displayStatusName}
               profileId={profileId}
+              pronouns={menuPronouns?.trim() || null}
+              containerClassName="w-full min-w-0"
               nameClassName="text-base font-bold text-white"
+              showNameplate
+              nameplateClassName="mb-0 h-20 w-full max-w-full"
+              plateMetaIcons={roleMetaOnPlate}
+              stretchTagUnderPlate
             />
-            {highestRoleIcon}
           </div>
-          <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">In-Accord Profile</p>
+          <div className="mt-2 min-h-36 w-full max-w-55 resize-y overflow-auto rounded-md border border-white/10 bg-[#1a1b1e] px-2.5 py-2">
+            <p
+              className="whitespace-pre-wrap wrap-break-word align-top text-[11px] text-[#dbdee1]"
+              style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
+            >
+              {menuComment?.trim() || "No comment set"}
+            </p>
+          </div>
 
           <div className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] p-3 text-xs">
             <div className="space-y-1 text-[#dbdee1]">
-              <p>Users ID: {profileId || ""}</p>
               <p>Name: {displayNameForProfileCard}</p>
               <p>Profile Name: {menuProfileName || "Not set"}</p>
               <p>Email: {profileEmail || ""}</p>
@@ -486,15 +595,6 @@ export const UserStatusMenu = ({
 
           <button
             type="button"
-            onClick={openProfileCardPopup}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-[#dbdee1] transition hover:bg-[#2f3136]"
-          >
-            <UserCircle2 className="h-4 w-4" />
-            View In-Accord profile card
-          </button>
-
-          <button
-            type="button"
             onClick={onSwitchAccounts}
             disabled={isSwitchingAccounts || isLoggingOut}
             className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-amber-200 transition hover:bg-[#3a3520] disabled:cursor-not-allowed disabled:opacity-60"
@@ -515,74 +615,8 @@ export const UserStatusMenu = ({
         </div>
       </PopoverContent>
 
-      <Dialog open={isProfileCardOpen} onOpenChange={setIsProfileCardOpen}>
-        <DialogContent className="w-[320px] overflow-hidden rounded-xl border border-black/30 bg-[#111214] p-0 text-[#dbdee1] shadow-2xl shadow-black/50">
-          <DialogTitle className="sr-only">In-Accord Profile Card</DialogTitle>
-
-          <div className="relative h-24 bg-gradient-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
-            {menuBannerUrl ? (
-              <Image
-                src={menuBannerUrl}
-                alt="User banner"
-                fill
-                className="object-cover"
-                unoptimized
-              />
-            ) : null}
-          </div>
-
-          <div className="relative p-3 pt-7">
-            <div className="absolute -top-5 left-3 rounded-full border-4 border-[#111214]">
-              <UserAvatar src={profileImageUrl ?? undefined} className="h-10 w-10" />
-            </div>
-
-            <div className="flex min-w-0 items-center gap-1.5">
-              <ProfileNameWithServerTag
-                name={displayStatusName}
-                profileId={profileId}
-                nameClassName="text-base font-bold text-white"
-              />
-              {highestRoleIcon}
-            </div>
-            <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">In-Accord Profile</p>
-
-            <div className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] p-3 text-xs">
-              <div className="space-y-1 text-[#dbdee1]">
-                <p>Users ID: {profileId || ""}</p>
-                <p>Name: {displayNameForProfileCard}</p>
-                <p>Email: {profileEmail || ""}</p>
-                <p>Last logon: {lastLogon}</p>
-                <p>Created: {created}</p>
-              </div>
-            </div>
-
-            <div className="mt-3 flex items-center gap-2 border-t border-white/10 pt-3">
-              <button
-                type="button"
-                onClick={onAddFriend}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/15 bg-[#1e1f22] text-[#dbdee1] transition hover:bg-[#2a2b30]"
-                aria-label="Add friend"
-                title="Add Friend"
-              >
-                <UserPlus className="h-4 w-4" />
-              </button>
-
-              <button
-                type="button"
-                onClick={onStartDirectMessage}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/15 bg-[#1e1f22] text-[#dbdee1] transition hover:bg-[#2a2b30]"
-                aria-label="Open direct message"
-                title="Direct Message"
-              >
-                <MessageCircle className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       <Dialog open={isSwitchAccountsConfirmOpen} onOpenChange={setIsSwitchAccountsConfirmOpen}>
-        <DialogContent className="w-[420px] border-black/30 bg-[#111214] text-[#dbdee1]">
+        <DialogContent className="w-105 border-black/30 bg-[#111214] text-[#dbdee1]">
           <DialogTitle className="text-base font-semibold text-white">Switch Accounts?</DialogTitle>
 
           <div className="mt-2 space-y-2 text-sm text-[#b5bac1]">

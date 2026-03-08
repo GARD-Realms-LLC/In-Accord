@@ -7,6 +7,7 @@ import { ChatHeader } from "@/components/chat/chat-header";
 import { ChatInput } from "@/components/chat/chat-input";
 import { ChatItem } from "@/components/chat/chat-item";
 import { ChatScrollBox } from "@/components/chat/chat-scroll-box";
+import { ChatLiveRefresh } from "@/components/chat/chat-live-refresh";
 // import { MediaRoom } from "@/components/media-room";
 import { channel, db, member, message } from "@/lib/db";
 import { computeChannelPermissionForRole } from "@/lib/channel-permissions";
@@ -209,9 +210,12 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
         />
 
         {currentChannel.type === ChannelType.TEXT ? (
+          <>
+          <ChatLiveRefresh intervalMs={1000} />
           <ChatScrollBox
             className="flex-1 overflow-y-auto"
             scrollKey={`${currentChannel.id}:${hydratedChannelMessages.length}:${lastChannelMessageId}`}
+            forceStickToBottom
           >
             {hydratedChannelMessages.length === 0 ? (
               <div className="p-6 text-sm text-zinc-500 dark:text-zinc-400">
@@ -240,6 +244,7 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
               ))
             )}
           </ChatScrollBox>
+          </>
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-zinc-500 dark:text-zinc-400">
             This channel type does not use text chat.

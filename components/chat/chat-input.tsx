@@ -15,6 +15,8 @@ import { useModal } from "@/hooks/use-modal-store";
 import { GifPicker } from "@/components/gif-picker";
 import { EmotePicker } from "@/components/emote-picker";
 import { StickerPicker } from "@/components/sticker-picker";
+import { SoundEfxPicker } from "@/components/sound-efx-picker";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   buildMentionToken,
   type MentionOption,
@@ -57,6 +59,7 @@ export const ChatInput = ({
   const [mentionQuery, setMentionQuery] = useState("");
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
   const [activeQuote, setActiveQuote] = useState<QuotedMessageMeta | null>(null);
+  const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const mentionOptions = useMemo<MentionOption[]>(() => {
@@ -452,6 +455,47 @@ export const ChatInput = ({
     }
   };
 
+  const onSoundEfxSelect = async (soundEfxUrl: string) => {
+    try {
+      setSendError(null);
+
+      const url = qs.stringifyUrl({
+        url: apiUrl,
+        query,
+      });
+
+      await axios.post(url, {
+        content: buildQuotedContent("[sound_efx]", activeQuote),
+        fileUrl: soundEfxUrl,
+      });
+
+      if (type === "conversation" && conversationId) {
+        void axios.post("/api/direct-messages/typing", {
+          conversationId,
+          isTyping: false,
+        });
+      }
+
+      form.reset();
+      clearMentionState();
+      setActiveQuote(null);
+      router.refresh();
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error)) {
+        const dataMessage =
+          typeof error.response?.data === "string"
+            ? error.response.data
+            : error.response?.data?.message;
+
+        setSendError(dataMessage || "Failed to send Sound EFX.");
+      } else {
+        setSendError("Failed to send Sound EFX.");
+      }
+
+      console.error("[CHAT_INPUT_SEND_SOUND_EFX]", error);
+    }
+  };
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -481,20 +525,45 @@ export const ChatInput = ({
                       </button>
                     </div>
                   ) : null}
-                  <button
-                    type="button"
-                    onClick={() => onOpen("messageFile", { apiUrl, query })}
-                    disabled={isLoading}
-                    className="absolute top-7 left-8 h-[24px] w-[24px] bg-zinc-500 dark:bg-zinc-400 hover:bg-zinc-600 dark:hover:bg-zinc-300 transition rounded-full p-1 flex items-center justify-center"
-                  >
-                    <Plus className="text-white dark:text-[#313338]" />
-                  </button>
+                  <Popover open={isAddMenuOpen} onOpenChange={setIsAddMenuOpen}>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        disabled={isLoading}
+                        className="absolute left-8 top-7 flex h-[24px] w-[24px] items-center justify-center rounded-full bg-zinc-500 p-1 transition hover:bg-zinc-600 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-400 dark:hover:bg-zinc-300"
+                        aria-label="Open add menu"
+                        title="Add"
+                      >
+                        <Plus className="text-white dark:text-[#313338]" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      side="top"
+                      align="start"
+                      className="w-44 border-zinc-300 bg-white p-1.5 dark:border-zinc-700 dark:bg-zinc-900"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsAddMenuOpen(false);
+                          onOpen("messageFile", { apiUrl, query });
+                        }}
+                        className="flex w-full items-center rounded-md px-2 py-2 text-left text-sm text-zinc-700 transition hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                      >
+                        Upload File
+                      </button>
+                    </PopoverContent>
+                  </Popover>
                   <Input
                     disabled={isLoading}
                     className="px-14 py-6 bg-zinc-200/90 dark:bg-zinc-700/75 border-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-zinc-600 dark:text-zinc-200"
                     placeholder={`Message ${
                       type === "conversation" ? name : "#" + name
                     }`}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
                     {...field}
                     ref={(element) => {
                       field.ref(element);
@@ -539,9 +608,6 @@ export const ChatInput = ({
                         clearMentionState();
                       }
                     }}
-                    onClick={(event) => {
-                      detectMentionState(String(field.value ?? ""), event.currentTarget.selectionStart);
-                    }}
                   />
                   {isMentionMenuOpen ? (
                     <div className="absolute bottom-[64px] left-14 right-16 z-20 max-h-56 overflow-auto rounded-lg border border-black/30 bg-[#1e1f22] p-1 shadow-2xl shadow-black/45">
@@ -573,6 +639,7 @@ export const ChatInput = ({
                   <div className="absolute top-[26px] right-8 flex items-center gap-2">
                     <EmotePicker onSelect={onEmoteSelect} serverId={stickerServerId} />
                     <StickerPicker onSelect={onStickerSelect} serverId={stickerServerId} />
+                    <SoundEfxPicker onSelect={onSoundEfxSelect} serverId={stickerServerId} />
                     <GifPicker onSelect={onGifSelect} serverId={stickerServerId} />
                   </div>
                   {sendError ? (

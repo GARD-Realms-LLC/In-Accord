@@ -11,10 +11,13 @@ import { ActionTooltip } from "@/components/action-tooltip";
 import { BotAppBadge } from "@/components/bot-app-badge";
 import { ModeratorLineIcon } from "@/components/moderator-line-icon";
 import { NewUserCloverBadge } from "@/components/new-user-clover-badge";
+import { ProfileIconRow } from "@/components/profile-icon-row";
+import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
 import { UserAvatar } from "@/components/user-avatar";
 import { MemberRole } from "@/lib/db/types";
 import { isInAccordAdministrator, isInAccordDeveloper, isInAccordModerator } from "@/lib/in-accord-admin";
 import { isBotUser } from "@/lib/is-bot-user";
+import { resolveProfileIcons, type ProfileIcon } from "@/lib/profile-icons";
 import { normalizePresenceStatus, presenceStatusDotClassMap, presenceStatusLabelMap } from "@/lib/presence-status";
 
 type OnlineRailUser = {
@@ -57,6 +60,17 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
     Record<
       string,
       {
+        pronouns: string | null;
+        comment: string | null;
+        nameplateLabel?: string | null;
+        nameplateColor?: string | null;
+        nameplateImageUrl?: string | null;
+        effectiveNameplateLabel?: string | null;
+        effectiveNameplateColor?: string | null;
+        effectiveNameplateImageUrl?: string | null;
+        profileIcons?: ProfileIcon[];
+        effectiveAvatarDecorationUrl?: string | null;
+        effectiveBannerUrl?: string | null;
         selectedServerTag: {
           serverId: string;
           serverName: string;
@@ -83,6 +97,17 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
       setLoadingProfileCardId(profileId);
 
       const response = await axios.get<{
+        pronouns?: string | null;
+        comment?: string | null;
+          nameplateLabel?: string | null;
+          nameplateColor?: string | null;
+          nameplateImageUrl?: string | null;
+          effectiveNameplateLabel?: string | null;
+          effectiveNameplateColor?: string | null;
+          effectiveNameplateImageUrl?: string | null;
+        profileIcons?: ProfileIcon[];
+        effectiveAvatarDecorationUrl?: string | null;
+        effectiveBannerUrl?: string | null;
         selectedServerTag?: {
           serverId: string;
           serverName: string;
@@ -103,10 +128,55 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
         typeof response.data.selectedServerTag.tagCode === "string"
           ? response.data.selectedServerTag
           : null;
+      const pronouns =
+        typeof response.data?.pronouns === "string" && response.data.pronouns.trim().length > 0
+          ? response.data.pronouns.trim()
+          : null;
+      const comment =
+        typeof response.data?.comment === "string" && response.data.comment.trim().length > 0
+          ? response.data.comment.trim()
+          : null;
 
       setProfileCardCache((prev) => ({
         ...prev,
         [profileId]: {
+          pronouns,
+          comment,
+          nameplateLabel:
+            typeof response.data?.nameplateLabel === "string" && response.data.nameplateLabel.trim().length > 0
+              ? response.data.nameplateLabel.trim()
+              : null,
+          nameplateColor:
+            typeof response.data?.nameplateColor === "string" && response.data.nameplateColor.trim().length > 0
+              ? response.data.nameplateColor.trim()
+              : null,
+          nameplateImageUrl:
+            typeof response.data?.nameplateImageUrl === "string" && response.data.nameplateImageUrl.trim().length > 0
+              ? response.data.nameplateImageUrl.trim()
+              : null,
+          effectiveNameplateLabel:
+            typeof response.data?.effectiveNameplateLabel === "string" && response.data.effectiveNameplateLabel.trim().length > 0
+              ? response.data.effectiveNameplateLabel.trim()
+              : null,
+          effectiveNameplateColor:
+            typeof response.data?.effectiveNameplateColor === "string" && response.data.effectiveNameplateColor.trim().length > 0
+              ? response.data.effectiveNameplateColor.trim()
+              : null,
+          effectiveNameplateImageUrl:
+            typeof response.data?.effectiveNameplateImageUrl === "string" && response.data.effectiveNameplateImageUrl.trim().length > 0
+              ? response.data.effectiveNameplateImageUrl.trim()
+              : null,
+          profileIcons: Array.isArray(response.data?.profileIcons) ? response.data.profileIcons : [],
+          effectiveAvatarDecorationUrl:
+            typeof response.data?.effectiveAvatarDecorationUrl === "string" &&
+            response.data.effectiveAvatarDecorationUrl.trim().length > 0
+              ? response.data.effectiveAvatarDecorationUrl.trim()
+              : null,
+          effectiveBannerUrl:
+            typeof response.data?.effectiveBannerUrl === "string" &&
+            response.data.effectiveBannerUrl.trim().length > 0
+              ? response.data.effectiveBannerUrl.trim()
+              : null,
           selectedServerTag,
         },
       }));
@@ -114,6 +184,16 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
       setProfileCardCache((prev) => ({
         ...prev,
         [profileId]: {
+          pronouns: null,
+          comment: null,
+          nameplateLabel: null,
+          nameplateColor: null,
+          nameplateImageUrl: null,
+          effectiveNameplateLabel: null,
+          effectiveNameplateColor: null,
+          effectiveNameplateImageUrl: null,
+          effectiveAvatarDecorationUrl: null,
+          effectiveBannerUrl: null,
           selectedServerTag: null,
         },
       }));
@@ -222,6 +302,26 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
       name: member.profileName || member.realName || member.displayName,
       email: member.email,
     });
+    const roleAndMetaIcons = (
+      <>
+        <NewUserCloverBadge createdAt={member.joinedAt} className="text-[11px]" />
+        {showBotBadge ? <BotAppBadge className="h-4 px-1 text-[9px]" /> : null}
+        {highestRoleIcon && highestRoleLabel ? (
+          <ActionTooltip label={highestRoleLabel} align="center">
+            {highestRoleIcon}
+          </ActionTooltip>
+        ) : null}
+      </>
+    );
+    const effectiveProfileIcons =
+      profileCard?.profileIcons && profileCard.profileIcons.length > 0
+        ? profileCard.profileIcons
+        : resolveProfileIcons({
+            userId: member.profileId,
+            role: member.globalRole,
+            email: member.email,
+            createdAt: member.joinedAt,
+          });
     const onStartDirectMessage = () => {
       const serverIdFromRoute =
         typeof params?.serverId === "string"
@@ -300,30 +400,27 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
             title={`View ${member.profileName || "Profile"} profile`}
           >
             <span className="relative inline-flex h-6 w-6 shrink-0">
-              <UserAvatar src={member.imageUrl ?? undefined} className="h-6 w-6" />
+              <UserAvatar
+                src={member.imageUrl ?? undefined}
+                decorationSrc={profileCard?.effectiveAvatarDecorationUrl}
+                className="h-6 w-6"
+              />
               <span
                 className={`absolute -bottom-0.5 -right-0.5 inline-flex h-2.5 w-2.5 rounded-full border border-[#111214] ${presenceStatusDotClassMap[normalizedPresenceStatus]}`}
                 aria-hidden="true"
               />
             </span>
-            <div className="flex min-w-0 items-center gap-1">
-              <p className="min-w-0 truncate text-xs text-[#dbdee1]">{member.profileName || "No profile name"}</p>
-              {profileCard?.selectedServerTag ? (
-                <span
-                  className="inline-flex items-center gap-1 rounded-full border border-[#5865f2]/35 bg-[#5865f2]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-[#d7dcff]"
-                  title={`Server tag from ${profileCard.selectedServerTag.serverName}`}
-                >
-                  <span>{profileCard.selectedServerTag.iconEmoji}</span>
-                  <span>{profileCard.selectedServerTag.tagCode}</span>
-                </span>
-              ) : null}
-              <NewUserCloverBadge createdAt={member.joinedAt} className="text-[11px]" />
-              {showBotBadge ? <BotAppBadge className="h-4 px-1 text-[9px]" /> : null}
-              {highestRoleIcon && highestRoleLabel ? (
-                <ActionTooltip label={highestRoleLabel} align="center">
-                  {highestRoleIcon}
-                </ActionTooltip>
-              ) : null}
+            <div className="flex w-full min-w-0 items-center gap-1">
+              <ProfileNameWithServerTag
+                name={member.profileName || member.realName || member.displayName || "No profile name"}
+                profileId={member.profileId}
+                memberId={member.id}
+                containerClassName="w-full min-w-0"
+                nameClassName="min-w-0 truncate text-xs text-[#dbdee1]"
+                showNameplate
+                plateMetaIcons={roleAndMetaIcons}
+                stretchTagUnderPlate
+              />
             </div>
           </button>
         </PopoverTrigger>
@@ -334,9 +431,9 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
           className="w-[320px] overflow-hidden rounded-xl border border-black/30 bg-[#111214] p-0 text-[#dbdee1] shadow-2xl shadow-black/50"
         >
           <div className="relative h-24 bg-linear-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
-            {member.bannerUrl ? (
+            {(profileCard?.effectiveBannerUrl || member.bannerUrl) ? (
               <Image
-                src={member.bannerUrl}
+                src={profileCard?.effectiveBannerUrl || member.bannerUrl || ""}
                 alt="User banner"
                 fill
                 className="object-cover"
@@ -345,35 +442,43 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
             ) : null}
           </div>
 
-          <div className="relative p-3 pt-7">
-            <div className="absolute -top-5 left-3 rounded-full border-4 border-[#111214]">
-              <UserAvatar src={member.imageUrl ?? undefined} className="h-10 w-10" />
+          <div className="relative p-3 pt-9">
+            <div className="absolute -top-10 left-3 rounded-full border-4 border-[#111214]">
+              <UserAvatar
+                src={member.imageUrl ?? undefined}
+                decorationSrc={profileCard?.effectiveAvatarDecorationUrl}
+                className="h-20 w-20"
+              />
             </div>
 
-            <div className="flex min-w-0 items-center gap-1.5">
-              <p className="truncate text-base font-bold text-white">{member.profileName || member.realName || member.displayName}</p>
-              {profileCard?.selectedServerTag ? (
-                <span
-                  className="inline-flex items-center gap-1 rounded-full border border-[#5865f2]/35 bg-[#5865f2]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-[#d7dcff]"
-                  title={`Server tag from ${profileCard.selectedServerTag.serverName}`}
-                >
-                  <span>{profileCard.selectedServerTag.iconEmoji}</span>
-                  <span>{profileCard.selectedServerTag.tagCode}</span>
-                </span>
-              ) : null}
-              {highestRoleIcon && highestRoleLabel ? (
-                <ActionTooltip label={highestRoleLabel} align="center">
-                  {highestRoleIcon}
-                </ActionTooltip>
-              ) : null}
-              <NewUserCloverBadge createdAt={member.joinedAt} className="text-sm" />
-              {showBotBadge ? <BotAppBadge className="h-4 px-1 text-[9px]" /> : null}
+            <div className="min-w-0">
+              <ProfileIconRow icons={effectiveProfileIcons} className="mb-1" />
+              <div className="flex w-full min-w-0 items-center gap-1.5">
+                <ProfileNameWithServerTag
+                  name={member.profileName || member.realName || member.displayName || "Unknown User"}
+                  profileId={member.profileId}
+                  memberId={member.id}
+                  pronouns={profileCard?.pronouns || null}
+                  containerClassName="w-full min-w-0"
+                  nameClassName="text-base font-bold text-white"
+                  showNameplate
+                  nameplateClassName="mb-0 h-20 w-full max-w-full"
+                  plateMetaIcons={roleAndMetaIcons}
+                  stretchTagUnderPlate
+                />
+              </div>
             </div>
-            <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">In-Accord Profile</p>
+            <div className="mt-2 min-h-36 w-full max-w-55 resize-y overflow-auto rounded-md border border-white/10 bg-[#1a1b1e] px-2.5 py-2">
+              <p
+                className="whitespace-pre-wrap wrap-break-word align-top text-[11px] text-[#dbdee1]"
+                style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
+              >
+                {profileCard?.comment || "No comment set"}
+              </p>
+            </div>
 
             <div className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] p-3 text-xs">
               <div className="space-y-1 text-[#dbdee1]">
-                <p>Users ID: {member.profileId}</p>
                 <p>Name: {member.realName || member.profileName || member.displayName || "Unknown User"}</p>
                 <p>Email: {member.email || "N/A"}</p>
                 <p>Role: {member.role}</p>
@@ -396,7 +501,6 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
                   >
                     <span>{profileCard.selectedServerTag.iconEmoji}</span>
                     <span>{profileCard.selectedServerTag.tagCode}</span>
-                    <span className="text-[#bfc5ff]">{profileCard.selectedServerTag.serverName}</span>
                   </span>
                 </div>
               </div>

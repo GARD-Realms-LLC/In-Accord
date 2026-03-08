@@ -76,15 +76,15 @@ export const ServerChannel = ({
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       className={cn(
-        "group px-2 py-2 rounded-md flex items-center gap-x-2 w-full text-left hover:bg-zinc-700/10 dark:hover:bg-zinc-700/50 transition mb-1",
+        "group px-2 py-2 rounded-md flex items-center gap-x-0 w-full text-left hover:bg-zinc-700/10 dark:hover:bg-zinc-700/50 transition mb-1",
         draggable && "cursor-grab active:cursor-grabbing",
         params?.channelId === channel.id && "bg-zinc-700/20 dark:bg-zinc-700"
       )}
     >
-      <Icon className="flex-shrink-0 w-5 h-5 text-zinc-500 dark:text-zinc-400" />
+      <Icon className="h-5 w-5 shrink-0 text-zinc-500 dark:text-zinc-400" />
       <p
         className={cn(
-          "line-clamp-1 min-w-0 flex-1 text-left font-semibold text-sm text-zinc-500 group-hover:text-zinc-600 dark:text-zinc-400 dark:group-hover:text-zinc-300 transition",
+          "-ml-1 line-clamp-1 min-w-0 flex-1 text-left text-sm font-semibold text-zinc-500 transition group-hover:text-zinc-600 dark:text-zinc-400 dark:group-hover:text-zinc-300",
           params?.channelId === channel.id &&
             "text-primary dark:text-zinc-200 dark:group-hover:text-white"
         )}

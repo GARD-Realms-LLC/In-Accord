@@ -22,6 +22,8 @@ export type UserPreferences = {
   selectedServerTagServerId: string | null;
   customThemeColors: CustomThemeColors | null;
   downloadedPlugins: string[];
+  bannerUploads: string[];
+  avatarUploads: string[];
   transparentBackground: {
     selectedBackground: string | null;
     uploadedBackgrounds: string[];
@@ -201,6 +203,8 @@ export const ensureUserPreferencesSchema = async () => {
       "selectedServerTagServerId" text,
       "customThemeColorsJson" text,
       "downloadedPluginsJson" text not null default '[]',
+      "bannerUploadsJson" text not null default '[]',
+      "avatarUploadsJson" text not null default '[]',
       "transparentBackgroundSelected" text,
       "transparentBackgroundUploadsJson" text not null default '[]',
       "createdAt" timestamp not null,
@@ -233,6 +237,16 @@ export const ensureUserPreferencesSchema = async () => {
     add column if not exists "selectedServerTagServerId" text
   `);
 
+  await db.execute(sql`
+    alter table "UserPreference"
+    add column if not exists "bannerUploadsJson" text not null default '[]'
+  `);
+
+  await db.execute(sql`
+    alter table "UserPreference"
+    add column if not exists "avatarUploadsJson" text not null default '[]'
+  `);
+
   const now = new Date();
   await db.execute(sql`
     insert into "UserPreference" ("userId", "createdAt", "updatedAt")
@@ -257,6 +271,8 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
       "selectedServerTagServerId",
       "customThemeColorsJson",
       "downloadedPluginsJson",
+      "bannerUploadsJson",
+      "avatarUploadsJson",
       "transparentBackgroundSelected",
       "transparentBackgroundUploadsJson"
     from "UserPreference"
@@ -274,6 +290,8 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
       selectedServerTagServerId: string | null;
       customThemeColorsJson: string | null;
       downloadedPluginsJson: string | null;
+      bannerUploadsJson: string | null;
+      avatarUploadsJson: string | null;
       transparentBackgroundSelected: string | null;
       transparentBackgroundUploadsJson: string | null;
     }>;
@@ -283,6 +301,8 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
   const connectedAccounts = normalizeConnectedAccounts(parseJsonSafely(row?.connectedAccountsJson ?? null));
   const serverTags = normalizeServerTags(parseJsonSafely(row?.serverTagsJson ?? null));
   const downloadedPlugins = normalizeStringArray(parseJsonSafely(row?.downloadedPluginsJson ?? null), 200);
+  const bannerUploads = normalizeStringArray(parseJsonSafely(row?.bannerUploadsJson ?? null), 60);
+  const avatarUploads = normalizeStringArray(parseJsonSafely(row?.avatarUploadsJson ?? null), 60);
   const transparentUploads = normalizeStringArray(
     parseJsonSafely(row?.transparentBackgroundUploadsJson ?? null),
     40
@@ -300,6 +320,8 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
         : null,
     customThemeColors,
     downloadedPlugins,
+    bannerUploads,
+    avatarUploads,
     transparentBackground: {
       selectedBackground:
         typeof row?.transparentBackgroundSelected === "string" && row.transparentBackgroundSelected.trim().length > 0
@@ -321,6 +343,8 @@ export const updateUserPreferences = async (
     selectedServerTagServerId: string | null;
     customThemeColors: CustomThemeColors | null;
     downloadedPlugins: string[];
+    bannerUploads: string[];
+    avatarUploads: string[];
     transparentBackgroundSelected: string | null;
     transparentBackgroundUploads: string[];
   }>
@@ -364,6 +388,14 @@ export const updateUserPreferences = async (
 
   if (Array.isArray(updates.downloadedPlugins)) {
     values.push(sql`"downloadedPluginsJson" = ${JSON.stringify(normalizeStringArray(updates.downloadedPlugins, 200))}`);
+  }
+
+  if (Array.isArray(updates.bannerUploads)) {
+    values.push(sql`"bannerUploadsJson" = ${JSON.stringify(normalizeStringArray(updates.bannerUploads, 60))}`);
+  }
+
+  if (Array.isArray(updates.avatarUploads)) {
+    values.push(sql`"avatarUploadsJson" = ${JSON.stringify(normalizeStringArray(updates.avatarUploads, 60))}`);
   }
 
   if (Object.prototype.hasOwnProperty.call(updates, "transparentBackgroundSelected")) {

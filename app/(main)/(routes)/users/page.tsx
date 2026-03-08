@@ -13,6 +13,7 @@ import { ChatHeader } from "@/components/chat/chat-header";
 import { ChatItem } from "@/components/chat/chat-item";
 import { ChatInput } from "@/components/chat/chat-input";
 import { ChatScrollBox } from "@/components/chat/chat-scroll-box";
+import { ChatLiveRefresh } from "@/components/chat/chat-live-refresh";
 import { ConversationTypingIndicator } from "@/components/chat/conversation-typing-indicator";
 import { DirectMessageListItem } from "@/components/chat/direct-message-list-item";
 import { DeleteDmConversationButton } from "@/components/chat/delete-dm-conversation-button";
@@ -575,12 +576,12 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
       >
         <h1
           className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 truncate text-center text-sm font-bold uppercase tracking-[0.08em] text-foreground"
-          style={{ left: "calc((100% - 256px) / 2)", maxWidth: "calc(100% - 560px)" }}
+          style={{ left: "calc((100% - 256px) / 2)", maxWidth: "calc(100% - 592px)" }}
         >
           In-Accord
         </h1>
 
-        <div className="absolute right-[276px] top-1/2 z-20 flex -translate-y-1/2 items-center gap-1 text-muted-foreground">
+        <div className="absolute right-77 top-1/2 z-20 flex -translate-y-1/2 items-center gap-1 text-muted-foreground">
           <button type="button" title="Start Call" className="rounded p-1.5 transition-colors hover:bg-accent hover:text-accent-foreground">
             <Phone className="h-4 w-4" suppressHydrationWarning />
           </button>
@@ -596,8 +597,8 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
         </div>
 
         <div
-          className="absolute top-1/2 z-20 w-[163px] -translate-y-1/2 -translate-x-1/2 rounded-md border border-border bg-background"
-          style={{ left: "calc(100% - 128px)" }}
+          className="absolute top-1/2 z-20 w-40.75 -translate-y-1/2 -translate-x-1/2 rounded-md border border-border bg-background"
+          style={{ left: "calc(100% - 144px)" }}
         >
           <div className="flex h-8 items-center px-2">
             <Search className="h-3.5 w-3.5 text-muted-foreground" suppressHydrationWarning />
@@ -611,7 +612,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
         </div>
       </header>
 
-      <div className="grid box-border h-full w-full grid-cols-[240px_1fr_260px] gap-2 p-2 pt-14">
+      <div className="grid box-border h-full w-full grid-cols-[240px_1fr_288px] gap-2 p-2 pt-14">
 
         <aside
           className="theme-users-left-rail self-start min-h-0 overflow-y-auto rounded-2xl border border-black/20 bg-[#2b2d31] p-2.5 shadow-xl shadow-black/35"
@@ -766,7 +767,9 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                   <ChatScrollBox
                     className="flex-1 overflow-y-auto"
                     scrollKey={`${selectedConversation.conversationId}:${selectedConversation.messages.length}:${selectedConversation.messages[selectedConversation.messages.length - 1]?.id ?? "none"}`}
+                    forceStickToBottom
                   >
+                    <ChatLiveRefresh intervalMs={1000} />
                     {selectedConversation.messages.length === 0 ? (
                       <div className="p-6 text-sm text-zinc-500 dark:text-zinc-400">
                         No direct messages yet. Say hello to {selectedConversation.otherMember.name}.
@@ -887,6 +890,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                                     name={friend.displayName}
                                     profileId={friend.profileId}
                                     memberId={friend.memberId}
+                                    showNameplate
                                   />
                                   <NewUserCloverBadge createdAt={friend.profileCreatedAt} className="text-xs" />
                                 </p>
@@ -938,7 +942,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
           <h3 className="text-xs font-bold uppercase tracking-[0.08em] text-muted-foreground">Active Now</h3>
           <div className="mt-4 rounded-lg bg-muted/60 p-4 text-center">
             <p className="text-sm font-semibold text-foreground">It&apos;s quiet for now...</p>
-            <p className="mt-2 text-xs text-muted-foreground">
+            <p className="mt-2 text-xs text-muted-foreground whitespace-normal wrap-break-word">
               When activity picks up, it will appear here.
             </p>
           </div>
@@ -969,6 +973,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                             name={friend.displayName}
                             profileId={friend.profileId}
                             memberId={friend.memberId}
+                            showNameplate
                           />
                           <NewUserCloverBadge createdAt={friend.profileCreatedAt} className="text-[11px]" />
                         </p>

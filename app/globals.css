@@ -373,6 +373,17 @@ select,
   text-shadow:
     0 1px 0 rgba(0, 0, 0, 0.55),
     0 2px 4px rgba(0, 0, 0, 0.35);
+  white-space: nowrap !important;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+}
+
+/* Only chat message content is allowed to wrap. */
+.chat-wrap-text,
+.chat-wrap-text :is(span, a, strong, em, b, i) {
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
 }
 
 .settings-scrollbar {
@@ -966,129 +977,129 @@ select,
 
 /* Explicit user-settings modal surface colors per custom theme. */
 .theme-settings-shell,
-.theme-settings-left-rail,
-.theme-settings-main-panel,
-.theme-settings-main-header,
-.theme-settings-main-content {
+.theme-settings-rail,
+.theme-settings-content,
+.theme-settings-content-header,
+.theme-settings-content-body {
   background-color: hsl(var(--card));
 }
 
 :root.light .theme-settings-shell,
-:root.light .theme-settings-main-panel,
-:root.light .theme-settings-main-content {
+:root.light .theme-settings-content,
+:root.light .theme-settings-content-body {
   background-color: #ecf1f7 !important;
 }
 
-:root.light .theme-settings-left-rail,
-:root.light .theme-settings-main-header {
+:root.light .theme-settings-rail,
+:root.light .theme-settings-content-header {
   background-color: #e1e7ef !important;
 }
 
 :root.dark .theme-settings-shell,
-:root.dark .theme-settings-main-panel,
-:root.dark .theme-settings-main-content {
+:root.dark .theme-settings-content,
+:root.dark .theme-settings-content-body {
   background-color: #1a1f28 !important;
 }
 
-:root.dark .theme-settings-left-rail,
-:root.dark .theme-settings-main-header {
+:root.dark .theme-settings-rail,
+:root.dark .theme-settings-content-header {
   background-color: #13161c !important;
 }
 
 :root.dark-blue .theme-settings-shell,
-:root.dark-blue .theme-settings-main-panel,
-:root.dark-blue .theme-settings-main-content {
+:root.dark-blue .theme-settings-content,
+:root.dark-blue .theme-settings-content-body {
   background-color: #173760 !important;
 }
 
-:root.dark-blue .theme-settings-left-rail,
-:root.dark-blue .theme-settings-main-header {
+:root.dark-blue .theme-settings-rail,
+:root.dark-blue .theme-settings-content-header {
   background-color: #143056 !important;
 }
 
 :root.dark-teal .theme-settings-shell,
-:root.dark-teal .theme-settings-main-panel,
-:root.dark-teal .theme-settings-main-content {
+:root.dark-teal .theme-settings-content,
+:root.dark-teal .theme-settings-content-body {
   background-color: #1a6367 !important;
 }
 
-:root.dark-teal .theme-settings-left-rail,
-:root.dark-teal .theme-settings-main-header {
+:root.dark-teal .theme-settings-rail,
+:root.dark-teal .theme-settings-content-header {
   background-color: #145154 !important;
 }
 
 :root.light-blue .theme-settings-shell,
-:root.light-blue .theme-settings-main-panel,
-:root.light-blue .theme-settings-main-content {
+:root.light-blue .theme-settings-content,
+:root.light-blue .theme-settings-content-body {
   background-color: #c4ece8 !important;
 }
 
-:root.light-blue .theme-settings-left-rail,
-:root.light-blue .theme-settings-main-header {
+:root.light-blue .theme-settings-rail,
+:root.light-blue .theme-settings-content-header {
   background-color: #b4e4df !important;
 }
 
 :root.light-red .theme-settings-shell,
-:root.light-red .theme-settings-main-panel,
-:root.light-red .theme-settings-main-content {
+:root.light-red .theme-settings-content,
+:root.light-red .theme-settings-content-body {
   background-color: #e2c0c0 !important;
 }
 
-:root.light-red .theme-settings-left-rail,
-:root.light-red .theme-settings-main-header {
+:root.light-red .theme-settings-rail,
+:root.light-red .theme-settings-content-header {
   background-color: #d9b2b2 !important;
 }
 
 :root.dark-red .theme-settings-shell,
-:root.dark-red .theme-settings-main-panel,
-:root.dark-red .theme-settings-main-content {
+:root.dark-red .theme-settings-content,
+:root.dark-red .theme-settings-content-body {
   background-color: #5a1a24 !important;
 }
 
-:root.dark-red .theme-settings-left-rail,
-:root.dark-red .theme-settings-main-header {
+:root.dark-red .theme-settings-rail,
+:root.dark-red .theme-settings-content-header {
   background-color: #4a141c !important;
 }
 
 :root.light-gray .theme-settings-shell,
-:root.light-gray .theme-settings-main-panel,
-:root.light-gray .theme-settings-main-content {
+:root.light-gray .theme-settings-content,
+:root.light-gray .theme-settings-content-body {
   background-color: #cdced1 !important;
 }
 
-:root.light-gray .theme-settings-left-rail,
-:root.light-gray .theme-settings-main-header {
+:root.light-gray .theme-settings-rail,
+:root.light-gray .theme-settings-content-header {
   background-color: #c1c3c7 !important;
 }
 
 :root.dark-gray .theme-settings-shell,
-:root.dark-gray .theme-settings-main-panel,
-:root.dark-gray .theme-settings-main-content {
+:root.dark-gray .theme-settings-content,
+:root.dark-gray .theme-settings-content-body {
   background-color: #2f3540 !important;
 }
 
-:root.dark-gray .theme-settings-left-rail,
-:root.dark-gray .theme-settings-main-header {
+:root.dark-gray .theme-settings-rail,
+:root.dark-gray .theme-settings-content-header {
   background-color: #252a33 !important;
 }
 
 :root.custom-theme .theme-settings-shell,
-:root.custom-theme .theme-settings-left-rail,
-:root.custom-theme .theme-settings-main-panel,
-:root.custom-theme .theme-settings-main-header,
-:root.custom-theme .theme-settings-main-content {
+:root.custom-theme .theme-settings-rail,
+:root.custom-theme .theme-settings-content,
+:root.custom-theme .theme-settings-content-header,
+:root.custom-theme .theme-settings-content-body {
   background-color: hsl(var(--card)) !important;
 }
 
 :root.transparent-theme .theme-settings-shell,
-:root.transparent-theme .theme-settings-main-panel,
-:root.transparent-theme .theme-settings-main-content {
+:root.transparent-theme .theme-settings-content,
+:root.transparent-theme .theme-settings-content-body {
   background-color: hsl(var(--background) / 0.36) !important;
   backdrop-filter: blur(8px);
 }
 
-:root.transparent-theme .theme-settings-left-rail,
-:root.transparent-theme .theme-settings-main-header {
+:root.transparent-theme .theme-settings-rail,
+:root.transparent-theme .theme-settings-content-header {
   background-color: hsl(var(--card) / 0.48) !important;
   backdrop-filter: blur(8px);
 }
@@ -1217,14 +1228,14 @@ select,
 .settings-theme-scope .bg-\[\#2b2d31\],
 .settings-theme-scope .bg-\[\#2b2d31\]\/95,
 .settings-theme-scope .theme-settings-shell,
-.settings-theme-scope .theme-settings-main-panel,
-.settings-theme-scope .theme-settings-main-header,
-.settings-theme-scope .theme-settings-main-content {
+.settings-theme-scope .theme-settings-content,
+.settings-theme-scope .theme-settings-content-header,
+.settings-theme-scope .theme-settings-content-body {
   background-color: var(--settings-bg-main) !important;
 }
 
 .settings-theme-scope .bg-\[\#232428\],
-.settings-theme-scope .theme-settings-left-rail {
+.settings-theme-scope .theme-settings-rail {
   background-color: var(--settings-bg-card) !important;
 }
 

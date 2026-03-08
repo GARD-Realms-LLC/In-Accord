@@ -34,6 +34,10 @@ interface ModalData {
   profileRole?: string | null;
   profileEmail?: string | null;
   profileImageUrl?: string | null;
+  profileAvatarDecorationUrl?: string | null;
+  profileNameplateLabel?: string | null;
+  profileNameplateColor?: string | null;
+  profileNameplateImageUrl?: string | null;
   profileBannerUrl?: string | null;
   profilePresenceStatus?: string | null;
   profileJoinedAt?: string | null;

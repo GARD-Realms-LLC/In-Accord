@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db, server } from "@/lib/db";
+import { appendServerInviteHistory } from "@/lib/server-invite-store";
 
 export async function PATCH(
   req: Request,
@@ -21,12 +22,20 @@ export async function PATCH(
       return new NextResponse("Server ID missing", { status: 400 });
     }
 
+    const nextInviteCode = uuidv4();
+
     await db
       .update(server)
       .set({
-        inviteCode: uuidv4(),
+        inviteCode: nextInviteCode,
       })
       .where(and(eq(server.id, serverId), eq(server.profileId, profile.id)));
+
+    await appendServerInviteHistory(serverId, {
+      code: nextInviteCode,
+      source: "regenerated",
+      createdByProfileId: profile.id,
+    });
 
     const updatedServer = await db.query.server.findFirst({
       where: and(eq(server.id, serverId), eq(server.profileId, profile.id)),

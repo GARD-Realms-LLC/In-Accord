@@ -9,20 +9,84 @@ import { hashPassword } from "@/lib/password";
 import { normalizePresenceStatus } from "@/lib/presence-status";
 import { getNextIncrementalUserId } from "@/lib/user-id";
 import { ensureUserProfileSchema } from "@/lib/user-profile";
+import { isInAccordAdministrator } from "@/lib/in-accord-admin";
 
 type UserRow = {
   userId: string;
   realName: string | null;
   profileName: string | null;
+  pronouns: string | null;
+  comment: string | null;
   bannerUrl: string | null;
   presenceStatus: string | null;
   email: string | null;
   role: string | null;
+  phone: string | null;
+  dateOfBirth: Date | string | null;
   imageUrl: string | null;
   joinedAt: Date | string | null;
   lastLogin: Date | string | null;
   ownedServerCount: number | string | null;
   joinedServerCount: number | string | null;
+};
+
+const normalizeDateOfBirthInput = (value: string): string | null => {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return "INVALID";
+  }
+
+  const [yearPart, monthPart, dayPart] = trimmed.split("-");
+  const year = Number(yearPart);
+  const month = Number(monthPart);
+  const day = Number(dayPart);
+
+  const parsed = new Date(`${trimmed}T00:00:00.000Z`);
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() + 1 !== month ||
+    parsed.getUTCDate() !== day
+  ) {
+    return "INVALID";
+  }
+
+  return trimmed;
+};
+
+const toDateOnlyString = (value: Date | string | null) => {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) {
+      return null;
+    }
+
+    return value.toISOString().slice(0, 10);
+  }
+
+  const trimmed = String(value).trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed.toISOString().slice(0, 10);
 };
 
 const normalizeManagedUserRole = (role: unknown) => {
@@ -72,10 +136,14 @@ export async function GET() {
         u."userId" as "userId",
         u."name" as "realName",
         up."profileName" as "profileName",
+        up."pronouns" as "pronouns",
+        up."comment" as "comment",
         up."bannerUrl" as "bannerUrl",
         up."presenceStatus" as "presenceStatus",
         u."email" as "email",
         u."role" as "role",
+        u."phone" as "phone",
+        u."dob" as "dateOfBirth",
         coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
         u."account.created" as "joinedAt",
         u."lastLogin" as "lastLogin"
@@ -103,10 +171,14 @@ export async function GET() {
       userId: row.userId,
       name: row.profileName ?? row.realName ?? row.email ?? "User",
       profileName: row.profileName ?? null,
+      pronouns: row.pronouns ?? null,
+      comment: row.comment ?? null,
       bannerUrl: row.bannerUrl ?? null,
       presenceStatus: normalizePresenceStatus(row.presenceStatus),
       email: row.email ?? "",
       role: normalizeManagedUserRole(row.role) ?? "USER",
+      phoneNumber: row.phone ?? "",
+      dateOfBirth: toDateOnlyString(row.dateOfBirth),
       imageUrl: row.imageUrl ?? "/in-accord-steampunk-logo.png",
       joinedAt: row.joinedAt ? new Date(row.joinedAt).toISOString() : null,
       lastLogin: row.lastLogin ? new Date(row.lastLogin).toISOString() : null,
@@ -244,17 +316,45 @@ export async function PATCH(request: Request) {
     const body = (await request.json().catch(() => null)) as {
       userId?: string;
       role?: string;
+      phoneNumber?: string | null;
+      dateOfBirth?: string | null;
     } | null;
 
     const userId = String(body?.userId ?? "").trim();
-    const role = normalizeManagedUserRole(body?.role);
+    const roleProvided = Boolean(body && Object.prototype.hasOwnProperty.call(body, "role"));
+    const phoneNumberProvided = Boolean(body && Object.prototype.hasOwnProperty.call(body, "phoneNumber"));
+    const dateOfBirthProvided = Boolean(body && Object.prototype.hasOwnProperty.call(body, "dateOfBirth"));
+
+    const role = roleProvided ? normalizeManagedUserRole(body?.role) : null;
+    const phoneNumber = phoneNumberProvided
+      ? String(body?.phoneNumber ?? "").trim()
+      : "";
+    const normalizedDateOfBirth = dateOfBirthProvided
+      ? normalizeDateOfBirthInput(typeof body?.dateOfBirth === "string" ? body.dateOfBirth : "")
+      : null;
 
     if (!userId) {
       return new NextResponse("userId is required", { status: 400 });
     }
 
-    if (!role) {
+    if (!roleProvided && !phoneNumberProvided && !dateOfBirthProvided) {
+      return new NextResponse("At least one field must be provided: role, phoneNumber, or dateOfBirth", { status: 400 });
+    }
+
+    if (roleProvided && !role) {
       return new NextResponse("Invalid role. Allowed roles: USER, ADMINISTRATOR, DEVELOPER, MODERATOR", { status: 400 });
+    }
+
+    if (phoneNumberProvided && phoneNumber.length > 32) {
+      return new NextResponse("Phone number must be 32 characters or less.", { status: 400 });
+    }
+
+    if (dateOfBirthProvided && normalizedDateOfBirth === "INVALID") {
+      return new NextResponse("Date Of Birth must be a valid date in YYYY-MM-DD format.", { status: 400 });
+    }
+
+    if (dateOfBirthProvided && !isInAccordAdministrator(profile.role)) {
+      return new NextResponse("Only Administrators can edit Date Of Birth.", { status: 403 });
     }
 
     if (userId === profile.id && role === "USER") {
@@ -276,18 +376,67 @@ export async function PATCH(request: Request) {
       return new NextResponse("User not found", { status: 404 });
     }
 
-    await db.execute(sql`
-      update "Users"
-      set "role" = ${role}
+    if (phoneNumberProvided || dateOfBirthProvided) {
+      await db.execute(sql`
+        alter table "Users"
+        add column if not exists "phone" varchar(32)
+      `);
+
+      await db.execute(sql`
+        alter table "Users"
+        add column if not exists "dob" date
+      `);
+    }
+
+    if (roleProvided && role) {
+      await db.execute(sql`
+        update "Users"
+        set "role" = ${role}
+        where "userId" = ${userId}
+      `);
+    }
+
+    if (phoneNumberProvided) {
+      await db.execute(sql`
+        update "Users"
+        set "phone" = ${phoneNumber || null}
+        where "userId" = ${userId}
+      `);
+    }
+
+    if (dateOfBirthProvided) {
+      await db.execute(sql`
+        update "Users"
+        set "dob" = ${normalizedDateOfBirth}
+        where "userId" = ${userId}
+      `);
+    }
+
+    const updatedResult = await db.execute(sql`
+      select "role", "phone", "dob" as "dateOfBirth"
+      from "Users"
       where "userId" = ${userId}
+      limit 1
     `);
+
+    const updatedRow = (updatedResult as unknown as {
+      rows?: Array<{
+        role: string | null;
+        phone: string | null;
+        dateOfBirth: Date | string | null;
+      }>;
+    }).rows?.[0];
+
+    const normalizedUpdatedRole = normalizeManagedUserRole(updatedRow?.role) ?? "USER";
 
     return NextResponse.json({
       ok: true,
       user: {
         userId,
         email: existingRow.email ?? "",
-        role,
+        role: normalizedUpdatedRole,
+        phoneNumber: updatedRow?.phone ?? "",
+        dateOfBirth: toDateOnlyString(updatedRow?.dateOfBirth ?? null),
       },
     });
   } catch (error) {

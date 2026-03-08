@@ -5,6 +5,7 @@ import { eq, sql } from "drizzle-orm";
 import { currentProfile } from "@/lib/current-profile";
 import { channel, ChannelType, db, MemberRole, member, server } from "@/lib/db";
 import { getServerBannerConfig, setServerBannerConfig } from "@/lib/server-banner-store";
+import { appendServerInviteHistory } from "@/lib/server-invite-store";
 import { ensureRulesChannelForServer, ensureSystemChannelSchema } from "@/lib/system-channels";
 
 export async function POST(req: Request) {
@@ -17,6 +18,7 @@ export async function POST(req: Request) {
     }
 
     const serverId = uuidv4();
+    const inviteCode = uuidv4();
     const now = new Date();
 
     await ensureSystemChannelSchema();
@@ -32,7 +34,7 @@ export async function POST(req: Request) {
         profileId: profile.id,
         name,
         imageUrl: resolvedImageUrl,
-        inviteCode: uuidv4(),
+        inviteCode,
         createdAt: now,
         updatedAt: now,
       });
@@ -90,6 +92,13 @@ export async function POST(req: Request) {
         url: bannerUrl,
         fit: bannerFit,
         scale: typeof bannerScale === "number" ? bannerScale : Number(bannerScale),
+      });
+
+      await appendServerInviteHistory(serverId, {
+        code: inviteCode,
+        source: "created",
+        createdByProfileId: profile.id,
+        createdAt: now.toISOString(),
       });
     });
 

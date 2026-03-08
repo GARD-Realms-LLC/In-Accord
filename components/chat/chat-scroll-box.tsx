@@ -6,6 +6,7 @@ type ChatScrollBoxProps = {
   className?: string;
   scrollKey?: string | number;
   stickToBottomOffset?: number;
+  forceStickToBottom?: boolean;
   children: React.ReactNode;
 };
 
@@ -13,6 +14,7 @@ export const ChatScrollBox = ({
   className,
   scrollKey,
   stickToBottomOffset = 120,
+  forceStickToBottom = false,
   children,
 }: ChatScrollBoxProps) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -57,7 +59,7 @@ export const ChatScrollBox = ({
       return;
     }
 
-    if (!shouldStickToBottomRef.current) {
+    if (!forceStickToBottom && !shouldStickToBottomRef.current) {
       return;
     }
 
@@ -71,7 +73,7 @@ export const ChatScrollBox = ({
     return () => {
       window.cancelAnimationFrame(raf);
     };
-  }, [scrollKey]);
+  }, [forceStickToBottom, scrollKey]);
 
   return (
     <div ref={containerRef} className={className}>
