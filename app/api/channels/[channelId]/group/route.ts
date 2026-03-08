@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db, member, MemberRole, server } from "@/lib/db";
@@ -71,15 +71,79 @@ export async function PATCH(
       }
     }
 
-    await db.execute(sql`
-      update "Channel"
-      set
-        "channelGroupId" = ${channelGroupId},
-        "updatedAt" = ${new Date()}
-      where "id" = ${channelId}
-        and "serverId" = ${serverId}
-        and "name" <> 'general'
+    const draggedChannelResult = await db.execute(sql`
+      select
+        c."id" as "id",
+        c."channelGroupId" as "channelGroupId",
+        c."sortOrder" as "sortOrder",
+        c."name" as "name"
+      from "Channel" c
+      where c."id" = ${channelId}
+        and c."serverId" = ${serverId}
+      limit 1
     `);
+
+    const draggedChannel = (
+      draggedChannelResult as unknown as {
+        rows: Array<{
+          id: string;
+          channelGroupId: string | null;
+          sortOrder: number | string | null;
+          name: string;
+        }>;
+      }
+    ).rows?.[0];
+
+    if (!draggedChannel) {
+      return new NextResponse("Channel not found", { status: 404 });
+    }
+
+    if (String(draggedChannel.name ?? "").trim().toLowerCase() === "general") {
+      return new NextResponse("Cannot move default channel", { status: 400 });
+    }
+
+    const currentGroupId = draggedChannel.channelGroupId ?? null;
+    const currentSortOrder = Number(draggedChannel.sortOrder ?? 0);
+
+    if (currentGroupId !== channelGroupId) {
+      const maxSortOrderResult = await db.execute(sql`
+        select coalesce(max(c."sortOrder"), 0) as "maxSortOrder"
+        from "Channel" c
+        where c."serverId" = ${serverId}
+          and c."channelGroupId" is not distinct from ${channelGroupId}
+      `);
+
+      const nextSortOrder =
+        Number(
+          (
+            maxSortOrderResult as unknown as {
+              rows: Array<{ maxSortOrder: number | string | null }>;
+            }
+          ).rows?.[0]?.maxSortOrder ?? 0
+        ) + 1;
+
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`
+          update "Channel" c
+          set
+            "sortOrder" = c."sortOrder" - 1,
+            "updatedAt" = ${new Date()}
+          where c."serverId" = ${serverId}
+            and c."channelGroupId" is not distinct from ${currentGroupId}
+            and c."sortOrder" > ${currentSortOrder}
+        `);
+
+        await tx.execute(sql`
+          update "Channel"
+          set
+            "channelGroupId" = ${channelGroupId},
+            "sortOrder" = ${nextSortOrder},
+            "updatedAt" = ${new Date()}
+          where "id" = ${channelId}
+            and "serverId" = ${serverId}
+        `);
+      });
+    }
 
     return NextResponse.json({ ok: true, channelId, channelGroupId });
   } catch (error) {

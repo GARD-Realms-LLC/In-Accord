@@ -8,11 +8,13 @@ import { ServerUserRolesRail } from "@/components/server/server-user-roles-rail"
 import { ServerRouteShell } from "@/components/server/server-route-shell";
 import { ChannelType, MemberRole } from "@/lib/db/types";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
+import { ensureChannelGroupSchema } from "@/lib/channel-groups";
 
 type ChannelRow = {
   id: string;
   name: string;
   type: ChannelType;
+  sortOrder: number | string | null;
 };
 
 type MemberRow = {
@@ -57,14 +59,17 @@ const ServerIdLayout = async ({
 
   const currentServerName = hasAccess[0].name;
 
+  await ensureChannelGroupSchema();
+
   const channelsResult = await db.execute(sql`
     select
       c."id" as "id",
       c."name" as "name",
-      c."type" as "type"
+      c."type" as "type",
+      c."sortOrder" as "sortOrder"
     from "Channel" c
     where c."serverId" = ${serverId}
-    order by c."createdAt" asc
+    order by c."channelGroupId" asc nulls first, c."sortOrder" asc, c."createdAt" asc
   `);
 
   const membersResult = await db.execute(sql`

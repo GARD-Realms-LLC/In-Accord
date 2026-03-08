@@ -68,6 +68,22 @@ export async function POST(req: Request) {
       }
     }
 
+    const maxSortOrderResult = await db.execute(sql`
+      select coalesce(max(c."sortOrder"), 0) as "maxSortOrder"
+      from "Channel" c
+      where c."serverId" = ${serverId}
+        and c."channelGroupId" is not distinct from ${normalizedGroupId}
+    `);
+
+    const nextSortOrder =
+      Number(
+        (
+          maxSortOrderResult as unknown as {
+            rows: Array<{ maxSortOrder: number | string | null }>;
+          }
+        ).rows?.[0]?.maxSortOrder ?? 0
+      ) + 1;
+
     await db.execute(sql`
       insert into "Channel" (
         "id",
@@ -76,6 +92,7 @@ export async function POST(req: Request) {
         "profileId",
         "serverId",
         "channelGroupId",
+        "sortOrder",
         "createdAt",
         "updatedAt"
       )
@@ -86,6 +103,7 @@ export async function POST(req: Request) {
         ${profile.id},
         ${serverId},
         ${normalizedGroupId},
+        ${nextSortOrder},
         ${now},
         ${now}
       )
@@ -98,7 +116,16 @@ export async function POST(req: Request) {
       },
     });
 
-    return NextResponse.json(updatedServer)
+    return NextResponse.json({
+      server: updatedServer,
+      channel: {
+        id,
+        name,
+        type,
+        serverId,
+        channelGroupId: normalizedGroupId,
+      },
+    })
 
   } catch (error) {
     console.log("[CHANNEL_POST]", error);

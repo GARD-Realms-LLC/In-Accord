@@ -11,6 +11,7 @@ export type ModalType =
   | "invite"
   | "editServer"
   | "members"
+  | "createForm"
   | "createChannel"
   | "editChannel"
   | "deleteChannel"

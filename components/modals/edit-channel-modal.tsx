@@ -447,49 +447,9 @@ export const EditChannelModal = () => {
 
   return (
     <Dialog open={isModalOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl overflow-hidden border border-black/30 bg-[#313338] p-0 text-white">
+      <DialogContent className="inset-0! left-0! top-0! right-0! bottom-0! m-auto h-[80vh] w-[80vw] max-h-[80vh] max-w-[80vw] translate-x-0! translate-y-0! overflow-hidden border border-black/30 bg-[#313338] p-0 text-white">
         <DialogTitle className="sr-only">Edit Channel Settings</DialogTitle>
-        <div className="grid min-h-[560px] grid-cols-[220px_1fr]">
-          <aside className="border-r border-black/30 bg-[#2b2d31] p-3">
-            <div className="mt-1 space-y-3">
-              {sections.map((sectionGroup, groupIndex) => (
-                <div key={`${sectionGroup.label || "danger"}-${groupIndex}`} className="space-y-1">
-                  {sectionGroup.label ? (
-                    <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">
-                      {sectionGroup.label}
-                    </p>
-                  ) : null}
-
-                  {sectionGroup.tabs.map((tab) => {
-                    const isActive = activeTab === tab;
-                    const TabIcon = tabIconMap[tab];
-
-                    return (
-                      <button
-                        key={tab}
-                        type="button"
-                        onClick={() => setActiveTab(tab)}
-                        className={cn(
-                          "flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition",
-                          tab === "danger"
-                            ? isActive
-                              ? "bg-rose-900/35 text-rose-200"
-                              : "text-rose-300 hover:bg-rose-900/25"
-                            : isActive
-                              ? "bg-[#404249] text-white"
-                              : "text-zinc-300 hover:bg-[#3a3d44]"
-                        )}
-                      >
-                        <TabIcon className="h-4 w-4 shrink-0" />
-                        {tabLabelMap[tab]}
-                      </button>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-          </aside>
-
+        <div className="grid h-full grid-cols-[1fr_220px]">
           <div className="flex h-full flex-col">
             <div className="border-b border-black/30 px-6 py-4">
               <h2 className="text-lg font-bold text-white">{tabLabelMap[activeTab]}</h2>
@@ -635,6 +595,46 @@ export const EditChannelModal = () => {
               </Form>
             )}
           </div>
+
+          <aside className="border-l border-black/30 bg-[#2b2d31] p-3">
+            <div className="mt-1 space-y-3">
+              {sections.map((sectionGroup, groupIndex) => (
+                <div key={`${sectionGroup.label || "danger"}-${groupIndex}`} className="space-y-1">
+                  {sectionGroup.label ? (
+                    <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">
+                      {sectionGroup.label}
+                    </p>
+                  ) : null}
+
+                  {sectionGroup.tabs.map((tab) => {
+                    const isActive = activeTab === tab;
+                    const TabIcon = tabIconMap[tab];
+
+                    return (
+                      <button
+                        key={tab}
+                        type="button"
+                        onClick={() => setActiveTab(tab)}
+                        className={cn(
+                          "flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition",
+                          tab === "danger"
+                            ? isActive
+                              ? "bg-rose-900/35 text-rose-200"
+                              : "text-rose-300 hover:bg-rose-900/25"
+                            : isActive
+                              ? "bg-[#404249] text-white"
+                              : "text-zinc-300 hover:bg-[#3a3d44]"
+                        )}
+                      >
+                        <TabIcon className="h-4 w-4 shrink-0" />
+                        {tabLabelMap[tab]}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </aside>
         </div>
       </DialogContent>
     </Dialog>

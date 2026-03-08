@@ -2,7 +2,9 @@
 
 import {
   ChevronDown,
+  FileText,
   Flag,
+  FolderPlus,
   LogOut,
   PlusCircle,
   Settings,
@@ -127,11 +129,25 @@ export const ServerHeader = ({ server, role, isServerOwner = false }: ServerHead
             {isModerator && (
               <>
               <DropdownMenuItem
+                onClick={() => onOpen("createForm", { server })}
+                className="px-3 py-2 text-sm cursor-pointer"
+              >
+                Create Forum
+                <FileText className="h-4 w-4 ml-auto" />
+              </DropdownMenuItem>
+              <DropdownMenuItem
                 onClick={() => onOpen("createChannel", { server })}
                 className="px-3 py-2 text-sm cursor-pointer"
               >
                 Create Channel
                 <PlusCircle className="h-4 w-4 ml-auto" />
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => onOpen("createChannelGroup", { server })}
+                className="px-3 py-2 text-sm cursor-pointer"
+              >
+                Add Group
+                <FolderPlus className="h-4 w-4 ml-auto" />
               </DropdownMenuItem>
               </>
             )}

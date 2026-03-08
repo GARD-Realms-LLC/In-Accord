@@ -74,7 +74,7 @@ export const ensureRulesChannelForServer = async (serverId: string, profileId?: 
     from "Channel"
     where "serverId" = ${normalizedServerId}
       and lower(trim(coalesce("name", ''))) = 'rules'
-    order by "createdAt" asc, "id" asc
+    order by "sortOrder" asc, "createdAt" asc, "id" asc
   `);
 
   const existingRuleRows = (rulesExistsResult as unknown as {
@@ -126,6 +126,21 @@ export const ensureRulesChannelForServer = async (serverId: string, profileId?: 
 
   const now = new Date();
 
+  const maxSortOrderResult = await db.execute(sql`
+    select coalesce(max(c."sortOrder"), 0) as "maxSortOrder"
+    from "Channel" c
+    where c."serverId" = ${normalizedServerId}
+  `);
+
+  const nextSortOrder =
+    Number(
+      (
+        maxSortOrderResult as unknown as {
+          rows: Array<{ maxSortOrder: number | string | null }>;
+        }
+      ).rows?.[0]?.maxSortOrder ?? 0
+    ) + 1;
+
   try {
     await db.execute(sql`
       insert into "Channel" (
@@ -134,6 +149,7 @@ export const ensureRulesChannelForServer = async (serverId: string, profileId?: 
         "type",
         "profileId",
         "serverId",
+        "sortOrder",
         "isSystem",
         "createdAt",
         "updatedAt"
@@ -144,6 +160,7 @@ export const ensureRulesChannelForServer = async (serverId: string, profileId?: 
         ${ChannelType.TEXT},
         ${resolvedProfileId},
         ${normalizedServerId},
+        ${nextSortOrder},
         ${true},
         ${now},
         ${now}

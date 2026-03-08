@@ -58,8 +58,34 @@ export const ensureChannelGroupSchema = async () => {
   `);
 
   await db.execute(sql`
+    alter table "Channel"
+    add column if not exists "sortOrder" integer not null default 0
+  `);
+
+  await db.execute(sql`
+    with ranked as (
+      select
+        c."id",
+        row_number() over (
+          partition by c."serverId", coalesce(c."channelGroupId", '')
+          order by c."sortOrder" asc, c."createdAt" asc, c."id" asc
+        ) as rn
+      from "Channel" c
+    )
+    update "Channel" c
+    set "sortOrder" = r.rn
+    from ranked r
+    where c."id" = r."id"
+  `);
+
+  await db.execute(sql`
     create index if not exists "Channel_channelGroupId_idx"
     on "Channel" ("channelGroupId")
+  `);
+
+  await db.execute(sql`
+    create index if not exists "Channel_serverId_group_sortOrder_idx"
+    on "Channel" ("serverId", "channelGroupId", "sortOrder")
   `);
 
   // Dedupe channel names per server (case-insensitive, trimmed), keeping oldest.

@@ -1,9 +1,10 @@
 "use client";
 
+import axios from "axios";
 import { type Channel, ChannelType, MemberRole, type Server } from "@/lib/db/types";
-import { Hash, Lock, Mic, Settings, Video } from "lucide-react";
+import { GripVertical, Hash, Lock, Mic, Settings, Video } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 import { ActionTooltip } from "@/components/action-tooltip";
@@ -34,8 +35,11 @@ export const ServerChannel = ({
 
   const Icon = iconMap[channel.type];
   const isDraggingRef = useRef(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [isReordering, setIsReordering] = useState(false);
   const normalizedName = (channel.name ?? "").trim().toLowerCase();
   const isProtectedChannel = normalizedName === "general" || normalizedName === "rules";
+  const canReorder = !!role && role !== MemberRole.GUEST && draggable;
 
   const onClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     if (isDraggingRef.current) {
@@ -53,7 +57,7 @@ export const ServerChannel = ({
   };
 
   const onDragStart = (event: React.DragEvent<HTMLButtonElement>) => {
-    if (!draggable) {
+    if (!canReorder) {
       return;
     }
 
@@ -67,20 +71,99 @@ export const ServerChannel = ({
     window.setTimeout(() => {
       isDraggingRef.current = false;
     }, 0);
+    setIsDragOver(false);
+  };
+
+  const onDragOver = (event: React.DragEvent<HTMLButtonElement>) => {
+    if (!canReorder) {
+      return;
+    }
+
+    const hasKnownType =
+      event.dataTransfer.types.includes("inaccord/channel-id") ||
+      event.dataTransfer.types.includes("text/plain");
+
+    if (!hasKnownType) {
+      return;
+    }
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    if (!isDragOver) {
+      setIsDragOver(true);
+    }
+  };
+
+  const onDragLeave = () => {
+    setIsDragOver(false);
+  };
+
+  const onDrop = async (event: React.DragEvent<HTMLButtonElement>) => {
+    if (!canReorder) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragOver(false);
+
+    if (isReordering) {
+      return;
+    }
+
+    const draggedChannelId = (
+      event.dataTransfer.getData("inaccord/channel-id") ||
+      event.dataTransfer.getData("text/plain") ||
+      ""
+    ).trim();
+
+    if (!draggedChannelId || draggedChannelId === channel.id) {
+      return;
+    }
+
+    try {
+      setIsReordering(true);
+      await axios.patch("/api/channels/reorder", {
+        serverId: server.id,
+        draggedChannelId,
+        targetChannelId: channel.id,
+      });
+      router.refresh();
+    } catch (error) {
+      console.error("[CHANNEL_REORDER_DROP]", error);
+      window.alert("Failed to reorder channel.");
+    } finally {
+      setIsReordering(false);
+    }
   };
 
   return (
     <button
       onClick={onClick}
-      draggable={draggable}
+      draggable={canReorder}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
       className={cn(
         "group px-2 py-2 rounded-md flex items-center gap-x-0 w-full text-left hover:bg-zinc-700/10 dark:hover:bg-zinc-700/50 transition mb-1",
-        draggable && "cursor-grab active:cursor-grabbing",
+        canReorder && "cursor-grab active:cursor-grabbing",
+        isDragOver && "ring-1 ring-indigo-400/70 bg-indigo-500/10",
         params?.channelId === channel.id && "bg-zinc-700/20 dark:bg-zinc-700"
       )}
     >
+      {canReorder ? (
+        <ActionTooltip label="Drag to reorder" side="top" align="center">
+          <span
+            className="mr-1 inline-flex items-center rounded-sm p-0.5 text-zinc-500 hover:bg-black/10 dark:text-zinc-400 dark:hover:bg-zinc-700/30"
+            title="Drag to reorder channel"
+            aria-label="Drag to reorder channel"
+          >
+            <GripVertical className="h-3.5 w-3.5" />
+          </span>
+        </ActionTooltip>
+      ) : null}
       <Icon className="h-5 w-5 shrink-0 text-zinc-500 dark:text-zinc-400" />
       <p
         className={cn(

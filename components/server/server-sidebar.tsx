@@ -3,7 +3,6 @@ import { Hash, Mic, Video } from "lucide-react";
 import { eq, sql } from "drizzle-orm";
 
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { currentProfile } from "@/lib/current-profile";
 import { db, server } from "@/lib/db";
 import { ensureChannelGroupSchema } from "@/lib/channel-groups";
@@ -29,6 +28,7 @@ type ChannelRow = {
   type: ChannelType;
   profileId: string;
   serverId: string;
+  sortOrder: number | string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
   channelGroupId: string | null;
@@ -73,13 +73,14 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
       c."type" as "type",
       c."profileId" as "profileId",
       c."serverId" as "serverId",
+      c."sortOrder" as "sortOrder",
       c."createdAt" as "createdAt",
       c."updatedAt" as "updatedAt",
       c."channelGroupId" as "channelGroupId"
     from "Channel" c
     left join "ChannelTopic" ct on ct."channelId" = c."id" and ct."serverId" = c."serverId"
     where c."serverId" = ${serverId}
-    order by c."createdAt" asc
+    order by c."channelGroupId" asc nulls first, c."sortOrder" asc, c."createdAt" asc
   `);
 
   const channels = ((channelsResult as unknown as { rows: ChannelRow[] }).rows ?? []).map((row) => ({
@@ -89,6 +90,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
     type: row.type,
     profileId: row.profileId,
     serverId: row.serverId,
+    sortOrder: Number(row.sortOrder ?? 0),
     createdAt: new Date(row.createdAt),
     updatedAt: new Date(row.updatedAt),
     channelGroupId: row.channelGroupId,
@@ -222,7 +224,6 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
     <div className="theme-channels-rail flex h-full w-full flex-col overflow-hidden rounded-2xl border border-border bg-card text-primary">
       <ServerHeader server={serverWithBanner} role={role} isServerOwner={isServerOwner} />
       <ScrollArea className="settings-scrollbar min-h-0 flex-1 px-3">
-        <Separator className="bg-zinc-200 dark:bg-zinc-700 rounded-md my-2" />
         {!!textChannelsUngrouped?.length && (
           <ChannelDropZone serverId={serverId} targetGroupId={null} className="mb-2">
             <ServerSection
@@ -292,6 +293,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
 
         {!!channelGroups.length && (
           <div className="mb-2">
+            <div className="my-2 h-px w-full bg-zinc-500 dark:bg-zinc-300" />
             <ServerSection
               sectionType="channels"
               channelType={ChannelType.TEXT}

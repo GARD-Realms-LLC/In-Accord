@@ -465,6 +465,24 @@ type OnboardingChannel = {
   type: "TEXT" | "AUDIO" | "VIDEO";
 };
 
+type OnboardingSubmissionItem = {
+  id: string;
+  memberId: string;
+  profileId: string;
+  submitterName?: string;
+  submitterImageUrl?: string | null;
+  reviewStatus: "PENDING" | "APPROVED" | "REJECTED" | "NEEDS_REVIEW";
+  reviewNote?: string;
+  reviewedByProfileId?: string | null;
+  reviewedAt?: string | null;
+  submittedAt: string;
+  updatedAt: string;
+  answers: Array<{
+    promptId: string;
+    values: string[];
+  }>;
+};
+
 const DEFAULT_ONBOARDING_CONFIG: OnboardingConfig = {
   enabled: false,
   welcomeMessage: "Welcome to the server! Complete onboarding to unlock your best channels.",
@@ -561,6 +579,10 @@ export const EditServerModal = () => {
   const [onboardingError, setOnboardingError] = useState<string | null>(null);
   const [onboardingSuccess, setOnboardingSuccess] = useState<string | null>(null);
   const [canManageOnboarding, setCanManageOnboarding] = useState(false);
+  const [onboardingSubmissions, setOnboardingSubmissions] = useState<OnboardingSubmissionItem[]>([]);
+  const [isLoadingOnboardingSubmissions, setIsLoadingOnboardingSubmissions] = useState(false);
+  const [onboardingReviewingSubmissionId, setOnboardingReviewingSubmissionId] = useState<string | null>(null);
+  const [onboardingReviewNotes, setOnboardingReviewNotes] = useState<Record<string, string>>({});
   const [serverGuideQuery, setServerGuideQuery] = useState("");
   const [serverGuideScrollTop, setServerGuideScrollTop] = useState(0);
   const [serverGuideViewportHeight, setServerGuideViewportHeight] = useState(460);
@@ -682,6 +704,10 @@ export const EditServerModal = () => {
       setOnboardingError(null);
       setOnboardingSuccess(null);
       setCanManageOnboarding(false);
+      setOnboardingSubmissions([]);
+      setIsLoadingOnboardingSubmissions(false);
+      setOnboardingReviewingSubmissionId(null);
+      setOnboardingReviewNotes({});
       setServerGuideQuery("");
       setServerGuideScrollTop(0);
       setGenericSectionSettings(createDefaultGenericSectionSettings());
@@ -961,13 +987,98 @@ export const EditServerModal = () => {
     }
   }, [server?.id]);
 
+  const loadOnboardingSubmissions = useCallback(async () => {
+    if (!server?.id) {
+      return;
+    }
+
+    try {
+      setIsLoadingOnboardingSubmissions(true);
+
+      const response = await axios.get<{
+        submissions?: OnboardingSubmissionItem[];
+      }>(`/api/servers/${server.id}/forms?scope=owner`);
+
+      const submissions = response.data.submissions ?? [];
+      setOnboardingSubmissions(submissions);
+      setOnboardingReviewNotes(
+        submissions.reduce<Record<string, string>>((accumulator, submissionItem) => {
+          accumulator[submissionItem.id] = submissionItem.reviewNote ?? "";
+          return accumulator;
+        }, {})
+      );
+    } catch {
+      setOnboardingSubmissions([]);
+      setOnboardingReviewNotes({});
+    } finally {
+      setIsLoadingOnboardingSubmissions(false);
+    }
+  }, [server?.id]);
+
   useEffect(() => {
     if (!isModalOpen || activeSection !== "onboarding") {
       return;
     }
 
     void loadOnboardingConfig();
-  }, [activeSection, isModalOpen, loadOnboardingConfig]);
+    void loadOnboardingSubmissions();
+  }, [activeSection, isModalOpen, loadOnboardingConfig, loadOnboardingSubmissions]);
+
+  const onReviewOnboardingSubmission = async (
+    submissionId: string,
+    reviewStatus: "PENDING" | "APPROVED" | "REJECTED" | "NEEDS_REVIEW"
+  ) => {
+    if (!server?.id || !canManageOnboarding || onboardingReviewingSubmissionId) {
+      return;
+    }
+
+    try {
+      setOnboardingError(null);
+      setOnboardingSuccess(null);
+      setOnboardingReviewingSubmissionId(submissionId);
+
+      await axios.patch(`/api/servers/${server.id}/forms`, {
+        responseId: submissionId,
+        reviewStatus,
+        reviewNote: onboardingReviewNotes[submissionId] ?? "",
+      });
+
+      setOnboardingSubmissions((previous) =>
+        previous.map((submissionItem) =>
+          submissionItem.id === submissionId
+            ? {
+                ...submissionItem,
+                reviewStatus,
+                reviewNote: onboardingReviewNotes[submissionId] ?? "",
+                reviewedAt: new Date().toISOString(),
+              }
+            : submissionItem
+        )
+      );
+
+      setOnboardingSuccess(
+        reviewStatus === "APPROVED"
+          ? "Submission approved."
+          : reviewStatus === "REJECTED"
+            ? "Submission rejected."
+            : reviewStatus === "NEEDS_REVIEW"
+              ? "Submission flagged for review."
+              : "Submission marked pending."
+      );
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          (typeof error.response?.data === "string" ? error.response.data : "") ||
+          error.message;
+        setOnboardingError(message || "Failed to update submission review status.");
+      } else {
+        setOnboardingError("Failed to update submission review status.");
+      }
+    } finally {
+      setOnboardingReviewingSubmissionId(null);
+    }
+  };
 
   const onToggleOnboardingChannel = (channelId: string, target: "checklist" | "resource") => {
     setOnboardingSuccess(null);
@@ -2011,6 +2122,10 @@ export const EditServerModal = () => {
     Boolean(activeEmojiStickerType);
 
   const onboardingTextChannels = onboardingChannels.filter((channelItem) => channelItem.type === "TEXT");
+  const onboardingPromptLabelById = useMemo(
+    () => new Map(onboardingConfig.prompts.map((promptItem) => [promptItem.id, promptItem.question])),
+    [onboardingConfig.prompts]
+  );
   const onboardingSelectedPreset =
     ONBOARDING_BANNER_PRESETS.find((item) => item.key === onboardingConfig.bannerPreset) ?? ONBOARDING_BANNER_PRESETS[0];
   const onboardingPreviewLabel = onboardingConfig.bannerUrl ? "Custom uploaded banner" : `${onboardingSelectedPreset.label} preset`;
@@ -3061,6 +3176,132 @@ export const EditServerModal = () => {
                             )}
                           </div>
                         </div>
+
+                        {canManageOnboarding ? (
+                          <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-4 space-y-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-300">Form submissions</p>
+                              <span className="rounded bg-black/25 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-300">
+                                {onboardingSubmissions.length} total
+                              </span>
+                            </div>
+
+                            <div className="max-h-[320px] space-y-2 overflow-y-auto overflow-x-hidden pr-1">
+                              {isLoadingOnboardingSubmissions ? (
+                                <div className="flex items-center gap-2 rounded-md border border-zinc-700 bg-[#1e1f22] px-3 py-2 text-xs text-zinc-300">
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  Loading submissions...
+                                </div>
+                              ) : onboardingSubmissions.length === 0 ? (
+                                <p className="rounded-md border border-zinc-700 bg-[#1e1f22] px-3 py-2 text-xs text-zinc-400">
+                                  No member submissions yet.
+                                </p>
+                              ) : (
+                                onboardingSubmissions.map((submissionItem) => (
+                                  <div key={submissionItem.id} className="space-y-2 rounded-md border border-zinc-700 bg-[#1e1f22] p-3">
+                                    <div className="flex items-center gap-2">
+                                      <UserAvatar src={submissionItem.submitterImageUrl ?? undefined} className="h-7 w-7" />
+                                      <div className="min-w-0 flex-1">
+                                        <p className="truncate text-xs font-semibold text-zinc-100">
+                                          {submissionItem.submitterName || submissionItem.profileId}
+                                        </p>
+                                        <p className="truncate text-[11px] text-zinc-400">
+                                          Updated {new Date(submissionItem.updatedAt || submissionItem.submittedAt).toLocaleString()}
+                                        </p>
+                                      </div>
+                                      <span
+                                        className={cn(
+                                          "rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]",
+                                          submissionItem.reviewStatus === "APPROVED"
+                                            ? "bg-emerald-500/20 text-emerald-200"
+                                            : submissionItem.reviewStatus === "REJECTED"
+                                              ? "bg-rose-500/20 text-rose-200"
+                                              : submissionItem.reviewStatus === "NEEDS_REVIEW"
+                                                ? "bg-amber-500/20 text-amber-200"
+                                                : "bg-zinc-500/20 text-zinc-300"
+                                        )}
+                                      >
+                                        {submissionItem.reviewStatus}
+                                      </span>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                      {submissionItem.answers.length === 0 ? (
+                                        <p className="text-[11px] text-zinc-500">No answers submitted.</p>
+                                      ) : (
+                                        submissionItem.answers.map((answerItem) => (
+                                          <div key={`${submissionItem.id}-${answerItem.promptId}`} className="rounded border border-zinc-700/80 bg-black/20 px-2 py-1.5">
+                                            <p className="text-[11px] font-semibold text-zinc-300">
+                                              {onboardingPromptLabelById.get(answerItem.promptId) || "Question"}
+                                            </p>
+                                            <p className="mt-0.5 text-[11px] text-zinc-100">
+                                              {answerItem.values.length > 0 ? answerItem.values.join(", ") : "No selection"}
+                                            </p>
+                                          </div>
+                                        ))
+                                      )}
+                                    </div>
+
+                                    <div>
+                                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">
+                                        Review note
+                                      </p>
+                                      <textarea
+                                        value={onboardingReviewNotes[submissionItem.id] ?? ""}
+                                        onChange={(event) =>
+                                          setOnboardingReviewNotes((previous) => ({
+                                            ...previous,
+                                            [submissionItem.id]: event.target.value,
+                                          }))
+                                        }
+                                        rows={2}
+                                        maxLength={500}
+                                        placeholder="Optional context for this decision"
+                                        disabled={onboardingReviewingSubmissionId === submissionItem.id}
+                                        className="w-full rounded-md border border-zinc-700 bg-[#15161a] px-2 py-1.5 text-xs text-zinc-100 outline-none focus:border-indigo-500"
+                                      />
+                                    </div>
+
+                                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                                      <Button
+                                        type="button"
+                                        onClick={() => void onReviewOnboardingSubmission(submissionItem.id, "APPROVED")}
+                                        disabled={onboardingReviewingSubmissionId === submissionItem.id}
+                                        className="h-7 bg-emerald-600/80 px-2 text-[11px] text-white hover:bg-emerald-600"
+                                      >
+                                        Approve
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        onClick={() => void onReviewOnboardingSubmission(submissionItem.id, "NEEDS_REVIEW")}
+                                        disabled={onboardingReviewingSubmissionId === submissionItem.id}
+                                        className="h-7 bg-amber-600/80 px-2 text-[11px] text-white hover:bg-amber-600"
+                                      >
+                                        Needs Review
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        onClick={() => void onReviewOnboardingSubmission(submissionItem.id, "REJECTED")}
+                                        disabled={onboardingReviewingSubmissionId === submissionItem.id}
+                                        className="h-7 bg-rose-600/80 px-2 text-[11px] text-white hover:bg-rose-600"
+                                      >
+                                        Reject
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        onClick={() => void onReviewOnboardingSubmission(submissionItem.id, "PENDING")}
+                                        disabled={onboardingReviewingSubmissionId === submissionItem.id}
+                                        className="h-7 bg-[#4e5058] px-2 text-[11px] text-white hover:bg-[#5d6069]"
+                                      >
+                                        Reset
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        ) : null}
 
                         {!canManageOnboarding ? (
                           <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">

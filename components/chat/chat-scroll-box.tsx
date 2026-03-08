@@ -41,6 +41,11 @@ export const ChatScrollBox = ({
     const timer = window.setTimeout(scrollToBottom, 60);
 
     const onScroll = () => {
+      if (forceStickToBottom) {
+        scrollToBottom();
+        return;
+      }
+
       shouldStickToBottomRef.current = isNearBottom(container, stickToBottomOffset);
     };
 
@@ -51,7 +56,7 @@ export const ChatScrollBox = ({
       window.cancelAnimationFrame(raf);
       window.clearTimeout(timer);
     };
-  }, [stickToBottomOffset]);
+  }, [forceStickToBottom, stickToBottomOffset]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -74,6 +79,62 @@ export const ChatScrollBox = ({
       window.cancelAnimationFrame(raf);
     };
   }, [forceStickToBottom, scrollKey]);
+
+  useEffect(() => {
+    if (!forceStickToBottom) {
+      return;
+    }
+
+    const container = containerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const scrollToBottom = () => {
+      container.scrollTop = container.scrollHeight;
+    };
+
+    let raf = 0;
+    const scheduleScroll = () => {
+      window.cancelAnimationFrame(raf);
+      raf = window.requestAnimationFrame(scrollToBottom);
+    };
+
+    scrollToBottom();
+
+    const mutationObserver = new MutationObserver(scheduleScroll);
+    mutationObserver.observe(container, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+    });
+
+    const resizeObserver = new ResizeObserver(scheduleScroll);
+    resizeObserver.observe(container);
+
+    const onWindowResize = () => {
+      scheduleScroll();
+    };
+
+    const onCapturedLoad = () => {
+      scheduleScroll();
+    };
+
+    window.addEventListener("resize", onWindowResize);
+    container.addEventListener("load", onCapturedLoad, true);
+
+    const interval = window.setInterval(scrollToBottom, 250);
+
+    return () => {
+      mutationObserver.disconnect();
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", onWindowResize);
+      container.removeEventListener("load", onCapturedLoad, true);
+      window.clearInterval(interval);
+      window.cancelAnimationFrame(raf);
+    };
+  }, [forceStickToBottom]);
 
   return (
     <div ref={containerRef} className={className}>
