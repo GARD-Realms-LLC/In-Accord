@@ -1447,8 +1447,8 @@ export const InAccordAdminModal = () => {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid min-h-0 flex-1 grid-cols-[220px_1fr]">
-          <aside className="border-r border-zinc-200 bg-zinc-50/80 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
+        <div className="grid min-h-0 flex-1 grid-cols-[220px_minmax(0,1fr)] [direction:ltr]">
+          <aside className="order-1 border-r border-zinc-200 bg-zinc-50/80 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
             <p className="px-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
               Admin Menu
             </p>
@@ -1527,7 +1527,7 @@ export const InAccordAdminModal = () => {
             </nav>
           </aside>
 
-          <section className="min-h-0 space-y-4 overflow-y-auto p-6">
+          <section className="order-2 min-h-0 space-y-4 overflow-y-auto p-6">
             {activeSection === "general" && (
               <>
                 <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-4">
