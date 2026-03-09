@@ -1,10 +1,10 @@
 import { NavigationSidebar } from "@/components/navigation/navigation-sidebar";
-import { Headphones, Mic } from "lucide-react";
 
 import { currentProfile } from "@/lib/current-profile";
 import { SettingsButton } from "@/components/settings/settings-button";
 import { UserStatusMenu } from "@/components/settings/user-status-menu";
 import { UserLocalTime } from "@/components/server/user-local-time";
+import { UserAudioControls } from "@/components/settings/user-audio-controls";
 
 const MainLayout = async ({ children }: { children: React.ReactNode }) => {
   const profile = await currentProfile();
@@ -36,8 +36,7 @@ const MainLayout = async ({ children }: { children: React.ReactNode }) => {
               profileLastLogonAt={profile.updatedAt ? profile.updatedAt.toISOString() : null}
             />
             <div className="ml-auto flex items-center gap-1 text-[#b5bac1]">
-              <button title="Mute" className="rounded p-1 hover:bg-[#3f4248]"><Mic className="h-3.5 w-3.5" suppressHydrationWarning /></button>
-              <button title="Deafen" className="rounded p-1 hover:bg-[#3f4248]"><Headphones className="h-3.5 w-3.5" suppressHydrationWarning /></button>
+              <UserAudioControls />
               <SettingsButton
                 profileId={profile.id}
                 profileRealName={profile.realName ?? null}

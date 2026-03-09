@@ -24,12 +24,16 @@ export async function POST(req: Request) {
     };
 
     const targetType = String(body.targetType ?? "").trim().toUpperCase() as ReportTargetType;
-    const targetId = String(body.targetId ?? "").trim();
+    let targetId = String(body.targetId ?? "").trim();
     const reason = String(body.reason ?? "").trim().slice(0, 300);
     const details = String(body.details ?? "").trim().slice(0, 4000);
 
     if (!allowedReportTargetTypes.has(targetType)) {
       return NextResponse.json({ error: "Invalid targetType" }, { status: 400 });
+    }
+
+    if (targetType === "BUG" && !targetId) {
+      targetId = "IN_ACCORD_APP";
     }
 
     if (!targetId) {

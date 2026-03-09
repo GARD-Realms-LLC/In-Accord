@@ -18,6 +18,7 @@ export type ModalType =
   | "leaveServer"
   | "deleteServer"
   | "deleteMessage"
+  | "bulkDeleteMessages"
   | "messageFile";
 
 interface ModalData {

@@ -33,6 +33,8 @@ export async function GET() {
         role: profile.role,
         email: profile.email,
         createdAt: profile.createdAt,
+        dateOfBirth: profile.dateOfBirth,
+        familyParentUserId: profile.familyParentUserId,
       }),
       email: profile.email,
       imageUrl: profile.imageUrl,

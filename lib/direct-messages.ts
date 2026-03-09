@@ -16,12 +16,22 @@ export interface GlobalRecentDmItem {
 
 export const getGlobalRecentDmsForProfile = async ({
   profileId,
+  selectedServerId,
+  recentWindowDays = 30,
 }: {
   profileId: string;
+  selectedServerId?: string | null;
+  recentWindowDays?: number;
 }): Promise<GlobalRecentDmItem[]> => {
   if (!profileId) {
     return [];
   }
+
+  const normalizedSelectedServerId = String(selectedServerId ?? "").trim() || null;
+  const normalizedRecentWindowDays = Number.isFinite(recentWindowDays)
+    ? Math.max(1, Math.floor(recentWindowDays))
+    : 30;
+  const recentCutoff = new Date(Date.now() - normalizedRecentWindowDays * 24 * 60 * 60 * 1000);
 
   const result = await db.execute(sql`
     with self_members as (
@@ -39,6 +49,16 @@ export const getGlobalRecentDmsForProfile = async ({
       from "Conversation" c
       where c."memberOneId" in (select "id" from self_members)
          or c."memberTwoId" in (select "id" from self_members)
+    ),
+    inbound_conversations as (
+      select distinct
+        cwo."conversationId" as "conversationId"
+      from conversations_with_other cwo
+      inner join "DirectMessage" inbound_dm
+        on inbound_dm."conversationId" = cwo."conversationId"
+       and inbound_dm."memberId" = cwo."otherMemberId"
+       and inbound_dm."deleted" = false
+       and inbound_dm."createdAt" >= ${recentCutoff}
     )
     select
       cwo."conversationId" as "conversationId",
@@ -51,10 +71,13 @@ export const getGlobalRecentDmsForProfile = async ({
       coalesce(max(dm."createdAt"), now()) as "lastMessageAt",
       0::integer as "unreadCount"
     from conversations_with_other cwo
+    inner join inbound_conversations ic on ic."conversationId" = cwo."conversationId"
     inner join "Member" om on om."id" = cwo."otherMemberId"
     left join "Users" u on u."userId" = om."profileId"
     left join "UserProfile" up on up."userId" = om."profileId"
     left join "DirectMessage" dm on dm."conversationId" = cwo."conversationId"
+    where 1 = 1
+      ${normalizedSelectedServerId ? sql`and om."serverId" = ${normalizedSelectedServerId}` : sql``}
     group by
       cwo."conversationId",
       om."serverId",

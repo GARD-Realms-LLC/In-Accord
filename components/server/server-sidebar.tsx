@@ -10,6 +10,7 @@ import { ensureChannelTopicSchema } from "@/lib/channel-topic";
 import { visibleChannelIdsForRole } from "@/lib/channel-permissions";
 import { getServerBannerConfig } from "@/lib/server-banner-store";
 import { ensureRulesChannelForServer } from "@/lib/system-channels";
+import { listActiveVoiceCountsForServer, pruneStaleVoiceStates } from "@/lib/voice-states";
 
 import { ServerHeader } from "./server-header";
 import { ServerSection } from "./server-section";
@@ -66,6 +67,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
 
   await ensureChannelGroupSchema();
   await ensureChannelTopicSchema();
+  await pruneStaleVoiceStates();
 
   const channelsResult = await db.execute(sql`
     select
@@ -219,6 +221,8 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
     members,
   };
 
+  const connectedVoiceCountsByChannelId = await listActiveVoiceCountsForServer({ serverId });
+
   const serverWithBanner = {
     ...serverWithMembers,
     bannerUrl: bannerConfig?.url ?? null,
@@ -247,6 +251,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
                   role={role}
                   server={serverWithMembers}
                   draggable
+                  connectedCount={connectedVoiceCountsByChannelId.get(channel.id) ?? 0}
                 />
               ))}
             </div>
@@ -269,6 +274,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
                   role={role}
                   server={serverWithMembers}
                   draggable
+                  connectedCount={connectedVoiceCountsByChannelId.get(channel.id) ?? 0}
                 />
               ))}
             </div>
@@ -291,6 +297,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
                   role={role}
                   server={serverWithMembers}
                   draggable
+                  connectedCount={connectedVoiceCountsByChannelId.get(channel.id) ?? 0}
                 />
               ))}
             </div>
@@ -312,6 +319,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
               role={role}
               server={serverWithMembers}
               groups={groupedChannels}
+              connectedVoiceCountsByChannelId={Object.fromEntries(connectedVoiceCountsByChannelId)}
             />
           </div>
         )}

@@ -1,6 +1,10 @@
 import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
+import {
+  autoConvertFamilyAccountIfNeeded,
+  ensureFamilyAccountSchema,
+} from "@/lib/family-accounts";
 import { normalizePresenceStatus } from "@/lib/presence-status";
 import { getSessionUserId } from "@/lib/session";
 import { getUserBanner } from "@/lib/user-banner-store";
@@ -22,6 +26,7 @@ type CachedProfile = {
   avatarDecorationUrl: string | null;
   phoneNumber: string | null;
   dateOfBirth: string | null;
+  familyParentUserId: string | null;
   bannerUrl: string | null;
   presenceStatus: string;
   role: string | null;
@@ -73,6 +78,8 @@ export const currentProfile = async () => {
   }
 
   try {
+    await ensureFamilyAccountSchema();
+
     const userResult = await db.execute(sql`
       select
         u."userId" as "userId",
@@ -87,6 +94,7 @@ export const currentProfile = async () => {
         up."avatarDecorationUrl" as "avatarDecorationUrl",
         nullif(trim(to_jsonb(u)->>'phone'), '') as "phoneNumber",
         nullif(trim(to_jsonb(u)->>'dob'), '') as "dateOfBirth",
+        nullif(trim(to_jsonb(u)->>'familyParentUserId'), '') as "familyParentUserId",
         up."bannerUrl" as "bannerUrl",
         up."presenceStatus" as "presenceStatus",
         u."role" as "role",
@@ -114,6 +122,7 @@ export const currentProfile = async () => {
         avatarDecorationUrl: string | null;
         phoneNumber: string | null;
         dateOfBirth: string | null;
+        familyParentUserId: string | null;
         bannerUrl: string | null;
         presenceStatus: string | null;
         role: string | null;
@@ -127,6 +136,10 @@ export const currentProfile = async () => {
 
     const resolvedBannerUrl = user
       ? user.bannerUrl ?? (await getUserBanner(user.userId))
+      : null;
+
+    const normalizedFamily = user
+      ? await autoConvertFamilyAccountIfNeeded(user.userId, user.dateOfBirth, user.familyParentUserId)
       : null;
 
     const current: CachedProfile | null = user
@@ -145,6 +158,7 @@ export const currentProfile = async () => {
           avatarDecorationUrl: user.avatarDecorationUrl ?? null,
           phoneNumber: user.phoneNumber ?? null,
           dateOfBirth: user.dateOfBirth ?? null,
+          familyParentUserId: normalizedFamily?.familyParentUserId ?? user.familyParentUserId ?? null,
           bannerUrl: resolvedBannerUrl,
           presenceStatus: normalizePresenceStatus(user.presenceStatus),
           role: user.role ?? null,

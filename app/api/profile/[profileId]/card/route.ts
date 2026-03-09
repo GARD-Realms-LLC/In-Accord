@@ -3,6 +3,11 @@ import { sql } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db } from "@/lib/db";
+import {
+  autoConvertFamilyAccountIfNeeded,
+  ensureFamilyAccountSchema,
+  normalizeFamilyLinkStateLabel,
+} from "@/lib/family-accounts";
 import { normalizePresenceStatus } from "@/lib/presence-status";
 import { ensureServerTagSchema, serverTagIconOptions } from "@/lib/server-tags";
 import { getUserServerProfile } from "@/lib/user-server-profile";
@@ -69,6 +74,7 @@ export async function GET(
     }
 
     await ensureUserProfileSchema();
+    await ensureFamilyAccountSchema();
     await ensureServerTagSchema();
 
     const result = await db.execute(sql`
@@ -85,6 +91,8 @@ export async function GET(
         up."avatarDecorationUrl" as "avatarDecorationUrl",
         up."bannerUrl" as "bannerUrl",
         up."presenceStatus" as "presenceStatus",
+        nullif(trim(to_jsonb(u)->>'dob'), '') as "dateOfBirth",
+        nullif(trim(to_jsonb(u)->>'familyParentUserId'), '') as "familyParentUserId",
         u."role" as "role",
         u."email" as "email",
         coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
@@ -110,6 +118,8 @@ export async function GET(
         avatarDecorationUrl: string | null;
         bannerUrl: string | null;
         presenceStatus: string | null;
+        dateOfBirth: string | null;
+        familyParentUserId: string | null;
         role: string | null;
         email: string | null;
         imageUrl: string | null;
@@ -123,6 +133,12 @@ export async function GET(
     }
 
     const fallbackBanner = await getUserBanner(profileId);
+    const normalizedFamily = await autoConvertFamilyAccountIfNeeded(
+      row.id,
+      row.dateOfBirth,
+      row.familyParentUserId
+    );
+    const lifecycle = normalizedFamily.lifecycle;
     const serverProfile = memberServerId
       ? await getUserServerProfile(profileId, memberServerId)
       : null;
@@ -180,7 +196,16 @@ export async function GET(
         role: row.role,
         email: row.email,
         createdAt: row.createdAt,
+        dateOfBirth: row.dateOfBirth,
+        familyParentUserId: normalizedFamily.familyParentUserId,
       }),
+      familyLifecycle: {
+        isFamilyLinked: lifecycle.isFamilyLinked,
+        showFamilyIcon: lifecycle.showFamilyIcon,
+        canConvertToNormal: lifecycle.canConvertToNormal,
+        age: lifecycle.age,
+        state: normalizeFamilyLinkStateLabel(lifecycle),
+      },
       nameplateLabel: row.nameplateLabel,
       nameplateColor: row.nameplateColor,
       nameplateImageUrl: row.nameplateImageUrl,

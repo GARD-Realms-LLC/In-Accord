@@ -13,10 +13,12 @@ import {
   listThreadsForMessages,
   markThreadRead,
 } from "@/lib/channel-threads";
+import { resolveMemberContext } from "@/lib/channel-permissions";
 import { getUserProfileNameMap } from "@/lib/user-profile";
 import type { Profile } from "@/lib/db/types";
 import { extractQuotedContent } from "@/lib/message-quotes";
 import { ThreadToolbar } from "@/components/chat/thread-toolbar";
+import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 
 interface ThreadPageProps {
   params: Promise<{
@@ -242,6 +244,12 @@ const ThreadPage = async ({ params }: ThreadPageProps) => {
     ? "Original message was deleted"
     : sourceBody || threadRow.sourceContent;
 
+  const memberContext = await resolveMemberContext({
+    profileId: profile.id,
+    serverId,
+  });
+  const canBulkDeleteMessages = Boolean(memberContext?.isServerOwner) || hasInAccordAdministrativeAccess(profile.role);
+
   const lastThreadMessageId = hydratedThreadMessages[hydratedThreadMessages.length - 1]?.id ?? "none";
 
   if (isPerfLoggingEnabled) {
@@ -281,7 +289,6 @@ const ThreadPage = async ({ params }: ThreadPageProps) => {
         <ChatScrollBox
           className="flex-1 overflow-y-auto"
           scrollKey={`${threadId}:${hydratedThreadMessages.length}:${lastThreadMessageId}`}
-          forceStickToBottom
         >
           {hydratedThreadMessages.length === 0 ? (
             <div className="p-6 text-sm text-zinc-500 dark:text-zinc-400">
@@ -307,6 +314,7 @@ const ThreadPage = async ({ params }: ThreadPageProps) => {
                 }}
                 reactionScope="channel"
                 initialReactions={reactionMap.get(item.id) ?? []}
+                canPurgeDeletedMessage={Boolean(memberContext?.isServerOwner) || access.currentMember!.role === "ADMIN" || hasInAccordAdministrativeAccess(profile.role)}
               />
             ))
           )}
@@ -326,6 +334,7 @@ const ThreadPage = async ({ params }: ThreadPageProps) => {
           disabled={(threadSummary?.archived ?? Boolean(threadRow.archived)) || !access.permissions?.allowSend}
           mentionUsers={mentionUsers}
           mentionRoles={mentionRoles}
+          canBulkDeleteMessages={canBulkDeleteMessages}
         />
       </div>
     </div>

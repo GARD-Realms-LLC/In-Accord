@@ -9,7 +9,7 @@ import { allowedReportStatuses, ensureReportSchema, type ReportStatus } from "@/
 type ReportRow = {
   id: string;
   reporterProfileId: string;
-  targetType: "USER" | "SERVER" | "MESSAGE";
+  targetType: "USER" | "SERVER" | "MESSAGE" | "BUG";
   targetId: string;
   reason: string | null;
   details: string | null;
@@ -49,7 +49,7 @@ export async function GET(req: Request) {
         : sql``;
 
     const targetTypeSql =
-      targetTypeFilter === "USER" || targetTypeFilter === "SERVER" || targetTypeFilter === "MESSAGE"
+      targetTypeFilter === "USER" || targetTypeFilter === "SERVER" || targetTypeFilter === "MESSAGE" || targetTypeFilter === "BUG"
         ? sql`and r."targetType" = ${targetTypeFilter}`
         : sql``;
 
@@ -109,7 +109,9 @@ export async function GET(req: Request) {
           ? row.targetUserName ?? row.targetId
           : row.targetType === "SERVER"
             ? row.targetServerName ?? row.targetId
-            : row.targetMessageContent ?? row.targetId,
+            : row.targetType === "BUG"
+              ? "In-Accord App"
+              : row.targetMessageContent ?? row.targetId,
       reason: row.reason ?? "",
       details: row.details ?? "",
       status: row.status,

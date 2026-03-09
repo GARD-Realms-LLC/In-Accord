@@ -13,6 +13,7 @@ import {
   Crown,
   Gamepad2,
   Gift,
+  Flag,
   IdCard,
   ImageIcon,
   Keyboard,
@@ -47,6 +48,7 @@ import { useRouter } from "next/navigation";
 
 import { ModeToggle } from "@/components/mode-toggle";
 import { ModeratorLineIcon } from "@/components/moderator-line-icon";
+import { DiscordDeveloperPanel } from "@/components/settings/discord-developer-panel";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { NameplatePill } from "@/components/nameplate-pill";
@@ -62,7 +64,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useModal } from "@/hooks/use-modal-store";
-import { getInAccordStaffLabel, isInAccordAdministrator, isInAccordDeveloper, isInAccordModerator } from "@/lib/in-accord-admin";
+import { getInAccordStaffLabel, isInAccordAdministrator, isInAccordDeveloper, isInAccordModerator, isInAccordParent } from "@/lib/in-accord-admin";
 import { writeMentionsEnabled } from "@/lib/mentions";
 import {
   composeProfileNameStyleValue,
@@ -79,14 +81,25 @@ import {
 } from "@/lib/profile-name-styles";
 import { normalizePresenceStatus, presenceStatusLabelMap } from "@/lib/presence-status";
 import { resolveProfileIcons } from "@/lib/profile-icons";
+import type {
+  ContentSocialPreferences,
+  DataPrivacyPreferences,
+  FamilyCenterApplicationFile,
+  FamilyCenterMemberAccount,
+  FamilyCenterPreferences,
+  DiscordAppConfig,
+  DiscordBotConfig,
+} from "@/lib/user-preferences";
 
 type SettingsSection =
   | "myAccount"
   | "profiles"
+  | "bugReporting"
   | "contentSocial"
   | "dataPrivacy"
   | "familyCenter"
   | "authorizedApps"
+  | "discordDeveloper"
   | "devices"
   | "connections"
   | "friendRequests"
@@ -123,12 +136,14 @@ const sectionGroups: SectionGroup[] = [
       "profiles",
       "contentSocial",
       "dataPrivacy",
-      "familyCenter",
       "authorizedApps",
+      "discordDeveloper",
       "devices",
       "connections",
       "friendRequests",
       "serverBoost",
+      "familyCenter",
+      "bugReporting",
     ],
   },
   {
@@ -156,10 +171,12 @@ const sectionGroups: SectionGroup[] = [
 const sectionLabelMap: Record<SettingsSection, string> = {
   myAccount: "My Account",
   profiles: "Profiles",
+  bugReporting: "Bug Reporting",
   contentSocial: "Content & Social",
   dataPrivacy: "Data & Privacy",
   familyCenter: "Family Center",
   authorizedApps: "Authorized Apps",
+  discordDeveloper: "Bot/App Developer",
   devices: "Devices",
   connections: "Connections",
   friendRequests: "Blocked Users",
@@ -187,10 +204,12 @@ const sectionLabelMap: Record<SettingsSection, string> = {
 const sectionDescriptionMap: Record<SettingsSection, string> = {
   myAccount: "Manage your account details and security settings.",
   profiles: "Set profile customization per identity and server context.",
+  bugReporting: "Report app issues and bugs directly to In-Accord staff.",
   contentSocial: "Control social and content visibility preferences.",
   dataPrivacy: "Review data, privacy, and safety controls.",
-  familyCenter: "Configure family center and parental controls.",
+  familyCenter: "Configure family center and family controls.",
   authorizedApps: "Review third-party authorized app access.",
+  discordDeveloper: "Manage bots and apps connected to your In-Accord profile.",
   devices: "Manage signed-in devices and sessions.",
   connections: "Connect and manage linked external accounts.",
   friendRequests: "Manage blocked users and request interactions.",
@@ -218,10 +237,12 @@ const sectionDescriptionMap: Record<SettingsSection, string> = {
 const sectionIconMap: Record<SettingsSection, React.ComponentType<{ className?: string }>> = {
   myAccount: User,
   profiles: IdCard,
+  bugReporting: Flag,
   contentSocial: Smile,
   dataPrivacy: LockKeyhole,
   familyCenter: Baby,
   authorizedApps: ShieldCheck,
+  discordDeveloper: Puzzle,
   devices: Smartphone,
   connections: Link2,
   friendRequests: UserPlus,
@@ -246,6 +267,52 @@ const sectionIconMap: Record<SettingsSection, React.ComponentType<{ className?: 
   gameOverlay: Monitor,
 };
 
+const settingsSections = [
+  "myAccount",
+  "profiles",
+  "bugReporting",
+  "contentSocial",
+  "dataPrivacy",
+  "familyCenter",
+  "authorizedApps",
+  "discordDeveloper",
+  "devices",
+  "connections",
+  "friendRequests",
+  "nitro",
+  "serverBoost",
+  "subscriptions",
+  "giftInventory",
+  "billing",
+  "appearance",
+  "accessibility",
+  "voiceVideo",
+  "textImages",
+  "emoji",
+  "stickers",
+  "notifications",
+  "keybinds",
+  "language",
+  "streamerMode",
+  "advanced",
+  "activityPrivacy",
+  "registeredGames",
+  "gameOverlay",
+] as const;
+
+const settingsSectionSet = new Set<SettingsSection>(settingsSections);
+
+const normalizeSettingsSection = (value: unknown): SettingsSection | null => {
+  const normalized = String(value ?? "").trim();
+  if (!normalized) {
+    return null;
+  }
+
+  return settingsSectionSet.has(normalized as SettingsSection)
+    ? (normalized as SettingsSection)
+    : null;
+};
+
 const CUSTOM_CSS_STYLE_ID = "in-accord-custom-css-style";
 const languageOptions = [
   { value: "system", label: "System Default" },
@@ -268,6 +335,298 @@ const NAMEPLATE_COLOR_PRESETS = [
   { key: "sky", label: "Sky", color: "#3498db" },
   { key: "slate", label: "Slate", color: "#99aab5" },
 ] as const;
+
+const defaultContentSocialPreferences: ContentSocialPreferences = {
+  allowDirectMessagesFromServerMembers: true,
+  allowFriendRequests: true,
+  matureContentFilter: "moderate",
+  hideSensitiveLinkPreviews: true,
+};
+
+const defaultDataPrivacyPreferences: DataPrivacyPreferences = {
+  profileDiscoverable: true,
+  showPresenceToNonFriends: true,
+  allowUsageDiagnostics: true,
+  retentionMode: "standard",
+};
+
+const defaultFamilyCenterPreferences: FamilyCenterPreferences = {
+  requireContentFilterForFamilyMembers: true,
+  shareWeeklySafetySummary: true,
+  allowDirectMessagesFromNonFriends: false,
+  alertOnMatureContentInteractions: true,
+  familyDesignation: "",
+  familyApplicationStatus: "",
+  familyApplicationSubmittedAt: "",
+  familyApplicationFiles: [],
+  familyMembers: [],
+};
+
+const familyMemberRelationOptions = [
+  "Grand Daughter",
+  "Grand Son",
+  "Daughter",
+  "Son",
+  "Mother",
+  "Father",
+  "Wife",
+  "Husband",
+  "Niece",
+  "Nephew",
+] as const;
+
+const familyDesignationOptions = [
+  "Grand Father",
+  "Grand Mother",
+  "Mother",
+  "Father",
+  "Wife",
+  "Husband",
+  "Aunty",
+  "Uncle",
+  "Legal Guardian",
+] as const;
+
+const normalizeContentSocialPreferences = (value: unknown): ContentSocialPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultContentSocialPreferences };
+  }
+
+  const source = value as Partial<Record<keyof ContentSocialPreferences, unknown>>;
+  const matureContentFilter =
+    source.matureContentFilter === "strict" ||
+    source.matureContentFilter === "moderate" ||
+    source.matureContentFilter === "off"
+      ? source.matureContentFilter
+      : defaultContentSocialPreferences.matureContentFilter;
+
+  return {
+    allowDirectMessagesFromServerMembers:
+      typeof source.allowDirectMessagesFromServerMembers === "boolean"
+        ? source.allowDirectMessagesFromServerMembers
+        : defaultContentSocialPreferences.allowDirectMessagesFromServerMembers,
+    allowFriendRequests:
+      typeof source.allowFriendRequests === "boolean"
+        ? source.allowFriendRequests
+        : defaultContentSocialPreferences.allowFriendRequests,
+    matureContentFilter,
+    hideSensitiveLinkPreviews:
+      typeof source.hideSensitiveLinkPreviews === "boolean"
+        ? source.hideSensitiveLinkPreviews
+        : defaultContentSocialPreferences.hideSensitiveLinkPreviews,
+  };
+};
+
+const normalizeDataPrivacyPreferences = (value: unknown): DataPrivacyPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultDataPrivacyPreferences };
+  }
+
+  const source = value as Partial<Record<keyof DataPrivacyPreferences, unknown>>;
+  const retentionMode =
+    source.retentionMode === "minimal" || source.retentionMode === "standard"
+      ? source.retentionMode
+      : defaultDataPrivacyPreferences.retentionMode;
+
+  return {
+    profileDiscoverable:
+      typeof source.profileDiscoverable === "boolean"
+        ? source.profileDiscoverable
+        : defaultDataPrivacyPreferences.profileDiscoverable,
+    showPresenceToNonFriends:
+      typeof source.showPresenceToNonFriends === "boolean"
+        ? source.showPresenceToNonFriends
+        : defaultDataPrivacyPreferences.showPresenceToNonFriends,
+    allowUsageDiagnostics:
+      typeof source.allowUsageDiagnostics === "boolean"
+        ? source.allowUsageDiagnostics
+        : defaultDataPrivacyPreferences.allowUsageDiagnostics,
+    retentionMode,
+  };
+};
+
+const normalizeFamilyCenterPreferences = (value: unknown): FamilyCenterPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultFamilyCenterPreferences };
+  }
+
+  const source = value as Partial<Record<keyof FamilyCenterPreferences, unknown>>;
+  const familyApplicationFiles = Array.isArray(source.familyApplicationFiles)
+    ? source.familyApplicationFiles
+        .filter((entry): entry is FamilyCenterApplicationFile => {
+          if (!entry || typeof entry !== "object") {
+            return false;
+          }
+
+          const candidate = entry as Partial<FamilyCenterApplicationFile>;
+          return typeof candidate.name === "string" && typeof candidate.url === "string";
+        })
+        .map((entry) => {
+          const uploadedDate =
+            typeof entry.uploadedAt === "string" && !Number.isNaN(new Date(entry.uploadedAt).getTime())
+              ? new Date(entry.uploadedAt).toISOString()
+              : new Date().toISOString();
+
+          const normalizedUrl = String(entry.url ?? "").trim().slice(0, 2048);
+
+          return {
+            name: String(entry.name ?? "").trim().slice(0, 200),
+            url: /^https?:\/\//i.test(normalizedUrl) || normalizedUrl.startsWith("/") ? normalizedUrl : "",
+            mimeType: String(entry.mimeType ?? "application/octet-stream").trim().slice(0, 120).toLowerCase(),
+            size:
+              typeof entry.size === "number" && Number.isFinite(entry.size) && entry.size > 0
+                ? Math.min(Math.floor(entry.size), 100 * 1024 * 1024)
+                : 0,
+            uploadedAt: uploadedDate,
+          } satisfies FamilyCenterApplicationFile;
+        })
+        .filter((entry) => entry.name.length > 0 && entry.url.length > 0)
+        .slice(0, 20)
+    : [];
+
+  const familyMembers = Array.isArray(source.familyMembers)
+    ? source.familyMembers
+        .filter((entry): entry is FamilyCenterMemberAccount => {
+          if (!entry || typeof entry !== "object") {
+            return false;
+          }
+
+          const candidate = entry as Partial<FamilyCenterMemberAccount>;
+          return typeof candidate.accountIdentifier === "string";
+        })
+        .map((entry, index) => {
+          const accountIdentifier = String(entry.accountIdentifier ?? "").trim().slice(0, 160);
+          const childName = String(entry.childName ?? "").trim().slice(0, 60);
+          const id = String(entry.id ?? "").trim().slice(0, 80) || `family-member-${index + 1}`;
+          const createdAt = String(entry.createdAt ?? "").trim() || new Date().toISOString();
+
+          return {
+            id,
+            childName,
+            accountIdentifier,
+            childRelation: familyMemberRelationOptions.includes(
+              (entry.childRelation ?? "") as (typeof familyMemberRelationOptions)[number]
+            )
+              ? (entry.childRelation as (typeof familyMemberRelationOptions)[number])
+              : "",
+            childEmail: String(entry.childEmail ?? "").trim().slice(0, 160),
+            childPassword: String(entry.childPassword ?? "").trim().slice(0, 128),
+            childPhone: String(entry.childPhone ?? "").trim().slice(0, 32),
+            childDateOfBirth:
+              typeof entry.childDateOfBirth === "string" && /^\d{4}-\d{2}-\d{2}$/.test(entry.childDateOfBirth)
+                ? entry.childDateOfBirth
+                : "",
+            linkedUserId: String(entry.linkedUserId ?? "").trim().slice(0, 191),
+            familyLinkState:
+              entry.familyLinkState === "managed-under-16" ||
+              entry.familyLinkState === "eligible-16-plus" ||
+              entry.familyLinkState === "normal"
+                ? entry.familyLinkState
+                : "normal",
+            createdAt,
+            requireContentFilterForFamilyMembers:
+              typeof entry.requireContentFilterForFamilyMembers === "boolean"
+                ? entry.requireContentFilterForFamilyMembers
+                : defaultFamilyCenterPreferences.requireContentFilterForFamilyMembers,
+            shareWeeklySafetySummary:
+              typeof entry.shareWeeklySafetySummary === "boolean"
+                ? entry.shareWeeklySafetySummary
+                : defaultFamilyCenterPreferences.shareWeeklySafetySummary,
+            allowDirectMessagesFromNonFriends:
+              typeof entry.allowDirectMessagesFromNonFriends === "boolean"
+                ? entry.allowDirectMessagesFromNonFriends
+                : defaultFamilyCenterPreferences.allowDirectMessagesFromNonFriends,
+            alertOnMatureContentInteractions:
+              typeof entry.alertOnMatureContentInteractions === "boolean"
+                ? entry.alertOnMatureContentInteractions
+                : defaultFamilyCenterPreferences.alertOnMatureContentInteractions,
+          } satisfies FamilyCenterMemberAccount;
+        })
+        .filter((entry) => entry.accountIdentifier.length > 0)
+    : [];
+
+  return {
+    requireContentFilterForFamilyMembers:
+      typeof source.requireContentFilterForFamilyMembers === "boolean"
+        ? source.requireContentFilterForFamilyMembers
+        : defaultFamilyCenterPreferences.requireContentFilterForFamilyMembers,
+    shareWeeklySafetySummary:
+      typeof source.shareWeeklySafetySummary === "boolean"
+        ? source.shareWeeklySafetySummary
+        : defaultFamilyCenterPreferences.shareWeeklySafetySummary,
+    allowDirectMessagesFromNonFriends:
+      typeof source.allowDirectMessagesFromNonFriends === "boolean"
+        ? source.allowDirectMessagesFromNonFriends
+        : defaultFamilyCenterPreferences.allowDirectMessagesFromNonFriends,
+    alertOnMatureContentInteractions:
+      typeof source.alertOnMatureContentInteractions === "boolean"
+        ? source.alertOnMatureContentInteractions
+        : defaultFamilyCenterPreferences.alertOnMatureContentInteractions,
+    familyDesignation: typeof source.familyDesignation === "string" ? source.familyDesignation.trim().slice(0, 80) : "",
+    familyApplicationStatus:
+      typeof source.familyApplicationStatus === "string" ? source.familyApplicationStatus.trim().slice(0, 80) : "",
+    familyApplicationSubmittedAt:
+      typeof source.familyApplicationSubmittedAt === "string" && !Number.isNaN(new Date(source.familyApplicationSubmittedAt).getTime())
+        ? new Date(source.familyApplicationSubmittedAt).toISOString()
+        : "",
+    familyApplicationFiles,
+    familyMembers,
+  };
+};
+
+const sanitizeFamilyApplicationErrorMessage = (value: string | null | undefined) => {
+  const message = String(value ?? "").trim();
+  if (!message) {
+    return "Could not submit application. Please try again.";
+  }
+
+  const normalized = message.toLowerCase();
+  const containsSensitiveStorageDetails =
+    normalized.includes("cloud storage") ||
+    normalized.includes("local fallback") ||
+    normalized.includes("secure document storage") ||
+    normalized.includes("not configured") ||
+    normalized.includes("clouflare_r2") ||
+    normalized.includes("cloudflare_r2") ||
+    normalized.includes("missing:");
+
+  if (containsSensitiveStorageDetails) {
+    return "Document upload is temporarily unavailable. Please try again later.";
+  }
+
+  return message;
+};
+
+type PasswordStrengthTone = "Weak" | "Fair" | "Good" | "Strong";
+
+const getPasswordStrength = (value: string): { label: PasswordStrengthTone; className: string; score: number } => {
+  const password = value.trim();
+  if (!password) {
+    return { label: "Weak", className: "text-rose-300", score: 0 };
+  }
+
+  let score = 0;
+  if (password.length >= 8) score += 1;
+  if (password.length >= 12) score += 1;
+  if (/[a-z]/.test(password)) score += 1;
+  if (/[A-Z]/.test(password)) score += 1;
+  if (/\d/.test(password)) score += 1;
+  if (/[^a-zA-Z\d]/.test(password)) score += 1;
+
+  if (score >= 6) {
+    return { label: "Strong", className: "text-emerald-300", score };
+  }
+
+  if (score >= 5) {
+    return { label: "Good", className: "text-sky-300", score };
+  }
+
+  if (score >= 3) {
+    return { label: "Fair", className: "text-amber-300", score };
+  }
+
+  return { label: "Weak", className: "text-rose-300", score };
+};
 
 type CustomThemeColors = {
   background: string;
@@ -455,6 +814,15 @@ type MemberServerProfileOption = {
   effectiveBannerUrl?: string | null;
 };
 
+type FamilyMemberLifecycle = {
+  memberUserId: string;
+  age: number | null;
+  isFamilyLinked: boolean;
+  showFamilyIcon: boolean;
+  canConvertToNormal: boolean;
+  state: "managed-under-16" | "eligible-16-plus" | "normal";
+};
+
 const connectionProviders: ConnectionProvider[] = [
   {
     key: "github",
@@ -563,12 +931,52 @@ export const SettingsModal = () => {
   const [uploadedBannerThumbnails, setUploadedBannerThumbnails] = useState<string[]>([]);
   const [resolvedProfileId, setResolvedProfileId] = useState<string | null>(data.profileId ?? null);
   const [mentionsEnabled, setMentionsEnabled] = useState(true);
+  const [contentSocialPreferences, setContentSocialPreferences] = useState<ContentSocialPreferences>({
+    ...defaultContentSocialPreferences,
+  });
+  const [isSavingContentSocialPreferences, setIsSavingContentSocialPreferences] = useState(false);
+  const [contentSocialStatus, setContentSocialStatus] = useState<string | null>(null);
+  const [dataPrivacyPreferences, setDataPrivacyPreferences] = useState<DataPrivacyPreferences>({
+    ...defaultDataPrivacyPreferences,
+  });
+  const [isSavingDataPrivacyPreferences, setIsSavingDataPrivacyPreferences] = useState(false);
+  const [dataPrivacyStatus, setDataPrivacyStatus] = useState<string | null>(null);
+  const [familyCenterPreferences, setFamilyCenterPreferences] = useState<FamilyCenterPreferences>({
+    ...defaultFamilyCenterPreferences,
+  });
+  const [isSavingFamilyCenterPreferences, setIsSavingFamilyCenterPreferences] = useState(false);
+  const [familyCenterStatus, setFamilyCenterStatus] = useState<string | null>(null);
+  const [familyMemberNameInput, setFamilyMemberNameInput] = useState("");
+  const [familyMemberAccountInput, setFamilyMemberAccountInput] = useState("");
+  const [familyMemberRelationInput, setFamilyMemberRelationInput] = useState<(typeof familyMemberRelationOptions)[number] | "">("");
+  const [familyMemberEmailInput, setFamilyMemberEmailInput] = useState("");
+  const [familyMemberPasswordInput, setFamilyMemberPasswordInput] = useState("");
+  const [familyMemberRepeatPasswordInput, setFamilyMemberRepeatPasswordInput] = useState("");
+  const [familyMemberPhoneInput, setFamilyMemberPhoneInput] = useState("");
+  const [familyMemberDateOfBirthInput, setFamilyMemberDateOfBirthInput] = useState("");
+  const [isCreatingFamilyMemberAccount, setIsCreatingFamilyMemberAccount] = useState(false);
+  const [isConvertingFamilyMemberUserId, setIsConvertingFamilyMemberUserId] = useState<string | null>(null);
+  const [familyMemberLifecycleByUserId, setFamilyMemberLifecycleByUserId] = useState<Record<string, FamilyMemberLifecycle>>({});
+  const [familyDesignationInput, setFamilyDesignationInput] = useState<(typeof familyDesignationOptions)[number] | "">("");
+  const [selectedFamilyMemberId, setSelectedFamilyMemberId] = useState("");
   const [languagePreference, setLanguagePreference] = useState<string>("system");
   const [isSavingLanguagePreference, setIsSavingLanguagePreference] = useState(false);
   const [languagePreferenceStatus, setLanguagePreferenceStatus] = useState<string | null>(null);
   const [connectedAccounts, setConnectedAccounts] = useState<string[]>([]);
   const [isSavingConnectionProvider, setIsSavingConnectionProvider] = useState<string | null>(null);
   const [connectionsStatus, setConnectionsStatus] = useState<string | null>(null);
+  const [bugTitle, setBugTitle] = useState("");
+  const [bugCategory, setBugCategory] = useState("general");
+  const [bugSeverity, setBugSeverity] = useState<"low" | "medium" | "high" | "critical">("medium");
+  const [bugSteps, setBugSteps] = useState("");
+  const [bugExpected, setBugExpected] = useState("");
+  const [bugActual, setBugActual] = useState("");
+  const [isSubmittingBugReport, setIsSubmittingBugReport] = useState(false);
+  const [bugReportStatus, setBugReportStatus] = useState<string | null>(null);
+  const [discordApps, setDiscordApps] = useState<DiscordAppConfig[]>([]);
+  const [discordBots, setDiscordBots] = useState<DiscordBotConfig[]>([]);
+  const [isSavingDiscordConfigs, setIsSavingDiscordConfigs] = useState(false);
+  const [discordConfigsStatus, setDiscordConfigsStatus] = useState<string | null>(null);
   const [ownedServerTags, setOwnedServerTags] = useState<OwnedServerTag[]>([]);
   const [memberServerTags, setMemberServerTags] = useState<MemberServerTag[]>([]);
   const [memberProfileServers, setMemberProfileServers] = useState<MemberServerProfileOption[]>([]);
@@ -609,6 +1017,12 @@ export const SettingsModal = () => {
   const [isPluginsInstalledPanelOpen, setIsPluginsInstalledPanelOpen] = useState(false);
   const [isDownloadedPluginsPanelOpen, setIsDownloadedPluginsPanelOpen] = useState(false);
   const [isPluginUploadsPanelOpen, setIsPluginUploadsPanelOpen] = useState(false);
+  const [isFamilyAccountApplyPanelOpen, setIsFamilyAccountApplyPanelOpen] = useState(false);
+  const [isFamilyAccountVerificationPanelOpen, setIsFamilyAccountVerificationPanelOpen] = useState(false);
+  const [isRemovingFamilyAccount, setIsRemovingFamilyAccount] = useState(false);
+  const [familyVerificationFiles, setFamilyVerificationFiles] = useState<File[]>([]);
+  const [familyVerificationUploadStatus, setFamilyVerificationUploadStatus] = useState<string | null>(null);
+  const [familyApplicationStatus, setFamilyApplicationStatus] = useState<string | null>(null);
   const [downloadedPlugins, setDownloadedPlugins] = useState<string[]>([]);
   const [blockedProfiles, setBlockedProfiles] = useState<BlockedProfileSummary[]>([]);
   const [isLoadingBlockedProfiles, setIsLoadingBlockedProfiles] = useState(false);
@@ -620,8 +1034,19 @@ export const SettingsModal = () => {
   const serverBannerInputRef = useRef<HTMLInputElement | null>(null);
   const nameplateImageInputRef = useRef<HTMLInputElement | null>(null);
   const serverNameplateImageInputRef = useRef<HTMLInputElement | null>(null);
+  const familyVerificationFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const isModalOpen = isOpen && type === "settings";
+
+  const familyMemberPasswordStrength = useMemo(
+    () => getPasswordStrength(familyMemberPasswordInput),
+    [familyMemberPasswordInput]
+  );
+
+  const familyMemberRepeatPasswordStrength = useMemo(
+    () => getPasswordStrength(familyMemberRepeatPasswordInput),
+    [familyMemberRepeatPasswordInput]
+  );
 
   const installedPluginsCount = useMemo(() => downloadedPlugins.length, [downloadedPlugins.length]);
 
@@ -629,6 +1054,20 @@ export const SettingsModal = () => {
     () => installedPluginsCount.toString().padStart(2, "0"),
     [installedPluginsCount]
   );
+
+  const hasFamilyCenterAccess = useMemo(() => {
+    const role = profileRole ?? data.profileRole;
+    return isInAccordAdministrator(role) || isInAccordParent(role);
+  }, [data.profileRole, profileRole]);
+  const isFamilyCenterEditable = hasFamilyCenterAccess;
+  const isFamilyApplicationApproved = useMemo(
+    () => /approved|aproved/i.test(String(familyApplicationStatus ?? "")),
+    [familyApplicationStatus]
+  );
+
+  const visibleSectionGroups = useMemo<SectionGroup[]>(() => {
+    return sectionGroups;
+  }, []);
 
   const sections = useMemo<SettingsSection[]>(() => sectionGroups.flatMap((group) => group.sections), []);
 
@@ -857,8 +1296,13 @@ export const SettingsModal = () => {
       try {
         const response = await axios.get<{
           mentionsEnabled?: boolean;
+          contentSocial?: unknown;
+          dataPrivacy?: unknown;
+          familyCenter?: unknown;
           languagePreference?: string;
           connectedAccounts?: unknown;
+          discordApps?: unknown;
+          discordBots?: unknown;
           customCss?: string;
           customThemeColors?: Partial<CustomThemeColors> | null;
           downloadedPlugins?: unknown;
@@ -871,6 +1315,9 @@ export const SettingsModal = () => {
         }
 
         const mentions = response.data?.mentionsEnabled !== false;
+        const hydratedContentSocial = normalizeContentSocialPreferences(response.data?.contentSocial);
+        const hydratedDataPrivacy = normalizeDataPrivacyPreferences(response.data?.dataPrivacy);
+        const hydratedFamilyCenter = normalizeFamilyCenterPreferences(response.data?.familyCenter);
         const language =
           typeof response.data?.languagePreference === "string" &&
           languageOptions.some((option) => option.value === response.data.languagePreference)
@@ -904,10 +1351,33 @@ export const SettingsModal = () => {
           : [];
         writeMentionsEnabled(mentions);
         setMentionsEnabled(mentions);
+        setContentSocialPreferences(hydratedContentSocial);
+        setContentSocialStatus(null);
+        setDataPrivacyPreferences(hydratedDataPrivacy);
+        setDataPrivacyStatus(null);
+        setFamilyCenterPreferences(hydratedFamilyCenter);
+        setFamilyDesignationInput(
+          familyDesignationOptions.includes(hydratedFamilyCenter.familyDesignation as (typeof familyDesignationOptions)[number])
+            ? (hydratedFamilyCenter.familyDesignation as (typeof familyDesignationOptions)[number])
+            : ""
+        );
+        setFamilyApplicationStatus(hydratedFamilyCenter.familyApplicationStatus || null);
+        setFamilyCenterStatus(null);
         setLanguagePreference(language);
         setLanguagePreferenceStatus(null);
         setConnectedAccounts(Array.from(new Set(linked)));
         setConnectionsStatus(null);
+        setDiscordApps(
+          Array.isArray(response.data?.discordApps)
+            ? (response.data.discordApps as DiscordAppConfig[])
+            : []
+        );
+        setDiscordBots(
+          Array.isArray(response.data?.discordBots)
+            ? (response.data.discordBots as DiscordBotConfig[])
+            : []
+        );
+        setDiscordConfigsStatus(null);
         setCustomCss(css);
         setDownloadedPlugins(plugins);
         setUploadedBannerThumbnails((prev) => {
@@ -930,10 +1400,19 @@ export const SettingsModal = () => {
 
         writeMentionsEnabled(true);
         setMentionsEnabled(true);
+        setContentSocialPreferences({ ...defaultContentSocialPreferences });
+        setContentSocialStatus(null);
+        setDataPrivacyPreferences({ ...defaultDataPrivacyPreferences });
+        setDataPrivacyStatus(null);
+        setFamilyCenterPreferences({ ...defaultFamilyCenterPreferences });
+        setFamilyCenterStatus(null);
         setLanguagePreference("system");
         setLanguagePreferenceStatus(null);
         setConnectedAccounts([]);
         setConnectionsStatus(null);
+        setDiscordApps([]);
+        setDiscordBots([]);
+        setDiscordConfigsStatus(null);
         setCustomCss("");
         setDownloadedPlugins([]);
         applyCustomCss("");
@@ -946,6 +1425,24 @@ export const SettingsModal = () => {
       cancelled = true;
     };
   }, [isModalOpen]);
+
+  useEffect(() => {
+    if (!isModalOpen) {
+      return;
+    }
+
+    const requestedSection = normalizeSettingsSection(
+      data.query?.settingsSection ?? data.query?.section
+    );
+
+    if (!requestedSection) {
+      return;
+    }
+
+    setActiveSection(requestedSection);
+    setDisplaySection(requestedSection);
+    setIsSectionVisible(true);
+  }, [data.query, isModalOpen]);
 
   const onToggleMentions = () => {
     const next = !mentionsEnabled;
@@ -989,6 +1486,669 @@ export const SettingsModal = () => {
     }
   };
 
+  const onSaveContentSocialPreferences = async () => {
+    try {
+      setIsSavingContentSocialPreferences(true);
+      setContentSocialStatus(null);
+
+      await axios.patch("/api/profile/preferences", {
+        contentSocial: contentSocialPreferences,
+      });
+
+      setContentSocialStatus("Content & Social preferences saved.");
+    } catch {
+      setContentSocialStatus("Could not save Content & Social preferences.");
+    } finally {
+      setIsSavingContentSocialPreferences(false);
+    }
+  };
+
+  const onSaveDataPrivacyPreferences = async () => {
+    try {
+      setIsSavingDataPrivacyPreferences(true);
+      setDataPrivacyStatus(null);
+
+      await axios.patch("/api/profile/preferences", {
+        dataPrivacy: dataPrivacyPreferences,
+      });
+
+      setDataPrivacyStatus("Data & Privacy preferences saved.");
+    } catch {
+      setDataPrivacyStatus("Could not save Data & Privacy preferences.");
+    } finally {
+      setIsSavingDataPrivacyPreferences(false);
+    }
+  };
+
+  const onSaveFamilyCenterPreferences = async () => {
+    if (!isFamilyCenterEditable) {
+      setFamilyCenterStatus("Only Family or Administrator roles can edit Family Center settings.");
+      return;
+    }
+
+    try {
+      setIsSavingFamilyCenterPreferences(true);
+      setFamilyCenterStatus(null);
+
+      await axios.patch("/api/profile/preferences", {
+        familyCenter: familyCenterPreferences,
+      });
+
+      setFamilyCenterStatus("Family Center preferences saved.");
+    } catch {
+      setFamilyCenterStatus("Could not save Family Center preferences.");
+    } finally {
+      setIsSavingFamilyCenterPreferences(false);
+    }
+  };
+
+  const onAddFamilyMember = async () => {
+    if (!isFamilyCenterEditable) {
+      setFamilyCenterStatus("Only Family or Administrator roles can edit Family Center settings.");
+      return;
+    }
+
+    const childName = familyMemberNameInput.trim();
+    const accountIdentifier = familyMemberAccountInput.trim();
+    const childRelation = familyMemberRelationInput;
+    const childEmail = familyMemberEmailInput.trim();
+    const childPassword = familyMemberPasswordInput.trim();
+    const childRepeatPassword = familyMemberRepeatPasswordInput.trim();
+    const childPhone = familyMemberPhoneInput.trim();
+    const childDateOfBirthRaw = familyMemberDateOfBirthInput.trim();
+    const normalizedChildDateOfBirth = (() => {
+      const candidate = childDateOfBirthRaw.replace(/\//g, "-");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(candidate)) {
+        return null;
+      }
+
+      const [yearPart, monthPart, dayPart] = candidate.split("-");
+      const year = Number(yearPart);
+      const month = Number(monthPart);
+      const day = Number(dayPart);
+      const parsed = new Date(`${candidate}T00:00:00.000Z`);
+
+      if (
+        Number.isNaN(parsed.getTime()) ||
+        parsed.getUTCFullYear() !== year ||
+        parsed.getUTCMonth() + 1 !== month ||
+        parsed.getUTCDate() !== day
+      ) {
+        return null;
+      }
+
+      return candidate;
+    })();
+
+    if (!childName || !accountIdentifier || !childRelation || !childEmail || !childPassword || !childRepeatPassword || !childPhone || !childDateOfBirthRaw) {
+      setFamilyCenterStatus("Family Name, Profile Name, Family Relation, Email, Password, Repeat Password, Phone, and Date of Birth are required.");
+      return;
+    }
+
+    if (!/^\S+@\S+\.\S+$/.test(childEmail)) {
+      setFamilyCenterStatus("Enter a valid email address.");
+      return;
+    }
+
+    if (!normalizedChildDateOfBirth) {
+      setFamilyCenterStatus("Select a valid Date of Birth.");
+      return;
+    }
+
+    if (childPassword.length < 8) {
+      setFamilyCenterStatus("Password must be at least 8 characters.");
+      return;
+    }
+
+    if (childPassword !== childRepeatPassword) {
+      setFamilyCenterStatus("Password and Repeat Password do not match.");
+      return;
+    }
+
+    const alreadyExists = familyCenterPreferences.familyMembers.some(
+      (entry) =>
+        entry.accountIdentifier.toLowerCase() === accountIdentifier.toLowerCase() ||
+        entry.childEmail.toLowerCase() === childEmail.toLowerCase()
+    );
+
+    if (alreadyExists) {
+      setFamilyCenterStatus("That account or email is already listed in Family Members.");
+      return;
+    }
+
+    try {
+      setIsCreatingFamilyMemberAccount(true);
+
+      const response = await axios.post<{
+        ok: boolean;
+        memberUserId: string;
+        lifecycle: FamilyMemberLifecycle;
+      }>("/api/family-center/members", {
+        childName,
+        accountIdentifier,
+        childEmail,
+        childPassword,
+        childPhone,
+        childDateOfBirth: normalizedChildDateOfBirth,
+      });
+
+      const nextMember: FamilyCenterMemberAccount = {
+      id: `family-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      childName: childName.slice(0, 60),
+      accountIdentifier: accountIdentifier.slice(0, 160),
+      childRelation,
+      childEmail: childEmail.slice(0, 160),
+      childPassword: childPassword.slice(0, 128),
+      childPhone: childPhone.slice(0, 32),
+      childDateOfBirth: normalizedChildDateOfBirth,
+      linkedUserId: response.data.memberUserId,
+      familyLinkState: response.data.lifecycle.state,
+      createdAt: new Date().toISOString(),
+      requireContentFilterForFamilyMembers: familyCenterPreferences.requireContentFilterForFamilyMembers,
+      shareWeeklySafetySummary: familyCenterPreferences.shareWeeklySafetySummary,
+      allowDirectMessagesFromNonFriends: familyCenterPreferences.allowDirectMessagesFromNonFriends,
+      alertOnMatureContentInteractions: familyCenterPreferences.alertOnMatureContentInteractions,
+    };
+
+    setFamilyCenterPreferences((current) => ({
+      ...current,
+      familyMembers: [...current.familyMembers, nextMember],
+    }));
+      setFamilyMemberLifecycleByUserId((current) => ({
+        ...current,
+        [response.data.memberUserId]: response.data.lifecycle,
+      }));
+    setSelectedFamilyMemberId(nextMember.id);
+    setFamilyMemberNameInput("");
+    setFamilyMemberAccountInput("");
+    setFamilyMemberRelationInput("");
+    setFamilyMemberEmailInput("");
+    setFamilyMemberPasswordInput("");
+    setFamilyMemberRepeatPasswordInput("");
+    setFamilyMemberPhoneInput("");
+    setFamilyMemberDateOfBirthInput("");
+      setFamilyCenterStatus("Family account added and real user account created. Click Save Changes to persist.");
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data as { error?: string } | undefined)?.error || error.response?.data || error.message
+        : "Could not create the family member account.";
+
+      setFamilyCenterStatus(typeof message === "string" ? message : "Could not create the family member account.");
+    } finally {
+      setIsCreatingFamilyMemberAccount(false);
+    }
+  };
+
+  const onRemoveFamilyMember = (memberId: string) => {
+    if (!isFamilyCenterEditable) {
+      setFamilyCenterStatus("Only Family or Administrator roles can edit Family Center settings.");
+      return;
+    }
+
+    setFamilyCenterPreferences((current) => {
+      const target = current.familyMembers.find((entry) => entry.id === memberId);
+      if (target?.linkedUserId) {
+        setFamilyMemberLifecycleByUserId((existing) => {
+          if (!existing[target.linkedUserId]) {
+            return existing;
+          }
+
+          const next = { ...existing };
+          delete next[target.linkedUserId];
+          return next;
+        });
+      }
+
+      return {
+        ...current,
+        familyMembers: current.familyMembers.filter((entry) => entry.id !== memberId),
+      };
+    });
+    setFamilyCenterStatus("Family account removed. Click Save Changes to persist.");
+  };
+
+  const onConvertFamilyMemberToNormal = async (member: FamilyCenterMemberAccount) => {
+    if (!member.linkedUserId) {
+      setFamilyCenterStatus("This family member is not linked to a real account.");
+      return;
+    }
+
+    const lifecycle = familyMemberLifecycleByUserId[member.linkedUserId];
+    if (!lifecycle?.canConvertToNormal) {
+      setFamilyCenterStatus("This account can be converted when the member is 16 or older.");
+      return;
+    }
+
+    try {
+      setIsConvertingFamilyMemberUserId(member.linkedUserId);
+
+      const response = await axios.patch<{
+        ok: boolean;
+        memberUserId: string;
+        lifecycle: FamilyMemberLifecycle;
+      }>("/api/family-center/members", {
+        action: "convert-to-normal",
+        memberUserId: member.linkedUserId,
+      });
+
+      setFamilyMemberLifecycleByUserId((current) => ({
+        ...current,
+        [response.data.memberUserId]: response.data.lifecycle,
+      }));
+
+      setFamilyCenterPreferences((current) => ({
+        ...current,
+        familyMembers: current.familyMembers.map((entry) =>
+          entry.linkedUserId === response.data.memberUserId
+            ? {
+                ...entry,
+                familyLinkState: response.data.lifecycle.state,
+              }
+            : entry
+        ),
+      }));
+
+      setFamilyCenterStatus("Family account converted to normal account.");
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data as { error?: string } | undefined)?.error || error.response?.data || error.message
+        : "Could not convert the family account.";
+      setFamilyCenterStatus(typeof message === "string" ? message : "Could not convert the family account.");
+    } finally {
+      setIsConvertingFamilyMemberUserId(null);
+    }
+  };
+
+  const linkedFamilyMemberUserIds = useMemo(
+    () =>
+      familyCenterPreferences.familyMembers
+        .map((member) => member.linkedUserId)
+        .filter((value) => value.trim().length > 0)
+        .join(","),
+    [familyCenterPreferences.familyMembers]
+  );
+
+  useEffect(() => {
+    if (!isModalOpen) {
+      return;
+    }
+
+    const linkedUserIds = linkedFamilyMemberUserIds
+      .split(",")
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0);
+
+    if (linkedUserIds.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const hydrateLifecycle = async () => {
+      try {
+        const response = await axios.get<{ members?: FamilyMemberLifecycle[] }>("/api/family-center/members", {
+          params: {
+            ids: linkedUserIds.join(","),
+          },
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        const members = Array.isArray(response.data?.members)
+          ? response.data.members.filter((entry) => typeof entry.memberUserId === "string" && entry.memberUserId.trim().length > 0)
+          : [];
+
+        setFamilyMemberLifecycleByUserId(() => {
+          const next: Record<string, FamilyMemberLifecycle> = {};
+          members.forEach((entry) => {
+            next[entry.memberUserId] = entry;
+          });
+          return next;
+        });
+
+        setFamilyCenterPreferences((current) => {
+          let changed = false;
+
+          const nextMembers = current.familyMembers.map((member) => {
+            if (!member.linkedUserId) {
+              return member;
+            }
+
+            const entry = members.find((value) => value.memberUserId === member.linkedUserId);
+            if (!entry || entry.state === member.familyLinkState) {
+              return member;
+            }
+
+            changed = true;
+            return {
+              ...member,
+              familyLinkState: entry.state,
+            };
+          });
+
+          if (!changed) {
+            return current;
+          }
+
+          return {
+            ...current,
+            familyMembers: nextMembers,
+          };
+        });
+      } catch {
+        // keep UI functional even when lifecycle hydration fails
+      }
+    };
+
+    void hydrateLifecycle();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isModalOpen, linkedFamilyMemberUserIds]);
+
+  useEffect(() => {
+    const members = familyCenterPreferences.familyMembers;
+
+    if (members.length === 0) {
+      if (selectedFamilyMemberId) {
+        setSelectedFamilyMemberId("");
+      }
+      return;
+    }
+
+    const exists = members.some((member) => member.id === selectedFamilyMemberId);
+    if (!exists) {
+      setSelectedFamilyMemberId(members[0]?.id ?? "");
+    }
+  }, [familyCenterPreferences.familyMembers, selectedFamilyMemberId]);
+
+  const selectedFamilyMember = useMemo(() => {
+    return (
+      familyCenterPreferences.familyMembers.find((member) => member.id === selectedFamilyMemberId) ?? null
+    );
+  }, [familyCenterPreferences.familyMembers, selectedFamilyMemberId]);
+
+  const updateSelectedFamilyMemberOversight = (
+    key:
+      | "requireContentFilterForFamilyMembers"
+      | "shareWeeklySafetySummary"
+      | "allowDirectMessagesFromNonFriends"
+      | "alertOnMatureContentInteractions"
+  ) => {
+    if (!isFamilyCenterEditable) {
+      setFamilyCenterStatus("Only Family or Administrator roles can edit Family Center settings.");
+      return;
+    }
+
+    if (!selectedFamilyMemberId) {
+      setFamilyCenterStatus("Select a family account first.");
+      return;
+    }
+
+    setFamilyCenterPreferences((current) => ({
+      ...current,
+      familyMembers: current.familyMembers.map((member) => {
+        if (member.id !== selectedFamilyMemberId) {
+          return member;
+        }
+
+        return {
+          ...member,
+          [key]: !member[key],
+        };
+      }),
+    }));
+    setFamilyCenterStatus(null);
+  };
+
+  const onCopyDefaultsToSelectedChild = () => {
+    if (!isFamilyCenterEditable) {
+      setFamilyCenterStatus("Only Family or Administrator roles can edit Family Center settings.");
+      return;
+    }
+
+    if (!selectedFamilyMemberId) {
+      setFamilyCenterStatus("Select a family account first.");
+      return;
+    }
+
+    setFamilyCenterPreferences((current) => ({
+      ...current,
+      familyMembers: current.familyMembers.map((member) => {
+        if (member.id !== selectedFamilyMemberId) {
+          return member;
+        }
+
+        return {
+          ...member,
+          requireContentFilterForFamilyMembers: current.requireContentFilterForFamilyMembers,
+          shareWeeklySafetySummary: current.shareWeeklySafetySummary,
+          allowDirectMessagesFromNonFriends: current.allowDirectMessagesFromNonFriends,
+          alertOnMatureContentInteractions: current.alertOnMatureContentInteractions,
+        };
+      }),
+    }));
+
+    setFamilyCenterStatus("Default Family Center controls copied to selected family account. Click Save Changes to persist.");
+  };
+
+  const onResetSelectedChildToAppDefaults = () => {
+    if (!isFamilyCenterEditable) {
+      setFamilyCenterStatus("Only Family or Administrator roles can edit Family Center settings.");
+      return;
+    }
+
+    if (!selectedFamilyMemberId) {
+      setFamilyCenterStatus("Select a family account first.");
+      return;
+    }
+
+    setFamilyCenterPreferences((current) => ({
+      ...current,
+      familyMembers: current.familyMembers.map((member) => {
+        if (member.id !== selectedFamilyMemberId) {
+          return member;
+        }
+
+        return {
+          ...member,
+          requireContentFilterForFamilyMembers:
+            defaultFamilyCenterPreferences.requireContentFilterForFamilyMembers,
+          shareWeeklySafetySummary:
+            defaultFamilyCenterPreferences.shareWeeklySafetySummary,
+          allowDirectMessagesFromNonFriends:
+            defaultFamilyCenterPreferences.allowDirectMessagesFromNonFriends,
+          alertOnMatureContentInteractions:
+            defaultFamilyCenterPreferences.alertOnMatureContentInteractions,
+        };
+      }),
+    }));
+
+    setFamilyCenterStatus("Selected family account controls reset to app defaults. Click Save Changes to persist.");
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) {
+      return `${bytes} B`;
+    }
+
+    if (bytes < 1024 * 1024) {
+      return `${(bytes / 1024).toFixed(1)} KB`;
+    }
+
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const onPickFamilyVerificationFiles = () => {
+    familyVerificationFileInputRef.current?.click();
+  };
+
+  const onFamilyVerificationFilesChange = (files?: FileList | null) => {
+    if (!files || files.length === 0) {
+      return;
+    }
+
+    const allowedMimeTypes = new Set(["image/jpeg", "image/png", "application/pdf"]);
+    const maxFileSizeBytes = 10 * 1024 * 1024;
+    const accepted: File[] = [];
+    const rejectedNames: string[] = [];
+
+    Array.from(files).forEach((file) => {
+      const hasValidType = allowedMimeTypes.has(file.type);
+      const hasValidSize = file.size <= maxFileSizeBytes;
+
+      if (hasValidType && hasValidSize) {
+        accepted.push(file);
+      } else {
+        rejectedNames.push(file.name);
+      }
+    });
+
+    if (accepted.length > 0) {
+      setFamilyVerificationFiles((current) => {
+        const deduped = [...current];
+
+        accepted.forEach((candidate) => {
+          const exists = deduped.some(
+            (existing) =>
+              existing.name === candidate.name &&
+              existing.size === candidate.size &&
+              existing.lastModified === candidate.lastModified
+          );
+
+          if (!exists) {
+            deduped.push(candidate);
+          }
+        });
+
+        return deduped;
+      });
+    }
+
+    if (rejectedNames.length > 0) {
+      setFamilyVerificationUploadStatus(
+        `Some files were skipped (${rejectedNames.join(", ")}). Only JPG, PNG, and PDF up to 10MB are allowed.`
+      );
+    } else {
+      setFamilyVerificationUploadStatus("Files attached. Upload area is now wired and ready for backend integration.");
+    }
+
+    if (familyVerificationFileInputRef.current) {
+      familyVerificationFileInputRef.current.value = "";
+    }
+  };
+
+  const onRemoveFamilyVerificationFile = (index: number) => {
+    setFamilyVerificationFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
+    setFamilyVerificationUploadStatus(null);
+  };
+
+  const onSubmitFamilyApplication = async () => {
+    if (isFamilyApplicationApproved) {
+      setFamilyVerificationUploadStatus("Family account is already approved. Remove Family Account to apply again.");
+      return;
+    }
+
+    if (!familyDesignationInput) {
+      setFamilyVerificationUploadStatus("Select a family designation before submitting.");
+      return;
+    }
+
+    if (familyVerificationFiles.length === 0) {
+      setFamilyVerificationUploadStatus("Attach at least one verification file before submitting.");
+      return;
+    }
+
+    try {
+      setFamilyVerificationUploadStatus("Preparing application PDF and uploading...");
+
+      const submitFormData = new FormData();
+      submitFormData.append("familyDesignation", familyDesignationInput);
+      submitFormData.append("legalName", realName || "");
+      submitFormData.append("profileName", profileName || "");
+      submitFormData.append("email", data.profileEmail || "");
+      submitFormData.append("phone", phoneNumber || "");
+      submitFormData.append("dateOfBirth", dateOfBirth || "");
+
+      familyVerificationFiles.forEach((file) => {
+        submitFormData.append("files", file);
+      });
+
+      const response = await fetch("/api/family-application/submit", {
+        method: "POST",
+        body: submitFormData,
+      });
+
+      if (!response.ok) {
+        let errorMessage = `Submit failed (${response.status})`;
+        try {
+          const errorPayload = (await response.json()) as { error?: string };
+          if (errorPayload?.error) {
+            errorMessage = errorPayload.error;
+          }
+        } catch {
+          // ignore JSON parse errors and keep fallback message
+        }
+
+        throw new Error(errorMessage);
+      }
+
+      const payload = (await response.json()) as {
+        familyCenter?: FamilyCenterPreferences;
+      };
+
+      const nextFamilyCenter = normalizeFamilyCenterPreferences(payload.familyCenter);
+      setFamilyCenterPreferences(nextFamilyCenter);
+      setFamilyApplicationStatus(nextFamilyCenter.familyApplicationStatus || null);
+      setFamilyCenterStatus("Family application submitted. Status has been added to the top bar.");
+      setFamilyVerificationUploadStatus("Application submitted successfully.");
+      setFamilyVerificationFiles([]);
+      setIsFamilyAccountVerificationPanelOpen(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not submit application. Please try again.";
+      setFamilyVerificationUploadStatus(sanitizeFamilyApplicationErrorMessage(message));
+    }
+  };
+
+  const onRemoveFamilyAccount = async () => {
+    try {
+      setIsRemovingFamilyAccount(true);
+      setFamilyCenterStatus(null);
+
+      const response = await axios.patch<{
+        ok: boolean;
+        role?: string | null;
+        familyCenter?: FamilyCenterPreferences;
+      }>("/api/family-application/remove");
+
+      const nextFamilyCenter = normalizeFamilyCenterPreferences(response.data?.familyCenter);
+      setFamilyCenterPreferences(nextFamilyCenter);
+      setFamilyApplicationStatus(nextFamilyCenter.familyApplicationStatus || null);
+      setFamilyDesignationInput(
+        familyDesignationOptions.includes(nextFamilyCenter.familyDesignation as (typeof familyDesignationOptions)[number])
+          ? (nextFamilyCenter.familyDesignation as (typeof familyDesignationOptions)[number])
+          : ""
+      );
+      setProfileRole(response.data?.role ?? null);
+      setIsFamilyAccountApplyPanelOpen(false);
+      setIsFamilyAccountVerificationPanelOpen(false);
+      setFamilyVerificationFiles([]);
+      setFamilyVerificationUploadStatus(null);
+      setFamilyCenterStatus("Family account removed. Apply for Family Account is available again.");
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data as { error?: string } | undefined)?.error || error.response?.data || error.message
+        : "Could not remove family account.";
+
+      setFamilyCenterStatus(typeof message === "string" ? message : "Could not remove family account.");
+    } finally {
+      setIsRemovingFamilyAccount(false);
+    }
+  };
+
   const onToggleConnectionProvider = async (providerKey: string) => {
     if (isSavingConnectionProvider) {
       return;
@@ -1019,6 +2179,63 @@ export const SettingsModal = () => {
       setConnectionsStatus("Could not update connections.");
     } finally {
       setIsSavingConnectionProvider(null);
+    }
+  };
+
+  const onSubmitBugReport = async () => {
+    const normalizedTitle = bugTitle.trim();
+    const normalizedSteps = bugSteps.trim();
+    const normalizedExpected = bugExpected.trim();
+    const normalizedActual = bugActual.trim();
+
+    setBugReportStatus(null);
+
+    if (!normalizedTitle) {
+      setBugReportStatus("Please add a short bug title.");
+      return;
+    }
+
+    if (!normalizedActual) {
+      setBugReportStatus("Please describe what happened.");
+      return;
+    }
+
+    try {
+      setIsSubmittingBugReport(true);
+
+      const reason = `[${bugSeverity.toUpperCase()}] ${bugCategory.toUpperCase()} — ${normalizedTitle}`.slice(0, 300);
+      const details = [
+        `Category: ${bugCategory}`,
+        `Severity: ${bugSeverity}`,
+        normalizedSteps ? `Steps to reproduce:\n${normalizedSteps}` : "",
+        normalizedExpected ? `Expected result:\n${normalizedExpected}` : "",
+        `Actual result:\n${normalizedActual}`,
+      ]
+        .filter(Boolean)
+        .join("\n\n")
+        .slice(0, 4000);
+
+      await axios.post("/api/reports", {
+        targetType: "BUG",
+        targetId: "IN_ACCORD_APP",
+        reason,
+        details,
+      });
+
+      setBugReportStatus("Bug report submitted. Thanks for helping improve In-Accord.");
+      setBugTitle("");
+      setBugCategory("general");
+      setBugSeverity("medium");
+      setBugSteps("");
+      setBugExpected("");
+      setBugActual("");
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Could not submit bug report."
+        : "Could not submit bug report.";
+      setBugReportStatus(message);
+    } finally {
+      setIsSubmittingBugReport(false);
     }
   };
 
@@ -2506,6 +3723,12 @@ export const SettingsModal = () => {
   const hasDeveloperWrench = isInAccordDeveloper(profileRole ?? data.profileRole);
   const hasModeratorShield = isInAccordModerator(profileRole ?? data.profileRole);
   const inAccordStaffRoleLabel = getInAccordStaffLabel(profileRole ?? data.profileRole);
+  const familyCenterStatusIsError = Boolean(
+    familyCenterStatus &&
+      /(required|valid|only|could not|does not match|already|failed|forbidden|unauthorized|missing)/i.test(
+        familyCenterStatus
+      )
+  );
   const profileIcons = resolveProfileIcons({
     userId: resolvedProfileId,
     role: profileRole ?? data.profileRole,
@@ -3943,6 +5166,286 @@ export const SettingsModal = () => {
       );
     }
 
+    if (displaySection === "contentSocial") {
+      return (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
+            <p className="text-sm font-medium text-white">Social Controls</p>
+            <p className="mt-1 text-xs text-[#949ba4]">
+              Choose who can reach you and how social interactions are handled.
+            </p>
+
+            <div className="mt-4 space-y-2">
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white">Allow direct messages from server members</p>
+                  <p className="text-xs text-[#949ba4]">If disabled, only friends can DM you directly.</p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setContentSocialPreferences((current) => ({
+                      ...current,
+                      allowDirectMessagesFromServerMembers: !current.allowDirectMessagesFromServerMembers,
+                    }));
+                    setContentSocialStatus(null);
+                  }}
+                  className={`inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition ${
+                    contentSocialPreferences.allowDirectMessagesFromServerMembers
+                      ? "border-emerald-400/50 bg-emerald-500/40"
+                      : "border-zinc-600 bg-zinc-700"
+                  }`}
+                  aria-pressed={contentSocialPreferences.allowDirectMessagesFromServerMembers}
+                  aria-label="Toggle direct messages from server members"
+                >
+                  <span
+                    className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
+                      contentSocialPreferences.allowDirectMessagesFromServerMembers ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white">Allow friend requests</p>
+                  <p className="text-xs text-[#949ba4]">Disable to prevent new incoming friend requests.</p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setContentSocialPreferences((current) => ({
+                      ...current,
+                      allowFriendRequests: !current.allowFriendRequests,
+                    }));
+                    setContentSocialStatus(null);
+                  }}
+                  className={`inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition ${
+                    contentSocialPreferences.allowFriendRequests
+                      ? "border-emerald-400/50 bg-emerald-500/40"
+                      : "border-zinc-600 bg-zinc-700"
+                  }`}
+                  aria-pressed={contentSocialPreferences.allowFriendRequests}
+                  aria-label="Toggle friend requests"
+                >
+                  <span
+                    className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
+                      contentSocialPreferences.allowFriendRequests ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
+            <p className="text-sm font-medium text-white">Content Filters</p>
+            <p className="mt-1 text-xs text-[#949ba4]">Tune how sensitive content is previewed in your client.</p>
+
+            <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
+              <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                Mature content filter
+              </label>
+
+              <select
+                value={contentSocialPreferences.matureContentFilter}
+                onChange={(event) => {
+                  const next = event.target.value as ContentSocialPreferences["matureContentFilter"];
+                  setContentSocialPreferences((current) => ({
+                    ...current,
+                    matureContentFilter: next,
+                  }));
+                  setContentSocialStatus(null);
+                }}
+                className="h-9 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+              >
+                <option value="strict">Strict (blur all potentially sensitive media)</option>
+                <option value="moderate">Moderate (blur only flagged previews)</option>
+                <option value="off">Off (show all previews)</option>
+              </select>
+
+              <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white">Hide sensitive link previews</p>
+                  <p className="text-xs text-[#949ba4]">Mask preview cards that are flagged as sensitive.</p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setContentSocialPreferences((current) => ({
+                      ...current,
+                      hideSensitiveLinkPreviews: !current.hideSensitiveLinkPreviews,
+                    }));
+                    setContentSocialStatus(null);
+                  }}
+                  className={`inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition ${
+                    contentSocialPreferences.hideSensitiveLinkPreviews
+                      ? "border-emerald-400/50 bg-emerald-500/40"
+                      : "border-zinc-600 bg-zinc-700"
+                  }`}
+                  aria-pressed={contentSocialPreferences.hideSensitiveLinkPreviews}
+                  aria-label="Toggle sensitive link previews"
+                >
+                  <span
+                    className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
+                      contentSocialPreferences.hideSensitiveLinkPreviews ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {contentSocialStatus ? (
+                <p className="mt-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-[#b5bac1]">
+                  {contentSocialStatus}
+                </p>
+              ) : null}
+
+              <div className="mt-3 flex justify-end">
+                <Button
+                  type="button"
+                  onClick={onSaveContentSocialPreferences}
+                  disabled={isSavingContentSocialPreferences}
+                  className="bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSavingContentSocialPreferences ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Saving...
+                    </span>
+                  ) : (
+                    "Save Content & Social"
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (displaySection === "bugReporting") {
+      return (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
+            <p className="text-sm font-medium text-white">Bug Reporting</p>
+            <p className="mt-1 text-xs text-[#949ba4]">
+              Found a bug? Send details directly to staff so it shows up in the Issues & Bugs queue.
+            </p>
+
+            <div className="mt-3 grid gap-3 rounded-xl border border-white/10 bg-black/20 p-3">
+              <div className="grid gap-2 sm:grid-cols-[1fr_160px_160px]">
+                <input
+                  type="text"
+                  value={bugTitle}
+                  onChange={(event) => {
+                    setBugTitle(event.target.value);
+                    setBugReportStatus(null);
+                  }}
+                  maxLength={140}
+                  placeholder="Short title (e.g. Settings modal freezes on save)"
+                  className="h-9 rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                />
+
+                <select
+                  value={bugCategory}
+                  onChange={(event) => {
+                    setBugCategory(event.target.value);
+                    setBugReportStatus(null);
+                  }}
+                  className="h-9 rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                >
+                  <option value="general">General</option>
+                  <option value="ui">UI / UX</option>
+                  <option value="performance">Performance</option>
+                  <option value="chat">Chat</option>
+                  <option value="notifications">Notifications</option>
+                  <option value="profile">Profiles</option>
+                  <option value="settings">Settings</option>
+                </select>
+
+                <select
+                  value={bugSeverity}
+                  onChange={(event) => {
+                    setBugSeverity(event.target.value as typeof bugSeverity);
+                    setBugReportStatus(null);
+                  }}
+                  className="h-9 rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="critical">Critical</option>
+                </select>
+              </div>
+
+              <textarea
+                value={bugSteps}
+                onChange={(event) => {
+                  setBugSteps(event.target.value);
+                  setBugReportStatus(null);
+                }}
+                rows={4}
+                maxLength={1200}
+                placeholder="Steps to reproduce (optional)"
+                className="w-full resize-y rounded-md border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+              />
+
+              <textarea
+                value={bugExpected}
+                onChange={(event) => {
+                  setBugExpected(event.target.value);
+                  setBugReportStatus(null);
+                }}
+                rows={3}
+                maxLength={800}
+                placeholder="Expected result (optional)"
+                className="w-full resize-y rounded-md border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+              />
+
+              <textarea
+                value={bugActual}
+                onChange={(event) => {
+                  setBugActual(event.target.value);
+                  setBugReportStatus(null);
+                }}
+                rows={4}
+                maxLength={1600}
+                placeholder="What happened? (required)"
+                className="w-full resize-y rounded-md border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+              />
+
+              {bugReportStatus ? (
+                <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-[#b5bac1]">
+                  {bugReportStatus}
+                </p>
+              ) : null}
+
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  onClick={() => void onSubmitBugReport()}
+                  disabled={isSubmittingBugReport}
+                  className="bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSubmittingBugReport ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Submitting...
+                    </span>
+                  ) : (
+                    "Submit Bug Report"
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     if (displaySection === "notifications") {
       return (
         <div className="space-y-4">
@@ -4158,6 +5661,21 @@ export const SettingsModal = () => {
             ) : null}
           </div>
         </div>
+      );
+    }
+
+    if (displaySection === "discordDeveloper") {
+      return (
+        <DiscordDeveloperPanel
+          apps={discordApps}
+          bots={discordBots}
+          isSaving={isSavingDiscordConfigs}
+          status={discordConfigsStatus}
+          onStatusChange={setDiscordConfigsStatus}
+          onSavingChange={setIsSavingDiscordConfigs}
+          onAppsChange={setDiscordApps}
+          onBotsChange={setDiscordBots}
+        />
       );
     }
 
@@ -4417,7 +5935,911 @@ export const SettingsModal = () => {
     }
 
     if (displaySection === "dataPrivacy") {
-      return renderComingSoonSection("Data & Privacy", "Privacy controls and account safety settings can be managed here.");
+      return (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
+            <p className="text-sm font-medium text-white">Data & Privacy Controls</p>
+            <p className="mt-1 text-xs text-[#949ba4]">
+              Manage account discoverability, presence visibility, diagnostics, and data retention behavior.
+            </p>
+
+            <div className="mt-4 space-y-2">
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white">Profile discoverable</p>
+                  <p className="text-xs text-[#949ba4]">Allow your profile to appear in discovery-style user searches.</p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDataPrivacyPreferences((current) => ({
+                      ...current,
+                      profileDiscoverable: !current.profileDiscoverable,
+                    }));
+                    setDataPrivacyStatus(null);
+                  }}
+                  className={`inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition ${
+                    dataPrivacyPreferences.profileDiscoverable
+                      ? "border-emerald-400/50 bg-emerald-500/40"
+                      : "border-zinc-600 bg-zinc-700"
+                  }`}
+                  aria-pressed={dataPrivacyPreferences.profileDiscoverable}
+                  aria-label="Toggle profile discoverability"
+                >
+                  <span
+                    className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
+                      dataPrivacyPreferences.profileDiscoverable ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white">Show presence to non-friends</p>
+                  <p className="text-xs text-[#949ba4]">If off, only friends can see your active/idle presence status.</p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDataPrivacyPreferences((current) => ({
+                      ...current,
+                      showPresenceToNonFriends: !current.showPresenceToNonFriends,
+                    }));
+                    setDataPrivacyStatus(null);
+                  }}
+                  className={`inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition ${
+                    dataPrivacyPreferences.showPresenceToNonFriends
+                      ? "border-emerald-400/50 bg-emerald-500/40"
+                      : "border-zinc-600 bg-zinc-700"
+                  }`}
+                  aria-pressed={dataPrivacyPreferences.showPresenceToNonFriends}
+                  aria-label="Toggle non-friend presence visibility"
+                >
+                  <span
+                    className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
+                      dataPrivacyPreferences.showPresenceToNonFriends ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white">Allow usage diagnostics</p>
+                  <p className="text-xs text-[#949ba4]">Share anonymous diagnostics to help improve stability and performance.</p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDataPrivacyPreferences((current) => ({
+                      ...current,
+                      allowUsageDiagnostics: !current.allowUsageDiagnostics,
+                    }));
+                    setDataPrivacyStatus(null);
+                  }}
+                  className={`inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition ${
+                    dataPrivacyPreferences.allowUsageDiagnostics
+                      ? "border-emerald-400/50 bg-emerald-500/40"
+                      : "border-zinc-600 bg-zinc-700"
+                  }`}
+                  aria-pressed={dataPrivacyPreferences.allowUsageDiagnostics}
+                  aria-label="Toggle usage diagnostics"
+                >
+                  <span
+                    className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
+                      dataPrivacyPreferences.allowUsageDiagnostics ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
+            <p className="text-sm font-medium text-white">Data Retention</p>
+            <p className="mt-1 text-xs text-[#949ba4]">
+              Choose how aggressively non-essential preference telemetry should be retained.
+            </p>
+
+            <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
+              <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                Retention Mode
+              </label>
+
+              <select
+                value={dataPrivacyPreferences.retentionMode}
+                onChange={(event) => {
+                  setDataPrivacyPreferences((current) => ({
+                    ...current,
+                    retentionMode: event.target.value as DataPrivacyPreferences["retentionMode"],
+                  }));
+                  setDataPrivacyStatus(null);
+                }}
+                className="h-9 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+              >
+                <option value="standard">Standard (recommended)</option>
+                <option value="minimal">Minimal (privacy-first)</option>
+              </select>
+
+              <p className="mt-2 text-[11px] text-[#949ba4]">
+                Minimal mode limits retention of non-essential preference-level diagnostics where possible.
+              </p>
+
+              {dataPrivacyStatus ? (
+                <p className="mt-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-[#b5bac1]">
+                  {dataPrivacyStatus}
+                </p>
+              ) : null}
+
+              <div className="mt-3 flex justify-end">
+                <Button
+                  type="button"
+                  onClick={onSaveDataPrivacyPreferences}
+                  disabled={isSavingDataPrivacyPreferences}
+                  className="bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSavingDataPrivacyPreferences ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Saving...
+                    </span>
+                  ) : (
+                    "Save Data & Privacy"
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (displaySection === "familyCenter") {
+      return (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-white">Family Center Controls</p>
+                <p className="mt-1 text-xs text-[#949ba4]">
+                  Select a family account to configure family oversight controls.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {familyApplicationStatus ? (
+                  <span className="inline-flex h-8 items-center rounded-md border border-emerald-500/35 bg-emerald-500/15 px-3 text-xs font-semibold text-emerald-200">
+                    Status: {familyApplicationStatus}
+                  </span>
+                ) : null}
+
+                <Button
+                  type="button"
+                  onClick={() => setIsFamilyAccountApplyPanelOpen(true)}
+                  disabled={isFamilyApplicationApproved || isRemovingFamilyAccount}
+                  className={`h-8 px-3 text-xs text-white disabled:cursor-not-allowed disabled:opacity-70 ${
+                    isFamilyApplicationApproved
+                      ? "bg-zinc-500 hover:bg-zinc-500"
+                      : "bg-[#5865f2] hover:bg-[#4752c4]"
+                  }`}
+                >
+                  Apply for Family Account
+                </Button>
+
+                {isFamilyApplicationApproved ? (
+                  <Button
+                    type="button"
+                    onClick={() => void onRemoveFamilyAccount()}
+                    disabled={isRemovingFamilyAccount}
+                    className="h-8 border border-rose-500/35 bg-rose-500/15 px-3 text-xs text-rose-200 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isRemovingFamilyAccount ? "Removing..." : "Remove Family Account"}
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+
+            {!isFamilyCenterEditable ? (
+              <p className="mt-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+                Family Center fields are view-only. Only Family or Administrator roles can edit settings.
+              </p>
+            ) : null}
+
+            <Dialog open={isFamilyAccountApplyPanelOpen} onOpenChange={setIsFamilyAccountApplyPanelOpen}>
+              <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Apply for Family Account</DialogTitle>
+                  <DialogDescription className="text-[#949ba4]">
+                    Start a Family Account request for your household profile setup.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-3">
+                  <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">What happens next</p>
+                    <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-[#b5bac1]">
+                      <li>Submit your household account details for review.</li>
+                      <li>Upload your ID for verification.</li>
+                      <li>In-Accord staff validates account eligibility.</li>
+                      <li>Family Center permissions are enabled after approval.</li>
+                    </ul>
+                  </div>
+
+                  <p className="text-xs text-[#949ba4]">
+                    This panel is ready for backend request wiring.
+                  </p>
+                </div>
+
+                <DialogFooter className="gap-2 sm:justify-end">
+                  <Button type="button" variant="outline" onClick={() => setIsFamilyAccountApplyPanelOpen(false)}>
+                    Close
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setIsFamilyAccountApplyPanelOpen(false);
+                      setIsFamilyAccountVerificationPanelOpen(true);
+                    }}
+                    className="bg-[#5865f2] text-white hover:bg-[#4752c4]"
+                  >
+                    Continue
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog
+              open={isFamilyAccountVerificationPanelOpen}
+              onOpenChange={setIsFamilyAccountVerificationPanelOpen}
+            >
+              <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>ID Verification Upload</DialogTitle>
+                  <DialogDescription className="text-[#949ba4]">
+                    Upload a valid government-issued ID to continue your Family Account application.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-3">
+                  <input
+                    ref={familyVerificationFileInputRef}
+                    className="hidden"
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.pdf"
+                    multiple
+                    onChange={(event) => onFamilyVerificationFilesChange(event.target.files)}
+                  />
+
+                  <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">Verification checklist</p>
+                    <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-[#b5bac1]">
+                      <li>Upload front and back images when required.</li>
+                      <li>Ensure your legal name and date of birth are readable.</li>
+                      <li>Supported formats: JPG, PNG, PDF.</li>
+                    </ul>
+                  </div>
+
+                  <div className="rounded-lg border border-dashed border-white/20 bg-[#15161a] p-4 text-center">
+                    <p className="text-sm font-semibold text-white">Upload Area</p>
+                    <p className="mt-1 text-xs text-[#949ba4]">Attach ID files now. Backend upload submission can be connected next.</p>
+
+                    <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                      <Button
+                        type="button"
+                        onClick={onPickFamilyVerificationFiles}
+                        className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4]"
+                      >
+                        Choose Files
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setFamilyVerificationFiles([]);
+                          setFamilyVerificationUploadStatus(null);
+                        }}
+                        disabled={familyVerificationFiles.length === 0}
+                      >
+                        Clear Files
+                      </Button>
+                    </div>
+
+                    {familyVerificationFiles.length > 0 ? (
+                      <div className="mt-3 rounded-md border border-white/10 bg-black/30 p-2 text-left">
+                        <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                          Attached Files ({familyVerificationFiles.length})
+                        </p>
+                        <div className="space-y-1.5">
+                          {familyVerificationFiles.map((file, index) => (
+                            <div
+                              key={`${file.name}-${file.lastModified}-${index}`}
+                              className="flex items-center justify-between gap-2 rounded border border-white/10 bg-[#1a1b1e] px-2 py-1.5"
+                            >
+                              <p className="truncate text-[11px] text-[#dbdee1]">
+                                {file.name} <span className="text-[#949ba4]">({formatFileSize(file.size)})</span>
+                              </p>
+                              <Button
+                                type="button"
+                                onClick={() => onRemoveFamilyVerificationFile(index)}
+                                className="h-6 border border-rose-500/35 bg-rose-500/15 px-2 text-[10px] text-rose-200 hover:bg-rose-500/25"
+                              >
+                                Remove
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-[11px] text-[#949ba4]">No files attached yet.</p>
+                    )}
+
+                    {familyVerificationUploadStatus ? (
+                      <p className="mt-2 text-[11px] text-[#b5bac1]">{familyVerificationUploadStatus}</p>
+                    ) : null}
+                  </div>
+
+                  <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">User Details</p>
+
+                    <div className="mt-2 grid gap-2 md:grid-cols-2">
+                      <div>
+                        <label className="mb-1 block text-[11px] font-semibold text-[#c6cad1]">Legal Name</label>
+                        <input
+                          type="text"
+                          value={realName || "Not set"}
+                          readOnly
+                          className="h-8 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-2.5 text-xs text-[#b5bac1] outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-1 block text-[11px] font-semibold text-[#c6cad1]">Profile Name</label>
+                        <input
+                          type="text"
+                          value={profileName || "Not set"}
+                          readOnly
+                          className="h-8 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-2.5 text-xs text-[#b5bac1] outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-1 block text-[11px] font-semibold text-[#c6cad1]">Email</label>
+                        <input
+                          type="text"
+                          value={data.profileEmail || "Not set"}
+                          readOnly
+                          className="h-8 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-2.5 text-xs text-[#b5bac1] outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-1 block text-[11px] font-semibold text-[#c6cad1]">Phone</label>
+                        <input
+                          type="text"
+                          value={phoneNumber || "Not set"}
+                          readOnly
+                          className="h-8 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-2.5 text-xs text-[#b5bac1] outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-1 block text-[11px] font-semibold text-[#c6cad1]">Date of Birth</label>
+                        <input
+                          type="text"
+                          value={dateOfBirth || "Not set"}
+                          readOnly
+                          className="h-8 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-2.5 text-xs text-[#b5bac1] outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-1 block text-[11px] font-semibold text-[#c6cad1]">Family Designation</label>
+                        <select
+                          value={familyDesignationInput}
+                          onChange={(event) => setFamilyDesignationInput(event.target.value as (typeof familyDesignationOptions)[number] | "")}
+                          className="h-8 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-2.5 text-xs text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                        >
+                          <option value="">Select designation</option>
+                          {familyDesignationOptions.map((option) => (
+                            <option key={`family-designation-${option}`} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <DialogFooter className="gap-2 sm:justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsFamilyAccountVerificationPanelOpen(false)}
+                  >
+                    Back
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={onSubmitFamilyApplication}
+                    disabled={!familyDesignationInput || familyVerificationFiles.length === 0}
+                    className="bg-[#5865f2] text-white hover:bg-[#4752c4]"
+                  >
+                    Submit Application
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
+              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                Profile Name
+              </label>
+              <select
+                value={selectedFamilyMemberId}
+                onChange={(event) => {
+                  setSelectedFamilyMemberId(event.target.value);
+                  setFamilyCenterStatus(null);
+                }}
+                disabled={familyCenterPreferences.familyMembers.length === 0 || !isFamilyCenterEditable}
+                className="h-9 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {familyCenterPreferences.familyMembers.length === 0 ? (
+                  <option value="">No family accounts available</option>
+                ) : null}
+                {familyCenterPreferences.familyMembers.map((member) => (
+                  <option key={`family-member-select-${member.id}`} value={member.id}>
+                    {(member.childName || "Profile Name").trim()} — {member.accountIdentifier}
+                  </option>
+                ))}
+              </select>
+
+              {selectedFamilyMember ? (
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-[11px] text-[#949ba4]">
+                    Editing oversight for <span className="font-semibold text-[#dbdee1]">{selectedFamilyMember.childName || "Profile Name"}</span>
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      onClick={onCopyDefaultsToSelectedChild}
+                      disabled={!selectedFamilyMember || !isFamilyCenterEditable}
+                      className="h-7 border border-[#5865f2]/35 bg-[#5865f2]/15 px-2 text-[11px] text-[#d7dcff] hover:bg-[#5865f2]/25 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Copy Defaults
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={onResetSelectedChildToAppDefaults}
+                      disabled={!selectedFamilyMember || !isFamilyCenterEditable}
+                      className="h-7 border border-zinc-500/35 bg-zinc-500/15 px-2 text-[11px] text-zinc-200 hover:bg-zinc-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Reset to App Defaults
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-2 text-[11px] text-[#949ba4]">Add and select a family account to edit oversight controls.</p>
+              )}
+            </div>
+
+            <div className="mt-3 space-y-2 rounded-xl border border-white/10 bg-black/20 p-3">
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white">Require content filter for family members</p>
+                  <p className="text-xs text-[#949ba4]">Enforces stricter filtering for supervised household profiles.</p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => updateSelectedFamilyMemberOversight("requireContentFilterForFamilyMembers")}
+                  disabled={!selectedFamilyMember || !isFamilyCenterEditable}
+                  className={`inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition ${
+                    selectedFamilyMember?.requireContentFilterForFamilyMembers
+                      ? "border-emerald-400/50 bg-emerald-500/40"
+                      : "border-zinc-600 bg-zinc-700"
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
+                  aria-pressed={selectedFamilyMember?.requireContentFilterForFamilyMembers ?? false}
+                  aria-label="Toggle family content filter requirement"
+                >
+                  <span
+                    className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
+                      selectedFamilyMember?.requireContentFilterForFamilyMembers ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white">Share weekly safety summary</p>
+                  <p className="text-xs text-[#949ba4]">Provides a weekly summary of moderation and safety-related activity.</p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => updateSelectedFamilyMemberOversight("shareWeeklySafetySummary")}
+                  disabled={!selectedFamilyMember || !isFamilyCenterEditable}
+                  className={`inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition ${
+                    selectedFamilyMember?.shareWeeklySafetySummary
+                      ? "border-emerald-400/50 bg-emerald-500/40"
+                      : "border-zinc-600 bg-zinc-700"
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
+                  aria-pressed={selectedFamilyMember?.shareWeeklySafetySummary ?? false}
+                  aria-label="Toggle weekly safety summary"
+                >
+                  <span
+                    className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
+                      selectedFamilyMember?.shareWeeklySafetySummary ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white">Allow direct messages from non-friends</p>
+                  <p className="text-xs text-[#949ba4]">When off, family-managed accounts can only receive DMs from friends.</p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => updateSelectedFamilyMemberOversight("allowDirectMessagesFromNonFriends")}
+                  disabled={!selectedFamilyMember || !isFamilyCenterEditable}
+                  className={`inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition ${
+                    selectedFamilyMember?.allowDirectMessagesFromNonFriends
+                      ? "border-emerald-400/50 bg-emerald-500/40"
+                      : "border-zinc-600 bg-zinc-700"
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
+                  aria-pressed={selectedFamilyMember?.allowDirectMessagesFromNonFriends ?? false}
+                  aria-label="Toggle direct messages from non-friends"
+                >
+                  <span
+                    className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
+                      selectedFamilyMember?.allowDirectMessagesFromNonFriends ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white">Alert on mature content interactions</p>
+                  <p className="text-xs text-[#949ba4]">Flags interactions with mature content for review in family oversight workflows.</p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => updateSelectedFamilyMemberOversight("alertOnMatureContentInteractions")}
+                  disabled={!selectedFamilyMember || !isFamilyCenterEditable}
+                  className={`inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition ${
+                    selectedFamilyMember?.alertOnMatureContentInteractions
+                      ? "border-emerald-400/50 bg-emerald-500/40"
+                      : "border-zinc-600 bg-zinc-700"
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
+                  aria-pressed={selectedFamilyMember?.alertOnMatureContentInteractions ?? false}
+                  aria-label="Toggle mature content interaction alerts"
+                >
+                  <span
+                    className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
+                      selectedFamilyMember?.alertOnMatureContentInteractions ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold text-white">Family Members</p>
+                  <p className="text-[11px] text-[#949ba4]">
+                    Add and manage linked family accounts for Family Center oversight.
+                  </p>
+                </div>
+                <span className="inline-flex h-6 items-center rounded-md border border-white/15 bg-white/5 px-2 text-[10px] font-semibold text-[#d7dcff]">
+                  Total: {familyCenterPreferences.familyMembers.length}
+                </span>
+              </div>
+
+              <div className="mt-3 space-y-3">
+                <div className="rounded-lg border border-white/10 bg-[#1a1b1e] p-2.5">
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                    Add Family Account
+                  </p>
+
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    <input
+                      type="text"
+                      value={familyMemberNameInput}
+                      onChange={(event) => {
+                        setFamilyMemberNameInput(event.target.value);
+                        setFamilyCenterStatus(null);
+                      }}
+                      maxLength={60}
+                      placeholder="Family Name"
+                      required
+                      disabled={!isFamilyCenterEditable}
+                      className="h-8 rounded-md border border-black/25 bg-[#131417] px-2.5 text-xs text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                    />
+
+                    <select
+                      value={familyMemberRelationInput}
+                      onChange={(event) => {
+                        setFamilyMemberRelationInput(event.target.value as (typeof familyMemberRelationOptions)[number] | "");
+                        setFamilyCenterStatus(null);
+                      }}
+                      required
+                      disabled={!isFamilyCenterEditable}
+                      className="h-8 rounded-md border border-black/25 bg-[#131417] px-2.5 text-xs text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                    >
+                      <option value="">Family Relation</option>
+                      {familyMemberRelationOptions.map((option) => (
+                        <option key={`family-member-relation-${option}`} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+
+                    <input
+                      type="text"
+                      value={familyMemberAccountInput}
+                      onChange={(event) => {
+                        setFamilyMemberAccountInput(event.target.value);
+                        setFamilyCenterStatus(null);
+                      }}
+                      maxLength={160}
+                      placeholder="Profile Name"
+                      required
+                      disabled={!isFamilyCenterEditable}
+                      className="h-8 rounded-md border border-black/25 bg-[#131417] px-2.5 text-xs text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                    />
+
+                    <input
+                      type="text"
+                      value={familyMemberDateOfBirthInput}
+                      onChange={(event) => {
+                        setFamilyMemberDateOfBirthInput(event.target.value);
+                        setFamilyCenterStatus(null);
+                      }}
+                      inputMode="numeric"
+                      pattern="\\d{4}[-/]\\d{2}[-/]\\d{2}"
+                      maxLength={10}
+                      placeholder="YYYY-MM-DD or YYYY/MM/DD"
+                      title="Use format YYYY-MM-DD or YYYY/MM/DD"
+                      required
+                      disabled={!isFamilyCenterEditable}
+                      className="h-8 rounded-md border border-black/25 bg-[#131417] px-2.5 text-xs text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                    />
+
+                    <input
+                      type="email"
+                      value={familyMemberEmailInput}
+                      onChange={(event) => {
+                        setFamilyMemberEmailInput(event.target.value);
+                        setFamilyCenterStatus(null);
+                      }}
+                      maxLength={160}
+                      placeholder="Email"
+                      required
+                      disabled={!isFamilyCenterEditable}
+                      className="h-8 rounded-md border border-black/25 bg-[#131417] px-2.5 text-xs text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                    />
+
+                    <input
+                      type="tel"
+                      value={familyMemberPhoneInput}
+                      onChange={(event) => {
+                        setFamilyMemberPhoneInput(event.target.value);
+                        setFamilyCenterStatus(null);
+                      }}
+                      maxLength={32}
+                      placeholder="Phone"
+                      required
+                      disabled={!isFamilyCenterEditable}
+                      className="h-8 rounded-md border border-black/25 bg-[#131417] px-2.5 text-xs text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                    />
+
+                    <div>
+                      <input
+                        type="password"
+                        value={familyMemberPasswordInput}
+                        onChange={(event) => {
+                          setFamilyMemberPasswordInput(event.target.value);
+                          setFamilyCenterStatus(null);
+                        }}
+                        maxLength={128}
+                        placeholder="Password"
+                        required
+                        disabled={!isFamilyCenterEditable}
+                        className="h-8 w-full rounded-md border border-black/25 bg-[#131417] px-2.5 text-xs text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                      />
+                      <p className={`mt-1 text-[10px] ${familyMemberPasswordStrength.className}`}>
+                        {familyMemberPasswordStrength.label}
+                      </p>
+                    </div>
+
+                    <div>
+                      <input
+                        type="password"
+                        value={familyMemberRepeatPasswordInput}
+                        onChange={(event) => {
+                          setFamilyMemberRepeatPasswordInput(event.target.value);
+                          setFamilyCenterStatus(null);
+                        }}
+                        maxLength={128}
+                        placeholder="Repeat Password"
+                        required
+                        disabled={!isFamilyCenterEditable}
+                        className="h-8 w-full rounded-md border border-black/25 bg-[#131417] px-2.5 text-xs text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                      />
+                      <p className={`mt-1 text-[10px] ${familyMemberRepeatPasswordStrength.className}`}>
+                        {familyMemberRepeatPasswordStrength.label}
+                        {familyMemberRepeatPasswordInput.trim().length > 0
+                          ? familyMemberRepeatPasswordInput.trim() === familyMemberPasswordInput.trim()
+                            ? " • Matches"
+                            : " • Does not match"
+                          : ""}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-2 flex justify-end">
+                    <Button
+                      type="button"
+                      onClick={onAddFamilyMember}
+                      disabled={!isFamilyCenterEditable || isCreatingFamilyMemberAccount}
+                      className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4]"
+                    >
+                      {isCreatingFamilyMemberAccount ? "Creating account..." : "Add Account"}
+                    </Button>
+                  </div>
+
+                  {familyCenterStatus ? (
+                    <p
+                      className={`mt-2 rounded-md border px-2.5 py-2 text-xs ${
+                        familyCenterStatusIsError
+                          ? "border-rose-500/30 bg-rose-500/10 text-rose-100"
+                          : "border-emerald-500/30 bg-emerald-500/10 text-emerald-100"
+                      }`}
+                    >
+                      {familyCenterStatus}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="rounded-lg border border-white/10 bg-[#1a1b1e] p-2.5">
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                    Existing Members
+                  </p>
+
+                  <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+                    {familyCenterPreferences.familyMembers.length === 0 ? (
+                      <p className="rounded-lg border border-white/10 bg-[#131417] px-3 py-2 text-xs text-[#949ba4]">
+                        No family accounts added yet.
+                      </p>
+                    ) : (
+                      familyCenterPreferences.familyMembers.map((member) => {
+                        const lifecycle = member.linkedUserId
+                          ? familyMemberLifecycleByUserId[member.linkedUserId]
+                          : null;
+                        const state = lifecycle?.state ?? member.familyLinkState;
+                        const stateLabel =
+                          state === "managed-under-16"
+                            ? "Managed <16"
+                            : state === "eligible-16-plus"
+                            ? "16+ eligible"
+                            : "Normal";
+
+                        return (
+                          <div
+                            key={member.id}
+                            className={`rounded-lg border px-2.5 py-2 ${
+                              member.id === selectedFamilyMemberId
+                                ? "border-[#5865f2]/60 bg-[#232953]"
+                                : "border-white/10 bg-[#131417]"
+                            }`}
+                          >
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <p className="truncate text-xs font-semibold text-white">
+                                {member.childName || "Profile Name"}
+                              </p>
+                              <span className="inline-flex h-5 items-center rounded-md border border-white/15 bg-white/5 px-1.5 text-[10px] font-semibold text-[#d7dcff]">
+                                {stateLabel}
+                              </span>
+                              {member.childRelation ? (
+                                <span className="inline-flex h-5 items-center rounded-md border border-white/10 bg-black/20 px-1.5 text-[10px] text-[#b5bac1]">
+                                  {member.childRelation}
+                                </span>
+                              ) : null}
+                            </div>
+
+                            <p className="mt-0.5 truncate text-[11px] text-[#949ba4]">
+                              {member.accountIdentifier}
+                              {member.childDateOfBirth ? ` • DOB ${member.childDateOfBirth}` : ""}
+                            </p>
+                            <p className="truncate text-[11px] text-[#949ba4]">
+                              {member.childEmail || "No email"}
+                              {member.childPhone ? ` • ${member.childPhone}` : ""}
+                            </p>
+                            {member.linkedUserId ? (
+                              <p className="truncate text-[11px] text-[#949ba4]">Linked: {member.linkedUserId}</p>
+                            ) : (
+                              <p className="truncate text-[11px] text-amber-300">Linked account: not created</p>
+                            )}
+
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              <Button
+                                type="button"
+                                onClick={() => setSelectedFamilyMemberId(member.id)}
+                                disabled={!isFamilyCenterEditable}
+                                className="h-7 border border-[#5865f2]/35 bg-[#5865f2]/15 px-2 text-[11px] text-[#d7dcff] hover:bg-[#5865f2]/25"
+                              >
+                                Oversight
+                              </Button>
+
+                              <Button
+                                type="button"
+                                onClick={() => void onConvertFamilyMemberToNormal(member)}
+                                disabled={
+                                  !member.linkedUserId ||
+                                  !familyMemberLifecycleByUserId[member.linkedUserId]?.canConvertToNormal ||
+                                  isConvertingFamilyMemberUserId === member.linkedUserId ||
+                                  !isFamilyCenterEditable
+                                }
+                                className="h-7 border border-emerald-500/35 bg-emerald-500/15 px-2 text-[11px] text-emerald-200 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {isConvertingFamilyMemberUserId === member.linkedUserId ? "Converting..." : "Convert"}
+                              </Button>
+
+                              <Button
+                                type="button"
+                                onClick={() => onRemoveFamilyMember(member.id)}
+                                disabled={!isFamilyCenterEditable}
+                                className="h-7 border border-rose-500/35 bg-rose-500/15 px-2 text-[11px] text-rose-200 hover:bg-rose-500/25"
+                              >
+                                Remove
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {familyCenterStatus ? (
+              <p className="mt-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-[#b5bac1]">
+                {familyCenterStatus}
+              </p>
+            ) : null}
+
+            <div className="mt-3 flex justify-end">
+              <Button
+                type="button"
+                onClick={onSaveFamilyCenterPreferences}
+                disabled={isSavingFamilyCenterPreferences || !isFamilyCenterEditable}
+                className="bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSavingFamilyCenterPreferences ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Saving...
+                  </span>
+                ) : (
+                  "Save Changes"
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      );
     }
 
     return renderComingSoonSection(sectionLabelMap[displaySection], sectionDescriptionMap[displaySection]);
@@ -4425,7 +6847,7 @@ export const SettingsModal = () => {
 
   return (
     <Dialog open={isModalOpen} onOpenChange={onClose}>
-      <DialogContent className="settings-theme-scope settings-scrollbar theme-settings-shell flex h-[85vh] max-h-[85vh] w-[85vw] max-w-[85vw] flex-col overflow-hidden rounded-3xl border-black/30 bg-[#2b2d31] p-0 text-[#dbdee1]">
+      <DialogContent className="settings-theme-scope settings-scrollbar theme-settings-shell flex h-[85vh] max-h-[85vh] w-[85vw] max-w-[85vw] flex-col overflow-hidden rounded-3xl border-black/30 bg-[#2b2d31] p-0 text-[#dbdee1] [&_input]:max-w-full [&_input]:min-w-0 [&_textarea]:max-w-full [&_textarea]:min-w-0 [&_button]:max-w-full [&_button]:min-w-0">
         <DialogTitle className="sr-only">User Settings</DialogTitle>
         <DialogDescription className="sr-only">
           Edit account, appearance, notification, and privacy settings.
@@ -4434,7 +6856,7 @@ export const SettingsModal = () => {
         <div className="grid min-h-0 flex-1 grid-cols-[1fr_260px] overflow-hidden">
           <aside className="theme-settings-rail settings-scrollbar order-2 flex h-full min-h-0 flex-col overflow-y-auto rounded-r-3xl border-l border-black/20 bg-[#232428] p-4 pt-2 shadow-2xl shadow-black/40">
             <nav className="settings-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
-              {sectionGroups.map((group) => (
+              {visibleSectionGroups.map((group) => (
                 <div key={group.label} className="space-y-1">
                   <p className="px-3 text-[11px] font-bold uppercase tracking-[0.08em] text-[#949ba4]">
                     {group.label}
@@ -4465,7 +6887,9 @@ export const SettingsModal = () => {
             </nav>
 
             <p className="mt-4 rounded-2xl border border-black/20 bg-[#1e1f22] px-3 py-2 text-xs leading-5 text-[#949ba4] whitespace-normal break-words shadow-lg shadow-black/35">
-              Choose a category on the right and edit details on the left.
+              Choose a category on the right
+              <br />
+              and edit details on the left.
             </p>
 
             <button
@@ -5632,15 +8056,6 @@ export const SettingsModal = () => {
 
                 {renderSectionContent()}
 
-                <div className="mt-6 flex justify-end">
-                  <Button
-                    type="button"
-                    onClick={onClose}
-                    className="bg-[#5865f2] text-white hover:bg-[#4752c4]"
-                  >
-                    Done
-                  </Button>
-                </div>
               </div>
             </div>
           </section>

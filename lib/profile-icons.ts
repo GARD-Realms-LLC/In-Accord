@@ -3,6 +3,7 @@ import {
   isInAccordDeveloper,
   isInAccordModerator,
 } from "@/lib/in-accord-admin";
+import { getFamilyLifecycleState } from "@/lib/family-lifecycle";
 
 export type ProfileIcon = {
   key: string;
@@ -16,6 +17,8 @@ type ProfileIconRuleContext = {
   role?: string | null;
   email?: string | null;
   createdAt?: Date | string | null;
+  dateOfBirth?: string | null;
+  familyParentUserId?: string | null;
 };
 
 type ProfileIconRule = {
@@ -59,6 +62,16 @@ const profileIconRules: ProfileIconRule[] = [
       emoji: "🛠️",
     },
     isEarned: (context) => isInAccordDeveloper(context.role),
+  },
+  {
+    icon: {
+      key: "family-member",
+      label: "Family Managed Member",
+      shortLabel: "FAMILY",
+      emoji: "👨‍👩‍👧",
+    },
+    isEarned: (context) =>
+      getFamilyLifecycleState(context.dateOfBirth, context.familyParentUserId).showFamilyIcon,
   },
 ];
 

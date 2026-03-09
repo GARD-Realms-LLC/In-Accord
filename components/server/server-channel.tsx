@@ -2,7 +2,7 @@
 
 import axios from "axios";
 import { type Channel, ChannelType, MemberRole, type Server } from "@/lib/db/types";
-import { GripVertical, Hash, Lock, Mic, Settings, Video } from "lucide-react";
+import { GripVertical, Hash, Mic, Settings, Video } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
@@ -15,6 +15,7 @@ interface ServerChannelProps {
   server: Server;
   role?: MemberRole;
   draggable?: boolean;
+  connectedCount?: number;
 }
 
 const iconMap = {
@@ -28,6 +29,7 @@ export const ServerChannel = ({
   server,
   role,
   draggable = false,
+  connectedCount = 0,
 }: ServerChannelProps) => {
   const { onOpen } = useModal();
   const params = useParams();
@@ -38,9 +40,8 @@ export const ServerChannel = ({
   const [isDragOver, setIsDragOver] = useState(false);
   const [isReordering, setIsReordering] = useState(false);
   const customIcon = String((channel as { icon?: string | null }).icon ?? "").trim();
-  const normalizedName = (channel.name ?? "").trim().toLowerCase();
-  const isProtectedChannel = normalizedName === "general" || normalizedName === "rules";
   const canReorder = !!role && role !== MemberRole.GUEST && draggable;
+  const showConnectedCount = (channel.type === ChannelType.AUDIO || channel.type === ChannelType.VIDEO) && connectedCount > 0;
 
   const onClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     if (isDraggingRef.current) {
@@ -154,17 +155,6 @@ export const ServerChannel = ({
         params?.channelId === channel.id && "bg-zinc-700/20 dark:bg-zinc-700"
       )}
     >
-      {canReorder ? (
-        <ActionTooltip label="Drag to reorder" side="top" align="center">
-          <span
-            className="mr-1 inline-flex items-center rounded-sm p-0.5 text-zinc-500 hover:bg-black/10 dark:text-zinc-400 dark:hover:bg-zinc-700/30"
-            title="Drag to reorder channel"
-            aria-label="Drag to reorder channel"
-          >
-            <GripVertical className="h-3.5 w-3.5" />
-          </span>
-        </ActionTooltip>
-      ) : null}
       {customIcon ? (
         <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-sm leading-none text-zinc-500 dark:text-zinc-300">
           {customIcon}
@@ -181,6 +171,11 @@ export const ServerChannel = ({
       >
         {channel.name}
       </p>
+      {showConnectedCount ? (
+        <span className="rounded-full border border-emerald-500/45 bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-emerald-200">
+          {connectedCount}
+        </span>
+      ) : null}
       <div className="ml-auto flex items-center gap-x-2">
         {role !== MemberRole.GUEST && (
           <ActionTooltip label="Channel Settings" align="center">
@@ -190,8 +185,16 @@ export const ServerChannel = ({
             />
           </ActionTooltip>
         )}
-        {isProtectedChannel ? (
-          <Lock className="w-4 h-4 text-zinc-500 dark:text-zinc-400" />
+        {canReorder ? (
+          <ActionTooltip label="Drag to reorder" side="top" align="center">
+            <span
+              className="inline-flex items-center rounded-sm p-0.5 text-zinc-500 hover:bg-black/10 dark:text-zinc-400 dark:hover:bg-zinc-700/30"
+              title="Drag to reorder channel"
+              aria-label="Drag to reorder channel"
+            >
+              <GripVertical className="h-3.5 w-3.5" />
+            </span>
+          </ActionTooltip>
         ) : null}
       </div>
     </button>

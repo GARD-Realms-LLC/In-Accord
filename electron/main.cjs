@@ -80,6 +80,92 @@ const DEFAULT_URL = "http://127.0.0.1:3000";
 let stopUpdateLoop = null;
 let nextServer = null;
 let activeAppUrl = DEFAULT_URL;
+let crashHandlingInProgress = false;
+
+const getCrashLogPath = () => {
+  try {
+    const userDataPath = app.getPath("userData");
+    return path.join(userDataPath, "crash-log.jsonl");
+  } catch (_error) {
+    return path.join(process.cwd(), "in-accord-crash-log.jsonl");
+  }
+};
+
+const appendCrashLog = (entry) => {
+  try {
+    const payload = JSON.stringify({
+      ...entry,
+      timestamp: new Date().toISOString(),
+      appVersion: app.getVersion(),
+      isPackaged: app.isPackaged,
+      platform: process.platform,
+      pid: process.pid,
+    });
+    fs.appendFileSync(getCrashLogPath(), `${payload}\n`, "utf8");
+  } catch (_error) {
+    // Never throw from crash logging.
+  }
+};
+
+const toCrashDetail = (reason) => {
+  if (reason instanceof Error) {
+    return reason.stack || reason.message;
+  }
+  return String(reason || "Unknown crash reason");
+};
+
+const reportCrash = async ({ source, reason, fatal = false }) => {
+  const detail = toCrashDetail(reason);
+  appendCrashLog({ source, detail, fatal });
+
+  if (!app.isReady() || crashHandlingInProgress) {
+    return;
+  }
+
+  crashHandlingInProgress = true;
+  try {
+    await dialog.showMessageBox({
+      type: "error",
+      title: "In-Accord crash detected",
+      message: `Crash source: ${source}`,
+      detail,
+      buttons: ["OK"],
+      noLink: true,
+    });
+  } catch (_dialogError) {
+    // Ignore dialog issues while handling crash.
+  } finally {
+    crashHandlingInProgress = false;
+  }
+
+  if (fatal) {
+    app.quit();
+  }
+};
+
+const wireCrashHandlers = () => {
+  process.on("uncaughtException", (error) => {
+    void reportCrash({ source: "main-process:uncaughtException", reason: error, fatal: true });
+  });
+
+  process.on("unhandledRejection", (reason) => {
+    void reportCrash({ source: "main-process:unhandledRejection", reason });
+  });
+
+  app.on("render-process-gone", (_event, _webContents, details) => {
+    void reportCrash({
+      source: `renderer-process:${details?.reason || "gone"}`,
+      reason: details,
+    });
+  });
+
+  app.on("child-process-gone", (_event, details) => {
+    void reportCrash({
+      source: `child-process:${details?.type || "unknown"}:${details?.reason || "gone"}`,
+      reason: details,
+    });
+  });
+};
 
 const broadcastUpdaterState = (state) => {
   const payload = state || getUpdaterState();
@@ -160,7 +246,16 @@ function createWindow(appUrl) {
 
   void win.loadURL(appUrl).catch(async (error) => {
     const detail = error instanceof Error ? error.message : String(error || "Unknown startup error");
+    appendCrashLog({ source: "window:loadURL", detail, fatal: false });
     await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`<h2>In-Accord failed to start</h2><p>${detail}</p>`)}`);
+  });
+
+  win.webContents.on("did-fail-load", (_event, code, description, validatedURL) => {
+    appendCrashLog({
+      source: "window:did-fail-load",
+      detail: `${description} (code ${code}) @ ${validatedURL}`,
+      fatal: false,
+    });
   });
 
   win.webContents.on("did-finish-load", () => {
@@ -180,6 +275,7 @@ function createWindow(appUrl) {
 app
   .whenReady()
   .then(async () => {
+    wireCrashHandlers();
     activeAppUrl = await resolveAppUrl();
     createWindow(activeAppUrl);
 

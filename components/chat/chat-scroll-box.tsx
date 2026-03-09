@@ -136,8 +136,12 @@ export const ChatScrollBox = ({
     };
   }, [forceStickToBottom]);
 
+  const resolvedClassName = className
+    ? `${className} chat-scroll-box-wrap min-w-0 max-w-full overflow-x-hidden`
+    : "chat-scroll-box-wrap min-w-0 max-w-full overflow-x-hidden";
+
   return (
-    <div ref={containerRef} className={className}>
+    <div ref={containerRef} className={resolvedClassName}>
       {children}
     </div>
   );

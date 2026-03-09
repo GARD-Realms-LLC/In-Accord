@@ -10,6 +10,7 @@ import { normalizePresenceStatus } from "@/lib/presence-status";
 import { getNextIncrementalUserId } from "@/lib/user-id";
 import { ensureUserProfileSchema } from "@/lib/user-profile";
 import { isInAccordAdministrator } from "@/lib/in-accord-admin";
+import { getInAccordRoles, normalizeRoleKey } from "@/lib/in-accord-roles";
 
 type UserRow = {
   userId: string;
@@ -89,32 +90,11 @@ const toDateOnlyString = (value: Date | string | null) => {
   return parsed.toISOString().slice(0, 10);
 };
 
-const normalizeManagedUserRole = (role: unknown) => {
-  const normalized = String(role ?? "USER").trim().toUpperCase();
+const normalizeManagedUserRole = (role: unknown) => normalizeRoleKey(role);
 
-  if (normalized === "USER") {
-    return "USER";
-  }
-
-  if (
-    normalized === "ADMIN" ||
-    normalized === "ADMINISTRATOR"
-  ) {
-    return "ADMINISTRATOR";
-  }
-
-  if (normalized === "DEVELOPER") {
-    return "DEVELOPER";
-  }
-
-  if (
-    normalized === "MODERATOR" ||
-    normalized === "MOD"
-  ) {
-    return "MODERATOR";
-  }
-
-  return null;
+const resolveAllowedRoleSet = async () => {
+  const roles = await getInAccordRoles();
+  return new Set(roles.map((role) => role.roleKey));
 };
 
 export async function GET() {
@@ -226,7 +206,12 @@ export async function POST(request: Request) {
     }
 
     if (!role) {
-      return new NextResponse("Invalid role. Allowed roles: USER, ADMINISTRATOR, DEVELOPER, MODERATOR", { status: 400 });
+      return new NextResponse("Invalid role value.", { status: 400 });
+    }
+
+    const allowedRoles = await resolveAllowedRoleSet();
+    if (!allowedRoles.has(role)) {
+      return new NextResponse("Role is not available in managed roles.", { status: 400 });
     }
 
     await ensureLocalAuthSchema();
@@ -342,7 +327,14 @@ export async function PATCH(request: Request) {
     }
 
     if (roleProvided && !role) {
-      return new NextResponse("Invalid role. Allowed roles: USER, ADMINISTRATOR, DEVELOPER, MODERATOR", { status: 400 });
+      return new NextResponse("Invalid role value.", { status: 400 });
+    }
+
+    if (roleProvided && role) {
+      const allowedRoles = await resolveAllowedRoleSet();
+      if (!allowedRoles.has(role)) {
+        return new NextResponse("Role is not available in managed roles.", { status: 400 });
+      }
     }
 
     if (phoneNumberProvided && phoneNumber.length > 32) {

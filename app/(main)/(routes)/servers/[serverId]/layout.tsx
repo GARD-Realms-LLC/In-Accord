@@ -8,7 +8,7 @@ import { ServerUserRolesRail } from "@/components/server/server-user-roles-rail"
 import { ServerRouteShell } from "@/components/server/server-route-shell";
 import { ChannelType, MemberRole } from "@/lib/db/types";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
-import { ensureChannelGroupSchema } from "@/lib/channel-groups";
+import { ensureChannelGroupSchema, ensureDefaultMediaChannelGroups } from "@/lib/channel-groups";
 
 type ChannelRow = {
   id: string;
@@ -60,6 +60,10 @@ const ServerIdLayout = async ({
   const currentServerName = hasAccess[0].name;
 
   await ensureChannelGroupSchema();
+  await ensureDefaultMediaChannelGroups({
+    serverId,
+    profileId: profile.id,
+  });
 
   const channelsResult = await db.execute(sql`
     select

@@ -36,11 +36,16 @@ export async function PATCH(req: Request) {
       customCss?: unknown;
       languagePreference?: unknown;
       connectedAccounts?: unknown;
+      contentSocial?: unknown;
+      dataPrivacy?: unknown;
+      familyCenter?: unknown;
       serverTags?: unknown;
       customThemeColors?: unknown;
       downloadedPlugins?: unknown;
       bannerUploads?: unknown;
       avatarUploads?: unknown;
+      discordApps?: unknown;
+      discordBots?: unknown;
     };
 
     const updates: Parameters<typeof updateUserPreferences>[1] = {};
@@ -61,6 +66,18 @@ export async function PATCH(req: Request) {
       updates.connectedAccounts = body.connectedAccounts
         .filter((value): value is string => typeof value === "string")
         .map((value) => value.trim());
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "contentSocial")) {
+      updates.contentSocial = body.contentSocial as Parameters<typeof updateUserPreferences>[1]["contentSocial"];
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "dataPrivacy")) {
+      updates.dataPrivacy = body.dataPrivacy as Parameters<typeof updateUserPreferences>[1]["dataPrivacy"];
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "familyCenter")) {
+      updates.familyCenter = body.familyCenter as Parameters<typeof updateUserPreferences>[1]["familyCenter"];
     }
 
     if (Array.isArray(body.serverTags)) {
@@ -92,6 +109,14 @@ export async function PATCH(req: Request) {
         .filter((value): value is string => typeof value === "string")
         .map((value) => value.trim())
         .filter((value) => value.length > 0);
+    }
+
+    if (Array.isArray(body.discordApps)) {
+      updates.discordApps = body.discordApps as Parameters<typeof updateUserPreferences>[1]["discordApps"];
+    }
+
+    if (Array.isArray(body.discordBots)) {
+      updates.discordBots = body.discordBots as Parameters<typeof updateUserPreferences>[1]["discordBots"];
     }
 
     const preferences = await updateUserPreferences(profile.id, updates);

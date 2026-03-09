@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   ArrowUpCircle,
   Bell,
+  Bug,
   CheckCircle2,
   GripVertical,
   Hash,
@@ -719,6 +720,9 @@ export const ServerRouteShell = ({
           <button type="button" title="Notifications" className="inline-flex h-8 w-8 items-center justify-center rounded hover:bg-[#3f4248] hover:text-white transition-colors">
             <Bell className="h-4 w-4" />
           </button>
+          <button type="button" title="Bug Reports" className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-[#3f4248] hover:text-white transition-colors">
+            <Bug className="h-3 w-3" suppressHydrationWarning />
+          </button>
         </div>
 
         <div
@@ -900,33 +904,6 @@ export const ServerRouteShell = ({
               >
                 <button
                   type="button"
-                  draggable
-                  onDragStart={(event) => {
-                    setDraggedTabId(tab.serverId);
-                    event.dataTransfer.effectAllowed = "move";
-                    event.dataTransfer.setData(
-                      SERVER_TAB_DRAG_MIME,
-                      JSON.stringify({
-                        serverId: tab.serverId,
-                        serverName: tab.serverName,
-                        source: "tab",
-                      })
-                    );
-                  }}
-                  onDragEnd={() => setDraggedTabId(null)}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                  }}
-                  className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-300 transition hover:bg-black/25 hover:text-white"
-                  title="Drag to reorder tab"
-                  aria-label={`Drag ${tab.serverName} tab to reorder`}
-                >
-                  <GripVertical className="h-3.5 w-3.5" />
-                </button>
-
-                <button
-                  type="button"
                   onClick={() => navigateToServerTab(tab)}
                   className="min-w-0 flex-1 truncate text-left"
                 >
@@ -965,6 +942,32 @@ export const ServerRouteShell = ({
                   }`}
                 >
                   <X className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  draggable
+                  onDragStart={(event) => {
+                    setDraggedTabId(tab.serverId);
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData(
+                      SERVER_TAB_DRAG_MIME,
+                      JSON.stringify({
+                        serverId: tab.serverId,
+                        serverName: tab.serverName,
+                        source: "tab",
+                      })
+                    );
+                  }}
+                  onDragEnd={() => setDraggedTabId(null)}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
+                  className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-300 transition hover:bg-black/25 hover:text-white"
+                  title="Drag to reorder tab"
+                  aria-label={`Drag ${tab.serverName} tab to reorder`}
+                >
+                  <GripVertical className="h-3.5 w-3.5" />
                 </button>
               </div>
             );

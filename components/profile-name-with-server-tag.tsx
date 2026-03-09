@@ -26,6 +26,13 @@ type ProfileCardPayload = {
   effectiveNameplateColor?: string | null;
   effectiveNameplateImageUrl?: string | null;
   selectedServerTag?: SelectedServerTag | null;
+  familyLifecycle?: {
+    isFamilyLinked?: boolean;
+    showFamilyIcon?: boolean;
+    canConvertToNormal?: boolean;
+    age?: number | null;
+    state?: "managed-under-16" | "eligible-16-plus" | "normal";
+  } | null;
 };
 
 type ProfileCardState = {
@@ -39,6 +46,7 @@ type ProfileCardState = {
   effectiveNameplateColor: string | null;
   effectiveNameplateImageUrl: string | null;
   selectedServerTag: SelectedServerTag | null;
+  showFamilyIcon: boolean;
 };
 
 type ProfileNameWithServerTagProps = {
@@ -76,6 +84,7 @@ const readCardState = async (profileId: string, memberId?: string | null) => {
       effectiveNameplateColor: null,
       effectiveNameplateImageUrl: null,
       selectedServerTag: null,
+      showFamilyIcon: false,
     };
   }
 
@@ -124,6 +133,7 @@ const readCardState = async (profileId: string, memberId?: string | null) => {
           : null;
       const tag = response.data?.selectedServerTag;
       const normalized = tag && typeof tag.tagCode === "string" ? tag : null;
+      const showFamilyIcon = Boolean(response.data?.familyLifecycle?.showFamilyIcon);
       const nextState: ProfileCardState = {
         effectiveProfileName,
         effectiveProfileNameStyle,
@@ -135,6 +145,7 @@ const readCardState = async (profileId: string, memberId?: string | null) => {
         effectiveNameplateColor,
         effectiveNameplateImageUrl,
         selectedServerTag: normalized,
+        showFamilyIcon,
       };
 
       cardCache.set(cacheKey, nextState);
@@ -152,6 +163,7 @@ const readCardState = async (profileId: string, memberId?: string | null) => {
         effectiveNameplateColor: null,
         effectiveNameplateImageUrl: null,
         selectedServerTag: null,
+        showFamilyIcon: false,
       };
       cardCache.set(cacheKey, fallbackState);
       return fallbackState;
@@ -188,6 +200,7 @@ export const ProfileNameWithServerTag = ({
   const [effectiveNameplateColor, setEffectiveNameplateColor] = useState<string | null>(null);
   const [effectiveNameplateImageUrl, setEffectiveNameplateImageUrl] = useState<string | null>(null);
   const [selectedServerTag, setSelectedServerTag] = useState<SelectedServerTag | null>(null);
+  const [showFamilyIcon, setShowFamilyIcon] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
 
   const trimmedProfileId = useMemo(() => String(profileId ?? "").trim(), [profileId]);
@@ -205,6 +218,7 @@ export const ProfileNameWithServerTag = ({
       setEffectiveNameplateColor(null);
       setEffectiveNameplateImageUrl(null);
       setSelectedServerTag(null);
+      setShowFamilyIcon(false);
       return;
     }
 
@@ -223,6 +237,7 @@ export const ProfileNameWithServerTag = ({
         setEffectiveNameplateColor(state.effectiveNameplateColor);
         setEffectiveNameplateImageUrl(state.effectiveNameplateImageUrl);
         setSelectedServerTag(state.selectedServerTag);
+        setShowFamilyIcon(state.showFamilyIcon);
       }
     };
 
@@ -293,6 +308,19 @@ export const ProfileNameWithServerTag = ({
   ) : null;
   const shouldRenderTagOutsidePlate = Boolean(selectedServerTag) && !shouldRenderTagInsidePlate;
   const renderMetaOutsidePlate = !(showNameplate && hasAnyNameplateValue);
+  const familyBadge = showFamilyIcon ? (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border border-fuchsia-400/35 bg-fuchsia-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-fuchsia-100",
+        badgeClassName
+      )}
+      title="Family managed account"
+      aria-label="Family managed account"
+    >
+      <span>👨‍👩‍👧</span>
+      <span>FAMILY</span>
+    </span>
+  ) : null;
 
   if (shouldHideName) {
     return (
@@ -324,6 +352,7 @@ export const ProfileNameWithServerTag = ({
             <span>{selectedServerTag.tagCode}</span>
           </span>
         ) : null}
+        {familyBadge}
       </span>
     );
   }
@@ -354,6 +383,7 @@ export const ProfileNameWithServerTag = ({
             <span>{selectedServerTag.tagCode}</span>
           </span>
         ) : null}
+        {familyBadge}
       </span>
 
       {showNameplate && hasAnyNameplateValue ? (

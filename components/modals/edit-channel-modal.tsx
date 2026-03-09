@@ -407,13 +407,26 @@ export const EditChannelModal = () => {
 
   const renderPermissionsSection = () => {
     const roleRows: Array<keyof RolePermissions> = ["ADMIN", "MODERATOR", "GUEST"];
+    const selectedChannelType = form.watch("type");
+    const sendPermissionLabel =
+      selectedChannelType === ChannelType.TEXT
+        ? "Send Messages"
+        : selectedChannelType === ChannelType.AUDIO
+          ? "Transmit Audio"
+          : "Transmit Video";
+    const connectPermissionLabel =
+      selectedChannelType === ChannelType.TEXT
+        ? "Connect (future media features)"
+        : selectedChannelType === ChannelType.AUDIO
+          ? "Connect to Voice"
+          : "Connect to Video";
 
     return (
       <div className="flex-1 space-y-4 px-6 py-5">
         <div className="rounded-lg border border-black/30 bg-[#232428] p-4">
           <p className="text-sm font-semibold text-white">Role Permissions</p>
           <p className="mt-1 text-xs text-zinc-400">
-            Configure who can view this channel, send messages, and connect.
+            Configure who can view this channel, use channel abilities, and connect.
           </p>
 
           <div className="mt-4 space-y-3">
@@ -423,8 +436,8 @@ export const EditChannelModal = () => {
                 <div className="grid gap-2 sm:grid-cols-3">
                   {([
                     ["allowView", "View Channel"],
-                    ["allowSend", "Send Messages"],
-                    ["allowConnect", "Connect"],
+                    ["allowSend", sendPermissionLabel],
+                    ["allowConnect", connectPermissionLabel],
                   ] as const).map(([key, label]) => (
                     <label key={key} className="flex items-center gap-2 rounded bg-black/20 px-2 py-1.5 text-xs text-zinc-200">
                       <input

@@ -45,7 +45,6 @@ export async function GET(req: Request) {
       return NextResponse.json(
         {
           error: "R2 configuration missing or placeholder values detected",
-          missing: missingKeys,
         },
         { status: 500 }
       );

@@ -1,7 +1,7 @@
 "use client";
 
 import { ChannelType, MemberRole } from "@/lib/db/types";
-import { FileText, Plus, Settings, Users } from "lucide-react";
+import { Plus, Settings, Users } from "lucide-react";
 
 import { ServerWithMembersWithProfiles } from "@/types";
 import { ActionTooltip } from "@/components/action-tooltip";
@@ -46,16 +46,6 @@ export const ServerSection = ({
               </button>
             </ActionTooltip>
           )}
-          {server?.id ? (
-            <ActionTooltip label="Create Forum" side="top" align="center">
-              <button
-                onClick={() => onOpen("createForm", { server })}
-                className="text-zinc-500 hover:text-zinc-600 dark:text-zinc-400 dark:hover:text-zinc-300 transition"
-              >
-                <FileText className="h-4 w-4" />
-              </button>
-            </ActionTooltip>
-          ) : null}
           <ActionTooltip label="Create Channel" side="top" align="center">
             <button
               onClick={() => onOpen("createChannel", { channelType })}

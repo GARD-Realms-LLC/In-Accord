@@ -386,6 +386,19 @@ select,
   word-break: break-word !important;
 }
 
+/* Prevent horizontal scrollbars in chat and DM message panes. */
+.chat-scroll-box-wrap {
+  overflow-x: hidden !important;
+}
+
+.chat-scroll-box-wrap,
+.chat-scroll-box-wrap :is(p, span, a, strong, em, b, i, small, label, code, pre, li, dt, dd, blockquote) {
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+  max-width: 100%;
+}
+
 .settings-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: #7a7f87 #2b2d31;

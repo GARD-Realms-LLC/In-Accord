@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { Crown, Eye, EyeOff, Flag, Link2, ScrollText, ShieldAlert, ShieldCheck, Smile, Sticker, Trash2, Webhook, Wrench } from "lucide-react";
+import { Baby, Crown, Eye, EyeOff, Flag, Link2, ScrollText, ShieldAlert, ShieldCheck, Smile, Sticker, Trash2, Webhook, Wrench } from "lucide-react";
 import Image from "next/image";
 
 import {
@@ -31,14 +31,49 @@ type AdminSection =
   | "servers"
   | "serverTags"
   | "reported"
+  | "issuesBugs"
   | "moderation"
   | "roles"
+  | "familyCenter"
   | "auditLog"
   | "invites"
   | "emojiStickers"
   | "webhooks"
   | "security"
-  | "integrations";
+  | "integrations"
+  | "discordAppsBots";
+
+const adminSections = [
+  "general",
+  "members",
+  "servers",
+  "serverTags",
+  "reported",
+  "issuesBugs",
+  "moderation",
+  "roles",
+  "familyCenter",
+  "auditLog",
+  "invites",
+  "emojiStickers",
+  "webhooks",
+  "security",
+  "integrations",
+  "discordAppsBots",
+] as const;
+
+const adminSectionSet = new Set<AdminSection>(adminSections);
+
+const normalizeAdminSection = (value: unknown): AdminSection | null => {
+  const normalized = String(value ?? "").trim();
+  if (!normalized) {
+    return null;
+  }
+
+  return adminSectionSet.has(normalized as AdminSection)
+    ? (normalized as AdminSection)
+    : null;
+};
 
 type AdminUser = {
   id: string;
@@ -112,7 +147,27 @@ type AdminRecentLogin = {
 type AdminIntegrationsSummary = {
   usersWithConnections: number;
   totalLinkedAccounts: number;
+  appsTotal?: number;
+  botsTotal?: number;
+  enabledApps?: number;
+  enabledBots?: number;
+  usersWithDiscordConfigs?: number;
 };
+
+type AdminDiscordConfig = {
+  id: string;
+  userId: string;
+  name: string;
+  email: string;
+  type: "APP" | "BOT";
+  configName: string;
+  applicationId: string;
+  enabled: boolean;
+  createdAt: string;
+};
+
+type DiscordConfigSortKey = "createdAt" | "status" | "type";
+type DiscordSortDirection = "asc" | "desc";
 
 type AdminIntegrationProvider = {
   key: string;
@@ -130,7 +185,7 @@ type AdminReport = {
   reporterProfileId: string;
   reporterName: string;
   reporterEmail: string;
-  targetType: "USER" | "SERVER" | "MESSAGE";
+  targetType: "USER" | "SERVER" | "MESSAGE" | "BUG";
   targetId: string;
   targetName: string;
   reason: string;
@@ -175,6 +230,85 @@ type AdminEmojiStickerSummary = {
   activeAssets: number;
 };
 
+type AdminManagedRole = {
+  roleKey: string;
+  roleLabel: string;
+  isSystem: boolean;
+  memberCount: number;
+};
+
+type AdminMetaInfo = {
+  build: {
+    appName: string;
+    appVersion: string;
+    nextVersion: string;
+    nodeEnv: string;
+    buildTimestamp: string;
+    commitSha: string | null;
+    branch: string | null;
+  };
+  github: {
+    repositoryUrl: string | null;
+    homepageUrl: string | null;
+    issuesUrl: string | null;
+  };
+  storage?: {
+    documentStorageConfigured?: boolean;
+    provider?: string;
+    applicationsPath?: string;
+  };
+  commits: Array<{
+    sha: string;
+    shortSha: string;
+    message: string;
+    author: string;
+    committedAt: string;
+  }>;
+  githubMainCommits?: Array<{
+    sha: string;
+    shortSha: string;
+    message: string;
+    url: string;
+    committedAt: string;
+  }>;
+};
+
+type AdminWebhook = {
+  id: string;
+  name: string;
+  endpointUrl: string;
+  eventType: string;
+  serverId: string | null;
+  serverName: string | null;
+  enabled: boolean;
+  secretPreview: string;
+  createdByProfileId: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+type AdminFamilyCenterEntry = {
+  applicationId: string;
+  submittedBy: string;
+  imageUrl: string;
+  userId: string;
+  displayName: string;
+  email: string;
+  role: string;
+  familyMembersCount: number;
+  familyDesignation: string;
+  applicationStatus: string;
+  applicationSubmittedAt: string | null;
+  applicationFiles: Array<{
+    name: string;
+    url: string;
+    mimeType: string;
+    size: number;
+    uploadedAt: string;
+  }>;
+  preferenceUpdatedAt: string | null;
+};
+
 const normalizeAdminRoleForDisplay = (role: string | null | undefined) => {
   const normalized = String(role ?? "USER").trim().toUpperCase();
 
@@ -204,6 +338,11 @@ const normalizeAdminRoleForDisplay = (role: string | null | undefined) => {
     return "MODERATOR";
   }
 
+  const normalizedCustom = normalized.replace(/[\s-]+/g, "_");
+  if (/^[A-Z][A-Z0-9_]{1,63}$/.test(normalizedCustom)) {
+    return normalizedCustom;
+  }
+
   return "USER";
 };
 
@@ -224,6 +363,13 @@ const getAdminRoleIcon = (role: string | null | undefined, className = "h-3.5 w-
 
   return null;
 };
+
+const formatManagedRoleLabelFromKey = (roleKey: string) =>
+  roleKey
+    .split("_")
+    .filter(Boolean)
+    .map((token) => token.slice(0, 1) + token.slice(1).toLowerCase())
+    .join(" ") || roleKey;
 
 export const InAccordAdminModal = () => {
   const { isOpen, onClose, type, data } = useModal();
@@ -250,7 +396,7 @@ export const InAccordAdminModal = () => {
   const [savingServerTagServerId, setSavingServerTagServerId] = useState<string | null>(null);
   const [serverTagsActionError, setServerTagsActionError] = useState<string | null>(null);
   const [serverTagsActionSuccess, setServerTagsActionSuccess] = useState<string | null>(null);
-  const [columnWidths, setColumnWidths] = useState([320, 210, 230, 220, 100, 100]);
+  const [columnWidths, setColumnWidths] = useState([240, 210, 230, 180, 100, 100]);
   const [serverColumnWidths, setServerColumnWidths] = useState([240, 220, 220, 180, 110, 110]);
   const [newUserName, setNewUserName] = useState("");
   const [newUserEmail, setNewUserEmail] = useState("");
@@ -273,13 +419,24 @@ export const InAccordAdminModal = () => {
   const [integrationsSummary, setIntegrationsSummary] = useState<AdminIntegrationsSummary | null>(null);
   const [integrationProviders, setIntegrationProviders] = useState<AdminIntegrationProvider[]>([]);
   const [topConnectedUsers, setTopConnectedUsers] = useState<AdminTopConnectedUser[]>([]);
+  const [recentDiscordConfigs, setRecentDiscordConfigs] = useState<AdminDiscordConfig[]>([]);
+  const [discordConfigQuery, setDiscordConfigQuery] = useState("");
+  const [discordConfigTypeFilter, setDiscordConfigTypeFilter] = useState<"ALL" | "APP" | "BOT">("ALL");
+  const [discordConfigStatusFilter, setDiscordConfigStatusFilter] = useState<"ALL" | "ENABLED" | "DISABLED">("ALL");
+  const [editingDiscordConfigKey, setEditingDiscordConfigKey] = useState<string | null>(null);
+  const [discordConfigDrafts, setDiscordConfigDrafts] = useState<Record<string, { configName: string; applicationId: string }>>({});
+  const [discordConfigActionPendingKey, setDiscordConfigActionPendingKey] = useState<string | null>(null);
+  const [discordConfigActionError, setDiscordConfigActionError] = useState<string | null>(null);
+  const [discordConfigActionSuccess, setDiscordConfigActionSuccess] = useState<string | null>(null);
+  const [discordConfigSortKey, setDiscordConfigSortKey] = useState<DiscordConfigSortKey>("createdAt");
+  const [discordConfigSortDirection, setDiscordConfigSortDirection] = useState<DiscordSortDirection>("desc");
   const [isLoadingIntegrations, setIsLoadingIntegrations] = useState(false);
   const [integrationsError, setIntegrationsError] = useState<string | null>(null);
   const [reports, setReports] = useState<AdminReport[]>([]);
   const [isLoadingReports, setIsLoadingReports] = useState(false);
   const [reportsError, setReportsError] = useState<string | null>(null);
   const [reportStatusFilter, setReportStatusFilter] = useState<"ALL" | AdminReport["status"]>("ALL");
-  const [reportTargetTypeFilter, setReportTargetTypeFilter] = useState<"ALL" | "USER" | "SERVER" | "MESSAGE">("ALL");
+  const [reportTargetTypeFilter, setReportTargetTypeFilter] = useState<"ALL" | "USER" | "SERVER" | "MESSAGE" | "BUG">("ALL");
   const [updatingReportId, setUpdatingReportId] = useState<string | null>(null);
   const [emojiStickerServers, setEmojiStickerServers] = useState<AdminEmojiStickerServer[]>([]);
   const [emojiStickerAssets, setEmojiStickerAssets] = useState<AdminEmojiStickerAsset[]>([]);
@@ -296,6 +453,45 @@ export const InAccordAdminModal = () => {
   const [newEmojiStickerType, setNewEmojiStickerType] = useState<"EMOJI" | "STICKER">("EMOJI");
   const [newEmojiStickerName, setNewEmojiStickerName] = useState("");
   const [newEmojiStickerValue, setNewEmojiStickerValue] = useState("");
+  const [managedRoles, setManagedRoles] = useState<AdminManagedRole[]>([]);
+  const [isLoadingManagedRoles, setIsLoadingManagedRoles] = useState(false);
+  const [managedRolesError, setManagedRolesError] = useState<string | null>(null);
+  const [managedRolesActionError, setManagedRolesActionError] = useState<string | null>(null);
+  const [managedRolesActionSuccess, setManagedRolesActionSuccess] = useState<string | null>(null);
+  const [newRoleKey, setNewRoleKey] = useState("");
+  const [newRoleLabel, setNewRoleLabel] = useState("");
+  const [isCreatingRole, setIsCreatingRole] = useState(false);
+  const [updatingRoleKey, setUpdatingRoleKey] = useState<string | null>(null);
+  const [deletingRoleKey, setDeletingRoleKey] = useState<string | null>(null);
+  const [roleLabelDrafts, setRoleLabelDrafts] = useState<Record<string, string>>({});
+  const [metaInfo, setMetaInfo] = useState<AdminMetaInfo | null>(null);
+  const [isLoadingMetaInfo, setIsLoadingMetaInfo] = useState(false);
+  const [metaInfoError, setMetaInfoError] = useState<string | null>(null);
+  const [webhooks, setWebhooks] = useState<AdminWebhook[]>([]);
+  const [isLoadingWebhooks, setIsLoadingWebhooks] = useState(false);
+  const [webhooksError, setWebhooksError] = useState<string | null>(null);
+  const [webhooksActionError, setWebhooksActionError] = useState<string | null>(null);
+  const [webhooksActionSuccess, setWebhooksActionSuccess] = useState<string | null>(null);
+  const [newWebhookName, setNewWebhookName] = useState("");
+  const [newWebhookUrl, setNewWebhookUrl] = useState("");
+  const [newWebhookEventType, setNewWebhookEventType] = useState("MESSAGE_CREATE");
+  const [newWebhookServerId, setNewWebhookServerId] = useState("GLOBAL");
+  const [isCreatingWebhook, setIsCreatingWebhook] = useState(false);
+  const [webhookActionPendingId, setWebhookActionPendingId] = useState<string | null>(null);
+  const [familyCenterEntries, setFamilyCenterEntries] = useState<AdminFamilyCenterEntry[]>([]);
+  const [isLoadingFamilyCenter, setIsLoadingFamilyCenter] = useState(false);
+  const [familyCenterError, setFamilyCenterError] = useState<string | null>(null);
+  const [familyCenterSuccess, setFamilyCenterSuccess] = useState<string | null>(null);
+  const [familyCenterSearch, setFamilyCenterSearch] = useState("");
+  const [familyCenterStatusFilter, setFamilyCenterStatusFilter] = useState<"ALL" | "SUBMITTED" | "APROVED" | "DENIED">("ALL");
+  const [deletingFamilyApplicationUserId, setDeletingFamilyApplicationUserId] = useState<string | null>(null);
+  const [reviewingFamilyApplicationActionUserId, setReviewingFamilyApplicationActionUserId] = useState<string | null>(null);
+  const [reviewingFamilyApplication, setReviewingFamilyApplication] = useState<AdminFamilyCenterEntry | null>(null);
+  const [previewingFamilyApplicationFile, setPreviewingFamilyApplicationFile] = useState<{
+    name: string;
+    url: string;
+    mimeType: string;
+  } | null>(null);
 
 
   const isModalOpen = isOpen && type === "inAccordAdmin";
@@ -350,12 +546,102 @@ export const InAccordAdminModal = () => {
     }
   };
 
+  const loadMetaInfo = useCallback(async () => {
+    try {
+      setIsLoadingMetaInfo(true);
+      setMetaInfoError(null);
+
+      const response = await fetch("/api/admin/meta", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load build info (${response.status})`);
+      }
+
+      const payload = (await response.json()) as AdminMetaInfo;
+      setMetaInfo(payload);
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_META_LOAD]", error);
+      setMetaInfo(null);
+      setMetaInfoError("Unable to load build and GitHub information right now.");
+    } finally {
+      setIsLoadingMetaInfo(false);
+    }
+  }, []);
+
+  const loadManagedRoles = async () => {
+    try {
+      setIsLoadingManagedRoles(true);
+      setManagedRolesError(null);
+
+      const response = await fetch("/api/admin/roles", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load roles (${response.status})`);
+      }
+
+      const payload = (await response.json()) as { roles?: AdminManagedRole[] };
+      const nextRoles = (payload.roles ?? []).map((role) => ({
+        ...role,
+        roleKey: normalizeAdminRoleForDisplay(role.roleKey),
+        roleLabel: String(role.roleLabel ?? "").trim() || normalizeAdminRoleForDisplay(role.roleKey),
+      }));
+
+      setManagedRoles(nextRoles);
+      setRoleLabelDrafts(
+        nextRoles.reduce<Record<string, string>>((acc, role) => {
+          acc[role.roleKey] = role.roleLabel;
+          return acc;
+        }, {})
+      );
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_ROLES_LOAD]", error);
+      setManagedRoles([]);
+      setRoleLabelDrafts({});
+      setManagedRolesError("Unable to load managed roles right now.");
+    } finally {
+      setIsLoadingManagedRoles(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isModalOpen) {
+      return;
+    }
+
+    const requestedSection = normalizeAdminSection(data.query?.adminSection);
+    if (!requestedSection) {
+      return;
+    }
+
+    setActiveSection(requestedSection);
+  }, [data.query, isModalOpen]);
+
   useEffect(() => {
     if (!isModalOpen || (activeSection !== "members" && activeSection !== "roles")) {
       return;
     }
 
     loadUsers();
+  }, [activeSection, isModalOpen]);
+
+  useEffect(() => {
+    if (!isModalOpen || (activeSection !== "members" && activeSection !== "roles")) {
+      return;
+    }
+
+    void loadManagedRoles();
   }, [activeSection, isModalOpen]);
 
   const loadServerTags = async () => {
@@ -469,16 +755,19 @@ export const InAccordAdminModal = () => {
         summary?: AdminIntegrationsSummary;
         providers?: AdminIntegrationProvider[];
         topConnectedUsers?: AdminTopConnectedUser[];
+        recentDiscordConfigs?: AdminDiscordConfig[];
       };
 
       setIntegrationsSummary(payload.summary ?? null);
       setIntegrationProviders(payload.providers ?? []);
       setTopConnectedUsers(payload.topConnectedUsers ?? []);
+      setRecentDiscordConfigs(payload.recentDiscordConfigs ?? []);
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_INTEGRATIONS_LOAD]", error);
       setIntegrationsSummary(null);
       setIntegrationProviders([]);
       setTopConnectedUsers([]);
+      setRecentDiscordConfigs([]);
       setIntegrationsError("Unable to load integrations insights right now.");
     } finally {
       setIsLoadingIntegrations(false);
@@ -601,6 +890,62 @@ export const InAccordAdminModal = () => {
     }
   }, [emojiStickerServerFilter, emojiStickerStatusFilter, emojiStickerTypeFilter, newEmojiStickerServerId]);
 
+  const loadWebhooks = useCallback(async () => {
+    try {
+      setIsLoadingWebhooks(true);
+      setWebhooksError(null);
+
+      const response = await fetch("/api/admin/webhooks", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load webhooks (${response.status})`);
+      }
+
+      const payload = (await response.json()) as { webhooks?: AdminWebhook[] };
+      setWebhooks(payload.webhooks ?? []);
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_WEBHOOKS_LOAD]", error);
+      setWebhooks([]);
+      setWebhooksError("Unable to load webhooks right now.");
+    } finally {
+      setIsLoadingWebhooks(false);
+    }
+  }, []);
+
+  const loadFamilyCenter = useCallback(async () => {
+    try {
+      setIsLoadingFamilyCenter(true);
+      setFamilyCenterError(null);
+
+      const response = await fetch("/api/admin/family-center", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load family center records (${response.status})`);
+      }
+
+      const payload = (await response.json()) as { entries?: AdminFamilyCenterEntry[] };
+      setFamilyCenterEntries(payload.entries ?? []);
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_FAMILY_CENTER_LOAD]", error);
+      setFamilyCenterEntries([]);
+      setFamilyCenterError("Unable to load Family Center records right now.");
+    } finally {
+      setIsLoadingFamilyCenter(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (
       !isModalOpen ||
@@ -624,7 +969,7 @@ export const InAccordAdminModal = () => {
   }, [activeSection, isModalOpen, loadSecurity]);
 
   useEffect(() => {
-    if (!isModalOpen || activeSection !== "integrations") {
+    if (!isModalOpen || (activeSection !== "integrations" && activeSection !== "discordAppsBots")) {
       return;
     }
 
@@ -643,12 +988,36 @@ export const InAccordAdminModal = () => {
   }, [activeSection, isModalOpen, loadIntegrations]);
 
   useEffect(() => {
-    if (!isModalOpen || (activeSection !== "servers" && activeSection !== "invites")) {
+    if (!isModalOpen || activeSection !== "general") {
+      return;
+    }
+
+    void loadMetaInfo();
+  }, [activeSection, isModalOpen, loadMetaInfo]);
+
+  useEffect(() => {
+    if (!isModalOpen || (activeSection !== "servers" && activeSection !== "invites" && activeSection !== "webhooks")) {
       return;
     }
 
     void loadServers();
   }, [activeSection, isModalOpen, loadServers]);
+
+  useEffect(() => {
+    if (!isModalOpen || activeSection !== "webhooks") {
+      return;
+    }
+
+    void loadWebhooks();
+  }, [activeSection, isModalOpen, loadWebhooks]);
+
+  useEffect(() => {
+    if (!isModalOpen || activeSection !== "familyCenter") {
+      return;
+    }
+
+    void loadFamilyCenter();
+  }, [activeSection, isModalOpen, loadFamilyCenter]);
 
   useEffect(() => {
     if (!isModalOpen || activeSection !== "emojiStickers") {
@@ -659,7 +1028,22 @@ export const InAccordAdminModal = () => {
   }, [activeSection, isModalOpen, loadEmojiStickers]);
 
   useEffect(() => {
-    if (!isModalOpen || activeSection !== "reported") {
+    if (!isModalOpen) {
+      return;
+    }
+
+    if (activeSection === "issuesBugs" && reportTargetTypeFilter !== "BUG") {
+      setReportTargetTypeFilter("BUG");
+      return;
+    }
+
+    if (activeSection === "reported" && reportTargetTypeFilter === "BUG") {
+      setReportTargetTypeFilter("ALL");
+    }
+  }, [activeSection, isModalOpen, reportTargetTypeFilter]);
+
+  useEffect(() => {
+    if (!isModalOpen || (activeSection !== "reported" && activeSection !== "issuesBugs")) {
       return;
     }
 
@@ -689,7 +1073,7 @@ export const InAccordAdminModal = () => {
       setSavingServerTagServerId(null);
       setServerTagsActionError(null);
       setServerTagsActionSuccess(null);
-      setColumnWidths([320, 210, 230, 220, 100, 100]);
+      setColumnWidths([240, 210, 230, 180, 100, 100]);
       setServerColumnWidths([240, 220, 220, 180, 110, 110]);
       setNewUserName("");
       setNewUserEmail("");
@@ -712,6 +1096,17 @@ export const InAccordAdminModal = () => {
       setIntegrationsSummary(null);
       setIntegrationProviders([]);
       setTopConnectedUsers([]);
+      setRecentDiscordConfigs([]);
+      setDiscordConfigQuery("");
+      setDiscordConfigTypeFilter("ALL");
+      setDiscordConfigStatusFilter("ALL");
+      setEditingDiscordConfigKey(null);
+      setDiscordConfigDrafts({});
+      setDiscordConfigActionPendingKey(null);
+      setDiscordConfigActionError(null);
+      setDiscordConfigActionSuccess(null);
+      setDiscordConfigSortKey("createdAt");
+      setDiscordConfigSortDirection("desc");
       setIsLoadingIntegrations(false);
       setIntegrationsError(null);
       setReports([]);
@@ -735,8 +1130,144 @@ export const InAccordAdminModal = () => {
       setNewEmojiStickerType("EMOJI");
       setNewEmojiStickerName("");
       setNewEmojiStickerValue("");
+      setManagedRoles([]);
+      setIsLoadingManagedRoles(false);
+      setManagedRolesError(null);
+      setManagedRolesActionError(null);
+      setManagedRolesActionSuccess(null);
+      setNewRoleKey("");
+      setNewRoleLabel("");
+      setIsCreatingRole(false);
+      setUpdatingRoleKey(null);
+      setDeletingRoleKey(null);
+      setRoleLabelDrafts({});
+      setMetaInfo(null);
+      setIsLoadingMetaInfo(false);
+      setMetaInfoError(null);
+      setWebhooks([]);
+      setIsLoadingWebhooks(false);
+      setWebhooksError(null);
+      setWebhooksActionError(null);
+      setWebhooksActionSuccess(null);
+      setNewWebhookName("");
+      setNewWebhookUrl("");
+      setNewWebhookEventType("MESSAGE_CREATE");
+      setNewWebhookServerId("GLOBAL");
+      setIsCreatingWebhook(false);
+      setWebhookActionPendingId(null);
+      setFamilyCenterEntries([]);
+      setIsLoadingFamilyCenter(false);
+      setFamilyCenterError(null);
+      setFamilyCenterSuccess(null);
+      setFamilyCenterSearch("");
+      setFamilyCenterStatusFilter("ALL");
+      setDeletingFamilyApplicationUserId(null);
+      setReviewingFamilyApplicationActionUserId(null);
+      setReviewingFamilyApplication(null);
+      setPreviewingFamilyApplicationFile(null);
     }
   }, [isModalOpen]);
+
+  const onReviewFamilyApplicationDecision = async (
+    entry: AdminFamilyCenterEntry,
+    decision: "ACCEPT" | "DECLINE"
+  ) => {
+    try {
+      setReviewingFamilyApplicationActionUserId(entry.userId);
+      setFamilyCenterError(null);
+      setFamilyCenterSuccess(null);
+
+      const response = await fetch("/api/admin/family-center", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: entry.userId,
+          decision,
+        }),
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Failed to update application (${response.status})`;
+        throw new Error(message);
+      }
+
+      const payload = (await response.json()) as {
+        applicationStatus?: string;
+      };
+
+      const nextStatus = String(payload.applicationStatus ?? "").trim();
+
+      if (nextStatus) {
+        setReviewingFamilyApplication((current) =>
+          current && current.userId === entry.userId
+            ? {
+                ...current,
+                applicationStatus: nextStatus,
+              }
+            : current
+        );
+      }
+
+      setReviewingFamilyApplication(null);
+      setPreviewingFamilyApplicationFile(null);
+
+      setFamilyCenterSuccess(
+        `${decision === "ACCEPT" ? "Accepted" : "Declined"} application for ${entry.displayName}.`
+      );
+      await loadFamilyCenter();
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_FAMILY_CENTER_REVIEW_ACTION]", error);
+      setFamilyCenterError(error instanceof Error ? error.message : "Unable to update application.");
+    } finally {
+      setReviewingFamilyApplicationActionUserId(null);
+    }
+  };
+
+  const onDeleteFamilyApplication = async (entry: AdminFamilyCenterEntry) => {
+    const confirmed = window.confirm(
+      `Delete family application ${entry.applicationId}? This clears the submitted application status and files for this user.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setDeletingFamilyApplicationUserId(entry.userId);
+      setFamilyCenterError(null);
+      setFamilyCenterSuccess(null);
+
+      const response = await fetch(
+        `/api/admin/family-center?userId=${encodeURIComponent(entry.userId)}`,
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Failed to delete application (${response.status})`;
+        throw new Error(message);
+      }
+
+      if (reviewingFamilyApplication?.userId === entry.userId) {
+        setReviewingFamilyApplication(null);
+        setPreviewingFamilyApplicationFile(null);
+      }
+
+      setFamilyCenterSuccess(`Deleted application for ${entry.displayName}.`);
+      await loadFamilyCenter();
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_FAMILY_CENTER_DELETE]", error);
+      setFamilyCenterError(error instanceof Error ? error.message : "Unable to delete application.");
+    } finally {
+      setDeletingFamilyApplicationUserId(null);
+    }
+  };
 
   const onUpdateReportStatus = async (reportId: string, status: AdminReport["status"]) => {
     try {
@@ -865,18 +1396,301 @@ export const InAccordAdminModal = () => {
     }
   };
 
-  const createUserRoleOptions = [
-    "USER",
-    "ADMINISTRATOR",
-    "DEVELOPER",
-    "MODERATOR",
-  ];
+  const onCreateWebhook = async () => {
+    const name = newWebhookName.trim();
+    const endpointUrl = newWebhookUrl.trim();
+    const eventType = newWebhookEventType.trim().toUpperCase() || "MESSAGE_CREATE";
+    const serverId = newWebhookServerId === "GLOBAL" ? null : newWebhookServerId;
+
+    setWebhooksActionError(null);
+    setWebhooksActionSuccess(null);
+
+    if (!name) {
+      setWebhooksActionError("Webhook name is required.");
+      return;
+    }
+
+    if (!/^https?:\/\//i.test(endpointUrl)) {
+      setWebhooksActionError("Endpoint URL must start with http:// or https://.");
+      return;
+    }
+
+    try {
+      setIsCreatingWebhook(true);
+
+      const response = await fetch("/api/admin/webhooks", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name,
+          endpointUrl,
+          eventType,
+          serverId,
+        }),
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Failed to create webhook (${response.status})`;
+        throw new Error(message);
+      }
+
+      const payload = (await response.json()) as { secretKey?: string };
+      setWebhooksActionSuccess(
+        payload.secretKey
+          ? `Webhook created. Secret: ${payload.secretKey}`
+          : "Webhook created."
+      );
+      setNewWebhookName("");
+      setNewWebhookUrl("");
+      setNewWebhookEventType("MESSAGE_CREATE");
+      setNewWebhookServerId("GLOBAL");
+      await loadWebhooks();
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_WEBHOOK_CREATE]", error);
+      setWebhooksActionError(error instanceof Error ? error.message : "Unable to create webhook.");
+    } finally {
+      setIsCreatingWebhook(false);
+    }
+  };
+
+  const onWebhookAction = async (
+    webhook: AdminWebhook,
+    action: "toggle" | "rotate-secret" | "delete"
+  ) => {
+    setWebhooksActionError(null);
+    setWebhooksActionSuccess(null);
+
+    if (action === "delete") {
+      const confirmed = window.confirm(`Delete webhook ${webhook.name}? This cannot be undone.`);
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    try {
+      setWebhookActionPendingId(webhook.id);
+
+      if (action === "delete") {
+        const response = await fetch(`/api/admin/webhooks?webhookId=${encodeURIComponent(webhook.id)}`, {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          const message = (await response.text()) || `Failed to delete webhook (${response.status})`;
+          throw new Error(message);
+        }
+
+        setWebhooksActionSuccess("Webhook deleted.");
+      } else {
+        const response = await fetch("/api/admin/webhooks", {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            webhookId: webhook.id,
+            action,
+            enabled: action === "toggle" ? !webhook.enabled : undefined,
+          }),
+        });
+
+        if (!response.ok) {
+          const message = (await response.text()) || `Failed to update webhook (${response.status})`;
+          throw new Error(message);
+        }
+
+        const payload = (await response.json()) as { secretKey?: string };
+        if (action === "toggle") {
+          setWebhooksActionSuccess(`Webhook ${webhook.enabled ? "disabled" : "enabled"}.`);
+        } else {
+          setWebhooksActionSuccess(
+            payload.secretKey
+              ? `Webhook secret rotated. New secret: ${payload.secretKey}`
+              : "Webhook secret rotated."
+          );
+        }
+      }
+
+      await loadWebhooks();
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_WEBHOOK_ACTION]", error);
+      setWebhooksActionError(error instanceof Error ? error.message : "Unable to update webhook.");
+    } finally {
+      setWebhookActionPendingId(null);
+    }
+  };
+
+  const createUserRoleOptions = useMemo(() => {
+    const keys = new Set<string>([
+      "USER",
+      "ADMINISTRATOR",
+      "DEVELOPER",
+      "MODERATOR",
+      ...managedRoles.map((role) => normalizeAdminRoleForDisplay(role.roleKey)),
+    ]);
+
+    return Array.from(keys).sort((a, b) => {
+      const priority: Record<string, number> = {
+        USER: 0,
+        MODERATOR: 1,
+        DEVELOPER: 2,
+        ADMINISTRATOR: 3,
+      };
+
+      const leftPriority = priority[a] ?? 10;
+      const rightPriority = priority[b] ?? 10;
+      if (leftPriority !== rightPriority) {
+        return leftPriority - rightPriority;
+      }
+
+      return a.localeCompare(b);
+    });
+  }, [managedRoles]);
+
+  const parseNewRoleKeyInput = (input: string) => {
+    const normalized = input.trim().toUpperCase().replace(/[\s-]+/g, "_");
+
+    if (!normalized) {
+      return null;
+    }
+
+    if (normalized === "ADMIN") {
+      return "ADMINISTRATOR";
+    }
+
+    if (normalized === "MOD") {
+      return "MODERATOR";
+    }
+
+    if (/^[A-Z][A-Z0-9_]{1,63}$/.test(normalized)) {
+      return normalized;
+    }
+
+    return null;
+  };
+
+  const onCreateManagedRole = async () => {
+    const roleKey = parseNewRoleKeyInput(newRoleKey);
+    const roleLabel = newRoleLabel.trim();
+
+    setManagedRolesActionError(null);
+    setManagedRolesActionSuccess(null);
+
+    if (!roleKey) {
+      setManagedRolesActionError("Role key must be 2-64 chars and use letters, numbers, or underscore.");
+      return;
+    }
+
+    try {
+      setIsCreatingRole(true);
+
+      const response = await fetch("/api/admin/roles", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          roleKey,
+          roleLabel,
+        }),
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Failed to create role (${response.status})`;
+        throw new Error(message);
+      }
+
+      setManagedRolesActionSuccess(`Role ${roleKey} added.`);
+      setNewRoleKey("");
+      setNewRoleLabel("");
+      await loadManagedRoles();
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_ROLE_CREATE]", error);
+      setManagedRolesActionError(error instanceof Error ? error.message : "Unable to create role.");
+    } finally {
+      setIsCreatingRole(false);
+    }
+  };
+
+  const onSaveManagedRoleLabel = async (roleKey: string) => {
+    const roleLabel = (roleLabelDrafts[roleKey] ?? "").trim();
+
+    setManagedRolesActionError(null);
+    setManagedRolesActionSuccess(null);
+
+    try {
+      setUpdatingRoleKey(roleKey);
+
+      const response = await fetch("/api/admin/roles", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          roleKey,
+          roleLabel,
+        }),
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Failed to update role (${response.status})`;
+        throw new Error(message);
+      }
+
+      setManagedRolesActionSuccess(`Updated role label for ${roleKey}.`);
+      await loadManagedRoles();
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_ROLE_UPDATE]", error);
+      setManagedRolesActionError(error instanceof Error ? error.message : "Unable to update role.");
+    } finally {
+      setUpdatingRoleKey(null);
+    }
+  };
+
+  const onDeleteManagedRole = async (roleKey: string) => {
+    const confirmed = window.confirm(`Delete role ${roleKey}? Users must be reassigned first.`);
+    if (!confirmed) {
+      return;
+    }
+
+    setManagedRolesActionError(null);
+    setManagedRolesActionSuccess(null);
+
+    try {
+      setDeletingRoleKey(roleKey);
+
+      const response = await fetch(`/api/admin/roles?roleKey=${encodeURIComponent(roleKey)}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Failed to delete role (${response.status})`;
+        throw new Error(message);
+      }
+
+      setManagedRolesActionSuccess(`Deleted role ${roleKey}.`);
+      await loadManagedRoles();
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_ROLE_DELETE]", error);
+      setManagedRolesActionError(error instanceof Error ? error.message : "Unable to delete role.");
+    } finally {
+      setDeletingRoleKey(null);
+    }
+  };
 
   const onCreateUser = async () => {
     const name = newUserName.trim();
     const email = newUserEmail.trim().toLowerCase();
     const password = newUserPassword;
-    const role = newUserRole.trim().toUpperCase() || "USER";
+    const role = normalizeAdminRoleForDisplay(newUserRole);
 
     setCreateUserError(null);
     setCreateUserSuccess(null);
@@ -1162,9 +1976,14 @@ export const InAccordAdminModal = () => {
   }, [memberRoleFilter, memberSearch, users]);
 
   const roleOptions = useMemo(() => {
-    const uniqueRoles = Array.from(new Set(users.map((user) => normalizeAdminRoleForDisplay(user.role))));
+    const uniqueRoles = Array.from(
+      new Set([
+        ...users.map((user) => normalizeAdminRoleForDisplay(user.role)),
+        ...createUserRoleOptions,
+      ])
+    );
     return ["ALL", ...uniqueRoles.sort()];
-  }, [users]);
+  }, [createUserRoleOptions, users]);
 
   const hasActiveMemberFilters = memberSearch.trim().length > 0 || memberRoleFilter !== "ALL";
 
@@ -1210,10 +2029,17 @@ export const InAccordAdminModal = () => {
       counts.set(role, (counts.get(role) ?? 0) + 1);
     });
 
+    managedRoles.forEach((role) => {
+      const normalizedRole = normalizeAdminRoleForDisplay(role.roleKey);
+      if (!counts.has(normalizedRole)) {
+        counts.set(normalizedRole, 0);
+      }
+    });
+
     return Array.from(counts.entries())
       .map(([role, count]) => ({ role, count }))
       .sort((a, b) => b.count - a.count || a.role.localeCompare(b.role));
-  }, [users]);
+  }, [managedRoles, users]);
 
   const inviteCoverage = useMemo(() => {
     const withInvites = servers.filter((server) => server.inviteCode && server.inviteCode.trim().length > 0).length;
@@ -1223,6 +2049,56 @@ export const InAccordAdminModal = () => {
       withoutInvites,
     };
   }, [servers]);
+
+  const familyCenterSummary = useMemo(() => {
+    return {
+      totalRecords: familyCenterEntries.length,
+      totalMembersTracked: familyCenterEntries.reduce((sum, entry) => sum + entry.familyMembersCount, 0),
+      pendingApplications: familyCenterEntries.filter((entry) => /pending/i.test(entry.applicationStatus)).length,
+      approvedApplications: familyCenterEntries.filter((entry) => /approved|aproved/i.test(entry.applicationStatus)).length,
+    };
+  }, [familyCenterEntries]);
+
+  const filteredFamilyCenterEntries = useMemo(() => {
+    const query = familyCenterSearch.trim().toLowerCase();
+
+    return familyCenterEntries.filter((entry) => {
+      const status = String(entry.applicationStatus || "").toLowerCase();
+      const statusMatches =
+        familyCenterStatusFilter === "ALL"
+          ? true
+          : familyCenterStatusFilter === "SUBMITTED"
+            ? /submitted|pending/.test(status)
+            : familyCenterStatusFilter === "APROVED"
+              ? /aproved|approved/.test(status)
+              : /denied|declined/.test(status);
+
+      if (!statusMatches) {
+        return false;
+      }
+
+      if (!query) {
+        return true;
+      }
+
+      const haystack = [
+        entry.applicationId,
+        entry.submittedBy,
+        entry.displayName,
+        entry.userId,
+        entry.email,
+        entry.applicationStatus,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(query);
+    });
+  }, [familyCenterEntries, familyCenterSearch, familyCenterStatusFilter]);
+
+  const hasActiveFamilyCenterFilters =
+    familyCenterSearch.trim().length > 0 || familyCenterStatusFilter !== "ALL";
 
   const emojiStickerServerOptions = useMemo(
     () => emojiStickerServers.map((item) => ({ id: item.id, name: item.name })),
@@ -1269,6 +2145,190 @@ export const InAccordAdminModal = () => {
 
   const hasActiveServerTagFilters =
     serverTagSearch.trim().length > 0 || serverTagOwnerFilter !== "ALL";
+
+  const hasActiveDiscordConfigFilters =
+    discordConfigQuery.trim().length > 0 ||
+    discordConfigTypeFilter !== "ALL" ||
+    discordConfigStatusFilter !== "ALL";
+
+  const discordConfigKey = (row: AdminDiscordConfig) => `${row.type}:${row.userId}:${row.id}`;
+
+  const roleLabelLookup = useMemo(() => {
+    const lookup: Record<string, string> = {};
+    managedRoles.forEach((role) => {
+      const key = normalizeAdminRoleForDisplay(role.roleKey);
+      lookup[key] = role.roleLabel || formatManagedRoleLabelFromKey(key);
+    });
+    return lookup;
+  }, [managedRoles]);
+
+  const filteredRecentDiscordConfigs = useMemo(() => {
+    const query = discordConfigQuery.trim().toLowerCase();
+
+    const filtered = recentDiscordConfigs.filter((row) => {
+      const typeMatches = discordConfigTypeFilter === "ALL" || row.type === discordConfigTypeFilter;
+      const statusMatches =
+        discordConfigStatusFilter === "ALL" ||
+        (discordConfigStatusFilter === "ENABLED" ? row.enabled : !row.enabled);
+
+      if (!typeMatches || !statusMatches) {
+        return false;
+      }
+
+      if (!query) {
+        return true;
+      }
+
+      const haystack = [
+        row.userId,
+        row.name,
+        row.email,
+        row.configName,
+        row.applicationId,
+        row.type,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(query);
+    });
+
+    const sorted = [...filtered].sort((a, b) => {
+      if (discordConfigSortKey === "createdAt") {
+        const left = new Date(a.createdAt).getTime();
+        const right = new Date(b.createdAt).getTime();
+        const safeLeft = Number.isNaN(left) ? 0 : left;
+        const safeRight = Number.isNaN(right) ? 0 : right;
+        return safeLeft - safeRight;
+      }
+
+      if (discordConfigSortKey === "status") {
+        const left = a.enabled ? 1 : 0;
+        const right = b.enabled ? 1 : 0;
+        return left - right;
+      }
+
+      return a.type.localeCompare(b.type);
+    });
+
+    return discordConfigSortDirection === "asc" ? sorted : sorted.reverse();
+  }, [
+    discordConfigQuery,
+    discordConfigSortDirection,
+    discordConfigSortKey,
+    discordConfigStatusFilter,
+    discordConfigTypeFilter,
+    recentDiscordConfigs,
+  ]);
+
+  const onDiscordConfigSort = (key: DiscordConfigSortKey) => {
+    if (discordConfigSortKey === key) {
+      setDiscordConfigSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+
+    setDiscordConfigSortKey(key);
+    setDiscordConfigSortDirection(key === "createdAt" ? "desc" : "asc");
+  };
+
+  const getSortGlyph = (key: DiscordConfigSortKey) => {
+    if (discordConfigSortKey !== key) {
+      return "↕";
+    }
+
+    return discordConfigSortDirection === "asc" ? "▲" : "▼";
+  };
+
+  const setDiscordConfigDraft = (row: AdminDiscordConfig) => {
+    const key = discordConfigKey(row);
+
+    setDiscordConfigDrafts((current) => ({
+      ...current,
+      [key]: {
+        configName: row.configName,
+        applicationId: row.applicationId,
+      },
+    }));
+    setEditingDiscordConfigKey(key);
+  };
+
+  const onAdminDiscordConfigAction = async (
+    row: AdminDiscordConfig,
+    action: "toggle" | "update" | "delete"
+  ) => {
+    const key = discordConfigKey(row);
+    setDiscordConfigActionError(null);
+    setDiscordConfigActionSuccess(null);
+
+    try {
+      setDiscordConfigActionPendingKey(key);
+
+      const payload: {
+        userId: string;
+        type: "APP" | "BOT";
+        configId: string;
+        action: "toggle" | "update" | "delete";
+        enabled?: boolean;
+        patch?: Record<string, unknown>;
+      } = {
+        userId: row.userId,
+        type: row.type,
+        configId: row.id,
+        action,
+      };
+
+      if (action === "toggle") {
+        payload.enabled = !row.enabled;
+      }
+
+      if (action === "update") {
+        const draft = discordConfigDrafts[key];
+        if (!draft) {
+          throw new Error("No draft found for this row.");
+        }
+
+        payload.patch = {
+          name: draft.configName,
+          applicationId: draft.applicationId,
+        };
+      }
+
+      const response = await fetch("/api/admin/integrations", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Failed to update Discord config (${response.status})`;
+        throw new Error(message);
+      }
+
+      setDiscordConfigActionSuccess(
+        action === "delete"
+          ? "Discord config deleted."
+          : action === "toggle"
+            ? `Discord config ${row.enabled ? "disabled" : "enabled"}.`
+            : "Discord config updated."
+      );
+
+      if (action === "update") {
+        setEditingDiscordConfigKey(null);
+      }
+
+      await loadIntegrations();
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_DISCORD_CONFIG_ACTION]", error);
+      setDiscordConfigActionError(
+        error instanceof Error ? error.message : "Unable to update Discord config."
+      );
+    } finally {
+      setDiscordConfigActionPendingKey(null);
+    }
+  };
 
   const setServerTagDraft = (
     serverId: string,
@@ -1379,6 +2439,37 @@ export const InAccordAdminModal = () => {
     return parsed.toLocaleString();
   };
 
+  const parseReportSeverity = (reason: string | null | undefined): "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" | null => {
+    const source = String(reason ?? "").trim();
+    const matched = source.match(/^\[(LOW|MEDIUM|HIGH|CRITICAL)\]/i)?.[1];
+    if (!matched) {
+      return null;
+    }
+
+    const normalized = matched.toUpperCase();
+    if (normalized === "LOW" || normalized === "MEDIUM" || normalized === "HIGH" || normalized === "CRITICAL") {
+      return normalized;
+    }
+
+    return null;
+  };
+
+  const getSeverityClassName = (severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL") => {
+    if (severity === "LOW") {
+      return "border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-200";
+    }
+
+    if (severity === "MEDIUM") {
+      return "border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-200";
+    }
+
+    if (severity === "HIGH") {
+      return "border-orange-500/45 bg-orange-500/15 text-orange-700 dark:text-orange-200";
+    }
+
+    return "border-rose-500/45 bg-rose-500/15 text-rose-700 dark:text-rose-200";
+  };
+
   const toCsvCell = (value: string | number | null | undefined) => {
     const raw = String(value ?? "");
     return `"${raw.replace(/"/g, '""')}"`;
@@ -1433,10 +2524,11 @@ export const InAccordAdminModal = () => {
 
   const normalizedNewUserRole = normalizeAdminRoleForDisplay(newUserRole);
   const canEditUsersDateOfBirth = isInAccordAdministrator(data.profileRole);
+  const recentMainCommits = metaInfo?.githubMainCommits ?? [];
 
   return (
     <Dialog open={isModalOpen} onOpenChange={onClose}>
-      <DialogContent className="flex h-[85vh] max-h-[85vh] w-[85vw] max-w-[85vw] flex-col overflow-hidden bg-white p-0 text-black dark:bg-[#313338] dark:text-white">
+      <DialogContent className="flex h-[85vh] max-h-[85vh] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] flex-col overflow-hidden bg-white p-0 text-black dark:bg-[#313338] dark:text-white [&_input]:max-w-full [&_input]:min-w-0 [&_textarea]:max-w-full [&_textarea]:min-w-0 [&_button]:max-w-full [&_button]:min-w-0">
         <DialogHeader className="border-b border-zinc-200 px-6 pb-4 pt-6 dark:border-zinc-700">
           <DialogTitle className="flex items-center gap-2 text-xl font-bold">
             <ShieldAlert className="h-5 w-5 text-amber-400" />
@@ -1471,13 +2563,6 @@ export const InAccordAdminModal = () => {
               </button>
               <button
                 type="button"
-                onClick={() => setActiveSection("reported")}
-                className={menuButtonClass("reported")}
-              >
-                Reported
-              </button>
-              <button
-                type="button"
                 onClick={() => setActiveSection("moderation")}
                 className={menuButtonClass("moderation")}
               >
@@ -1492,13 +2577,6 @@ export const InAccordAdminModal = () => {
               </button>
               <button
                 type="button"
-                onClick={() => setActiveSection("auditLog")}
-                className={menuButtonClass("auditLog")}
-              >
-                Audit Log
-              </button>
-              <button
-                type="button"
                 onClick={() => setActiveSection("invites")}
                 className={menuButtonClass("invites")}
               >
@@ -1509,7 +2587,11 @@ export const InAccordAdminModal = () => {
                 onClick={() => setActiveSection("emojiStickers")}
                 className={menuButtonClass("emojiStickers")}
               >
-                Emoji & Stickers
+                <span className="inline-flex items-center gap-1.5">
+                  <Smile className="h-3.5 w-3.5" />
+                  <Sticker className="h-3.5 w-3.5" />
+                  <span>Emoji & Stickers</span>
+                </span>
               </button>
               <button
                 type="button"
@@ -1524,39 +2606,197 @@ export const InAccordAdminModal = () => {
               <button type="button" onClick={() => setActiveSection("integrations")} className={menuButtonClass("integrations")}>
                 Integrations
               </button>
+              <button
+                type="button"
+                onClick={() => setActiveSection("discordAppsBots")}
+                className={menuButtonClass("discordAppsBots")}
+              >
+                In-Accord Apps & Bots
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveSection("familyCenter")}
+                className={menuButtonClass("familyCenter")}
+              >
+                Family Center
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveSection("auditLog")}
+                className={menuButtonClass("auditLog")}
+              >
+                Audit Log
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveSection("reported")}
+                className={menuButtonClass("reported")}
+              >
+                Reports
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveSection("issuesBugs")}
+                className={menuButtonClass("issuesBugs")}
+              >
+                Issues & Bugs
+              </button>
             </nav>
           </aside>
 
           <section className="order-2 min-h-0 space-y-4 overflow-y-auto p-6">
             {activeSection === "general" && (
-              <>
-                <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-amber-300">Access Status</p>
-                  <div className="mt-2 flex items-center gap-2 text-sm text-amber-200">
-                    <ShieldCheck className="h-4 w-4" />
-                    Staff access confirmed for
-                    <span className="inline-flex items-center gap-1.5">
-                      <span>{data.profileName || "current user"}</span>
-                      {isInAccordAdministrator(data.profileRole) ? (
-                        isInAccordDeveloper(data.profileRole)
-                          ? <Wrench className="h-4 w-4 shrink-0 text-cyan-400" aria-label={getInAccordStaffLabel(data.profileRole) ?? "In-Accord Staff"} />
-                          : <Crown className="h-4 w-4 shrink-0 text-rose-500" aria-label={getInAccordStaffLabel(data.profileRole) ?? "In-Accord Staff"} />
-                      ) : null}
-                    </span>
+              <div className="flex h-full min-h-0 flex-col gap-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-amber-300">Access Status</p>
+                    <div className="mt-2 flex items-center gap-2 text-sm text-amber-200">
+                      <ShieldCheck className="h-4 w-4" />
+                      Staff access confirmed for
+                      <span className="inline-flex items-center gap-1.5">
+                        <span>{data.profileName || "current user"}</span>
+                        {isInAccordAdministrator(data.profileRole) ? (
+                          isInAccordDeveloper(data.profileRole)
+                            ? <Wrench className="h-4 w-4 shrink-0 text-cyan-400" aria-label={getInAccordStaffLabel(data.profileRole) ?? "In-Accord Staff"} />
+                            : <Crown className="h-4 w-4 shrink-0 text-rose-500" aria-label={getInAccordStaffLabel(data.profileRole) ?? "In-Accord Staff"} />
+                        ) : null}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800/40 dark:text-zinc-200">
+                    <p className="font-semibold">Profile Context</p>
+                    <p className="mt-1">User ID: {data.profileId || "N/A"}</p>
+                    <p>Email: {data.profileEmail || "N/A"}</p>
+                    <p>Role: {data.profileRole || "User"}</p>
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800/40 dark:text-zinc-200">
-                  <p className="font-semibold">Profile Context</p>
-                  <p className="mt-1">User ID: {data.profileId || "N/A"}</p>
-                  <p>Email: {data.profileEmail || "N/A"}</p>
-                  <p>Role: {data.profileRole || "User"}</p>
+                <div className="flex min-h-0 flex-1 flex-col rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800/40 dark:text-zinc-200">
+                  <p className="font-semibold">Build Information</p>
+
+                  {isLoadingMetaInfo ? (
+                    <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">Loading build and GitHub details...</p>
+                  ) : metaInfoError ? (
+                    <p className="mt-2 text-xs text-rose-500">{metaInfoError}</p>
+                  ) : metaInfo ? (
+                    <div className="mt-2 flex min-h-0 flex-1 flex-col gap-3">
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                          <p className="mb-1 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Build</p>
+                          <p>App: {metaInfo.build.appName}</p>
+                          <p>Version: {metaInfo.build.appVersion}</p>
+                          <p>Next.js: {metaInfo.build.nextVersion}</p>
+                          <p>Environment: {metaInfo.build.nodeEnv}</p>
+                          <p>Built: {formatDateTime(metaInfo.build.buildTimestamp)}</p>
+                          <p>Branch: {metaInfo.build.branch || "N/A"}</p>
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <span className="text-xs">Document Storage:</span>
+                            <span
+                              className={cn(
+                                "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]",
+                                metaInfo.storage?.documentStorageConfigured
+                                  ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-200"
+                                  : "border-rose-500/45 bg-rose-500/15 text-rose-700 dark:text-rose-200"
+                              )}
+                              title={
+                                metaInfo.storage?.documentStorageConfigured
+                                  ? `${metaInfo.storage?.provider || "Storage"} • ${metaInfo.storage?.applicationsPath || "Client/Applications/"}`
+                                  : "Cloud storage is not configured"
+                              }
+                            >
+                              {metaInfo.storage?.documentStorageConfigured ? "Configured" : "Not Configured"}
+                            </span>
+                          </div>
+                          <p>
+                            Commit:{" "}
+                            {recentMainCommits.length > 0 ? (
+                              recentMainCommits.map((entry, index) => (
+                                <span key={`build-commit-main-${entry.sha}`}>
+                                  {index > 0 ? ", " : ""}
+                                  <a
+                                    href={entry.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="font-mono text-indigo-600 hover:underline dark:text-indigo-300"
+                                    title={entry.message || entry.sha}
+                                  >
+                                    {entry.shortSha || entry.sha.slice(0, 7)}
+                                  </a>
+                                </span>
+                              ))
+                            ) : (
+                              "N/A"
+                            )}
+                          </p>
+                        </div>
+
+                        <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                          <p className="mb-1 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">GitHub</p>
+                          <p className="truncate" title={metaInfo.github.repositoryUrl || "N/A"}>Repository: {metaInfo.github.repositoryUrl || "N/A"}</p>
+                          <p className="truncate" title={metaInfo.github.homepageUrl || "N/A"}>Homepage: {metaInfo.github.homepageUrl || "N/A"}</p>
+                          <p className="truncate" title={metaInfo.github.issuesUrl || "N/A"}>Issues: {metaInfo.github.issuesUrl || "N/A"}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                        <div className="mb-1 flex items-center justify-between gap-2">
+                          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Running Commit Log</p>
+                          <button
+                            type="button"
+                            onClick={() => void loadMetaInfo()}
+                            disabled={isLoadingMetaInfo}
+                            className="h-7 rounded-md border border-zinc-300 bg-white px-2 text-[10px] font-medium text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                          >
+                            {isLoadingMetaInfo ? "Refreshing..." : "Refresh"}
+                          </button>
+                        </div>
+                        {(metaInfo.commits ?? []).length === 0 ? (
+                          <p className="text-xs text-zinc-500 dark:text-zinc-400">No local git history available.</p>
+                        ) : (
+                          <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1 text-xs">
+                            {(metaInfo.commits ?? []).map((entry) => {
+                              const commitHref = metaInfo.github.repositoryUrl
+                                ? `${metaInfo.github.repositoryUrl}/commit/${entry.sha}`
+                                : null;
+
+                              return (
+                                <div
+                                  key={`general-meta-commit-${entry.sha}`}
+                                  className="rounded border border-zinc-200 bg-zinc-50/70 px-2 py-1.5 dark:border-zinc-700 dark:bg-zinc-900/30"
+                                >
+                                  <p className="truncate font-semibold text-zinc-800 dark:text-zinc-100" title={entry.message}>{entry.message}</p>
+                                  <p className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">
+                                    {entry.author} • {formatDateTime(entry.committedAt)}
+                                  </p>
+                                  {commitHref ? (
+                                    <a
+                                      href={commitHref}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="mt-0.5 inline-block font-mono text-[11px] text-indigo-600 hover:underline dark:text-indigo-300"
+                                    >
+                                      {entry.shortSha}
+                                    </a>
+                                  ) : (
+                                    <p className="mt-0.5 font-mono text-[11px] text-zinc-500 dark:text-zinc-400">{entry.shortSha}</p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">No build metadata available.</p>
+                  )}
                 </div>
-              </>
+              </div>
             )}
 
             {activeSection === "members" && (
-              <div className="rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
+              <div className="flex h-full min-h-0 flex-col rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
                 <div className="mb-4 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-600 dark:bg-zinc-900/40">
                   <p className="mb-3 text-sm font-semibold text-zinc-800 dark:text-zinc-100">Create New User</p>
                   <div className="grid gap-2 md:grid-cols-2">
@@ -1599,7 +2839,7 @@ export const InAccordAdminModal = () => {
                     >
                       {createUserRoleOptions.map((role) => (
                         <option key={role} value={role}>
-                          {role}
+                          {roleLabelLookup[role] ? `${roleLabelLookup[role]} (${role})` : role}
                         </option>
                       ))}
                     </select>
@@ -1644,7 +2884,7 @@ export const InAccordAdminModal = () => {
                   >
                     {roleOptions.map((role) => (
                       <option key={role} value={role}>
-                        {role === "ALL" ? "All roles" : role}
+                        {role === "ALL" ? "All roles" : (roleLabelLookup[role] ? `${roleLabelLookup[role]} (${role})` : role)}
                       </option>
                     ))}
                   </select>
@@ -1662,18 +2902,19 @@ export const InAccordAdminModal = () => {
                   </button>
                 </div>
 
-                {isLoadingUsers ? (
-                  <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading users...</p>
-                ) : usersError ? (
-                  <p className="text-sm text-rose-500">{usersError}</p>
-                ) : filteredUsers.length === 0 ? (
-                  <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                    No users found{hasActiveMemberFilters ? " for the current filters" : ""}.
-                  </p>
-                ) : (
-                  <div className="overflow-hidden rounded-lg border border-zinc-300 dark:border-zinc-700">
-                    <div className="overflow-x-auto">
-                      <div className="min-w-max">
+                <div className="min-h-0 flex-1">
+                  {isLoadingUsers ? (
+                    <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading users...</p>
+                  ) : usersError ? (
+                    <p className="text-sm text-rose-500">{usersError}</p>
+                  ) : filteredUsers.length === 0 ? (
+                    <p className="text-sm text-zinc-600 dark:text-zinc-300">
+                      No users found{hasActiveMemberFilters ? " for the current filters" : ""}.
+                    </p>
+                  ) : (
+                    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-zinc-300 dark:border-zinc-700">
+                      <div className="min-h-0 flex-1 overflow-x-auto">
+                        <div className="flex h-full min-h-0 min-w-max flex-col">
                         <div
                           className="grid gap-2 bg-zinc-200/80 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
                           style={{ gridTemplateColumns }}
@@ -1726,7 +2967,7 @@ export const InAccordAdminModal = () => {
                           <p>joined</p>
                         </div>
 
-                        <div className="max-h-105 overflow-y-auto bg-white/70 font-mono text-[12pt] leading-none text-zinc-800 dark:bg-zinc-950/30 dark:text-zinc-200">
+                        <div className="h-full min-h-0 overflow-y-auto bg-white/70 font-mono text-[12pt] leading-none text-zinc-800 dark:bg-zinc-950/30 dark:text-zinc-200">
                           {filteredUsers.map((user, index) => (
                             (() => {
                               const normalizedPresenceStatus = normalizePresenceStatus(user.presenceStatus);
@@ -1870,7 +3111,7 @@ export const InAccordAdminModal = () => {
                                 >
                                   {createUserRoleOptions.map((role) => (
                                     <option key={`${user.userId}-${role}`} value={role}>
-                                      {role}
+                                      {roleLabelLookup[role] ? `${roleLabelLookup[role]} (${role})` : role}
                                     </option>
                                   ))}
                                 </select>
@@ -1920,9 +3161,9 @@ export const InAccordAdminModal = () => {
                                     deletingUserId === user.userId ||
                                     !hasDetailsChanges
                                   }
-                                  className="h-6 w-full rounded-md bg-zinc-900 px-2 text-[10px] font-semibold text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+                                  className="inline-flex h-5 w-fit items-center justify-center self-start whitespace-nowrap rounded-md bg-zinc-900 px-1.5 text-[9px] font-semibold text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
                                 >
-                                  {isSavingDetails ? "Saving..." : "Save details"}
+                                  {isSavingDetails ? "Saving..." : "Save"}
                                 </button>
                                 {!canEditUsersDateOfBirth ? (
                                   <p className="text-[9px] text-amber-500">DOB edit: Administrator only</p>
@@ -1935,10 +3176,11 @@ export const InAccordAdminModal = () => {
                             })()
                           ))}
                         </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             )}
 
@@ -2078,7 +3320,7 @@ export const InAccordAdminModal = () => {
             )}
 
             {activeSection === "serverTags" && (
-              <div className="rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
+              <div className="flex h-full min-h-0 flex-col rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Server Tags</p>
                   <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-xs font-medium text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200">
@@ -2132,17 +3374,18 @@ export const InAccordAdminModal = () => {
                   <p className="mb-3 text-xs text-emerald-500">{serverTagsActionSuccess}</p>
                 ) : null}
 
-                {isLoadingServerTags ? (
-                  <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading server tags...</p>
-                ) : serverTagsError ? (
-                  <p className="text-sm text-rose-500">{serverTagsError}</p>
-                ) : filteredServerTags.length === 0 ? (
-                  <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                    No server tags found{hasActiveServerTagFilters ? " for the current filters" : ""}.
-                  </p>
-                ) : (
-                  <div className="max-h-130 space-y-2 overflow-y-auto pr-1">
-                    {filteredServerTags.map((item) => {
+                <div className="min-h-0 flex-1">
+                  {isLoadingServerTags ? (
+                    <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading server tags...</p>
+                  ) : serverTagsError ? (
+                    <p className="text-sm text-rose-500">{serverTagsError}</p>
+                  ) : filteredServerTags.length === 0 ? (
+                    <p className="text-sm text-zinc-600 dark:text-zinc-300">
+                      No server tags found{hasActiveServerTagFilters ? " for the current filters" : ""}.
+                    </p>
+                  ) : (
+                    <div className="h-full min-h-0 space-y-2 overflow-y-auto pr-1">
+                      {filteredServerTags.map((item) => {
                       const draft = serverTagDrafts[item.serverId] ?? {
                         tagCode: item.tagCode ?? "",
                         iconKey: item.iconKey ?? serverTagIconOptions[0]?.key ?? "",
@@ -2228,16 +3471,19 @@ export const InAccordAdminModal = () => {
                           </p>
                         </div>
                       );
-                    })}
-                  </div>
-                )}
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
-            {activeSection === "reported" && (
+            {(activeSection === "reported" || activeSection === "issuesBugs") && (
               <div className="rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Reported Queue</p>
+                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
+                    {activeSection === "reported" ? "Reports Queue" : "Issues & Bugs Queue"}
+                  </p>
                   <button
                     type="button"
                     onClick={() => void loadReports()}
@@ -2247,7 +3493,7 @@ export const InAccordAdminModal = () => {
                   </button>
                 </div>
 
-                <div className="mb-4 grid gap-2 sm:grid-cols-[180px_180px_auto]">
+                <div className="mb-4 grid gap-2 sm:grid-cols-[180px_180px_auto_auto]">
                   <select
                     value={reportStatusFilter}
                     onChange={(event) => setReportStatusFilter(event.target.value as typeof reportStatusFilter)}
@@ -2269,7 +3515,23 @@ export const InAccordAdminModal = () => {
                     <option value="USER">Users</option>
                     <option value="SERVER">Servers</option>
                     <option value="MESSAGE">Messages</option>
+                    <option value="BUG">Bugs</option>
                   </select>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReportTargetTypeFilter((current) => (current === "BUG" ? "ALL" : "BUG"));
+                    }}
+                    className={cn(
+                      "h-9 rounded-md border px-3 text-sm font-medium transition",
+                      reportTargetTypeFilter === "BUG"
+                        ? "border-rose-500/45 bg-rose-500/15 text-rose-700 dark:text-rose-200"
+                        : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                    )}
+                  >
+                    Bugs only
+                  </button>
 
                   <button
                     type="button"
@@ -2292,6 +3554,7 @@ export const InAccordAdminModal = () => {
                 ) : (
                   <div className="space-y-2">
                     {reports.map((report) => {
+                      const severity = parseReportSeverity(report.reason);
                       const statusClassName =
                         report.status === "OPEN"
                           ? "border-amber-500/30 bg-amber-500/15 text-amber-200"
@@ -2315,6 +3578,8 @@ export const InAccordAdminModal = () => {
                                     ? "Reported User"
                                     : report.targetType === "SERVER"
                                       ? "Reported Server"
+                                      : report.targetType === "BUG"
+                                        ? "Bug Report"
                                       : "Reported Message"}
                                 </span>
                                 <span className="ml-2">{report.targetName}</span>
@@ -2324,6 +3589,17 @@ export const InAccordAdminModal = () => {
                             <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]", statusClassName)}>
                               {report.status.replace("_", " ")}
                             </span>
+                            {severity ? (
+                              <span
+                                className={cn(
+                                  "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]",
+                                  getSeverityClassName(severity)
+                                )}
+                                title={`Severity: ${severity}`}
+                              >
+                                {severity}
+                              </span>
+                            ) : null}
                           </div>
 
                           <div className="grid gap-2 text-xs text-zinc-700 dark:text-zinc-300 md:grid-cols-2">
@@ -2424,40 +3700,549 @@ export const InAccordAdminModal = () => {
               <div className="rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Roles</p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void loadUsers();
+                        void loadManagedRoles();
+                      }}
+                      className="h-8 rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mb-4 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                  <p className="mb-3 text-sm font-semibold text-zinc-800 dark:text-zinc-100">Add role</p>
+                  <div className="grid gap-2 md:grid-cols-[220px_1fr_auto]">
+                    <input
+                      type="text"
+                      value={newRoleKey}
+                      onChange={(event) => setNewRoleKey(event.target.value.toUpperCase())}
+                      placeholder="Role key (e.g. HELPER)"
+                      className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm font-semibold uppercase tracking-wide text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
+                    />
+                    <input
+                      type="text"
+                      value={newRoleLabel}
+                      onChange={(event) => setNewRoleLabel(event.target.value)}
+                      placeholder="Role label (optional)"
+                      className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void onCreateManagedRole()}
+                      disabled={isCreatingRole}
+                      className="h-9 rounded-md bg-indigo-600 px-3 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isCreatingRole ? "Adding..." : "Add role"}
+                    </button>
+                  </div>
+                  <p className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+                    Use A-Z, 0-9, and _.
+                  </p>
+                </div>
+
+                {managedRolesActionError ? <p className="mb-3 text-xs text-rose-500">{managedRolesActionError}</p> : null}
+                {managedRolesActionSuccess ? <p className="mb-3 text-xs text-emerald-500">{managedRolesActionSuccess}</p> : null}
+
+                {(isLoadingUsers || isLoadingManagedRoles) ? (
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading role management...</p>
+                ) : usersError ? (
+                  <p className="text-sm text-rose-500">{usersError}</p>
+                ) : managedRolesError ? (
+                  <p className="text-sm text-rose-500">{managedRolesError}</p>
+                ) : roleDistribution.length === 0 ? (
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300">No role data available.</p>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {roleDistribution.map((entry) => (
+                        <div
+                          key={`role-card-${entry.role}`}
+                          className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45"
+                        >
+                          <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
+                            {getAdminRoleIcon(entry.role, "h-4 w-4")}
+                            {entry.role}
+                          </p>
+                          <p className="mt-1 text-lg font-bold text-zinc-900 dark:text-zinc-100">{entry.count}</p>
+                          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">members assigned this role</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="overflow-hidden rounded-lg border border-zinc-300 dark:border-zinc-700">
+                      <div className="grid grid-cols-[180px_1fr_100px_130px] gap-2 bg-zinc-200/80 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                        <p>Role Key</p>
+                        <p>Label</p>
+                        <p>Members</p>
+                        <p>Actions</p>
+                      </div>
+                      <div className="max-h-85 overflow-y-auto bg-white/80 text-xs text-zinc-800 dark:bg-zinc-950/30 dark:text-zinc-200">
+                        {managedRoles.map((role, index) => {
+                          const memberCount = roleDistribution.find((entry) => entry.role === role.roleKey)?.count ?? role.memberCount ?? 0;
+                          const isUpdating = updatingRoleKey === role.roleKey;
+                          const isDeleting = deletingRoleKey === role.roleKey;
+                          const isBusy = isUpdating || isDeleting;
+                          const draftLabel = roleLabelDrafts[role.roleKey] ?? role.roleLabel ?? formatManagedRoleLabelFromKey(role.roleKey);
+
+                          return (
+                            <div
+                              key={`managed-role-${role.roleKey}`}
+                              className={cn(
+                                "grid grid-cols-[180px_1fr_100px_130px] gap-2 px-3 py-2",
+                                index % 2 === 0
+                                  ? "bg-white/70 dark:bg-zinc-950/25"
+                                  : "bg-zinc-100/70 dark:bg-zinc-900/35"
+                              )}
+                            >
+                              <p className="truncate font-mono text-[11px]" title={role.roleKey}>{role.roleKey}</p>
+
+                              <input
+                                type="text"
+                                value={draftLabel}
+                                onChange={(event) =>
+                                  setRoleLabelDrafts((current) => ({
+                                    ...current,
+                                    [role.roleKey]: event.target.value,
+                                  }))
+                                }
+                                disabled={isBusy}
+                                className="h-7 rounded-md border border-zinc-300 bg-white px-2 text-xs text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                              />
+
+                              <p className="text-sm font-semibold">{memberCount}</p>
+
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => void onSaveManagedRoleLabel(role.roleKey)}
+                                  disabled={isBusy}
+                                  className="h-7 rounded-md bg-indigo-600 px-2 text-[10px] font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {isUpdating ? "Saving..." : "Save"}
+                                </button>
+                                {!role.isSystem ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => void onDeleteManagedRole(role.roleKey)}
+                                    disabled={isBusy}
+                                    className="h-7 rounded-md border border-rose-500/35 bg-rose-500/15 px-2 text-[10px] font-semibold text-rose-200 transition hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    {isDeleting ? "Deleting..." : "Delete"}
+                                  </button>
+                                ) : null}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeSection === "familyCenter" && (
+              <div className="rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-zinc-800 dark:text-zinc-100">
+                    <Baby className="h-4 w-4" />
+                    Family Center
+                  </div>
                   <button
                     type="button"
-                    onClick={() => void loadUsers()}
+                    onClick={() => void loadFamilyCenter()}
                     className="h-8 rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
                   >
                     Refresh
                   </button>
                 </div>
 
-                {isLoadingUsers ? (
-                  <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading role distribution...</p>
-                ) : usersError ? (
-                  <p className="text-sm text-rose-500">{usersError}</p>
-                ) : roleDistribution.length === 0 ? (
-                  <p className="text-sm text-zinc-600 dark:text-zinc-300">No role data available.</p>
+                {isLoadingFamilyCenter ? (
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading Family Center records...</p>
+                ) : familyCenterError ? (
+                  <p className="text-sm text-rose-500">{familyCenterError}</p>
                 ) : (
-                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {roleDistribution.map((entry) => (
-                      <div
-                        key={`role-card-${entry.role}`}
-                        className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45"
-                      >
-                        <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          {getAdminRoleIcon(entry.role, "h-4 w-4")}
-                          {entry.role}
-                        </p>
-                        <p className="mt-1 text-lg font-bold text-zinc-900 dark:text-zinc-100">{entry.count}</p>
-                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">members assigned this role</p>
+                  <>
+                    {familyCenterSuccess ? (
+                      <p className="mb-3 text-xs text-emerald-600 dark:text-emerald-300">{familyCenterSuccess}</p>
+                    ) : null}
+
+                    <div className="mb-4 grid gap-2 md:grid-cols-4">
+                      <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Applications</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{familyCenterSummary.totalRecords}</p>
                       </div>
-                    ))}
-                  </div>
+                      <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Pending</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{familyCenterSummary.pendingApplications}</p>
+                      </div>
+                      <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Approved</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{familyCenterSummary.approvedApplications}</p>
+                      </div>
+                      <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Family Members Tracked</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{familyCenterSummary.totalMembersTracked}</p>
+                      </div>
+                    </div>
+
+                    <div className="mb-4 grid gap-2 sm:grid-cols-[1fr_180px_auto]">
+                      <input
+                        type="text"
+                        value={familyCenterSearch}
+                        onChange={(event) => setFamilyCenterSearch(event.target.value)}
+                        placeholder="Search by application ID, submitted by, user, or email"
+                        className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
+                      />
+
+                      <select
+                        value={familyCenterStatusFilter}
+                        onChange={(event) =>
+                          setFamilyCenterStatusFilter(event.target.value as "ALL" | "SUBMITTED" | "APROVED" | "DENIED")
+                        }
+                        className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                      >
+                        <option value="ALL">All status</option>
+                        <option value="SUBMITTED">Submitted</option>
+                        <option value="APROVED">Aproved</option>
+                        <option value="DENIED">Denied</option>
+                      </select>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFamilyCenterSearch("");
+                          setFamilyCenterStatusFilter("ALL");
+                        }}
+                        disabled={!hasActiveFamilyCenterFilters}
+                        className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                      >
+                        Clear filters
+                      </button>
+                    </div>
+
+                    {filteredFamilyCenterEntries.length === 0 ? (
+                      <p className="text-sm text-zinc-600 dark:text-zinc-300">
+                        No Family Center applications found{hasActiveFamilyCenterFilters ? " for the current filters" : " yet"}.
+                      </p>
+                    ) : (
+                      <div className="overflow-hidden rounded-lg border border-zinc-300 dark:border-zinc-700">
+                        <div className="grid grid-cols-[1.1fr_1fr_1fr_1fr_0.7fr_0.7fr_0.9fr_1fr_0.8fr] gap-2 bg-zinc-200/80 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                          <p>Application ID</p>
+                          <p>Submitted By</p>
+                          <p>User</p>
+                          <p>Email</p>
+                          <p>Role</p>
+                          <p>Members</p>
+                          <p>Designation</p>
+                          <p>Status</p>
+                          <p>Actions</p>
+                        </div>
+                        <div className="max-h-90 overflow-y-auto bg-white/80 text-xs text-zinc-800 dark:bg-zinc-950/30 dark:text-zinc-200">
+                          {filteredFamilyCenterEntries.map((entry, index) => (
+                            <div
+                              key={`family-center-entry-${entry.userId}`}
+                              className={cn(
+                                "grid grid-cols-[1.1fr_1fr_1fr_1fr_0.7fr_0.7fr_0.9fr_1fr_0.8fr] gap-2 px-3 py-2",
+                                index % 2 === 0
+                                  ? "bg-white/70 dark:bg-zinc-950/25"
+                                  : "bg-zinc-100/70 dark:bg-zinc-900/35"
+                              )}
+                            >
+                              <p className="truncate font-mono text-[11px]" title={entry.applicationId}>{entry.applicationId}</p>
+                              <div className="min-w-0">
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <button
+                                      type="button"
+                                      className="inline-flex min-w-0 items-center gap-1.5 rounded-md px-1 py-0.5 text-left hover:bg-zinc-200/70 dark:hover:bg-zinc-800/70"
+                                      title={`View profile for ${entry.submittedBy}`}
+                                    >
+                                      <UserAvatar src={entry.imageUrl} className="h-5 w-5" />
+                                      <span className="truncate">{entry.submittedBy}</span>
+                                    </button>
+                                  </PopoverTrigger>
+                                  <PopoverContent
+                                    side="top"
+                                    align="start"
+                                    className="w-[280px] rounded-xl border border-zinc-300 bg-white p-3 text-zinc-900 shadow-xl dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <UserAvatar src={entry.imageUrl} className="h-10 w-10" />
+                                      <div className="min-w-0">
+                                        <p className="truncate text-sm font-semibold">{entry.displayName}</p>
+                                        <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{entry.email || "N/A"}</p>
+                                      </div>
+                                    </div>
+                                    <div className="mt-3 space-y-1 rounded-md border border-zinc-200 bg-zinc-50/80 p-2 text-xs dark:border-zinc-700 dark:bg-zinc-800/50">
+                                      <p><span className="font-semibold">User ID:</span> {entry.userId}</p>
+                                      <p><span className="font-semibold">Role:</span> {entry.role}</p>
+                                      <p><span className="font-semibold">Submitted By:</span> {entry.submittedBy}</p>
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
+                              </div>
+                              <p className="truncate" title={`${entry.displayName} (${entry.userId})`}>{entry.displayName}</p>
+                              <p className="truncate" title={entry.email || "N/A"}>{entry.email || "N/A"}</p>
+                              <p className="truncate" title={entry.role}>{entry.role}</p>
+                              <p>{entry.familyMembersCount}</p>
+                              <p className="truncate" title={entry.familyDesignation || "Not set"}>{entry.familyDesignation || "Not set"}</p>
+                              <div className="min-w-0">
+                                <span
+                                  className={cn(
+                                    "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                                    /pending/i.test(entry.applicationStatus)
+                                      ? "border-amber-500/35 bg-amber-500/15 text-amber-700 dark:text-amber-200"
+                                      : /approved|aproved/i.test(entry.applicationStatus)
+                                        ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-700 dark:text-emerald-200"
+                                        : "border-zinc-500/35 bg-zinc-500/15 text-zinc-700 dark:text-zinc-200"
+                                  )}
+                                  title={entry.applicationSubmittedAt ? `Submitted: ${formatDateTime(entry.applicationSubmittedAt)}` : "No submission date"}
+                                >
+                                  {entry.applicationStatus || "No status"}
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setReviewingFamilyApplication(entry)}
+                                  className="inline-flex h-7 items-center gap-1 rounded-md border border-indigo-300 bg-indigo-50 px-2 text-[11px] font-semibold text-indigo-700 transition hover:bg-indigo-100 dark:border-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-200 dark:hover:bg-indigo-900/50"
+                                >
+                                  <Eye className="h-3.5 w-3.5" />
+                                  View
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void onDeleteFamilyApplication(entry)}
+                                  disabled={deletingFamilyApplicationUserId === entry.userId}
+                                  className="inline-flex h-7 items-center rounded-md border border-rose-300 bg-rose-50 px-2 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-700 dark:bg-rose-950/35 dark:text-rose-200 dark:hover:bg-rose-900/45"
+                                >
+                                  {deletingFamilyApplicationUserId === entry.userId ? "Deleting..." : "Delete"}
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}
+
+            <Dialog
+              open={Boolean(reviewingFamilyApplication)}
+              onOpenChange={(open) => {
+                if (!open) {
+                  setReviewingFamilyApplication(null);
+                  setPreviewingFamilyApplicationFile(null);
+                }
+              }}
+            >
+              <DialogContent className="max-w-2xl bg-white text-black dark:bg-[#313338] dark:text-white">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <ScrollText className="h-4 w-4" />
+                    Family Application Review
+                  </DialogTitle>
+                  <DialogDescription className="text-zinc-600 dark:text-zinc-300">
+                    Review the selected Family Center application details.
+                  </DialogDescription>
+                </DialogHeader>
+
+                {reviewingFamilyApplication ? (
+                  <div className="grid gap-3 text-sm md:grid-cols-2">
+                    <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45 md:col-span-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Application ID</p>
+                      <p className="mt-1 font-mono text-[12px] text-zinc-900 dark:text-zinc-100">{reviewingFamilyApplication.applicationId}</p>
+                    </div>
+
+                    <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Submitted By</p>
+                      <p className="mt-1 text-zinc-900 dark:text-zinc-100">{reviewingFamilyApplication.submittedBy}</p>
+                    </div>
+
+                    <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">User</p>
+                      <p className="mt-1 text-zinc-900 dark:text-zinc-100" title={reviewingFamilyApplication.userId}>
+                        {reviewingFamilyApplication.displayName}
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Email</p>
+                      <p className="mt-1 text-zinc-900 dark:text-zinc-100">{reviewingFamilyApplication.email || "N/A"}</p>
+                    </div>
+
+                    <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Role</p>
+                      <p className="mt-1 text-zinc-900 dark:text-zinc-100">{reviewingFamilyApplication.role || "USER"}</p>
+                    </div>
+
+                    <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Family Members Tracked</p>
+                      <p className="mt-1 text-zinc-900 dark:text-zinc-100">{reviewingFamilyApplication.familyMembersCount}</p>
+                    </div>
+
+                    <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Family Designation</p>
+                      <p className="mt-1 text-zinc-900 dark:text-zinc-100">{reviewingFamilyApplication.familyDesignation || "Not set"}</p>
+                    </div>
+
+                    <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Application Status</p>
+                      <p className="mt-1 text-zinc-900 dark:text-zinc-100">{reviewingFamilyApplication.applicationStatus || "No status"}</p>
+                    </div>
+
+                    <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Submitted At</p>
+                      <p className="mt-1 text-zinc-900 dark:text-zinc-100">{formatDateTime(reviewingFamilyApplication.applicationSubmittedAt)}</p>
+                    </div>
+
+                    <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45 md:col-span-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Preference Updated</p>
+                      <p className="mt-1 text-zinc-900 dark:text-zinc-100">{formatDateTime(reviewingFamilyApplication.preferenceUpdatedAt)}</p>
+                    </div>
+
+                    <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45 md:col-span-2">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
+                          Application Files ({reviewingFamilyApplication.applicationFiles.length})
+                        </p>
+                      </div>
+
+                      {reviewingFamilyApplication.applicationFiles.length === 0 ? (
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400">No files attached to this application.</p>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+                          {reviewingFamilyApplication.applicationFiles.map((file, index) => {
+                            const isImage = /^image\//i.test(file.mimeType || "");
+                            const isPdf = /pdf/i.test(file.mimeType || "") || /\.pdf($|\?)/i.test(file.url);
+
+                            return (
+                              <button
+                                key={`family-application-file-${file.url}-${index}`}
+                                type="button"
+                                onClick={() =>
+                                  setPreviewingFamilyApplicationFile({
+                                    name: file.name,
+                                    url: file.url,
+                                    mimeType: file.mimeType,
+                                  })
+                                }
+                                className="group overflow-hidden rounded-md border border-zinc-300 bg-white text-left transition hover:border-indigo-400 hover:bg-indigo-50/40 dark:border-zinc-700 dark:bg-zinc-900/40 dark:hover:border-indigo-600 dark:hover:bg-indigo-950/20"
+                                title={`View ${file.name}`}
+                              >
+                                <div className="flex h-20 items-center justify-center bg-zinc-100 dark:bg-zinc-800/70">
+                                  {isImage ? (
+                                    <img src={file.url} alt={file.name} className="h-full w-full object-cover" loading="lazy" />
+                                  ) : (
+                                    <div className="flex flex-col items-center justify-center gap-1 text-zinc-600 dark:text-zinc-300">
+                                      <ScrollText className="h-5 w-5" />
+                                      <span className="text-[10px] font-semibold uppercase">{isPdf ? "PDF" : "File"}</span>
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="px-2 py-1.5">
+                                  <p className="truncate text-[10px] font-medium text-zinc-800 dark:text-zinc-100">{file.name}</p>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="md:col-span-2 flex items-center justify-end gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-700">
+                      <button
+                        type="button"
+                        onClick={() => void onReviewFamilyApplicationDecision(reviewingFamilyApplication, "DECLINE")}
+                        disabled={
+                          reviewingFamilyApplicationActionUserId === reviewingFamilyApplication.userId ||
+                          /declined|denied/i.test(reviewingFamilyApplication.applicationStatus)
+                        }
+                        className="h-8 rounded-md border border-rose-300 bg-rose-50 px-3 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-700 dark:bg-rose-950/35 dark:text-rose-200 dark:hover:bg-rose-900/45"
+                      >
+                        {reviewingFamilyApplicationActionUserId === reviewingFamilyApplication.userId
+                          ? "Saving..."
+                          : "Decline"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void onReviewFamilyApplicationDecision(reviewingFamilyApplication, "ACCEPT")}
+                        disabled={
+                          reviewingFamilyApplicationActionUserId === reviewingFamilyApplication.userId ||
+                          /approved|aproved/i.test(reviewingFamilyApplication.applicationStatus)
+                        }
+                        className="h-8 rounded-md border border-emerald-300 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-emerald-700 dark:bg-emerald-950/35 dark:text-emerald-200 dark:hover:bg-emerald-900/45"
+                      >
+                        {reviewingFamilyApplicationActionUserId === reviewingFamilyApplication.userId
+                          ? "Saving..."
+                          : "Accept"}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </DialogContent>
+            </Dialog>
+
+            <Dialog
+              open={Boolean(previewingFamilyApplicationFile)}
+              onOpenChange={(open) => {
+                if (!open) {
+                  setPreviewingFamilyApplicationFile(null);
+                }
+              }}
+            >
+              <DialogContent className="max-w-4xl bg-white text-black dark:bg-[#313338] dark:text-white">
+                <DialogHeader>
+                  <DialogTitle className="truncate text-base">
+                    {previewingFamilyApplicationFile?.name || "Application file"}
+                  </DialogTitle>
+                  <DialogDescription className="text-zinc-600 dark:text-zinc-300">
+                    Click the link below if the preview is limited.
+                  </DialogDescription>
+                </DialogHeader>
+
+                {previewingFamilyApplicationFile ? (
+                  <div className="space-y-3">
+                    <div className="max-h-[65vh] overflow-auto rounded-md border border-zinc-300 bg-zinc-50 p-2 dark:border-zinc-700 dark:bg-zinc-900/40">
+                      {/^image\//i.test(previewingFamilyApplicationFile.mimeType || "") ? (
+                        <img
+                          src={previewingFamilyApplicationFile.url}
+                          alt={previewingFamilyApplicationFile.name}
+                          className="mx-auto h-auto max-h-[60vh] w-auto max-w-full rounded"
+                        />
+                      ) : /pdf/i.test(previewingFamilyApplicationFile.mimeType || "") || /\.pdf($|\?)/i.test(previewingFamilyApplicationFile.url) ? (
+                        <iframe
+                          src={previewingFamilyApplicationFile.url}
+                          title={previewingFamilyApplicationFile.name}
+                          className="h-[60vh] w-full rounded border border-zinc-300 dark:border-zinc-700"
+                        />
+                      ) : (
+                        <div className="flex h-44 items-center justify-center text-sm text-zinc-600 dark:text-zinc-300">
+                          Preview unavailable for this file type.
+                        </div>
+                      )}
+                    </div>
+
+                    <a
+                      href={previewingFamilyApplicationFile.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+                    >
+                      Open file in new tab
+                    </a>
+                  </div>
+                ) : null}
+              </DialogContent>
+            </Dialog>
 
             {activeSection === "auditLog" && (
               <div className="rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
@@ -2837,14 +4622,154 @@ export const InAccordAdminModal = () => {
             )}
 
             {activeSection === "webhooks" && (
-              <div className="rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
-                <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                  <Webhook className="h-4 w-4" />
-                  Webhooks
+              <div className="flex h-full min-h-0 flex-col rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
+                <div className="mb-4 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-zinc-800 dark:text-zinc-100">
+                    <Webhook className="h-4 w-4" />
+                    Webhooks
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void loadWebhooks()}
+                    className="h-8 rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                  >
+                    Refresh
+                  </button>
                 </div>
-                <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/45 dark:text-zinc-200">
-                  Webhooks area added.
-                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Next step: add create/revoke/list webhook endpoints and per-server secret rotation controls.</p>
+
+                <div className="mb-4 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                  <p className="mb-2 text-sm font-semibold text-zinc-800 dark:text-zinc-100">Create Webhook</p>
+                  <div className="grid gap-2 md:grid-cols-[180px_180px_1fr_160px_auto]">
+                    <select
+                      value={newWebhookServerId}
+                      onChange={(event) => setNewWebhookServerId(event.target.value)}
+                      className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                    >
+                      <option value="GLOBAL">Global webhook</option>
+                      {servers.map((serverItem) => (
+                        <option key={`webhook-server-${serverItem.id}`} value={serverItem.id}>
+                          {serverItem.name}
+                        </option>
+                      ))}
+                    </select>
+
+                    <input
+                      type="text"
+                      value={newWebhookName}
+                      onChange={(event) => setNewWebhookName(event.target.value)}
+                      placeholder="Webhook name"
+                      className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
+                    />
+
+                    <input
+                      type="url"
+                      value={newWebhookUrl}
+                      onChange={(event) => setNewWebhookUrl(event.target.value)}
+                      placeholder="https://example.com/webhook"
+                      className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
+                    />
+
+                    <select
+                      value={newWebhookEventType}
+                      onChange={(event) => setNewWebhookEventType(event.target.value)}
+                      className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                    >
+                      <option value="MESSAGE_CREATE">MESSAGE_CREATE</option>
+                      <option value="MEMBER_JOIN">MEMBER_JOIN</option>
+                      <option value="REPORT_CREATED">REPORT_CREATED</option>
+                      <option value="SERVER_ACTIVITY">SERVER_ACTIVITY</option>
+                    </select>
+
+                    <button
+                      type="button"
+                      onClick={() => void onCreateWebhook()}
+                      disabled={isCreatingWebhook}
+                      className="h-9 rounded-md bg-indigo-600 px-3 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isCreatingWebhook ? "Creating..." : "Create"}
+                    </button>
+                  </div>
+                </div>
+
+                {webhooksActionError ? <p className="mb-3 text-xs text-rose-500">{webhooksActionError}</p> : null}
+                {webhooksActionSuccess ? <p className="mb-3 text-xs text-emerald-500">{webhooksActionSuccess}</p> : null}
+
+                <div className="min-h-0 flex-1">
+                  {isLoadingWebhooks ? (
+                    <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading webhooks...</p>
+                  ) : webhooksError ? (
+                    <p className="text-sm text-rose-500">{webhooksError}</p>
+                  ) : webhooks.length === 0 ? (
+                    <p className="text-sm text-zinc-600 dark:text-zinc-300">No webhooks configured yet.</p>
+                  ) : (
+                    <div className="h-full min-h-0 space-y-2 overflow-y-auto pr-1">
+                      {webhooks.map((hook) => {
+                        const isPending = webhookActionPendingId === hook.id;
+
+                        return (
+                          <div
+                            key={`admin-webhook-${hook.id}`}
+                            className="rounded-lg border border-zinc-300 bg-white/85 p-3 dark:border-zinc-700 dark:bg-zinc-900/45"
+                          >
+                            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{hook.name}</p>
+                              <span
+                                className={cn(
+                                  "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]",
+                                  hook.enabled
+                                    ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-200"
+                                    : "border-zinc-500/35 bg-zinc-500/15 text-zinc-200"
+                                )}
+                              >
+                                {hook.enabled ? "ENABLED" : "DISABLED"}
+                              </span>
+                            </div>
+
+                            <div className="grid gap-1 text-xs text-zinc-600 dark:text-zinc-300">
+                              <p className="truncate" title={hook.endpointUrl}>Endpoint: {hook.endpointUrl}</p>
+                              <p>Event: {hook.eventType}</p>
+                              <p>Scope: {hook.serverName || "Global"}</p>
+                              <p className="font-mono">Secret: {hook.secretPreview}</p>
+                              <p>Updated: {formatDateTime(hook.updatedAt ?? hook.createdAt)}</p>
+                            </div>
+
+                            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-zinc-300/70 pt-3 dark:border-zinc-700/70">
+                              <button
+                                type="button"
+                                onClick={() => void onWebhookAction(hook, "toggle")}
+                                disabled={isPending}
+                                className={cn(
+                                  "h-8 rounded-md px-3 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60",
+                                  hook.enabled
+                                    ? "border border-zinc-500/35 bg-zinc-500/15 text-zinc-200 hover:bg-zinc-500/25"
+                                    : "border border-emerald-500/35 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
+                                )}
+                              >
+                                {hook.enabled ? "Disable" : "Enable"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void onWebhookAction(hook, "rotate-secret")}
+                                disabled={isPending}
+                                className="h-8 rounded-md border border-indigo-500/35 bg-indigo-500/15 px-3 text-xs font-medium text-indigo-200 transition hover:bg-indigo-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                Rotate Secret
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void onWebhookAction(hook, "delete")}
+                                disabled={isPending}
+                                className="h-8 rounded-md border border-rose-500/35 bg-rose-500/15 px-3 text-xs font-medium text-rose-200 transition hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                Delete
+                              </button>
+                              {isPending ? <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Updating...</p> : null}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -3014,6 +4939,305 @@ export const InAccordAdminModal = () => {
                               <p>{row.count}</p>
                             </div>
                           ))
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {activeSection === "discordAppsBots" && (
+              <div className="rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">In-Accord Apps & Bots</p>
+                  <button
+                    type="button"
+                    onClick={() => void loadIntegrations()}
+                    className="h-8 rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                  >
+                    Refresh
+                  </button>
+                </div>
+
+                {isLoadingIntegrations ? (
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading Discord configuration insights...</p>
+                ) : integrationsError ? (
+                  <p className="text-sm text-rose-500">{integrationsError}</p>
+                ) : (
+                  <>
+                    <div className="mb-4 grid gap-2 md:grid-cols-5">
+                      <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Users w/ Configs</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{integrationsSummary?.usersWithDiscordConfigs ?? 0}</p>
+                      </div>
+                      <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Apps</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{integrationsSummary?.appsTotal ?? 0}</p>
+                      </div>
+                      <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Bots</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{integrationsSummary?.botsTotal ?? 0}</p>
+                      </div>
+                      <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Enabled Apps</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{integrationsSummary?.enabledApps ?? 0}</p>
+                      </div>
+                      <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Enabled Bots</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{integrationsSummary?.enabledBots ?? 0}</p>
+                      </div>
+                    </div>
+
+                    <div className="mb-4 grid gap-2 sm:grid-cols-[1fr_140px_140px_auto]">
+                      <input
+                        type="text"
+                        value={discordConfigQuery}
+                        onChange={(event) => setDiscordConfigQuery(event.target.value)}
+                        placeholder="Search by user, email, name, app ID"
+                        className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
+                      />
+
+                      <select
+                        value={discordConfigTypeFilter}
+                        onChange={(event) => setDiscordConfigTypeFilter(event.target.value as typeof discordConfigTypeFilter)}
+                        className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                      >
+                        <option value="ALL">All types</option>
+                        <option value="APP">Apps</option>
+                        <option value="BOT">Bots</option>
+                      </select>
+
+                      <select
+                        value={discordConfigStatusFilter}
+                        onChange={(event) => setDiscordConfigStatusFilter(event.target.value as typeof discordConfigStatusFilter)}
+                        className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                      >
+                        <option value="ALL">All status</option>
+                        <option value="ENABLED">Enabled</option>
+                        <option value="DISABLED">Disabled</option>
+                      </select>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDiscordConfigQuery("");
+                          setDiscordConfigTypeFilter("ALL");
+                          setDiscordConfigStatusFilter("ALL");
+                        }}
+                        disabled={!hasActiveDiscordConfigFilters}
+                        className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                      >
+                        Clear filters
+                      </button>
+                    </div>
+
+                    <div className="mb-4 flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
+                        Sort
+                      </span>
+                      <select
+                        value={discordConfigSortKey}
+                        onChange={(event) => onDiscordConfigSort(event.target.value as DiscordConfigSortKey)}
+                        className="h-8 rounded-md border border-zinc-300 bg-white px-2 text-xs text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                      >
+                        <option value="createdAt">Created date</option>
+                        <option value="status">Status</option>
+                        <option value="type">Type</option>
+                      </select>
+                      <select
+                        value={discordConfigSortDirection}
+                        onChange={(event) =>
+                          setDiscordConfigSortDirection(event.target.value as DiscordSortDirection)
+                        }
+                        className="h-8 rounded-md border border-zinc-300 bg-white px-2 text-xs text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                      >
+                        <option value="asc">Ascending</option>
+                        <option value="desc">Descending</option>
+                      </select>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        Tip: click Type / Status / Created headers to toggle sorting.
+                      </p>
+                    </div>
+
+                    {discordConfigActionError ? (
+                      <p className="mb-3 text-xs text-rose-500">{discordConfigActionError}</p>
+                    ) : null}
+                    {discordConfigActionSuccess ? (
+                      <p className="mb-3 text-xs text-emerald-500">{discordConfigActionSuccess}</p>
+                    ) : null}
+
+                    <div className="overflow-hidden rounded-lg border border-zinc-300 dark:border-zinc-700">
+                      <div className="grid grid-cols-[1fr_1fr_0.55fr_1fr_0.8fr_1fr_1.3fr] gap-2 bg-zinc-200/80 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                        <p>User</p>
+                        <p>Name</p>
+                        <button
+                          type="button"
+                          onClick={() => onDiscordConfigSort("type")}
+                          className="inline-flex items-center gap-1 text-left hover:text-zinc-900 dark:hover:text-white"
+                          title="Sort by type"
+                        >
+                          Type <span>{getSortGlyph("type")}</span>
+                        </button>
+                        <p>Application ID</p>
+                        <button
+                          type="button"
+                          onClick={() => onDiscordConfigSort("status")}
+                          className="inline-flex items-center gap-1 text-left hover:text-zinc-900 dark:hover:text-white"
+                          title="Sort by status"
+                        >
+                          Status <span>{getSortGlyph("status")}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onDiscordConfigSort("createdAt")}
+                          className="inline-flex items-center gap-1 text-left hover:text-zinc-900 dark:hover:text-white"
+                          title="Sort by created date"
+                        >
+                          Created <span>{getSortGlyph("createdAt")}</span>
+                        </button>
+                        <p>Actions</p>
+                      </div>
+                      <div className="max-h-96 overflow-y-auto bg-white/80 text-xs text-zinc-800 dark:bg-zinc-950/30 dark:text-zinc-200">
+                        {filteredRecentDiscordConfigs.length === 0 ? (
+                          <p className="px-3 py-3 text-zinc-600 dark:text-zinc-300">
+                            No Discord app or bot configs found{hasActiveDiscordConfigFilters ? " for current filters" : ""}.
+                          </p>
+                        ) : (
+                          filteredRecentDiscordConfigs.map((row, index) => {
+                            const key = discordConfigKey(row);
+                            const isEditing = editingDiscordConfigKey === key;
+                            const isPending = discordConfigActionPendingKey === key;
+                            const draft = discordConfigDrafts[key];
+                            const hasChanges =
+                              !!draft &&
+                              (draft.configName.trim() !== row.configName ||
+                                draft.applicationId.trim() !== row.applicationId);
+
+                            return (
+                              <div
+                                key={`discord-config-${row.userId}-${row.type}-${row.id}-${index}`}
+                                className={cn(
+                                  "grid grid-cols-[1fr_1fr_0.55fr_1fr_0.8fr_1fr_1.3fr] gap-2 px-3 py-2",
+                                  index % 2 === 0
+                                    ? "bg-white/70 dark:bg-zinc-950/25"
+                                    : "bg-zinc-100/70 dark:bg-zinc-900/35"
+                                )}
+                              >
+                                <p className="truncate" title={`${row.name} (${row.userId})`}>
+                                  {row.name || row.userId}
+                                </p>
+
+                                {isEditing ? (
+                                  <input
+                                    type="text"
+                                    value={draft?.configName ?? row.configName}
+                                    onChange={(event) =>
+                                      setDiscordConfigDrafts((current) => ({
+                                        ...current,
+                                        [key]: {
+                                          configName: event.target.value,
+                                          applicationId: current[key]?.applicationId ?? row.applicationId,
+                                        },
+                                      }))
+                                    }
+                                    className="h-7 rounded-md border border-zinc-300 bg-white px-2 text-xs text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                                  />
+                                ) : (
+                                  <p className="truncate" title={row.configName}>{row.configName}</p>
+                                )}
+
+                                <p>{row.type}</p>
+
+                                {isEditing ? (
+                                  <input
+                                    type="text"
+                                    value={draft?.applicationId ?? row.applicationId}
+                                    onChange={(event) =>
+                                      setDiscordConfigDrafts((current) => ({
+                                        ...current,
+                                        [key]: {
+                                          configName: current[key]?.configName ?? row.configName,
+                                          applicationId: event.target.value,
+                                        },
+                                      }))
+                                    }
+                                    className="h-7 rounded-md border border-zinc-300 bg-white px-2 font-mono text-xs text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                                  />
+                                ) : (
+                                  <p className="truncate font-mono" title={row.applicationId}>{row.applicationId}</p>
+                                )}
+
+                                <p className={row.enabled ? "text-emerald-600 dark:text-emerald-300" : "text-zinc-500 dark:text-zinc-400"}>
+                                  {row.enabled ? "Enabled" : "Disabled"}
+                                </p>
+
+                                <p className="truncate" title={formatDateTime(row.createdAt)}>{formatDateTime(row.createdAt)}</p>
+
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  {isEditing ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => void onAdminDiscordConfigAction(row, "update")}
+                                        disabled={isPending || !hasChanges}
+                                        className="h-7 rounded-md bg-indigo-600 px-2 text-[10px] font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                      >
+                                        Save
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingDiscordConfigKey(null);
+                                          setDiscordConfigDrafts((current) => {
+                                            const next = { ...current };
+                                            delete next[key];
+                                            return next;
+                                          });
+                                        }}
+                                        disabled={isPending}
+                                        className="h-7 rounded-md border border-zinc-300 bg-white px-2 text-[10px] font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => setDiscordConfigDraft(row)}
+                                      disabled={isPending}
+                                      className="h-7 rounded-md border border-zinc-300 bg-white px-2 text-[10px] font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                                    >
+                                      Edit
+                                    </button>
+                                  )}
+
+                                  <button
+                                    type="button"
+                                    onClick={() => void onAdminDiscordConfigAction(row, "toggle")}
+                                    disabled={isPending}
+                                    className={cn(
+                                      "h-7 rounded-md px-2 text-[10px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-60",
+                                      row.enabled
+                                        ? "border border-zinc-500/35 bg-zinc-500/15 text-zinc-200 hover:bg-zinc-500/25"
+                                        : "border border-emerald-500/35 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
+                                    )}
+                                  >
+                                    {row.enabled ? "Disable" : "Enable"}
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => void onAdminDiscordConfigAction(row, "delete")}
+                                    disabled={isPending}
+                                    className="h-7 rounded-md border border-rose-500/35 bg-rose-500/15 px-2 text-[10px] font-semibold text-rose-200 transition hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })
                         )}
                       </div>
                     </div>

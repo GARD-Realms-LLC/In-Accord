@@ -12,6 +12,13 @@ const IN_ACCORD_MODERATOR_ROLE_ALIASES = new Set([
   "MOD",
 ]);
 
+const IN_ACCORD_PARENT_ROLE_ALIASES = new Set([
+  "PARENT",
+  "PARENT_ROLE",
+  "FAMILY",
+  "FAMILY_ROLE",
+]);
+
 export const normalizeInAccordRole = (role: string | null | undefined) =>
   (role ?? "").trim().toUpperCase();
 
@@ -28,6 +35,11 @@ export const isInAccordModerator = (role: string | null | undefined) => {
 export const isInAccordAdministrator = (role: string | null | undefined) => {
   const normalizedRole = normalizeInAccordRole(role);
   return IN_ACCORD_ADMIN_ROLE_ALIASES.has(normalizedRole);
+};
+
+export const isInAccordParent = (role: string | null | undefined) => {
+  const normalizedRole = normalizeInAccordRole(role);
+  return IN_ACCORD_PARENT_ROLE_ALIASES.has(normalizedRole);
 };
 
 export const hasInAccordAdministrativeAccess = (role: string | null | undefined) =>

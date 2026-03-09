@@ -37,6 +37,7 @@ const prefixMap = {
   serverImage: "Client/Server Icons/",
   userImage: "Client/User Icons/",
   userBanner: "Client/User Banners/",
+  familyApplication: "Client/Family Applications/",
 } as const;
 
 function getFileExtension(filename: string) {
@@ -78,6 +79,15 @@ export async function POST(req: Request) {
     const key = `${prefix}${fileName}`;
 
     if (!r2Client) {
+      if (type === "familyApplication") {
+        return NextResponse.json(
+          {
+            error: "Document upload is temporarily unavailable. Please try again later.",
+          },
+          { status: 503 }
+        );
+      }
+
       const localSubDir =
         type === "userImage"
           ? "user-icons"
@@ -96,7 +106,6 @@ export async function POST(req: Request) {
         key: `local:${localSubDir}/${fileName}`,
         storage: "local",
         warning: "R2 not configured; saved locally for development",
-        missing: missingKeys,
       });
     }
 

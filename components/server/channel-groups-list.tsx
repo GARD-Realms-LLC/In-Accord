@@ -23,6 +23,7 @@ interface ChannelGroupsListProps {
   role?: MemberRole;
   server: Server;
   groups: GroupWithChannels[];
+  connectedVoiceCountsByChannelId?: Record<string, number>;
 }
 
 const reorderGroups = (groups: GroupWithChannels[], draggedId: string, targetId: string) => {
@@ -48,6 +49,7 @@ export const ChannelGroupsList = ({
   role,
   server,
   groups,
+  connectedVoiceCountsByChannelId = {},
 }: ChannelGroupsListProps) => {
   const router = useRouter();
   const [orderedGroups, setOrderedGroups] = useState<GroupWithChannels[]>(groups);
@@ -152,22 +154,6 @@ export const ChannelGroupsList = ({
                 <summary
                   className="mb-1 flex w-full list-none items-center rounded-sm px-1 py-0.5 hover:bg-black/10 dark:hover:bg-zinc-700/30"
                 >
-                  {canManageGroups ? (
-                    <span
-                      draggable
-                      onDragStart={(event) => onGroupDragStart(event, group.id)}
-                      onDragEnd={onGroupDragEnd}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                      }}
-                      className="mr-1 inline-flex cursor-grab items-center rounded-sm p-0.5 text-zinc-500 hover:bg-black/10 active:cursor-grabbing dark:text-zinc-400 dark:hover:bg-zinc-700/30"
-                      title="Drag to reorder group"
-                      aria-label="Drag to reorder group"
-                    >
-                      <GripVertical className="h-3.5 w-3.5" />
-                    </span>
-                  ) : null}
                   <p className="min-w-0 flex-1 truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
                     {group.icon ? `${group.icon} ` : ""}
                     {group.name} - {group.channels.length}
@@ -179,6 +165,22 @@ export const ChannelGroupsList = ({
                     <span className="text-[10px] text-zinc-500 transition group-open/details:rotate-180 dark:text-zinc-400">
                       ⌄
                     </span>
+                    {canManageGroups ? (
+                      <span
+                        draggable
+                        onDragStart={(event) => onGroupDragStart(event, group.id)}
+                        onDragEnd={onGroupDragEnd}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                        }}
+                        className="inline-flex cursor-grab items-center rounded-sm p-0.5 text-zinc-500 hover:bg-black/10 active:cursor-grabbing dark:text-zinc-400 dark:hover:bg-zinc-700/30"
+                        title="Drag to reorder group"
+                        aria-label="Drag to reorder group"
+                      >
+                        <GripVertical className="h-3.5 w-3.5" />
+                      </span>
+                    ) : null}
                   </div>
                 </summary>
 
@@ -191,6 +193,7 @@ export const ChannelGroupsList = ({
                         role={role}
                         server={server}
                         draggable
+                        connectedCount={connectedVoiceCountsByChannelId[channel.id] ?? 0}
                       />
                     ))}
                   </div>

@@ -6,7 +6,6 @@ import { NewUserCloverBadge } from "@/components/new-user-clover-badge";
 import { MobileToggle } from "@/components/mobile-toggle";
 import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
 import { UserAvatar } from "@/components/user-avatar";
-import { CreateFormHeaderButton } from "@/components/chat/create-form-header-button";
 
 import { ChatVideoButton } from "./chat-video-button";
 
@@ -74,7 +73,6 @@ export const ChatHeader = ({
         <div className="ml-auto flex items-center">
           {type === "channel" && channelId ? (
             <>
-              <CreateFormHeaderButton className="mr-2" />
               <Link
                 href={`/servers/${serverId}/channels/${channelId}/threads`}
                 className="mr-2 inline-flex items-center rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"

@@ -1,4 +1,6 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
+import { Mic, Video } from "lucide-react";
 import { ChannelType } from "@/lib/db";
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 
@@ -8,25 +10,32 @@ import { ChatInput } from "@/components/chat/chat-input";
 import { ChatItem } from "@/components/chat/chat-item";
 import { ChatScrollBox } from "@/components/chat/chat-scroll-box";
 import { ChatLiveRefresh } from "@/components/chat/chat-live-refresh";
+import { VoiceStateSession } from "@/components/server/voice-state-session";
 // import { MediaRoom } from "@/components/media-room";
 import { channel, db, member, message } from "@/lib/db";
 import { computeChannelPermissionForRole } from "@/lib/channel-permissions";
 import { resolveMemberContext } from "@/lib/channel-permissions";
+import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 import { getUserProfileNameMap } from "@/lib/user-profile";
 import type { Profile } from "@/lib/db/types";
 import { listThreadsForMessages } from "@/lib/channel-threads";
+import { listActiveVoiceMembersForChannel, pruneStaleVoiceStates } from "@/lib/voice-states";
 
 interface ChannelIdPageProps {
   params: Promise<{
     serverId: string;
     channelId: string;
   }>;
+  searchParams: Promise<{
+    live?: string;
+  }>;
 }
 
-const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
+const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
   const perfStart = Date.now();
   const isPerfLoggingEnabled = process.env.NODE_ENV !== "production";
   const { serverId, channelId } = await params;
+  const resolvedSearchParams = await searchParams;
 
   const profile = await currentProfile();
 
@@ -55,6 +64,9 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
     redirect("/");
   }
 
+  const isMediaChannel =
+    currentChannel.type === ChannelType.AUDIO || currentChannel.type === ChannelType.VIDEO;
+
   const topicResult = await db.execute(sql`
     select "topic"
     from "ChannelTopic"
@@ -78,6 +90,19 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
     role: currentMember.role,
     isServerOwner: memberContext?.isServerOwner ?? false,
   });
+
+  const isLiveSessionRequested = String(resolvedSearchParams?.live ?? "").toLowerCase() === "true";
+
+  if (isMediaChannel) {
+    await pruneStaleVoiceStates();
+  }
+
+  const connectedVoiceMembers = isMediaChannel
+    ? await listActiveVoiceMembersForChannel({
+        serverId,
+        channelId: currentChannel.id,
+      })
+    : [];
 
   if (!channelPermissions.allowView) {
     redirect(`/servers/${serverId}`);
@@ -154,6 +179,56 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
 
   const mentionProfileNameMap = await getUserProfileNameMap(serverMembers.map((item) => item.profileId));
 
+  const mediaPresenceRows = isMediaChannel
+    ? await db.execute(sql`
+        select
+          m."id" as "memberId",
+          m."profileId" as "profileId",
+          m."role" as "role",
+          up."presenceStatus" as "presenceStatus",
+          u."name" as "name",
+          u."email" as "email"
+        from "Member" m
+        left join "Users" u on u."userId" = m."profileId"
+        left join "UserProfile" up on up."userId" = m."profileId"
+        where m."serverId" = ${serverId}
+      `)
+    : { rows: [] };
+
+  const mediaMembers = ((mediaPresenceRows as unknown as {
+    rows?: Array<{
+      memberId: string;
+      profileId: string;
+      role: string | null;
+      presenceStatus: string | null;
+      name: string | null;
+      email: string | null;
+    }>;
+  }).rows ?? []).map((row) => {
+    const normalizedPresence = String(row.presenceStatus ?? "OFFLINE").toUpperCase();
+
+    return {
+      memberId: row.memberId,
+      profileId: row.profileId,
+      displayName:
+        row.name?.trim() ||
+        mentionProfileNameMap.get(row.profileId) ||
+        row.email?.trim() ||
+        row.profileId,
+      presenceStatus: normalizedPresence,
+    };
+  });
+
+  const visibleMediaMembers = mediaMembers.filter(
+    (item) => item.profileId === profile.id || item.presenceStatus !== "INVISIBLE"
+  );
+  const connectedMediaMemberIds = new Set(connectedVoiceMembers.map((item) => item.memberId));
+  const availableMediaMembers = visibleMediaMembers
+    .filter((item) => item.profileId !== profile.id)
+    .filter((item) => !connectedMediaMemberIds.has(item.memberId))
+    .filter((item) => item.presenceStatus !== "OFFLINE")
+    .slice(0, 10);
+
   const mentionUsers = serverMembers.map((item) => {
     const resolvedName =
       mentionProfileNameMap.get(item.profileId) ??
@@ -218,6 +293,12 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
 
   const lastChannelMessageId = hydratedChannelMessages[hydratedChannelMessages.length - 1]?.id ?? "none";
 
+  const isAudioChannel = currentChannel.type === ChannelType.AUDIO;
+  const mediaChannelLabel = isAudioChannel ? "Voice" : "Video";
+  const isLiveSession = channelPermissions.allowConnect && isLiveSessionRequested;
+  const normalizedChannelIcon = String((currentChannel as { icon?: string | null }).icon ?? "").trim();
+  const canBulkDeleteMessages = Boolean(memberContext?.isServerOwner) || hasInAccordAdministrativeAccess(profile.role);
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
       <div className="theme-server-chat-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-border bg-background shadow-xl shadow-black/35">
@@ -230,17 +311,154 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
           type="channel"
         />
 
-        {currentChannel.type === ChannelType.TEXT ? (
-          <>
+        {currentChannel.type === ChannelType.TEXT ? null : (
+          <div className="w-full border-b border-border/60 p-4">
+            <VoiceStateSession
+              serverId={serverId}
+              channelId={currentChannel.id}
+              active={isLiveSession}
+              isVideoChannel={currentChannel.type === ChannelType.VIDEO}
+            />
+            <div className="mx-auto w-full max-w-3xl rounded-2xl border border-border bg-card p-5 shadow-lg shadow-black/20">
+              <p className="flex items-center gap-2 text-base font-semibold text-zinc-900 dark:text-zinc-100">
+                {normalizedChannelIcon ? (
+                  <span className="inline-flex h-5 w-5 items-center justify-center text-base leading-none text-zinc-500 dark:text-zinc-300">
+                    {normalizedChannelIcon}
+                  </span>
+                ) : isAudioChannel ? (
+                  <Mic className="h-4 w-4 text-zinc-500 dark:text-zinc-300" />
+                ) : (
+                  <Video className="h-4 w-4 text-zinc-500 dark:text-zinc-300" />
+                )}
+                {mediaChannelLabel} Channel - {currentChannel.name}
+              </p>
+              <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                {isAudioChannel
+                  ? `Join #${currentChannel.name} to talk with members in real time.`
+                  : `Join #${currentChannel.name} to talk and share camera in real time.`}
+              </p>
+
+              {!channelPermissions.allowConnect ? (
+                <div className="mt-4 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+                  You can view this channel, but you do not have permission to connect.
+                </div>
+              ) : isLiveSession ? (
+                <div className="mt-4 space-y-3">
+                  <div className="rounded-lg border border-emerald-500/35 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
+                    Connected to #{currentChannel.name}. You are now in this {mediaChannelLabel.toLowerCase()} channel.
+                  </div>
+                  <ul className="space-y-1 rounded-lg border border-border/60 bg-background/60 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300">
+                    <li>• {isAudioChannel ? "Mute / unmute your microphone" : "Mute / unmute your microphone"}</li>
+                    <li>• {isAudioChannel ? "Deafen / undeafen incoming audio" : "Turn camera on / off"}</li>
+                    <li>• Switch channels anytime from the channel list.</li>
+                  </ul>
+
+                  <div className="rounded-lg border border-border/60 bg-background/60 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300">
+                    <p className="mb-2 font-semibold text-zinc-800 dark:text-zinc-100">Connected now</p>
+                    {connectedVoiceMembers.length ? (
+                      <ul className="space-y-1.5">
+                        {connectedVoiceMembers.map((item) => (
+                          <li
+                            key={item.memberId}
+                            className="flex items-center justify-between rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-1.5"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-emerald-200">
+                                {item.profileId === profile.id ? "You" : item.displayName}
+                              </p>
+                              <div className="mt-1 flex flex-wrap items-center gap-1">
+                                <span className="rounded-full border border-emerald-400/50 bg-emerald-500/15 px-2 py-0.5 text-[10px] uppercase tracking-wide text-emerald-200">
+                                  Connected
+                                </span>
+                                {item.isMuted ? (
+                                  <span className="rounded-full border border-rose-400/50 bg-rose-500/15 px-2 py-0.5 text-[10px] uppercase tracking-wide text-rose-200">
+                                    Muted
+                                  </span>
+                                ) : null}
+                                {item.isDeafened ? (
+                                  <span className="rounded-full border border-rose-400/50 bg-rose-500/15 px-2 py-0.5 text-[10px] uppercase tracking-wide text-rose-200">
+                                    Deafened
+                                  </span>
+                                ) : null}
+                                {currentChannel.type === ChannelType.VIDEO ? (
+                                  <span className="rounded-full border border-sky-400/50 bg-sky-500/15 px-2 py-0.5 text-[10px] uppercase tracking-wide text-sky-200">
+                                    {item.isCameraOn ? "Camera On" : "Camera Off"}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        Connecting... waiting for channel presence update.
+                      </p>
+                    )}
+                  </div>
+                  <Link
+                    href={`/servers/${serverId}/channels/${currentChannel.id}`}
+                    className="inline-flex h-9 items-center justify-center rounded-md border border-zinc-300/40 bg-zinc-200/70 px-3 text-sm font-semibold text-zinc-800 transition hover:bg-zinc-300/80 dark:border-zinc-600/70 dark:bg-zinc-700/60 dark:text-zinc-100 dark:hover:bg-zinc-600/70"
+                  >
+                    Disconnect
+                  </Link>
+                </div>
+              ) : (
+                <div className="mt-4 space-y-3">
+                  <div className="rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 py-2 text-sm text-indigo-200">
+                    Not connected yet. Click below to join this {mediaChannelLabel.toLowerCase()} channel.
+                  </div>
+                  <ul className="space-y-1 rounded-lg border border-border/60 bg-background/60 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300">
+                    <li>• {isAudioChannel ? "Talk instantly with people in this channel" : "Talk and broadcast your camera to channel members"}</li>
+                    <li>• Members can join/leave without sending messages.</li>
+                    <li>• Channel chat is available below.</li>
+                  </ul>
+
+                  <div className="rounded-lg border border-border/60 bg-background/60 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300">
+                    <p className="mb-2 font-semibold text-zinc-800 dark:text-zinc-100">Available to join</p>
+                    {availableMediaMembers.length ? (
+                      <ul className="space-y-1.5">
+                        {availableMediaMembers.map((item) => (
+                          <li
+                            key={item.memberId}
+                            className="flex items-center justify-between rounded-md border border-border/50 bg-background/70 px-2 py-1.5"
+                          >
+                            <span className="truncate">{item.displayName}</span>
+                            <span className="ml-2 shrink-0 rounded-full border border-zinc-500/50 bg-zinc-500/15 px-2 py-0.5 text-[10px] uppercase tracking-wide text-zinc-300">
+                              {item.presenceStatus}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        No one else is currently online in this server.
+                      </p>
+                    )}
+                  </div>
+                  <Link
+                    href={`/servers/${serverId}/channels/${currentChannel.id}?live=true`}
+                    className="inline-flex h-9 items-center justify-center rounded-md bg-indigo-500 px-3 text-sm font-semibold text-white transition hover:bg-indigo-400"
+                  >
+                    Connect to {mediaChannelLabel}
+                  </Link>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <>
           <ChatLiveRefresh />
           <ChatScrollBox
             className="flex-1 overflow-y-auto"
             scrollKey={`${currentChannel.id}:${hydratedChannelMessages.length}:${lastChannelMessageId}`}
-            forceStickToBottom
           >
             {hydratedChannelMessages.length === 0 ? (
               <div className="p-6 text-sm text-zinc-500 dark:text-zinc-400">
-                No messages yet. Start the conversation in #{currentChannel.name}.
+                {isMediaChannel
+                  ? `No chat messages yet in #${currentChannel.name}. Say hi below.`
+                  : `No messages yet. Start the conversation in #${currentChannel.name}.`}
               </div>
             ) : (
               hydratedChannelMessages.map((item) => (
@@ -264,34 +482,29 @@ const ChannelIdPage = async ({ params }: ChannelIdPageProps) => {
                   serverId={currentChannel.serverId}
                   channelId={currentChannel.id}
                   thread={threadBySourceMessageId.get(item.id) ?? null}
+                  canPurgeDeletedMessage={Boolean(memberContext?.isServerOwner) || currentMember.role === "ADMIN" || hasInAccordAdministrativeAccess(profile.role)}
                 />
               ))
             )}
           </ChatScrollBox>
-          </>
-        ) : (
-          <div className="flex h-full items-center justify-center text-sm text-zinc-500 dark:text-zinc-400">
-            This channel type does not use text chat.
-          </div>
-        )}
+        </>
       </div>
 
-      {currentChannel.type === ChannelType.TEXT ? (
-        <div className="theme-server-chat-bar w-[calc(100vw-584px)] max-w-full rounded-2xl border border-border bg-card shadow-lg shadow-black/25">
-          <ChatInput
-            name={currentChannel.name}
-            type="channel"
-            apiUrl="/api/socket/messages"
-            query={{
-              channelId: currentChannel.id,
-              serverId: currentChannel.serverId,
-            }}
-            disabled={!channelPermissions.allowSend}
-            mentionUsers={mentionUsers}
-            mentionRoles={mentionRoles}
-          />
-        </div>
-      ) : null}
+      <div className="theme-server-chat-bar w-[calc(100vw-584px)] max-w-full rounded-2xl border border-border bg-card shadow-lg shadow-black/25">
+        <ChatInput
+          name={currentChannel.name}
+          type="channel"
+          apiUrl="/api/socket/messages"
+          query={{
+            channelId: currentChannel.id,
+            serverId: currentChannel.serverId,
+          }}
+          disabled={!channelPermissions.allowSend}
+          mentionUsers={mentionUsers}
+          mentionRoles={mentionRoles}
+          canBulkDeleteMessages={canBulkDeleteMessages}
+        />
+      </div>
     </div>
   );
 };

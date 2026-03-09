@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { v4 as uuidv4 } from "uuid";
 
 import { db } from "@/lib/db";
 
@@ -147,6 +148,10 @@ export const ensureChannelGroupSchema = async () => {
   `);
 
   await db.execute(sql`
+    drop index if exists "Channel_unique_name_per_server"
+  `);
+
+  await db.execute(sql`
     create unique index if not exists "Channel_unique_name_per_server"
     on "Channel" (
       "serverId",
@@ -163,4 +168,59 @@ export const ensureChannelGroupSchema = async () => {
   `);
 
   channelGroupSchemaReady = true;
+};
+
+export const ensureDefaultMediaChannelGroups = async ({
+  serverId,
+  profileId,
+}: {
+  serverId: string;
+  profileId: string;
+}) => {
+  await ensureChannelGroupSchema();
+
+  const now = new Date();
+  const audioGroupId = uuidv4();
+  const videoGroupId = uuidv4();
+
+  await db.execute(sql`
+    with normalized_existing as (
+      select lower(trim(coalesce(g."name", ''))) as normalized_name
+      from "ChannelGroup" g
+      where g."serverId" = ${serverId}
+    ),
+    base as (
+      select coalesce(max(g."sortOrder"), 0) as max_sort_order
+      from "ChannelGroup" g
+      where g."serverId" = ${serverId}
+    )
+    insert into "ChannelGroup" (
+      "id",
+      "name",
+      "serverId",
+      "profileId",
+      "sortOrder",
+      "createdAt",
+      "updatedAt"
+    )
+    select
+      candidates."id",
+      candidates."name",
+      ${serverId},
+      ${profileId},
+      base.max_sort_order + candidates."offset",
+      ${now},
+      ${now}
+    from base
+    cross join (
+      values
+        (${audioGroupId}, ${"Audio Channels"}, 1),
+        (${videoGroupId}, ${"Video Channels"}, 2)
+    ) as candidates("id", "name", "offset")
+    where not exists (
+      select 1
+      from normalized_existing existing
+      where existing.normalized_name = lower(trim(candidates."name"))
+    )
+  `);
 };

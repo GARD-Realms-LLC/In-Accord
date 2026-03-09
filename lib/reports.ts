@@ -2,10 +2,10 @@ import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 
-export type ReportTargetType = "USER" | "SERVER" | "MESSAGE";
+export type ReportTargetType = "USER" | "SERVER" | "MESSAGE" | "BUG";
 export type ReportStatus = "OPEN" | "IN_REVIEW" | "RESOLVED" | "DISMISSED";
 
-export const allowedReportTargetTypes = new Set<ReportTargetType>(["USER", "SERVER", "MESSAGE"]);
+export const allowedReportTargetTypes = new Set<ReportTargetType>(["USER", "SERVER", "MESSAGE", "BUG"]);
 export const allowedReportStatuses = new Set<ReportStatus>([
   "OPEN",
   "IN_REVIEW",

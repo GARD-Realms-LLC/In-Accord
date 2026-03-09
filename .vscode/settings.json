@@ -39,5 +39,8 @@
         "activityBar.activeBorder": "#4fcb1a",
         "activityBarBadge.foreground": "#000000",
         "activityBarBadge.background": "#4fcb1a"
+    },
+    "jumpToAliasFile.alias": {
+        "@": "e:\\In-Accord\\src"
     }
 }

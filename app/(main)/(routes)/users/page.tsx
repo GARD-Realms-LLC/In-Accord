@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { and, asc, eq, sql } from "drizzle-orm";
-import { Bell, MessageCircle, Phone, Search, UserPlus, Video } from "lucide-react";
+import { Bell, Bug, MessageCircle, Phone, Search, UserPlus, Video } from "lucide-react";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db, directMessage, member } from "@/lib/db";
@@ -65,14 +65,18 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
     return redirect("/sign-in");
   }
 
-  const recentDms = await getGlobalRecentDmsForProfile({ profileId: profile.id });
-
   const selectedServerId =
     typeof resolvedSearchParams?.serverId === "string"
       ? resolvedSearchParams.serverId
       : Array.isArray(resolvedSearchParams?.serverId)
         ? (resolvedSearchParams?.serverId[0] ?? "")
         : "";
+
+  const recentDms = await getGlobalRecentDmsForProfile({
+    profileId: profile.id,
+    selectedServerId: selectedServerId || null,
+    recentWindowDays: 30,
+  });
 
   const selectedMemberId =
     typeof resolvedSearchParams?.memberId === "string"
@@ -599,6 +603,9 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
           <button type="button" title="Notifications" className="inline-flex h-8 w-8 items-center justify-center rounded transition-colors hover:bg-[#3f4248] hover:text-white">
             <Bell className="h-4 w-4" suppressHydrationWarning />
           </button>
+          <button type="button" title="Bug Reports" className="inline-flex h-8 w-8 items-center justify-center rounded transition-colors hover:bg-[#3f4248] hover:text-white">
+            <Bug className="h-4 w-4" suppressHydrationWarning />
+          </button>
         </div>
 
         <div
@@ -747,7 +754,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
             </div>
           </header>
 
-          <section className="flex min-h-0 flex-1 overflow-auto p-3">
+          <section className="flex min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3">
             {selectedConversation ? (
               <div className="flex h-full min-h-0 w-full flex-col gap-2">
                 <div className="theme-users-chat-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-black/20 bg-white shadow-xl shadow-black/35 dark:bg-[#313338]">
@@ -774,7 +781,6 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                   <ChatScrollBox
                     className="flex-1 overflow-y-auto"
                     scrollKey={`${selectedConversation.conversationId}:${selectedConversation.messages.length}:${selectedConversation.messages[selectedConversation.messages.length - 1]?.id ?? "none"}`}
-                    forceStickToBottom
                   >
                     <ChatLiveRefresh />
                     {selectedConversation.messages.length === 0 ? (

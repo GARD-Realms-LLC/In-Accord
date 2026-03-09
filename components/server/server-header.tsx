@@ -2,10 +2,10 @@
 
 import {
   ChevronDown,
-  FileText,
   Flag,
   FolderPlus,
   LogOut,
+  Mic,
   PlusCircle,
   Settings,
   Star,
@@ -24,7 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useModal } from "@/hooks/use-modal-store";
-import { MemberRole } from "@/lib/db/types";
+import { ChannelType, MemberRole } from "@/lib/db/types";
 interface ServerHeaderProps {
   server: ServerWithMembersWithProfiles & {
     bannerUrl?: string | null;
@@ -129,18 +129,18 @@ export const ServerHeader = ({ server, role, isServerOwner = false }: ServerHead
             {isModerator && (
               <>
               <DropdownMenuItem
-                onClick={() => onOpen("createForm", { server })}
-                className="px-3 py-2 text-sm cursor-pointer"
-              >
-                Create Forum
-                <FileText className="h-4 w-4 ml-auto" />
-              </DropdownMenuItem>
-              <DropdownMenuItem
                 onClick={() => onOpen("createChannel", { server })}
                 className="px-3 py-2 text-sm cursor-pointer"
               >
                 Create Channel
                 <PlusCircle className="h-4 w-4 ml-auto" />
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => onOpen("createChannel", { server, channelType: ChannelType.AUDIO })}
+                className="px-3 py-2 text-sm cursor-pointer"
+              >
+                Add Voice Channel
+                <Mic className="h-4 w-4 ml-auto" />
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => onOpen("createChannelGroup", { server })}

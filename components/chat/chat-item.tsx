@@ -60,6 +60,7 @@ interface ChatItemProps {
     participantCount?: number;
     unreadCount?: number;
   } | null;
+  canPurgeDeletedMessage?: boolean;
 }
 
 const formSchema = z.object({
@@ -232,6 +233,59 @@ type LinkPreview = {
   canonicalUrl: string;
 };
 
+type VoiceJoinNotification = {
+  displayText: string;
+  joinPath: string;
+};
+
+const VOICE_JOIN_MARKER_REGEX = /\s*\[\[JOIN_CHANNEL:([^:\]]+):([^\]]+)\]\]\s*$/i;
+const VOICE_JOIN_URL_REGEX = /\s+Join:\s+(https?:\/\/\S+)\s*$/i;
+
+const parseVoiceJoinNotification = (rawText: string): VoiceJoinNotification | null => {
+  const text = String(rawText ?? "");
+
+  const markerMatch = text.match(VOICE_JOIN_MARKER_REGEX);
+  if (markerMatch) {
+    const serverId = String(markerMatch[1] ?? "").trim();
+    const channelId = String(markerMatch[2] ?? "").trim();
+    if (!serverId || !channelId) {
+      return null;
+    }
+
+    return {
+      displayText: text.replace(VOICE_JOIN_MARKER_REGEX, "").trim(),
+      joinPath: `/servers/${encodeURIComponent(serverId)}/channels/${encodeURIComponent(channelId)}`,
+    };
+  }
+
+  const urlMatch = text.match(VOICE_JOIN_URL_REGEX);
+  const rawUrl = String(urlMatch?.[1] ?? "").trim();
+  if (!rawUrl) {
+    return null;
+  }
+
+  try {
+    const parsedUrl = new URL(rawUrl);
+    const routeMatch = parsedUrl.pathname.match(/^\/servers\/([^/]+)\/channels\/([^/?#]+)/i);
+    if (!routeMatch) {
+      return null;
+    }
+
+    const serverId = String(routeMatch[1] ?? "").trim();
+    const channelId = String(routeMatch[2] ?? "").trim();
+    if (!serverId || !channelId) {
+      return null;
+    }
+
+    return {
+      displayText: text.replace(VOICE_JOIN_URL_REGEX, "").trim(),
+      joinPath: `/servers/${encodeURIComponent(serverId)}/channels/${encodeURIComponent(channelId)}`,
+    };
+  } catch {
+    return null;
+  }
+};
+
 const renderTextWithLinks = (text: string, keyPrefix: string) => {
   const chunks = splitTextWithUrls(text);
   return chunks.map((chunk, chunkIndex) => {
@@ -270,6 +324,7 @@ export const ChatItem = ({
   serverId,
   channelId,
   thread,
+  canPurgeDeletedMessage = false,
 }: ChatItemProps) => {
   const [isEditing, setIsEditing] = useState(false);
   const [isProfilePopoverOpen, setIsProfilePopoverOpen] = useState(false);
@@ -783,7 +838,9 @@ export const ChatItem = ({
     memberCreatedDate && !Number.isNaN(memberCreatedDate.getTime())
       ? memberCreatedDate.toLocaleString()
       : "Unknown";
-  const { quote: quotedMessage, body: messageBody } = extractQuotedContent(content);
+  const { quote: quotedMessage, body: rawMessageBody } = extractQuotedContent(content);
+  const voiceJoinNotification = parseVoiceJoinNotification(rawMessageBody);
+  const messageBody = voiceJoinNotification?.displayText ?? rawMessageBody;
   const contentSegments = parseMentionSegments(messageBody);
   const hasMention = contentSegments.some((segment) => segment.kind === "mention");
   const isMentioningCurrentUser = contentSegments.some(
@@ -920,6 +977,34 @@ export const ChatItem = ({
     };
   }, [messageUrls]);
 
+  if (deleted) {
+    const deletedByName = String(displayName ?? "").trim() || "Unknown User";
+    const canHardDeleteDeletedMessage = canPurgeDeletedMessage && reactionScope === "channel";
+
+    return (
+      <div className="relative flex w-full items-center px-4 py-3">
+        <div className="rounded-md border border-zinc-300/70 bg-zinc-100/70 px-3 py-2 text-xs italic text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-400">
+          A message has been deleted by: "{deletedByName}".
+        </div>
+        {canHardDeleteDeletedMessage ? (
+          <div className="absolute right-5 top-1/2 -translate-y-1/2 rounded-sm border bg-white/95 p-1 shadow-sm dark:bg-zinc-800/95">
+            <ActionTooltip label="Delete permanently" align="center">
+              <Trash
+                onClick={() => {
+                  onOpen("deleteMessage", {
+                    apiUrl: `${socketUrl}/${id}`,
+                    query: socketQuery,
+                  });
+                }}
+                className={cn(actionIconClassName, actionIconEnabledClassName)}
+              />
+            </ActionTooltip>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(
@@ -931,7 +1016,7 @@ export const ChatItem = ({
             : "hover:bg-black/5"
       )}
     >
-      <div className="group flex gap-x-2 items-start w-full">
+      <div className="group flex w-full min-w-0 items-start gap-x-2">
         <Popover open={isProfilePopoverOpen} onOpenChange={setIsProfilePopoverOpen}>
           <PopoverTrigger asChild>
             <button
@@ -1077,7 +1162,7 @@ export const ChatItem = ({
             </div>
           </PopoverContent>
         </Popover>
-        <div className="flex flex-col w-full">
+        <div className="flex w-full min-w-0 flex-col">
           <div className="flex items-center gap-x-2">
             <div className="flex items-center gap-1">
               <button
@@ -1166,7 +1251,7 @@ export const ChatItem = ({
 
               <p
                 className={cn(
-                  "chat-wrap-text text-sm text-zinc-600 dark:text-zinc-300",
+                  "chat-wrap-text max-w-full text-sm text-zinc-600 dark:text-zinc-300",
                   deleted &&
                     "italic text-zinc-500 dark:text-zinc-400 text-xs mt-1"
                 )}
@@ -1201,6 +1286,18 @@ export const ChatItem = ({
                   </span>
                 )}
               </p>
+
+              {voiceJoinNotification && !deleted ? (
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    onClick={() => router.push(voiceJoinNotification.joinPath)}
+                    className="inline-flex h-8 items-center justify-center rounded-md bg-emerald-500 px-3 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-emerald-400"
+                  >
+                    Join
+                  </button>
+                </div>
+              ) : null}
 
               {renderedPreviews.length ? (
                 <div className="mt-2 space-y-2">

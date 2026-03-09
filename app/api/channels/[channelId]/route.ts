@@ -8,6 +8,50 @@ import { ensureChannelGroupSchema } from "@/lib/channel-groups";
 import { ensureChannelTopicSchema } from "@/lib/channel-topic";
 import { ensureSystemChannelSchema } from "@/lib/system-channels";
 
+const VALID_CHANNEL_TYPES = new Set(["TEXT", "AUDIO", "VIDEO"]);
+
+const resolveAllowedChannelTypes = async () => {
+  const result = await db.execute(sql`
+    select e.enumlabel as "label"
+    from pg_type t
+    join pg_enum e on e.enumtypid = t.oid
+    where t.typname = 'ChannelType'
+    order by e.enumsortorder asc
+  `);
+
+  const labels = ((result as unknown as { rows?: Array<{ label: string | null }> }).rows ?? [])
+    .map((row) => String(row.label ?? "").trim().toUpperCase())
+    .filter(Boolean);
+
+  return labels.length ? new Set(labels) : VALID_CHANNEL_TYPES;
+};
+
+const mapChannelMutationError = (error: unknown, fallbackText: string) => {
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (/duplicate key|Channel_unique_name_per_server/i.test(message)) {
+    return { status: 409, text: "Channel name already exists in this server" };
+  }
+
+  if (/invalid input value for enum|ChannelType/i.test(message)) {
+    return { status: 400, text: "This channel type is not enabled in the database yet" };
+  }
+
+  if (/null value in column|not-null constraint/i.test(message)) {
+    return { status: 400, text: "Missing required channel fields" };
+  }
+
+  if (/column .* does not exist|relation .* does not exist/i.test(message)) {
+    return { status: 500, text: "Channel database schema is out of date. Please restart the app and try again." };
+  }
+
+  if (/permission denied/i.test(message)) {
+    return { status: 403, text: "Database permission denied while updating channel" };
+  }
+
+  return { status: 500, text: fallbackText };
+};
+
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ channelId: string }> }
@@ -114,7 +158,14 @@ export async function PATCH(
     const { channelId } = await params;
 
     const profile = await currentProfile();
-    const { name, type, channelGroupId, topic, icon } = await req.json();
+    const body = (await req.json()) as {
+      name?: unknown;
+      type?: unknown;
+      channelGroupId?: unknown;
+      topic?: unknown;
+      icon?: unknown;
+    };
+    const { name, type, channelGroupId, topic, icon } = body;
     const { searchParams } = new URL(req.url);
 
     const serverId = searchParams.get("serverId");
@@ -189,6 +240,7 @@ export async function PATCH(
 
     const incomingName = String(name ?? "").trim();
     const nextName = incomingName;
+    const nextType = typeof type === "string" ? type.trim().toUpperCase() : "";
     const nextTopic = typeof topic === "string" ? topic.trim() : "";
     const nextIcon =
       typeof icon === "string" && icon.trim().length > 0
@@ -199,6 +251,25 @@ export async function PATCH(
       return new NextResponse("Name is required", { status: 400 });
     }
 
+    const allowedChannelTypes = await resolveAllowedChannelTypes();
+    if (!allowedChannelTypes.has(nextType)) {
+      return new NextResponse("Invalid channel type", { status: 400 });
+    }
+
+    const duplicateNameResult = await db.execute(sql`
+      select "id"
+      from "Channel"
+      where "serverId" = ${serverId}
+        and "id" <> ${channelId}
+        and lower(trim(coalesce("name", ''))) = lower(trim(${nextName}))
+      limit 1
+    `);
+
+    const duplicateNameExists = (duplicateNameResult as unknown as { rows?: Array<{ id: string }> }).rows?.[0];
+    if (duplicateNameExists) {
+      return new NextResponse("Channel name already exists in this server", { status: 409 });
+    }
+
     if (nextTopic.length > 500) {
       return new NextResponse("Channel topic must be 500 characters or fewer", { status: 400 });
     }
@@ -207,7 +278,7 @@ export async function PATCH(
       update "Channel"
       set
         "name" = ${nextName},
-        "type" = ${type},
+        "type" = ${nextType},
         "channelGroupId" = ${normalizedGroupId},
         "icon" = ${nextIcon},
         "updatedAt" = ${new Date()}
@@ -232,12 +303,7 @@ export async function PATCH(
     return NextResponse.json(currentServer);
   } catch (error) {
     console.log("[CHANNEL_ID_PATCH]", error);
-
-    const message = error instanceof Error ? error.message : String(error);
-    if (/duplicate key|Channel_unique_name_per_server/i.test(message)) {
-      return new NextResponse("Channel name already exists in this server", { status: 409 });
-    }
-
-    return new NextResponse("Internal Error", { status: 500 });
+    const mapped = mapChannelMutationError(error, "Unable to update channel right now. Please try again.");
+    return new NextResponse(mapped.text, { status: mapped.status });
   }
 }

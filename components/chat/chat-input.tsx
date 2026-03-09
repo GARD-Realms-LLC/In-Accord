@@ -5,7 +5,7 @@ import axios from "axios";
 import qs from "query-string";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Plus, Reply, X } from "lucide-react";
+import { Plus, Reply, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
@@ -33,6 +33,7 @@ interface ChatInputProps {
   disabled?: boolean;
   mentionUsers?: Array<{ id: string; label: string }>;
   mentionRoles?: Array<{ id: string; label: string }>;
+  canBulkDeleteMessages?: boolean;
 }
 
 const formSchema = z.object({
@@ -50,6 +51,7 @@ export const ChatInput = ({
   disabled = false,
   mentionUsers = [],
   mentionRoles = [],
+  canBulkDeleteMessages = false,
 }: ChatInputProps) => {
   const { onOpen } = useModal();
   const [sendError, setSendError] = useState<string | null>(null);
@@ -558,9 +560,26 @@ export const ChatInput = ({
                       </button>
                     </PopoverContent>
                   </Popover>
+                  {canBulkDeleteMessages ? (
+                    <button
+                      type="button"
+                      disabled={isLoading}
+                      onClick={() =>
+                        onOpen("bulkDeleteMessages", {
+                          apiUrl: "/api/socket/messages/bulk-delete",
+                          query,
+                        })
+                      }
+                      className="absolute right-8 top-7 inline-flex h-6 w-6 items-center justify-center rounded text-zinc-500 transition hover:bg-zinc-200 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-60 dark:text-zinc-300 dark:hover:bg-zinc-700/70 dark:hover:text-rose-300"
+                      aria-label="Bulk delete posts"
+                      title="Bulk delete newest posts"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  ) : null}
                   <Input
                     disabled={isLoading}
-                    className="px-14 py-6 bg-zinc-200/90 dark:bg-zinc-700/75 border-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-zinc-600 dark:text-zinc-200"
+                    className={`py-6 bg-zinc-200/90 dark:bg-zinc-700/75 border-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-zinc-600 dark:text-zinc-200 ${canBulkDeleteMessages ? "px-14 pr-20" : "px-14"}`}
                     placeholder={`Message ${
                       type === "conversation" ? name : "#" + name
                     }`}
@@ -640,7 +659,7 @@ export const ChatInput = ({
                       })}
                     </div>
                   ) : null}
-                  <div className="absolute top-6.5 right-8 flex items-center gap-2">
+                  <div className={`absolute top-6.5 flex items-center gap-2 ${canBulkDeleteMessages ? "right-16" : "right-8"}`}>
                     <EmotePicker onSelect={onEmoteSelect} serverId={stickerServerId} />
                     <StickerPicker onSelect={onStickerSelect} serverId={stickerServerId} />
                     <SoundEfxPicker onSelect={onSoundEfxSelect} serverId={stickerServerId} />
