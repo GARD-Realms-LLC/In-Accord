@@ -1,5 +1,7 @@
 # In-Accord — Social Your Way
 
+![Platform: In-Accord](https://img.shields.io/badge/Platform-In--Accord-6f42c1?style=for-the-badge)
+
 ![In-Accord Logo](./Images/in-accord-steampunk-logo.png)
 
 In-Accord is a desktop-ready, real-time social platform built with:
@@ -10,6 +12,34 @@ In-Accord is a desktop-ready, real-time social platform built with:
 - Socket.IO (real-time updates)
 - Drizzle ORM + MySQL
 - UploadThing (file uploads)
+
+## In-Accord SDK (`In-Accord.js`)
+
+This repository ships with a lightweight SDK client at `./In-Accord.js`.
+
+### Quick start
+
+```js
+const { createInAccordClient } = require("./In-Accord.js");
+
+const client = createInAccordClient({
+	baseUrl: "http://localhost:3000", // local dev
+});
+```
+
+### Moving to a domain (important)
+
+When deploying, initialize the SDK with your real domain:
+
+```js
+const client = createInAccordClient({
+	baseUrl: "https://your-domain.com",
+});
+```
+
+If no `baseUrl` is passed, the SDK defaults to `http://localhost:3000`.
+
+For more SDK details, see `INSTRUCTIONS.md`.
 
 ## Prerequisites
 

@@ -1,0 +1,12 @@
+# Keep GitHub Linguist language stats focused on source files.
+# This does NOT create a custom language named "In-Accord" (GitHub doesn't support custom names there),
+# but it prevents common generated/build outputs from affecting language percentages.
+
+.next/** linguist-generated=true
+.next-dev/** linguist-generated=true
+dist/** linguist-generated=true
+Win-64/** linguist-generated=true
+build/** linguist-generated=true
+
+portable-*.log linguist-generated=true
+*.tsbuildinfo linguist-generated=true
