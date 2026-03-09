@@ -241,6 +241,7 @@ type AdminMetaInfo = {
   build: {
     appName: string;
     appVersion: string;
+    sdkVersion: string;
     nextVersion: string;
     nodeEnv: string;
     buildTimestamp: string;
@@ -2686,6 +2687,7 @@ export const InAccordAdminModal = () => {
                           <p className="mb-1 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Build</p>
                           <p>App: {metaInfo.build.appName}</p>
                           <p>Version: {metaInfo.build.appVersion}</p>
+                          <p>In-Accord SDK: {metaInfo.build.sdkVersion || "1.0.0.1"}</p>
                           <p>Next.js: {metaInfo.build.nextVersion}</p>
                           <p>Environment: {metaInfo.build.nodeEnv}</p>
                           <p>Built: {formatDateTime(metaInfo.build.buildTimestamp)}</p>

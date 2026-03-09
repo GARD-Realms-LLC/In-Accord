@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { createHash } from "node:crypto";
 
 import { currentProfile } from "@/lib/current-profile";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
@@ -19,6 +20,9 @@ type PackageJsonShape = {
 
 const DEFAULT_GITHUB_REPO_URL = "https://github.com/GARD-Realms-LLC/In-Accord";
 const execFileAsync = promisify(execFile);
+const SDK_VERSION_TRACK_FILE = ".inaccord-sdk-version.json";
+const SDK_SOURCE_FILE = "In-Accord.js";
+const SDK_BASE_VERSION = "1.0.0.1";
 
 const isPlaceholder = (value?: string) =>
   !value || value.trim() === "" || value.includes("replace_me");
@@ -66,6 +70,63 @@ const toDisplayVersion = (value: string | null | undefined) => {
   }
 
   return raw.replace(/^[~^]/, "");
+};
+
+const normalizeSdkVersion = (value: string | null | undefined) => {
+  const raw = String(value ?? "").trim();
+  if (!/^\d+\.\d+\.\d+\.\d+$/.test(raw)) {
+    return SDK_BASE_VERSION;
+  }
+  return raw;
+};
+
+const bumpSdkVersion = (value: string) => {
+  const normalized = normalizeSdkVersion(value);
+  const parts = normalized.split(".").map((part) => Number.parseInt(part, 10));
+
+  if (parts.length !== 4 || parts.some((part) => !Number.isFinite(part) || part < 0)) {
+    return SDK_BASE_VERSION;
+  }
+
+  return `${parts[0]}.${parts[1]}.${parts[2]}.${parts[3] + 1}`;
+};
+
+const getSdkVersion = async () => {
+  try {
+    const root = process.cwd();
+    const sdkSourcePath = path.join(root, SDK_SOURCE_FILE);
+    const sdkTrackPath = path.join(root, SDK_VERSION_TRACK_FILE);
+    const sdkSourceContent = await readFile(sdkSourcePath, "utf8");
+    const sourceHash = createHash("sha256").update(sdkSourceContent).digest("hex");
+
+    const existingRaw = await readFile(sdkTrackPath, "utf8").catch(() => "");
+    const existing = existingRaw
+      ? (JSON.parse(existingRaw) as { version?: string; sourceHash?: string })
+      : null;
+
+    const currentVersion = normalizeSdkVersion(existing?.version);
+    const currentSourceHash = String(existing?.sourceHash ?? "").trim();
+
+    if (currentSourceHash === sourceHash) {
+      return currentVersion;
+    }
+
+    const nextVersion = currentSourceHash ? bumpSdkVersion(currentVersion) : SDK_BASE_VERSION;
+
+    const nextPayload = {
+      version: nextVersion,
+      sourceHash,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await writeFile(sdkTrackPath, `${JSON.stringify(nextPayload, null, 2)}\n`, "utf8").catch(() => {
+      // Ignore write failures (e.g. read-only runtime). We can still return the computed version.
+    });
+
+    return nextVersion;
+  } catch {
+    return SDK_BASE_VERSION;
+  }
 };
 
 const parseGitHubOwnerRepo = (repositoryUrl: string | null | undefined) => {
@@ -237,6 +298,7 @@ export async function GET() {
 
     const commits = await getRecentCommitLog();
     const githubMainCommits = await getRecentGitHubCommits(repositoryUrl, "main");
+    const sdkVersion = await getSdkVersion();
 
     const storageConfigured =
       !isPlaceholder(process.env.CLOUDFLARE_R2_ACCOUNT_ID) &&
@@ -248,6 +310,7 @@ export async function GET() {
       build: {
         appName: packageJson.name ?? "In-Accord",
         appVersion: toDisplayVersion(packageJson.version),
+        sdkVersion: toDisplayVersion(sdkVersion),
         nextVersion: toDisplayVersion(
           packageJson.dependencies?.next ?? packageJson.devDependencies?.next ?? null
         ),
