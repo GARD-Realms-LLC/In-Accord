@@ -434,6 +434,15 @@ type AdminServerPerformance = {
   updatedAt: string | null;
 };
 
+type AdminManagedFile = {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  sizeBytes: number;
+  updatedAt: string;
+  url: string | null;
+};
+
 type AdminEmojiStickerServer = {
   id: string;
   name: string;
@@ -753,6 +762,15 @@ export const InAccordAdminModal = () => {
   const [serverPerformance, setServerPerformance] = useState<AdminServerPerformance | null>(null);
   const [isLoadingServerPerformance, setIsLoadingServerPerformance] = useState(false);
   const [serverPerformanceError, setServerPerformanceError] = useState<string | null>(null);
+  const [managedFiles, setManagedFiles] = useState<AdminManagedFile[]>([]);
+  const [managedFilesFolderDraft, setManagedFilesFolderDraft] = useState("");
+  const [isLoadingManagedFiles, setIsLoadingManagedFiles] = useState(false);
+  const [managedFilesError, setManagedFilesError] = useState<string | null>(null);
+  const [managedFilesSuccess, setManagedFilesSuccess] = useState<string | null>(null);
+  const [managedFileUpload, setManagedFileUpload] = useState<File | null>(null);
+  const [isUploadingManagedFile, setIsUploadingManagedFile] = useState(false);
+  const [deletingManagedFilePath, setDeletingManagedFilePath] = useState<string | null>(null);
+  const [selectedManagedFilePaths, setSelectedManagedFilePaths] = useState<string[]>([]);
   const [newPatronageDonorName, setNewPatronageDonorName] = useState("");
   const [newPatronageDonorEmail, setNewPatronageDonorEmail] = useState("");
   const [newPatronageType, setNewPatronageType] = useState<"ONE_TIME" | "MONTHLY">("ONE_TIME");
@@ -1414,6 +1432,140 @@ export const InAccordAdminModal = () => {
     }
   }, []);
 
+  const loadManagedFiles = useCallback(async (folderInput?: string) => {
+    try {
+      setIsLoadingManagedFiles(true);
+      setManagedFilesError(null);
+
+      const folder = String(folderInput ?? managedFilesFolderDraft ?? "").trim();
+      const query = new URLSearchParams();
+      if (folder) {
+        query.set("folder", folder);
+      }
+
+      const response = await fetch(`/api/admin/file-manager${query.toString() ? `?${query.toString()}` : ""}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load file manager (${response.status})`);
+      }
+
+      const payload = (await response.json()) as {
+        folder?: string;
+        files?: AdminManagedFile[];
+      };
+
+      const nextFiles = payload.files ?? [];
+      setManagedFiles(nextFiles);
+      setManagedFilesFolderDraft(payload.folder ?? folder);
+      setSelectedManagedFilePaths((current) =>
+        current.filter((selectedPath) => nextFiles.some((entry) => entry.path === selectedPath))
+      );
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_FILE_MANAGER_LOAD]", error);
+      setManagedFiles([]);
+      setManagedFilesError("Unable to load files right now.");
+    } finally {
+      setIsLoadingManagedFiles(false);
+    }
+  }, [managedFilesFolderDraft]);
+
+  const onUploadManagedFile = async () => {
+    if (!managedFileUpload) {
+      setManagedFilesError("Select a file first.");
+      return;
+    }
+
+    try {
+      setIsUploadingManagedFile(true);
+      setManagedFilesError(null);
+      setManagedFilesSuccess(null);
+
+      const formData = new FormData();
+      formData.append("file", managedFileUpload);
+      formData.append("folder", managedFilesFolderDraft.trim());
+
+      const response = await fetch("/api/admin/file-manager", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Failed to upload file (${response.status})`;
+        throw new Error(message);
+      }
+
+      setManagedFileUpload(null);
+      setManagedFilesSuccess("File uploaded.");
+      await loadManagedFiles(managedFilesFolderDraft);
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_FILE_MANAGER_UPLOAD]", error);
+      setManagedFilesError(error instanceof Error ? error.message : "Unable to upload file.");
+    } finally {
+      setIsUploadingManagedFile(false);
+    }
+  };
+
+  const onDeleteManagedFile = async (file: AdminManagedFile) => {
+    const confirmed = window.confirm(`Delete ${file.path}? This cannot be undone.`);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setDeletingManagedFilePath(file.path);
+      setManagedFilesError(null);
+      setManagedFilesSuccess(null);
+
+      const response = await fetch("/api/admin/file-manager", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ path: file.path }),
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Failed to delete file (${response.status})`;
+        throw new Error(message);
+      }
+
+      setManagedFilesSuccess("File deleted.");
+      await loadManagedFiles(managedFilesFolderDraft);
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_FILE_MANAGER_DELETE]", error);
+      setManagedFilesError(error instanceof Error ? error.message : "Unable to delete file.");
+    } finally {
+      setDeletingManagedFilePath(null);
+    }
+  };
+
+  const onOpenCheckedFolder = async () => {
+    const selectedFolders = managedFiles.filter(
+      (file) => selectedManagedFilePaths.includes(file.path) && file.isDirectory
+    );
+
+    if (selectedFolders.length === 0) {
+      setManagedFilesError("Select at least one folder checkbox first.");
+      return;
+    }
+
+    if (selectedFolders.length > 1) {
+      setManagedFilesError("Select only one folder to open.");
+      return;
+    }
+
+    const targetFolder = selectedFolders[0]?.path ?? "";
+    setManagedFilesError(null);
+    setManagedFilesSuccess(null);
+    await loadManagedFiles(targetFolder);
+  };
+
   const loadServers = useCallback(async () => {
     try {
       setIsLoadingServers(true);
@@ -1687,7 +1839,8 @@ export const InAccordAdminModal = () => {
     }
 
     void loadServerPerformance();
-  }, [activeSection, isModalOpen, loadServerPerformance]);
+    void loadManagedFiles();
+  }, [activeSection, isModalOpen, loadManagedFiles, loadServerPerformance]);
 
   useEffect(() => {
     const activeGroup = adminMenuGroups.find((group) => group.sections.includes(activeSection));
@@ -1827,6 +1980,15 @@ export const InAccordAdminModal = () => {
       setServerPerformance(null);
       setIsLoadingServerPerformance(false);
       setServerPerformanceError(null);
+      setManagedFiles([]);
+      setManagedFilesFolderDraft("");
+      setIsLoadingManagedFiles(false);
+      setManagedFilesError(null);
+      setManagedFilesSuccess(null);
+      setManagedFileUpload(null);
+      setIsUploadingManagedFile(false);
+      setDeletingManagedFilePath(null);
+      setSelectedManagedFilePaths([]);
       setNewPatronageDonorName("");
       setNewPatronageDonorEmail("");
       setNewPatronageType("ONE_TIME");
@@ -4699,6 +4861,7 @@ export const InAccordAdminModal = () => {
                     onClick={() => {
                       void loadSiteUrlSetup();
                       void loadServerPerformance();
+                      void loadManagedFiles();
                     }}
                     className="h-8 rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
                   >
@@ -4746,6 +4909,145 @@ export const InAccordAdminModal = () => {
                   {serverPerformance?.nodeVersion ? (
                     <p className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">Runtime: {serverPerformance.nodeVersion}</p>
                   ) : null}
+                </div>
+
+                <div className="mb-3 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">File Manager</p>
+                    <span className="text-[11px] text-zinc-500 dark:text-zinc-400">Scope: Repository Root</span>
+                    <button
+                      type="button"
+                      onClick={() => void loadManagedFiles()}
+                      className="h-7 rounded-md border border-zinc-300 bg-white px-2 text-[11px] font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                    >
+                      Refresh Files
+                    </button>
+                  </div>
+
+                  <div className="mb-2 grid gap-2 sm:grid-cols-[1fr_auto]">
+                    <input
+                      type="text"
+                      value={managedFilesFolderDraft}
+                      onChange={(event) => setManagedFilesFolderDraft(event.target.value)}
+                      placeholder="Folder inside repository root (leave blank for root)"
+                      className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void loadManagedFiles(managedFilesFolderDraft)}
+                      className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                    >
+                      Open Folder
+                    </button>
+                  </div>
+
+                  <div className="mb-2 flex items-center justify-end">
+                    <button
+                      type="button"
+                      onClick={() => void onOpenCheckedFolder()}
+                      className="h-8 rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                    >
+                      Open Checked Folder
+                    </button>
+                  </div>
+
+                  <div className="mb-2 grid gap-2 sm:grid-cols-[1fr_auto]">
+                    <input
+                      type="file"
+                      onChange={(event) => setManagedFileUpload(event.target.files?.[0] ?? null)}
+                      className="h-9 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs text-zinc-900 outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void onUploadManagedFile()}
+                      disabled={isUploadingManagedFile || !managedFileUpload}
+                      className="h-9 rounded-md bg-indigo-600 px-3 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isUploadingManagedFile ? "Uploading..." : "Upload File"}
+                    </button>
+                  </div>
+
+                  {managedFilesError ? <p className="mb-2 text-xs text-rose-500">{managedFilesError}</p> : null}
+                  {managedFilesSuccess ? <p className="mb-2 text-xs text-emerald-500">{managedFilesSuccess}</p> : null}
+
+                  {isLoadingManagedFiles ? (
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">Loading files...</p>
+                  ) : managedFiles.length === 0 ? (
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">No files in this folder.</p>
+                  ) : (
+                    <div className="max-h-52 overflow-y-auto rounded-md border border-zinc-300 dark:border-zinc-700">
+                      <div className="grid grid-cols-[0.35fr_1.6fr_0.6fr_0.8fr_0.8fr] gap-2 bg-zinc-200/80 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                        <label className="inline-flex items-center gap-1">
+                          <input
+                            type="checkbox"
+                            checked={managedFiles.length > 0 && selectedManagedFilePaths.length === managedFiles.length}
+                            onChange={(event) =>
+                              setSelectedManagedFilePaths(
+                                event.target.checked ? managedFiles.map((entry) => entry.path) : []
+                              )
+                            }
+                          />
+                          <span>Sel</span>
+                        </label>
+                        <p>Path</p>
+                        <p>Size</p>
+                        <p>Updated</p>
+                        <p>Actions</p>
+                      </div>
+                      <div className="bg-white/70 text-xs text-zinc-800 dark:bg-zinc-950/30 dark:text-zinc-200">
+                        {managedFiles.map((file, index) => (
+                          <div
+                            key={`managed-file-${file.path}-${index}`}
+                            className={cn(
+                              "grid grid-cols-[0.35fr_1.6fr_0.6fr_0.8fr_0.8fr] items-center gap-2 px-3 py-2",
+                              index % 2 === 0
+                                ? "bg-white/70 dark:bg-zinc-950/25"
+                                : "bg-zinc-100/70 dark:bg-zinc-900/35"
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedManagedFilePaths.includes(file.path)}
+                              onChange={(event) =>
+                                setSelectedManagedFilePaths((current) =>
+                                  event.target.checked
+                                    ? Array.from(new Set([...current, file.path]))
+                                    : current.filter((entry) => entry !== file.path)
+                                )
+                              }
+                            />
+                            <p className="truncate font-mono" title={file.path}>{file.path}</p>
+                            <p>{file.isDirectory ? "-" : `${Math.max(1, Math.round(file.sizeBytes / 1024))} KB`}</p>
+                            <p className="truncate" title={formatDateTime(file.updatedAt)}>{formatDateTime(file.updatedAt)}</p>
+                            <div className="flex items-center gap-1.5">
+                              {file.url ? (
+                                <a
+                                  href={file.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex h-7 items-center rounded-md border border-zinc-300 bg-white px-2 text-[10px] font-semibold text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                                >
+                                  Open
+                                </a>
+                              ) : (
+                                <span className="text-[10px] text-zinc-500 dark:text-zinc-400">Folder</span>
+                              )}
+                              {!file.isDirectory ? (
+                                <button
+                                  type="button"
+                                  onClick={() => void onDeleteManagedFile(file)}
+                                  disabled={deletingManagedFilePath === file.path}
+                                  className="h-7 rounded-md border border-rose-500/35 bg-rose-500/15 px-2 text-[10px] font-semibold text-rose-200 transition hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {deletingManagedFilePath === file.path ? "Deleting..." : "Delete"}
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
