@@ -24,6 +24,7 @@ type UserRow = {
   comment: string | null;
   bannerUrl: string | null;
   presenceStatus: string | null;
+  currentGame: string | null;
   email: string | null;
   role: string | null;
   phone: string | null;
@@ -124,6 +125,7 @@ export async function GET() {
         up."comment" as "comment",
         up."bannerUrl" as "bannerUrl",
         up."presenceStatus" as "presenceStatus",
+        nullif(trim(to_jsonb(up)->>'currentGame'), '') as "currentGame",
         u."email" as "email",
         u."role" as "role",
         u."phone" as "phone",
@@ -159,6 +161,7 @@ export async function GET() {
       comment: row.comment ?? null,
       bannerUrl: row.bannerUrl ?? null,
       presenceStatus: normalizePresenceStatus(row.presenceStatus),
+      currentGame: row.currentGame ?? null,
       email: row.email ?? "",
       role: normalizeManagedUserRole(row.role) ?? "USER",
       phoneNumber: row.phone ?? "",

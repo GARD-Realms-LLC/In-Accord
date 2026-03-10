@@ -99,6 +99,7 @@ export async function GET(
         up."avatarDecorationUrl" as "avatarDecorationUrl",
         up."bannerUrl" as "bannerUrl",
         up."presenceStatus" as "presenceStatus",
+        nullif(trim(to_jsonb(up)->>'currentGame'), '') as "currentGame",
         nullif(trim(to_jsonb(u)->>'dob'), '') as "dateOfBirth",
         nullif(trim(to_jsonb(u)->>'familyParentUserId'), '') as "familyParentUserId",
         nullif(trim(to_jsonb(u)->>'businessParentUserId'), '') as "businessParentUserId",
@@ -129,6 +130,7 @@ export async function GET(
         avatarDecorationUrl: string | null;
         bannerUrl: string | null;
         presenceStatus: string | null;
+        currentGame: string | null;
         dateOfBirth: string | null;
         familyParentUserId: string | null;
         businessParentUserId: string | null;
@@ -270,6 +272,7 @@ export async function GET(
         : null,
       selectedServerTag,
       presenceStatus: normalizePresenceStatus(row.presenceStatus),
+      currentGame: row.currentGame ?? null,
       role: row.role,
       email: row.email ?? "",
       imageUrl: row.imageUrl ?? "/in-accord-steampunk-logo.png",

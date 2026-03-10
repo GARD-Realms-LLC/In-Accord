@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -14,8 +14,13 @@ export default function Page() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -53,7 +58,7 @@ export default function Page() {
   };
 
   return (
-    <form onSubmit={onSubmit} className="w-full max-w-md space-y-4 rounded-xl border border-black/20 bg-[#232428] p-6 text-white">
+    <form onSubmit={onSubmit} suppressHydrationWarning className="w-full max-w-md space-y-4 rounded-xl border border-black/20 bg-[#232428] p-6 text-white">
       <div className="flex justify-center">
         <Image
           src="/in-accord-steampunk-logo.png"
@@ -61,6 +66,7 @@ export default function Page() {
           width={432}
           height={216}
           className="h-54 w-108 rounded-lg"
+          suppressHydrationWarning
           priority
         />
       </div>
@@ -91,7 +97,7 @@ export default function Page() {
           aria-label={showPassword ? "Hide password" : "Show password"}
           title={showPassword ? "Hide password" : "Show password"}
         >
-          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          {isMounted ? (showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />) : null}
         </button>
       </div>
       {error ? <p className="text-sm text-rose-400">{error}</p> : null}

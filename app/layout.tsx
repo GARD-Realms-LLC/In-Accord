@@ -8,6 +8,11 @@ import { ModalProvider } from "@/components/providers/modal-provider";
 import { SocketProvider } from "@/components/providers/socket-provider";
 import { ContextMenuProvider } from "@/components/providers/context-menu-provider";
 import { ToasterProvider } from "@/components/providers/toaster-provider";
+import { AdvancedPreferencesProvider } from "@/components/providers/advanced-preferences-provider";
+import { StreamerModePreferencesProvider } from "@/components/providers/streamer-mode-preferences-provider";
+import { GameOverlayPreferencesProvider } from "@/components/providers/game-overlay-preferences-provider";
+import { ActivityPrivacyPreferencesProvider } from "@/components/providers/activity-privacy-preferences-provider";
+import { CurrentGameSyncProvider } from "@/components/providers/current-game-sync-provider";
 
 const font = Open_Sans({ subsets: ["latin"] });
 
@@ -48,6 +53,11 @@ export default function RootLayout({
           storageKey="in-accord-theme"
         >
           <SocketProvider>
+            <AdvancedPreferencesProvider />
+            <StreamerModePreferencesProvider />
+            <ActivityPrivacyPreferencesProvider />
+            <GameOverlayPreferencesProvider />
+            <CurrentGameSyncProvider />
             <ContextMenuProvider />
             <ModalProvider />
             <ToasterProvider />

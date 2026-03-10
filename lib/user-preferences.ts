@@ -28,6 +28,30 @@ export type DataPrivacyPreferences = {
   retentionMode: "standard" | "minimal";
 };
 
+export type ActivityPrivacyPreferences = {
+  shareActivityStatus: boolean;
+  shareCurrentGame: boolean;
+  allowFriendJoinRequests: boolean;
+  allowSpectateRequests: boolean;
+  activityVisibility: "everyone" | "friends" | "none";
+  logActivityHistory: boolean;
+};
+
+export type RegisteredGameEntry = {
+  id: string;
+  name: string;
+  provider: string;
+  shortDescription: string;
+  thumbnailUrl: string;
+  addedAt: string;
+};
+
+export type RegisteredGamesPreferences = {
+  showDetectedGames: boolean;
+  manualGames: RegisteredGameEntry[];
+  hiddenGameIds: string[];
+};
+
 export type NotificationPreferences = {
   enableDesktopNotifications: boolean;
   enableSoundEffects: boolean;
@@ -60,6 +84,47 @@ export type EmojiPreferences = {
   defaultComposerEmoji: string;
   favoriteEmojis: string[];
   uploadedEmojiUrls: string[];
+};
+
+export type StickerPreferences = {
+  showComposerStickerButton: boolean;
+  preferAnimatedStickers: boolean;
+  defaultComposerStickerUrl: string;
+  favoriteStickers: string[];
+  uploadedStickerUrls: string[];
+};
+
+export type KeybindPreferences = {
+  enableCustomKeybinds: boolean;
+  openCommandPalette: string;
+  focusServerSearch: string;
+  toggleMute: string;
+  toggleDeafen: string;
+  toggleCamera: string;
+};
+
+export type AdvancedPreferences = {
+  enableHardwareAcceleration: boolean;
+  openLinksInApp: boolean;
+  confirmBeforeQuit: boolean;
+  enableDebugOverlay: boolean;
+  diagnosticsLevel: "off" | "basic" | "verbose";
+};
+
+export type StreamerModePreferences = {
+  enabled: boolean;
+  hidePersonalInfo: boolean;
+  hideInviteLinks: boolean;
+  hideNotificationContent: boolean;
+  suppressSounds: boolean;
+};
+
+export type GameOverlayPreferences = {
+  enabled: boolean;
+  showPerformanceStats: boolean;
+  enableClickThrough: boolean;
+  opacity: number;
+  position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
 };
 
 export type BotGhostIntegrationConfig = {
@@ -140,6 +205,21 @@ const defaultDataPrivacyPreferences: DataPrivacyPreferences = {
   retentionMode: "standard",
 };
 
+const defaultActivityPrivacyPreferences: ActivityPrivacyPreferences = {
+  shareActivityStatus: true,
+  shareCurrentGame: true,
+  allowFriendJoinRequests: true,
+  allowSpectateRequests: false,
+  activityVisibility: "friends",
+  logActivityHistory: true,
+};
+
+const defaultRegisteredGamesPreferences: RegisteredGamesPreferences = {
+  showDetectedGames: true,
+  manualGames: [],
+  hiddenGameIds: [],
+};
+
 const defaultNotificationPreferences: NotificationPreferences = {
   enableDesktopNotifications: true,
   enableSoundEffects: true,
@@ -172,6 +252,47 @@ const defaultEmojiPreferences: EmojiPreferences = {
   defaultComposerEmoji: "😊",
   favoriteEmojis: ["😀", "😂", "😍", "🔥", "👏", "🎉", "👍", "👀"],
   uploadedEmojiUrls: [],
+};
+
+const defaultStickerPreferences: StickerPreferences = {
+  showComposerStickerButton: true,
+  preferAnimatedStickers: true,
+  defaultComposerStickerUrl: "",
+  favoriteStickers: [],
+  uploadedStickerUrls: [],
+};
+
+const defaultKeybindPreferences: KeybindPreferences = {
+  enableCustomKeybinds: false,
+  openCommandPalette: "Ctrl+K",
+  focusServerSearch: "Ctrl+Shift+F",
+  toggleMute: "Ctrl+Shift+M",
+  toggleDeafen: "Ctrl+Shift+D",
+  toggleCamera: "Ctrl+Shift+C",
+};
+
+const defaultAdvancedPreferences: AdvancedPreferences = {
+  enableHardwareAcceleration: true,
+  openLinksInApp: true,
+  confirmBeforeQuit: true,
+  enableDebugOverlay: false,
+  diagnosticsLevel: "basic",
+};
+
+const defaultStreamerModePreferences: StreamerModePreferences = {
+  enabled: false,
+  hidePersonalInfo: true,
+  hideInviteLinks: true,
+  hideNotificationContent: true,
+  suppressSounds: false,
+};
+
+const defaultGameOverlayPreferences: GameOverlayPreferences = {
+  enabled: false,
+  showPerformanceStats: false,
+  enableClickThrough: false,
+  opacity: 85,
+  position: "top-right",
 };
 
 const defaultBotGhostIntegration: BotGhostIntegrationConfig = {
@@ -213,12 +334,19 @@ export type UserPreferences = {
   textImages: TextImagesPreferences;
   accessibility: AccessibilityPreferences;
   emoji: EmojiPreferences;
+  stickers: StickerPreferences;
+  keybinds: KeybindPreferences;
+  advanced: AdvancedPreferences;
+  streamerMode: StreamerModePreferences;
+  gameOverlay: GameOverlayPreferences;
   botGhost: BotGhostIntegrationConfig;
   customCss: string;
   languagePreference: string;
   connectedAccounts: string[];
   contentSocial: ContentSocialPreferences;
   dataPrivacy: DataPrivacyPreferences;
+  activityPrivacy: ActivityPrivacyPreferences;
+  registeredGames: RegisteredGamesPreferences;
   familyCenter: FamilyCenterPreferences;
   businessCenter: BusinessCenterPreferences;
   schoolCenter: FamilyCenterPreferences;
@@ -445,6 +573,86 @@ const normalizeDataPrivacyPreferences = (value: unknown): DataPrivacyPreferences
   };
 };
 
+const normalizeActivityPrivacyPreferences = (value: unknown): ActivityPrivacyPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultActivityPrivacyPreferences };
+  }
+
+  const source = value as Partial<Record<keyof ActivityPrivacyPreferences, unknown>>;
+  const activityVisibility =
+    source.activityVisibility === "everyone" ||
+    source.activityVisibility === "friends" ||
+    source.activityVisibility === "none"
+      ? source.activityVisibility
+      : defaultActivityPrivacyPreferences.activityVisibility;
+
+  return {
+    shareActivityStatus:
+      typeof source.shareActivityStatus === "boolean"
+        ? source.shareActivityStatus
+        : defaultActivityPrivacyPreferences.shareActivityStatus,
+    shareCurrentGame:
+      typeof source.shareCurrentGame === "boolean"
+        ? source.shareCurrentGame
+        : defaultActivityPrivacyPreferences.shareCurrentGame,
+    allowFriendJoinRequests:
+      typeof source.allowFriendJoinRequests === "boolean"
+        ? source.allowFriendJoinRequests
+        : defaultActivityPrivacyPreferences.allowFriendJoinRequests,
+    allowSpectateRequests:
+      typeof source.allowSpectateRequests === "boolean"
+        ? source.allowSpectateRequests
+        : defaultActivityPrivacyPreferences.allowSpectateRequests,
+    activityVisibility,
+    logActivityHistory:
+      typeof source.logActivityHistory === "boolean"
+        ? source.logActivityHistory
+        : defaultActivityPrivacyPreferences.logActivityHistory,
+  };
+};
+
+const normalizeRegisteredGamesPreferences = (value: unknown): RegisteredGamesPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultRegisteredGamesPreferences };
+  }
+
+  const source = value as Partial<Record<keyof RegisteredGamesPreferences, unknown>>;
+  const hiddenGameIds = normalizeStringArray(source.hiddenGameIds, 240)
+    .map((entry) => entry.slice(0, 120));
+
+  const manualGames = Array.isArray(source.manualGames)
+    ? source.manualGames
+        .filter((entry): entry is RegisteredGameEntry => Boolean(entry && typeof entry === "object"))
+        .map((entry, index) => {
+          const candidate = entry as Partial<RegisteredGameEntry>;
+          const name = normalizeLabel(candidate.name, 120);
+          const id =
+            normalizeIdLike(candidate.id, 120) ||
+            `manual-${index + 1}-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+
+          return {
+            id,
+            name,
+            provider: normalizeLabel(candidate.provider, 60) || "manual",
+            shortDescription: normalizeLabel(candidate.shortDescription, 280),
+            thumbnailUrl: normalizeMediaUrlLike(candidate.thumbnailUrl, 2048),
+            addedAt: normalizeIsoDate(candidate.addedAt),
+          } satisfies RegisteredGameEntry;
+        })
+        .filter((entry) => entry.name.length > 0)
+        .slice(0, 120)
+    : [];
+
+  return {
+    showDetectedGames:
+      typeof source.showDetectedGames === "boolean"
+        ? source.showDetectedGames
+        : defaultRegisteredGamesPreferences.showDetectedGames,
+    manualGames,
+    hiddenGameIds,
+  };
+};
+
 const normalizeNotificationPreferences = (value: unknown): NotificationPreferences => {
   if (!value || typeof value !== "object") {
     return { ...defaultNotificationPreferences };
@@ -594,6 +802,182 @@ const normalizeEmojiPreferences = (value: unknown): EmojiPreferences => {
     defaultComposerEmoji,
     favoriteEmojis,
     uploadedEmojiUrls,
+  };
+};
+
+const normalizeStickerPreferences = (value: unknown): StickerPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultStickerPreferences };
+  }
+
+  const source = value as Partial<Record<keyof StickerPreferences, unknown>>;
+  const defaultComposerStickerUrl =
+    typeof source.defaultComposerStickerUrl === "string"
+      ? source.defaultComposerStickerUrl.trim().slice(0, 2048)
+      : defaultStickerPreferences.defaultComposerStickerUrl;
+
+  const favoriteStickers = Array.isArray(source.favoriteStickers)
+    ? Array.from(
+        new Set(
+          source.favoriteStickers
+            .filter((item): item is string => typeof item === "string")
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0)
+            .slice(0, 48)
+        )
+      )
+    : [...defaultStickerPreferences.favoriteStickers];
+
+  const uploadedStickerUrls = Array.isArray(source.uploadedStickerUrls)
+    ? Array.from(
+        new Set(
+          source.uploadedStickerUrls
+            .filter((item): item is string => typeof item === "string")
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0)
+            .slice(0, 120)
+        )
+      )
+    : [];
+
+  return {
+    showComposerStickerButton:
+      typeof source.showComposerStickerButton === "boolean"
+        ? source.showComposerStickerButton
+        : defaultStickerPreferences.showComposerStickerButton,
+    preferAnimatedStickers:
+      typeof source.preferAnimatedStickers === "boolean"
+        ? source.preferAnimatedStickers
+        : defaultStickerPreferences.preferAnimatedStickers,
+    defaultComposerStickerUrl,
+    favoriteStickers,
+    uploadedStickerUrls,
+  };
+};
+
+const normalizeKeybindString = (value: unknown, fallback: string) => {
+  const normalized = typeof value === "string" ? value.trim().slice(0, 64) : "";
+  return normalized.length > 0 ? normalized : fallback;
+};
+
+const normalizeKeybindPreferences = (value: unknown): KeybindPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultKeybindPreferences };
+  }
+
+  const source = value as Partial<Record<keyof KeybindPreferences, unknown>>;
+
+  return {
+    enableCustomKeybinds:
+      typeof source.enableCustomKeybinds === "boolean"
+        ? source.enableCustomKeybinds
+        : defaultKeybindPreferences.enableCustomKeybinds,
+    openCommandPalette: normalizeKeybindString(
+      source.openCommandPalette,
+      defaultKeybindPreferences.openCommandPalette
+    ),
+    focusServerSearch: normalizeKeybindString(
+      source.focusServerSearch,
+      defaultKeybindPreferences.focusServerSearch
+    ),
+    toggleMute: normalizeKeybindString(source.toggleMute, defaultKeybindPreferences.toggleMute),
+    toggleDeafen: normalizeKeybindString(source.toggleDeafen, defaultKeybindPreferences.toggleDeafen),
+    toggleCamera: normalizeKeybindString(source.toggleCamera, defaultKeybindPreferences.toggleCamera),
+  };
+};
+
+const normalizeAdvancedPreferences = (value: unknown): AdvancedPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultAdvancedPreferences };
+  }
+
+  const source = value as Partial<Record<keyof AdvancedPreferences, unknown>>;
+  const diagnosticsLevel =
+    source.diagnosticsLevel === "off" ||
+    source.diagnosticsLevel === "basic" ||
+    source.diagnosticsLevel === "verbose"
+      ? source.diagnosticsLevel
+      : defaultAdvancedPreferences.diagnosticsLevel;
+
+  return {
+    enableHardwareAcceleration:
+      typeof source.enableHardwareAcceleration === "boolean"
+        ? source.enableHardwareAcceleration
+        : defaultAdvancedPreferences.enableHardwareAcceleration,
+    openLinksInApp:
+      typeof source.openLinksInApp === "boolean"
+        ? source.openLinksInApp
+        : defaultAdvancedPreferences.openLinksInApp,
+    confirmBeforeQuit:
+      typeof source.confirmBeforeQuit === "boolean"
+        ? source.confirmBeforeQuit
+        : defaultAdvancedPreferences.confirmBeforeQuit,
+    enableDebugOverlay:
+      typeof source.enableDebugOverlay === "boolean"
+        ? source.enableDebugOverlay
+        : defaultAdvancedPreferences.enableDebugOverlay,
+    diagnosticsLevel,
+  };
+};
+
+const normalizeStreamerModePreferences = (value: unknown): StreamerModePreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultStreamerModePreferences };
+  }
+
+  const source = value as Partial<Record<keyof StreamerModePreferences, unknown>>;
+
+  return {
+    enabled: typeof source.enabled === "boolean" ? source.enabled : defaultStreamerModePreferences.enabled,
+    hidePersonalInfo:
+      typeof source.hidePersonalInfo === "boolean"
+        ? source.hidePersonalInfo
+        : defaultStreamerModePreferences.hidePersonalInfo,
+    hideInviteLinks:
+      typeof source.hideInviteLinks === "boolean"
+        ? source.hideInviteLinks
+        : defaultStreamerModePreferences.hideInviteLinks,
+    hideNotificationContent:
+      typeof source.hideNotificationContent === "boolean"
+        ? source.hideNotificationContent
+        : defaultStreamerModePreferences.hideNotificationContent,
+    suppressSounds:
+      typeof source.suppressSounds === "boolean"
+        ? source.suppressSounds
+        : defaultStreamerModePreferences.suppressSounds,
+  };
+};
+
+const normalizeGameOverlayPreferences = (value: unknown): GameOverlayPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultGameOverlayPreferences };
+  }
+
+  const source = value as Partial<Record<keyof GameOverlayPreferences, unknown>>;
+  const position =
+    source.position === "top-left" ||
+    source.position === "top-right" ||
+    source.position === "bottom-left" ||
+    source.position === "bottom-right"
+      ? source.position
+      : defaultGameOverlayPreferences.position;
+  const opacity =
+    typeof source.opacity === "number" && Number.isFinite(source.opacity)
+      ? Math.max(20, Math.min(100, Math.round(source.opacity)))
+      : defaultGameOverlayPreferences.opacity;
+
+  return {
+    enabled: typeof source.enabled === "boolean" ? source.enabled : defaultGameOverlayPreferences.enabled,
+    showPerformanceStats:
+      typeof source.showPerformanceStats === "boolean"
+        ? source.showPerformanceStats
+        : defaultGameOverlayPreferences.showPerformanceStats,
+    enableClickThrough:
+      typeof source.enableClickThrough === "boolean"
+        ? source.enableClickThrough
+        : defaultGameOverlayPreferences.enableClickThrough,
+    opacity,
+    position,
   };
 };
 
@@ -1192,12 +1576,19 @@ export const ensureUserPreferencesSchema = async () => {
       "textImagesJson" text not null default '{}',
       "accessibilityJson" text not null default '{}',
       "emojiJson" text not null default '{}',
+      "stickersJson" text not null default '{}',
+      "keybindsJson" text not null default '{}',
+      "advancedJson" text not null default '{}',
+      "streamerModeJson" text not null default '{}',
+      "gameOverlayJson" text not null default '{}',
       "botGhostJson" text not null default '{}',
       "customCss" text not null default '',
       "languagePreference" text not null default 'system',
       "connectedAccountsJson" text not null default '[]',
       "contentSocialJson" text not null default '{}',
       "dataPrivacyJson" text not null default '{}',
+      "activityPrivacyJson" text not null default '{}',
+      "registeredGamesJson" text not null default '{}',
       "familyCenterJson" text not null default '{}',
       "businessCenterJson" text not null default '{}',
       "schoolCenterJson" text not null default '{}',
@@ -1245,6 +1636,31 @@ export const ensureUserPreferencesSchema = async () => {
 
   await db.execute(sql`
     alter table "UserPreference"
+    add column if not exists "stickersJson" text not null default '{}'
+  `);
+
+  await db.execute(sql`
+    alter table "UserPreference"
+    add column if not exists "keybindsJson" text not null default '{}'
+  `);
+
+  await db.execute(sql`
+    alter table "UserPreference"
+    add column if not exists "advancedJson" text not null default '{}'
+  `);
+
+  await db.execute(sql`
+    alter table "UserPreference"
+    add column if not exists "streamerModeJson" text not null default '{}'
+  `);
+
+  await db.execute(sql`
+    alter table "UserPreference"
+    add column if not exists "gameOverlayJson" text not null default '{}'
+  `);
+
+  await db.execute(sql`
+    alter table "UserPreference"
     add column if not exists "botGhostJson" text not null default '{}'
   `);
 
@@ -1266,6 +1682,16 @@ export const ensureUserPreferencesSchema = async () => {
   await db.execute(sql`
     alter table "UserPreference"
     add column if not exists "dataPrivacyJson" text not null default '{}'
+  `);
+
+  await db.execute(sql`
+    alter table "UserPreference"
+    add column if not exists "activityPrivacyJson" text not null default '{}'
+  `);
+
+  await db.execute(sql`
+    alter table "UserPreference"
+    add column if not exists "registeredGamesJson" text not null default '{}'
   `);
 
   await db.execute(sql`
@@ -1344,12 +1770,19 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
       "textImagesJson",
       "accessibilityJson",
       "emojiJson",
+      "stickersJson",
+      "keybindsJson",
+      "advancedJson",
+      "streamerModeJson",
+      "gameOverlayJson",
       "botGhostJson",
       "customCss",
       "languagePreference",
       "connectedAccountsJson",
       "contentSocialJson",
       "dataPrivacyJson",
+      "activityPrivacyJson",
+      "registeredGamesJson",
       "familyCenterJson",
       "businessCenterJson",
       "schoolCenterJson",
@@ -1377,12 +1810,19 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
       textImagesJson: string | null;
       accessibilityJson: string | null;
       emojiJson: string | null;
+      stickersJson: string | null;
+      keybindsJson: string | null;
+      advancedJson: string | null;
+      streamerModeJson: string | null;
+      gameOverlayJson: string | null;
       botGhostJson: string | null;
       customCss: string | null;
       languagePreference: string | null;
       connectedAccountsJson: string | null;
       contentSocialJson: string | null;
       dataPrivacyJson: string | null;
+      activityPrivacyJson: string | null;
+      registeredGamesJson: string | null;
       familyCenterJson: string | null;
       businessCenterJson: string | null;
       schoolCenterJson: string | null;
@@ -1406,10 +1846,17 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
   const textImages = normalizeTextImagesPreferences(parseJsonSafely(row?.textImagesJson ?? null));
   const accessibility = normalizeAccessibilityPreferences(parseJsonSafely(row?.accessibilityJson ?? null));
   const emoji = normalizeEmojiPreferences(parseJsonSafely(row?.emojiJson ?? null));
+  const stickers = normalizeStickerPreferences(parseJsonSafely(row?.stickersJson ?? null));
+  const keybinds = normalizeKeybindPreferences(parseJsonSafely(row?.keybindsJson ?? null));
+  const advanced = normalizeAdvancedPreferences(parseJsonSafely(row?.advancedJson ?? null));
+  const streamerMode = normalizeStreamerModePreferences(parseJsonSafely(row?.streamerModeJson ?? null));
+  const gameOverlay = normalizeGameOverlayPreferences(parseJsonSafely(row?.gameOverlayJson ?? null));
   const botGhost = normalizeBotGhostIntegration(parseJsonSafely(row?.botGhostJson ?? null));
   const connectedAccounts = normalizeConnectedAccounts(parseJsonSafely(row?.connectedAccountsJson ?? null));
   const contentSocial = normalizeContentSocialPreferences(parseJsonSafely(row?.contentSocialJson ?? null));
   const dataPrivacy = normalizeDataPrivacyPreferences(parseJsonSafely(row?.dataPrivacyJson ?? null));
+  const activityPrivacy = normalizeActivityPrivacyPreferences(parseJsonSafely(row?.activityPrivacyJson ?? null));
+  const registeredGames = normalizeRegisteredGamesPreferences(parseJsonSafely(row?.registeredGamesJson ?? null));
   const familyCenter = normalizeFamilyCenterPreferences(parseJsonSafely(row?.familyCenterJson ?? null));
   const businessCenter = normalizeBusinessCenterPreferences(parseJsonSafely(row?.businessCenterJson ?? null));
   const schoolCenter = normalizeFamilyCenterPreferences(parseJsonSafely(row?.schoolCenterJson ?? null));
@@ -1430,12 +1877,19 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
     textImages,
     accessibility,
     emoji,
+    stickers,
+    keybinds,
+    advanced,
+    streamerMode,
+    gameOverlay,
     botGhost,
     customCss: typeof row?.customCss === "string" ? row.customCss : "",
     languagePreference: normalizeLanguagePreference(row?.languagePreference),
     connectedAccounts,
     contentSocial,
     dataPrivacy,
+    activityPrivacy,
+    registeredGames,
     familyCenter,
     businessCenter,
     schoolCenter,
@@ -1469,12 +1923,19 @@ export const updateUserPreferences = async (
     textImages: TextImagesPreferences;
     accessibility: AccessibilityPreferences;
     emoji: EmojiPreferences;
+    stickers: StickerPreferences;
+    keybinds: KeybindPreferences;
+    advanced: AdvancedPreferences;
+    streamerMode: StreamerModePreferences;
+    gameOverlay: GameOverlayPreferences;
     botGhost: BotGhostIntegrationConfig;
     customCss: string;
     languagePreference: string;
     connectedAccounts: string[];
     contentSocial: ContentSocialPreferences;
     dataPrivacy: DataPrivacyPreferences;
+    activityPrivacy: ActivityPrivacyPreferences;
+    registeredGames: RegisteredGamesPreferences;
     familyCenter: FamilyCenterPreferences;
     businessCenter: BusinessCenterPreferences;
     schoolCenter: FamilyCenterPreferences;
@@ -1524,6 +1985,36 @@ export const updateUserPreferences = async (
     );
   }
 
+  if (Object.prototype.hasOwnProperty.call(updates, "stickers")) {
+    values.push(
+      sql`"stickersJson" = ${JSON.stringify(normalizeStickerPreferences(updates.stickers))}`
+    );
+  }
+
+  if (Object.prototype.hasOwnProperty.call(updates, "keybinds")) {
+    values.push(
+      sql`"keybindsJson" = ${JSON.stringify(normalizeKeybindPreferences(updates.keybinds))}`
+    );
+  }
+
+  if (Object.prototype.hasOwnProperty.call(updates, "advanced")) {
+    values.push(
+      sql`"advancedJson" = ${JSON.stringify(normalizeAdvancedPreferences(updates.advanced))}`
+    );
+  }
+
+  if (Object.prototype.hasOwnProperty.call(updates, "streamerMode")) {
+    values.push(
+      sql`"streamerModeJson" = ${JSON.stringify(normalizeStreamerModePreferences(updates.streamerMode))}`
+    );
+  }
+
+  if (Object.prototype.hasOwnProperty.call(updates, "gameOverlay")) {
+    values.push(
+      sql`"gameOverlayJson" = ${JSON.stringify(normalizeGameOverlayPreferences(updates.gameOverlay))}`
+    );
+  }
+
   if (Object.prototype.hasOwnProperty.call(updates, "botGhost")) {
     values.push(
       sql`"botGhostJson" = ${JSON.stringify(normalizeBotGhostIntegration(updates.botGhost))}`
@@ -1551,6 +2042,18 @@ export const updateUserPreferences = async (
   if (Object.prototype.hasOwnProperty.call(updates, "dataPrivacy")) {
     values.push(
       sql`"dataPrivacyJson" = ${JSON.stringify(normalizeDataPrivacyPreferences(updates.dataPrivacy))}`
+    );
+  }
+
+  if (Object.prototype.hasOwnProperty.call(updates, "activityPrivacy")) {
+    values.push(
+      sql`"activityPrivacyJson" = ${JSON.stringify(normalizeActivityPrivacyPreferences(updates.activityPrivacy))}`
+    );
+  }
+
+  if (Object.prototype.hasOwnProperty.call(updates, "registeredGames")) {
+    values.push(
+      sql`"registeredGamesJson" = ${JSON.stringify(normalizeRegisteredGamesPreferences(updates.registeredGames))}`
     );
   }
 

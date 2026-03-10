@@ -68,7 +68,7 @@ export async function POST(request: Request) {
       return new NextResponse("Invalid credentials", { status: 401 });
     }
 
-    await setSessionUserId(authenticatedUserId);
+    await setSessionUserId(authenticatedUserId, { request });
     return NextResponse.json({ ok: true, redirectTo: "/users" });
   } catch (error) {
     console.error("[AUTH_SIGN_IN_POST]", error);

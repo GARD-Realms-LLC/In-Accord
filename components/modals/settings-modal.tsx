@@ -93,14 +93,22 @@ import {
   type ProfileNameEffectKey,
   type ProfileNameFontKey,
 } from "@/lib/profile-name-styles";
-import { normalizePresenceStatus, presenceStatusLabelMap } from "@/lib/presence-status";
+import { formatPresenceStatusLabel, normalizePresenceStatus, presenceStatusLabelMap } from "@/lib/presence-status";
 import { resolveProfileIcons } from "@/lib/profile-icons";
 import type {
+  AdvancedPreferences,
+  ActivityPrivacyPreferences,
   AccessibilityPreferences,
   BotGhostIntegrationConfig,
   ContentSocialPreferences,
   DataPrivacyPreferences,
   EmojiPreferences,
+  GameOverlayPreferences,
+  KeybindPreferences,
+  RegisteredGameEntry,
+  RegisteredGamesPreferences,
+  StickerPreferences,
+  StreamerModePreferences,
   NotificationPreferences,
   TextImagesPreferences,
   FamilyCenterApplicationFile,
@@ -473,6 +481,21 @@ const defaultDataPrivacyPreferences: DataPrivacyPreferences = {
   retentionMode: "standard",
 };
 
+const defaultActivityPrivacyPreferences: ActivityPrivacyPreferences = {
+  shareActivityStatus: true,
+  shareCurrentGame: true,
+  allowFriendJoinRequests: true,
+  allowSpectateRequests: false,
+  activityVisibility: "friends",
+  logActivityHistory: true,
+};
+
+const defaultRegisteredGamesPreferences: RegisteredGamesPreferences = {
+  showDetectedGames: true,
+  manualGames: [],
+  hiddenGameIds: [],
+};
+
 const defaultNotificationPreferences: NotificationPreferences = {
   enableDesktopNotifications: true,
   enableSoundEffects: true,
@@ -505,6 +528,60 @@ const defaultEmojiPreferences: EmojiPreferences = {
   defaultComposerEmoji: "😊",
   favoriteEmojis: ["😀", "😂", "😍", "🔥", "👏", "🎉", "👍", "👀"],
   uploadedEmojiUrls: [],
+};
+
+const defaultStickerPreferences: StickerPreferences = {
+  showComposerStickerButton: true,
+  preferAnimatedStickers: true,
+  defaultComposerStickerUrl: "",
+  favoriteStickers: [],
+  uploadedStickerUrls: [],
+};
+
+const defaultKeybindPreferences: KeybindPreferences = {
+  enableCustomKeybinds: false,
+  openCommandPalette: "Ctrl+K",
+  focusServerSearch: "Ctrl+Shift+F",
+  toggleMute: "Ctrl+Shift+M",
+  toggleDeafen: "Ctrl+Shift+D",
+  toggleCamera: "Ctrl+Shift+C",
+};
+
+const defaultAdvancedPreferences: AdvancedPreferences = {
+  enableHardwareAcceleration: true,
+  openLinksInApp: true,
+  confirmBeforeQuit: true,
+  enableDebugOverlay: false,
+  diagnosticsLevel: "basic",
+};
+
+const defaultStreamerModePreferences: StreamerModePreferences = {
+  enabled: false,
+  hidePersonalInfo: true,
+  hideInviteLinks: true,
+  hideNotificationContent: true,
+  suppressSounds: false,
+};
+
+const defaultGameOverlayPreferences: GameOverlayPreferences = {
+  enabled: false,
+  showPerformanceStats: false,
+  enableClickThrough: false,
+  opacity: 85,
+  position: "top-right",
+};
+
+type RegisteredConnectionGame = {
+  id: string;
+  name: string;
+  provider: string;
+  shortDescription: string;
+  thumbnailUrl: string;
+};
+
+type RegisteredGamesProviderState = {
+  source: "live" | "fallback";
+  count: number;
 };
 
 const defaultBotGhostIntegration: BotGhostIntegrationConfig = {
@@ -689,6 +766,182 @@ const normalizeEmojiPreferences = (value: unknown): EmojiPreferences => {
     defaultComposerEmoji,
     favoriteEmojis,
     uploadedEmojiUrls,
+  };
+};
+
+const normalizeStickerPreferences = (value: unknown): StickerPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultStickerPreferences };
+  }
+
+  const source = value as Partial<Record<keyof StickerPreferences, unknown>>;
+  const defaultComposerStickerUrl =
+    typeof source.defaultComposerStickerUrl === "string"
+      ? source.defaultComposerStickerUrl.trim().slice(0, 2048)
+      : defaultStickerPreferences.defaultComposerStickerUrl;
+
+  const favoriteStickers = Array.isArray(source.favoriteStickers)
+    ? Array.from(
+        new Set(
+          source.favoriteStickers
+            .filter((item): item is string => typeof item === "string")
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0)
+            .slice(0, 48)
+        )
+      )
+    : [...defaultStickerPreferences.favoriteStickers];
+
+  const uploadedStickerUrls = Array.isArray(source.uploadedStickerUrls)
+    ? Array.from(
+        new Set(
+          source.uploadedStickerUrls
+            .filter((item): item is string => typeof item === "string")
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0)
+            .slice(0, 120)
+        )
+      )
+    : [];
+
+  return {
+    showComposerStickerButton:
+      typeof source.showComposerStickerButton === "boolean"
+        ? source.showComposerStickerButton
+        : defaultStickerPreferences.showComposerStickerButton,
+    preferAnimatedStickers:
+      typeof source.preferAnimatedStickers === "boolean"
+        ? source.preferAnimatedStickers
+        : defaultStickerPreferences.preferAnimatedStickers,
+    defaultComposerStickerUrl,
+    favoriteStickers,
+    uploadedStickerUrls,
+  };
+};
+
+const normalizeKeybindString = (value: unknown, fallback: string) => {
+  const normalized = typeof value === "string" ? value.trim().slice(0, 64) : "";
+  return normalized.length > 0 ? normalized : fallback;
+};
+
+const normalizeKeybindPreferences = (value: unknown): KeybindPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultKeybindPreferences };
+  }
+
+  const source = value as Partial<Record<keyof KeybindPreferences, unknown>>;
+
+  return {
+    enableCustomKeybinds:
+      typeof source.enableCustomKeybinds === "boolean"
+        ? source.enableCustomKeybinds
+        : defaultKeybindPreferences.enableCustomKeybinds,
+    openCommandPalette: normalizeKeybindString(
+      source.openCommandPalette,
+      defaultKeybindPreferences.openCommandPalette
+    ),
+    focusServerSearch: normalizeKeybindString(
+      source.focusServerSearch,
+      defaultKeybindPreferences.focusServerSearch
+    ),
+    toggleMute: normalizeKeybindString(source.toggleMute, defaultKeybindPreferences.toggleMute),
+    toggleDeafen: normalizeKeybindString(source.toggleDeafen, defaultKeybindPreferences.toggleDeafen),
+    toggleCamera: normalizeKeybindString(source.toggleCamera, defaultKeybindPreferences.toggleCamera),
+  };
+};
+
+const normalizeAdvancedPreferences = (value: unknown): AdvancedPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultAdvancedPreferences };
+  }
+
+  const source = value as Partial<Record<keyof AdvancedPreferences, unknown>>;
+  const diagnosticsLevel =
+    source.diagnosticsLevel === "off" ||
+    source.diagnosticsLevel === "basic" ||
+    source.diagnosticsLevel === "verbose"
+      ? source.diagnosticsLevel
+      : defaultAdvancedPreferences.diagnosticsLevel;
+
+  return {
+    enableHardwareAcceleration:
+      typeof source.enableHardwareAcceleration === "boolean"
+        ? source.enableHardwareAcceleration
+        : defaultAdvancedPreferences.enableHardwareAcceleration,
+    openLinksInApp:
+      typeof source.openLinksInApp === "boolean"
+        ? source.openLinksInApp
+        : defaultAdvancedPreferences.openLinksInApp,
+    confirmBeforeQuit:
+      typeof source.confirmBeforeQuit === "boolean"
+        ? source.confirmBeforeQuit
+        : defaultAdvancedPreferences.confirmBeforeQuit,
+    enableDebugOverlay:
+      typeof source.enableDebugOverlay === "boolean"
+        ? source.enableDebugOverlay
+        : defaultAdvancedPreferences.enableDebugOverlay,
+    diagnosticsLevel,
+  };
+};
+
+const normalizeStreamerModePreferences = (value: unknown): StreamerModePreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultStreamerModePreferences };
+  }
+
+  const source = value as Partial<Record<keyof StreamerModePreferences, unknown>>;
+
+  return {
+    enabled: typeof source.enabled === "boolean" ? source.enabled : defaultStreamerModePreferences.enabled,
+    hidePersonalInfo:
+      typeof source.hidePersonalInfo === "boolean"
+        ? source.hidePersonalInfo
+        : defaultStreamerModePreferences.hidePersonalInfo,
+    hideInviteLinks:
+      typeof source.hideInviteLinks === "boolean"
+        ? source.hideInviteLinks
+        : defaultStreamerModePreferences.hideInviteLinks,
+    hideNotificationContent:
+      typeof source.hideNotificationContent === "boolean"
+        ? source.hideNotificationContent
+        : defaultStreamerModePreferences.hideNotificationContent,
+    suppressSounds:
+      typeof source.suppressSounds === "boolean"
+        ? source.suppressSounds
+        : defaultStreamerModePreferences.suppressSounds,
+  };
+};
+
+const normalizeGameOverlayPreferences = (value: unknown): GameOverlayPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultGameOverlayPreferences };
+  }
+
+  const source = value as Partial<Record<keyof GameOverlayPreferences, unknown>>;
+  const position =
+    source.position === "top-left" ||
+    source.position === "top-right" ||
+    source.position === "bottom-left" ||
+    source.position === "bottom-right"
+      ? source.position
+      : defaultGameOverlayPreferences.position;
+  const opacity =
+    typeof source.opacity === "number" && Number.isFinite(source.opacity)
+      ? Math.max(20, Math.min(100, Math.round(source.opacity)))
+      : defaultGameOverlayPreferences.opacity;
+
+  return {
+    enabled: typeof source.enabled === "boolean" ? source.enabled : defaultGameOverlayPreferences.enabled,
+    showPerformanceStats:
+      typeof source.showPerformanceStats === "boolean"
+        ? source.showPerformanceStats
+        : defaultGameOverlayPreferences.showPerformanceStats,
+    enableClickThrough:
+      typeof source.enableClickThrough === "boolean"
+        ? source.enableClickThrough
+        : defaultGameOverlayPreferences.enableClickThrough,
+    opacity,
+    position,
   };
 };
 
@@ -886,6 +1139,44 @@ const normalizeDataPrivacyPreferences = (value: unknown): DataPrivacyPreferences
         ? source.allowUsageDiagnostics
         : defaultDataPrivacyPreferences.allowUsageDiagnostics,
     retentionMode,
+  };
+};
+
+const normalizeActivityPrivacyPreferences = (value: unknown): ActivityPrivacyPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultActivityPrivacyPreferences };
+  }
+
+  const source = value as Partial<Record<keyof ActivityPrivacyPreferences, unknown>>;
+  const activityVisibility =
+    source.activityVisibility === "everyone" ||
+    source.activityVisibility === "friends" ||
+    source.activityVisibility === "none"
+      ? source.activityVisibility
+      : defaultActivityPrivacyPreferences.activityVisibility;
+
+  return {
+    shareActivityStatus:
+      typeof source.shareActivityStatus === "boolean"
+        ? source.shareActivityStatus
+        : defaultActivityPrivacyPreferences.shareActivityStatus,
+    shareCurrentGame:
+      typeof source.shareCurrentGame === "boolean"
+        ? source.shareCurrentGame
+        : defaultActivityPrivacyPreferences.shareCurrentGame,
+    allowFriendJoinRequests:
+      typeof source.allowFriendJoinRequests === "boolean"
+        ? source.allowFriendJoinRequests
+        : defaultActivityPrivacyPreferences.allowFriendJoinRequests,
+    allowSpectateRequests:
+      typeof source.allowSpectateRequests === "boolean"
+        ? source.allowSpectateRequests
+        : defaultActivityPrivacyPreferences.allowSpectateRequests,
+    activityVisibility,
+    logActivityHistory:
+      typeof source.logActivityHistory === "boolean"
+        ? source.logActivityHistory
+        : defaultActivityPrivacyPreferences.logActivityHistory,
   };
 };
 
@@ -1331,6 +1622,17 @@ type ConnectionProvider = {
   description: string;
 };
 
+type DeviceSession = {
+  sessionId: string;
+  deviceName: string;
+  userAgent: string | null;
+  ipAddress: string | null;
+  createdAt: string;
+  lastSeenAt: string;
+  expiresAt: string;
+  isCurrent: boolean;
+};
+
 type ServerTagIconOption = {
   key: string;
   label: string;
@@ -1416,6 +1718,74 @@ const connectionProviders: ConnectionProvider[] = [
   },
 ];
 
+const normalizeRegisteredGamesPreferences = (value: unknown): RegisteredGamesPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultRegisteredGamesPreferences };
+  }
+
+  const source = value as Partial<Record<keyof RegisteredGamesPreferences, unknown>>;
+  const hiddenGameIds = Array.isArray(source.hiddenGameIds)
+    ? Array.from(
+        new Set(
+          source.hiddenGameIds
+            .filter((entry): entry is string => typeof entry === "string")
+            .map((entry) => entry.trim())
+            .filter((entry) => entry.length > 0)
+            .slice(0, 240)
+        )
+      )
+    : [];
+
+  const manualGames = Array.isArray(source.manualGames)
+    ? source.manualGames
+        .filter((entry): entry is RegisteredGameEntry => Boolean(entry && typeof entry === "object"))
+        .map((entry, index) => {
+          const sourceEntry = entry as Partial<RegisteredGameEntry>;
+          const name = typeof sourceEntry.name === "string" ? sourceEntry.name.trim().slice(0, 120) : "";
+          const id =
+            typeof sourceEntry.id === "string" && sourceEntry.id.trim().length > 0
+              ? sourceEntry.id.trim().slice(0, 120)
+              : `manual-${index + 1}-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+          const thumbnailUrl =
+            typeof sourceEntry.thumbnailUrl === "string"
+              ? sourceEntry.thumbnailUrl.trim().slice(0, 2048)
+              : "";
+
+          return {
+            id,
+            name,
+            provider:
+              typeof sourceEntry.provider === "string" && sourceEntry.provider.trim().length > 0
+                ? sourceEntry.provider.trim().slice(0, 60)
+                : "manual",
+            shortDescription:
+              typeof sourceEntry.shortDescription === "string"
+                ? sourceEntry.shortDescription.trim().slice(0, 280)
+                : "",
+            thumbnailUrl:
+              /^https?:\/\//i.test(thumbnailUrl) || thumbnailUrl.startsWith("/") ? thumbnailUrl : "",
+            addedAt:
+              typeof sourceEntry.addedAt === "string" && !Number.isNaN(new Date(sourceEntry.addedAt).getTime())
+                ? new Date(sourceEntry.addedAt).toISOString()
+                : new Date().toISOString(),
+          } satisfies RegisteredGameEntry;
+        })
+        .filter((entry) => entry.name.length > 0)
+        .slice(0, 120)
+    : [];
+
+  return {
+    showDetectedGames:
+      typeof source.showDetectedGames === "boolean"
+        ? source.showDetectedGames
+        : defaultRegisteredGamesPreferences.showDetectedGames,
+    manualGames,
+    hiddenGameIds,
+  };
+};
+
+const oauthConnectionProviders = new Set<string>(["github", "google", "steam", "twitch", "xbox", "youtube"]);
+
 export const SettingsModal = () => {
   const router = useRouter();
   const { isOpen, onClose, type, data } = useModal();
@@ -1463,6 +1833,7 @@ export const SettingsModal = () => {
   const [profilePresenceStatus, setProfilePresenceStatus] = useState(
     normalizePresenceStatus(data.profilePresenceStatus)
   );
+  const [profileCurrentGame, setProfileCurrentGame] = useState<string | null>(data.profileCurrentGame?.trim() || null);
   const [profileNameError, setProfileNameError] = useState<string | null>(null);
   const [profileNameSuccess, setProfileNameSuccess] = useState<string | null>(null);
   const [isEditingDefaultProfileNameInline, setIsEditingDefaultProfileNameInline] = useState(false);
@@ -1506,6 +1877,25 @@ export const SettingsModal = () => {
   });
   const [isSavingDataPrivacyPreferences, setIsSavingDataPrivacyPreferences] = useState(false);
   const [dataPrivacyStatus, setDataPrivacyStatus] = useState<string | null>(null);
+  const [activityPrivacyPreferences, setActivityPrivacyPreferences] = useState<ActivityPrivacyPreferences>({
+    ...defaultActivityPrivacyPreferences,
+  });
+  const [isSavingActivityPrivacyPreferences, setIsSavingActivityPrivacyPreferences] = useState(false);
+  const [activityPrivacyStatus, setActivityPrivacyStatus] = useState<string | null>(null);
+  const [registeredGamesPreferences, setRegisteredGamesPreferences] = useState<RegisteredGamesPreferences>({
+    ...defaultRegisteredGamesPreferences,
+  });
+  const [manualGameNameInput, setManualGameNameInput] = useState("");
+  const [manualGameProviderInput, setManualGameProviderInput] = useState("manual");
+  const [manualGameDescriptionInput, setManualGameDescriptionInput] = useState("");
+  const [manualGameThumbnailInput, setManualGameThumbnailInput] = useState("");
+  const [isSavingRegisteredGamesPreferences, setIsSavingRegisteredGamesPreferences] = useState(false);
+  const [registeredGamesStatus, setRegisteredGamesStatus] = useState<string | null>(null);
+  const [detectedRegisteredGames, setDetectedRegisteredGames] = useState<RegisteredConnectionGame[]>([]);
+  const [registeredGamesProviderStates, setRegisteredGamesProviderStates] = useState<
+    Record<string, RegisteredGamesProviderState>
+  >({});
+  const [isLoadingDetectedRegisteredGames, setIsLoadingDetectedRegisteredGames] = useState(false);
   const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferences>({
     ...defaultNotificationPreferences,
   });
@@ -1528,6 +1918,33 @@ export const SettingsModal = () => {
   const [emojiFavoritesInput, setEmojiFavoritesInput] = useState(defaultEmojiPreferences.favoriteEmojis.join(" "));
   const [isSavingEmojiPreferences, setIsSavingEmojiPreferences] = useState(false);
   const [emojiStatus, setEmojiStatus] = useState<string | null>(null);
+  const [stickerPreferences, setStickerPreferences] = useState<StickerPreferences>({
+    ...defaultStickerPreferences,
+  });
+  const [stickerUploadDraftUrl, setStickerUploadDraftUrl] = useState("");
+  const [stickerFavoritesInput, setStickerFavoritesInput] = useState("");
+  const [isSavingStickerPreferences, setIsSavingStickerPreferences] = useState(false);
+  const [stickerStatus, setStickerStatus] = useState<string | null>(null);
+  const [keybindPreferences, setKeybindPreferences] = useState<KeybindPreferences>({
+    ...defaultKeybindPreferences,
+  });
+  const [isSavingKeybindPreferences, setIsSavingKeybindPreferences] = useState(false);
+  const [keybindStatus, setKeybindStatus] = useState<string | null>(null);
+  const [advancedPreferences, setAdvancedPreferences] = useState<AdvancedPreferences>({
+    ...defaultAdvancedPreferences,
+  });
+  const [isSavingAdvancedPreferences, setIsSavingAdvancedPreferences] = useState(false);
+  const [advancedStatus, setAdvancedStatus] = useState<string | null>(null);
+  const [streamerModePreferences, setStreamerModePreferences] = useState<StreamerModePreferences>({
+    ...defaultStreamerModePreferences,
+  });
+  const [isSavingStreamerModePreferences, setIsSavingStreamerModePreferences] = useState(false);
+  const [streamerModeStatus, setStreamerModeStatus] = useState<string | null>(null);
+  const [gameOverlayPreferences, setGameOverlayPreferences] = useState<GameOverlayPreferences>({
+    ...defaultGameOverlayPreferences,
+  });
+  const [isSavingGameOverlayPreferences, setIsSavingGameOverlayPreferences] = useState(false);
+  const [gameOverlayStatus, setGameOverlayStatus] = useState<string | null>(null);
   const [isVoiceMuted, setIsVoiceMuted] = useState(false);
   const [isVoiceDeafened, setIsVoiceDeafened] = useState(false);
   const [isVoiceSessionActive, setIsVoiceSessionActive] = useState(false);
@@ -1622,7 +2039,13 @@ export const SettingsModal = () => {
   const [languagePreference, setLanguagePreference] = useState<string>("system");
   const [isSavingLanguagePreference, setIsSavingLanguagePreference] = useState(false);
   const [languagePreferenceStatus, setLanguagePreferenceStatus] = useState<string | null>(null);
+  const [deviceSessions, setDeviceSessions] = useState<DeviceSession[]>([]);
+  const [isLoadingDeviceSessions, setIsLoadingDeviceSessions] = useState(false);
+  const [deviceSessionActionPending, setDeviceSessionActionPending] = useState<string | null>(null);
+  const [devicesStatus, setDevicesStatus] = useState<string | null>(null);
   const [connectedAccounts, setConnectedAccounts] = useState<string[]>([]);
+  const [connectionProviderAvailability, setConnectionProviderAvailability] = useState<Record<string, boolean>>({});
+  const [connectionProviderOAuthSupport, setConnectionProviderOAuthSupport] = useState<Record<string, boolean>>({});
   const [isSavingConnectionProvider, setIsSavingConnectionProvider] = useState<string | null>(null);
   const [connectionsStatus, setConnectionsStatus] = useState<string | null>(null);
   const [bugTitle, setBugTitle] = useState("");
@@ -2021,13 +2444,14 @@ export const SettingsModal = () => {
     setDateOfBirthDraft("");
     setProfileRole(data.profileRole ?? null);
     setProfilePresenceStatus(normalizePresenceStatus(data.profilePresenceStatus));
+    setProfileCurrentGame(data.profileCurrentGame?.trim() || null);
     setProfileNameError(null);
     setProfileNameSuccess(null);
     setPronounsStatus(null);
     setCommentStatus(null);
     setPhoneNumberStatus(null);
     setDateOfBirthStatus(null);
-  }, [data.profileName, data.profilePresenceStatus, data.profileRealName, data.profileRole, isModalOpen]);
+  }, [data.profileCurrentGame, data.profileName, data.profilePresenceStatus, data.profileRealName, data.profileRole, isModalOpen]);
 
   useEffect(() => {
     setResolvedProfileId(data.profileId ?? null);
@@ -2048,8 +2472,15 @@ export const SettingsModal = () => {
           textImages?: unknown;
           accessibility?: unknown;
           emoji?: unknown;
+          stickers?: unknown;
+          keybinds?: unknown;
+          advanced?: unknown;
+          streamerMode?: unknown;
+          gameOverlay?: unknown;
           contentSocial?: unknown;
           dataPrivacy?: unknown;
+          activityPrivacy?: unknown;
+          registeredGames?: unknown;
           familyCenter?: unknown;
           businessCenter?: unknown;
           schoolCenter?: unknown;
@@ -2073,10 +2504,17 @@ export const SettingsModal = () => {
         const mentions = response.data?.mentionsEnabled !== false;
         const hydratedContentSocial = normalizeContentSocialPreferences(response.data?.contentSocial);
         const hydratedDataPrivacy = normalizeDataPrivacyPreferences(response.data?.dataPrivacy);
+        const hydratedActivityPrivacy = normalizeActivityPrivacyPreferences(response.data?.activityPrivacy);
+        const hydratedRegisteredGames = normalizeRegisteredGamesPreferences(response.data?.registeredGames);
         const hydratedNotifications = normalizeNotificationPreferences(response.data?.notifications);
         const hydratedTextImages = normalizeTextImagesPreferences(response.data?.textImages);
         const hydratedAccessibility = normalizeAccessibilityPreferences(response.data?.accessibility);
         const hydratedEmoji = normalizeEmojiPreferences(response.data?.emoji);
+        const hydratedStickers = normalizeStickerPreferences(response.data?.stickers);
+        const hydratedKeybinds = normalizeKeybindPreferences(response.data?.keybinds);
+        const hydratedAdvanced = normalizeAdvancedPreferences(response.data?.advanced);
+        const hydratedStreamerMode = normalizeStreamerModePreferences(response.data?.streamerMode);
+        const hydratedGameOverlay = normalizeGameOverlayPreferences(response.data?.gameOverlay);
         const hydratedBotGhost = normalizeBotGhostIntegration(response.data?.botGhost);
         const hydratedFamilyCenter = normalizeFamilyCenterPreferences(response.data?.familyCenter);
         const hydratedBusinessCenter = normalizeBusinessCenterPreferences(response.data?.businessCenter);
@@ -2118,6 +2556,14 @@ export const SettingsModal = () => {
         setContentSocialStatus(null);
         setDataPrivacyPreferences(hydratedDataPrivacy);
         setDataPrivacyStatus(null);
+        setActivityPrivacyPreferences(hydratedActivityPrivacy);
+        setActivityPrivacyStatus(null);
+        setRegisteredGamesPreferences(hydratedRegisteredGames);
+        setRegisteredGamesStatus(null);
+        setManualGameNameInput("");
+        setManualGameProviderInput("manual");
+        setManualGameDescriptionInput("");
+        setManualGameThumbnailInput("");
         setNotificationPreferences(hydratedNotifications);
         setNotificationStatus(null);
         setTextImagesPreferences(hydratedTextImages);
@@ -2128,6 +2574,18 @@ export const SettingsModal = () => {
         setEmojiUploadDraftUrl("");
         setEmojiFavoritesInput(hydratedEmoji.favoriteEmojis.join(" "));
         setEmojiStatus(null);
+        setStickerPreferences(hydratedStickers);
+        setStickerUploadDraftUrl("");
+        setStickerFavoritesInput(hydratedStickers.favoriteStickers.join("\n"));
+        setStickerStatus(null);
+        setKeybindPreferences(hydratedKeybinds);
+        setKeybindStatus(null);
+        setAdvancedPreferences(hydratedAdvanced);
+        setAdvancedStatus(null);
+        setStreamerModePreferences(hydratedStreamerMode);
+        setStreamerModeStatus(null);
+        setGameOverlayPreferences(hydratedGameOverlay);
+        setGameOverlayStatus(null);
         applyAccessibilityPreferencesToDocument(hydratedAccessibility);
         setFamilyCenterPreferences(hydratedFamilyCenter);
         setFamilyCenterSnapshot(hydratedFamilyCenter);
@@ -2139,6 +2597,8 @@ export const SettingsModal = () => {
         setLanguagePreference(language);
         setLanguagePreferenceStatus(null);
         setConnectedAccounts(Array.from(new Set(linked)));
+        setConnectionProviderAvailability({});
+        setConnectionProviderOAuthSupport({});
         setConnectionsStatus(null);
         setOtherApps(
           Array.isArray(response.data?.OtherApps)
@@ -2179,6 +2639,14 @@ export const SettingsModal = () => {
         setContentSocialStatus(null);
         setDataPrivacyPreferences({ ...defaultDataPrivacyPreferences });
         setDataPrivacyStatus(null);
+        setActivityPrivacyPreferences({ ...defaultActivityPrivacyPreferences });
+        setActivityPrivacyStatus(null);
+        setRegisteredGamesPreferences({ ...defaultRegisteredGamesPreferences });
+        setRegisteredGamesStatus(null);
+        setManualGameNameInput("");
+        setManualGameProviderInput("manual");
+        setManualGameDescriptionInput("");
+        setManualGameThumbnailInput("");
         setNotificationPreferences({ ...defaultNotificationPreferences });
         setNotificationStatus(null);
         setTextImagesPreferences({ ...defaultTextImagesPreferences });
@@ -2189,6 +2657,18 @@ export const SettingsModal = () => {
         setEmojiUploadDraftUrl("");
         setEmojiFavoritesInput(defaultEmojiPreferences.favoriteEmojis.join(" "));
         setEmojiStatus(null);
+        setStickerPreferences({ ...defaultStickerPreferences });
+        setStickerUploadDraftUrl("");
+        setStickerFavoritesInput("");
+        setStickerStatus(null);
+        setKeybindPreferences({ ...defaultKeybindPreferences });
+        setKeybindStatus(null);
+        setAdvancedPreferences({ ...defaultAdvancedPreferences });
+        setAdvancedStatus(null);
+        setStreamerModePreferences({ ...defaultStreamerModePreferences });
+        setStreamerModeStatus(null);
+        setGameOverlayPreferences({ ...defaultGameOverlayPreferences });
+        setGameOverlayStatus(null);
         applyAccessibilityPreferencesToDocument(defaultAccessibilityPreferences);
         setFamilyCenterPreferences({ ...defaultFamilyCenterPreferences });
         setFamilyCenterSnapshot({ ...defaultFamilyCenterPreferences });
@@ -2198,6 +2678,8 @@ export const SettingsModal = () => {
         setLanguagePreference("system");
         setLanguagePreferenceStatus(null);
         setConnectedAccounts([]);
+        setConnectionProviderAvailability({});
+        setConnectionProviderOAuthSupport({});
         setConnectionsStatus(null);
         setOtherApps([]);
         setOtherBots([]);
@@ -2309,6 +2791,104 @@ export const SettingsModal = () => {
     } finally {
       setIsSavingDataPrivacyPreferences(false);
     }
+  };
+
+  const onSaveActivityPrivacyPreferences = async () => {
+    try {
+      setIsSavingActivityPrivacyPreferences(true);
+      setActivityPrivacyStatus(null);
+
+      const nextPreferences = normalizeActivityPrivacyPreferences(activityPrivacyPreferences);
+
+      await axios.patch("/api/profile/preferences", {
+        activityPrivacy: nextPreferences,
+      });
+
+      setActivityPrivacyPreferences(nextPreferences);
+
+      window.dispatchEvent(
+        new CustomEvent("inaccord:activity-privacy-preferences-updated", {
+          detail: {
+            activityPrivacy: nextPreferences,
+          },
+        })
+      );
+
+      setActivityPrivacyStatus("Activity Privacy preferences saved.");
+    } catch {
+      setActivityPrivacyStatus("Could not save Activity Privacy preferences.");
+    } finally {
+      setIsSavingActivityPrivacyPreferences(false);
+    }
+  };
+
+  const onSaveRegisteredGamesPreferences = async () => {
+    try {
+      setIsSavingRegisteredGamesPreferences(true);
+      setRegisteredGamesStatus(null);
+
+      const nextPreferences = normalizeRegisteredGamesPreferences(registeredGamesPreferences);
+
+      await axios.patch("/api/profile/preferences", {
+        registeredGames: nextPreferences,
+      });
+
+      setRegisteredGamesPreferences(nextPreferences);
+
+      window.dispatchEvent(
+        new CustomEvent("inaccord:registered-games-preferences-updated", {
+          detail: {
+            registeredGames: nextPreferences,
+          },
+        })
+      );
+
+      setRegisteredGamesStatus("Registered Games preferences saved.");
+    } catch {
+      setRegisteredGamesStatus("Could not save Registered Games preferences.");
+    } finally {
+      setIsSavingRegisteredGamesPreferences(false);
+    }
+  };
+
+  const onAddManualRegisteredGame = () => {
+    const name = manualGameNameInput.trim().slice(0, 120);
+    if (!name) {
+      setRegisteredGamesStatus("Enter a game name before adding.");
+      return;
+    }
+
+    const provider = manualGameProviderInput.trim().slice(0, 60) || "manual";
+    const shortDescription = manualGameDescriptionInput.trim().slice(0, 280);
+    const thumbnailRaw = manualGameThumbnailInput.trim().slice(0, 2048);
+    const thumbnailUrl =
+      /^https?:\/\//i.test(thumbnailRaw) || thumbnailRaw.startsWith("/") ? thumbnailRaw : "";
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const id = `manual:${provider}:${slug || `game-${Date.now()}`}`;
+
+    setRegisteredGamesPreferences((current) => {
+      const next: RegisteredGamesPreferences = {
+        ...current,
+        manualGames: [
+          {
+            id,
+            name,
+            provider,
+            shortDescription,
+            thumbnailUrl,
+            addedAt: new Date().toISOString(),
+          },
+          ...current.manualGames.filter((entry) => entry.id !== id),
+        ].slice(0, 120),
+      };
+
+      return next;
+    });
+
+    setManualGameNameInput("");
+    setManualGameDescriptionInput("");
+    setManualGameThumbnailInput("");
+    setRegisteredGamesStatus(null);
   };
 
   const onSaveNotificationPreferences = async () => {
@@ -2427,6 +3007,166 @@ export const SettingsModal = () => {
       setEmojiStatus("Could not save Emoji preferences.");
     } finally {
       setIsSavingEmojiPreferences(false);
+    }
+  };
+
+  const onSaveStickerPreferences = async () => {
+    try {
+      setIsSavingStickerPreferences(true);
+      setStickerStatus(null);
+
+      const parsedFavorites = Array.from(
+        new Set(
+          stickerFavoritesInput
+            .split(/[\n,\s]+/)
+            .map((value) => value.trim())
+            .filter((value) => value.length > 0)
+            .slice(0, 48)
+        )
+      );
+
+      const nextPreferences: StickerPreferences = {
+        ...stickerPreferences,
+        favoriteStickers: parsedFavorites,
+      };
+
+      await axios.patch("/api/profile/preferences", {
+        stickers: nextPreferences,
+      });
+
+      setStickerPreferences(nextPreferences);
+      setStickerUploadDraftUrl("");
+      setStickerFavoritesInput(nextPreferences.favoriteStickers.join("\n"));
+
+      window.dispatchEvent(
+        new CustomEvent("inaccord:sticker-preferences-updated", {
+          detail: {
+            stickers: nextPreferences,
+          },
+        })
+      );
+
+      setStickerStatus("Sticker preferences saved.");
+    } catch {
+      setStickerStatus("Could not save Sticker preferences.");
+    } finally {
+      setIsSavingStickerPreferences(false);
+    }
+  };
+
+  const onSaveKeybindPreferences = async () => {
+    try {
+      setIsSavingKeybindPreferences(true);
+      setKeybindStatus(null);
+
+      const nextPreferences = normalizeKeybindPreferences(keybindPreferences);
+
+      await axios.patch("/api/profile/preferences", {
+        keybinds: nextPreferences,
+      });
+
+      setKeybindPreferences(nextPreferences);
+
+      window.dispatchEvent(
+        new CustomEvent("inaccord:keybind-preferences-updated", {
+          detail: {
+            keybinds: nextPreferences,
+          },
+        })
+      );
+
+      setKeybindStatus("Keybind preferences saved.");
+    } catch {
+      setKeybindStatus("Could not save Keybind preferences.");
+    } finally {
+      setIsSavingKeybindPreferences(false);
+    }
+  };
+
+  const onSaveAdvancedPreferences = async () => {
+    try {
+      setIsSavingAdvancedPreferences(true);
+      setAdvancedStatus(null);
+
+      const nextPreferences = normalizeAdvancedPreferences(advancedPreferences);
+
+      await axios.patch("/api/profile/preferences", {
+        advanced: nextPreferences,
+      });
+
+      setAdvancedPreferences(nextPreferences);
+
+      window.dispatchEvent(
+        new CustomEvent("inaccord:advanced-preferences-updated", {
+          detail: {
+            advanced: nextPreferences,
+          },
+        })
+      );
+
+      setAdvancedStatus("Advanced preferences saved.");
+    } catch {
+      setAdvancedStatus("Could not save Advanced preferences.");
+    } finally {
+      setIsSavingAdvancedPreferences(false);
+    }
+  };
+
+  const onSaveStreamerModePreferences = async () => {
+    try {
+      setIsSavingStreamerModePreferences(true);
+      setStreamerModeStatus(null);
+
+      const nextPreferences = normalizeStreamerModePreferences(streamerModePreferences);
+
+      await axios.patch("/api/profile/preferences", {
+        streamerMode: nextPreferences,
+      });
+
+      setStreamerModePreferences(nextPreferences);
+
+      window.dispatchEvent(
+        new CustomEvent("inaccord:streamer-mode-preferences-updated", {
+          detail: {
+            streamerMode: nextPreferences,
+          },
+        })
+      );
+
+      setStreamerModeStatus("Streamer Mode preferences saved.");
+    } catch {
+      setStreamerModeStatus("Could not save Streamer Mode preferences.");
+    } finally {
+      setIsSavingStreamerModePreferences(false);
+    }
+  };
+
+  const onSaveGameOverlayPreferences = async () => {
+    try {
+      setIsSavingGameOverlayPreferences(true);
+      setGameOverlayStatus(null);
+
+      const nextPreferences = normalizeGameOverlayPreferences(gameOverlayPreferences);
+
+      await axios.patch("/api/profile/preferences", {
+        gameOverlay: nextPreferences,
+      });
+
+      setGameOverlayPreferences(nextPreferences);
+
+      window.dispatchEvent(
+        new CustomEvent("inaccord:game-overlay-preferences-updated", {
+          detail: {
+            gameOverlay: nextPreferences,
+          },
+        })
+      );
+
+      setGameOverlayStatus("Game Overlay preferences saved.");
+    } catch {
+      setGameOverlayStatus("Could not save Game Overlay preferences.");
+    } finally {
+      setIsSavingGameOverlayPreferences(false);
     }
   };
 
@@ -3234,33 +3974,305 @@ export const SettingsModal = () => {
       return;
     }
 
-    const isCurrentlyConnected = connectedAccounts.includes(providerKey);
-    const nextConnectedAccounts = isCurrentlyConnected
-      ? connectedAccounts.filter((value) => value !== providerKey)
-      : Array.from(new Set([...connectedAccounts, providerKey]));
+    const isConnected = connectedAccounts.includes(providerKey);
+    const isOAuthSupported = connectionProviderOAuthSupport[providerKey] ?? oauthConnectionProviders.has(providerKey);
+    if (!isConnected && isOAuthSupported && typeof window !== "undefined") {
+      const returnTo = `${window.location.pathname}?settingsSection=connections`;
+      window.location.href = `/api/profile/connections/oauth/start?provider=${encodeURIComponent(providerKey)}&returnTo=${encodeURIComponent(returnTo)}`;
+      return;
+    }
 
-    setConnectedAccounts(nextConnectedAccounts);
     setConnectionsStatus(null);
 
     try {
       setIsSavingConnectionProvider(providerKey);
 
-      await axios.patch("/api/profile/preferences", {
-        connectedAccounts: nextConnectedAccounts,
+      const response = await axios.post<{
+        connectedAccounts?: string[];
+        providerAvailability?: Record<string, boolean>;
+        providerOAuthSupport?: Record<string, boolean>;
+        connected?: boolean;
+        error?: string;
+      }>("/api/profile/connections", {
+        provider: providerKey,
+        action: isConnected ? "disconnect" : "connect",
       });
 
+      const nextConnectedAccounts = Array.isArray(response.data?.connectedAccounts)
+        ? response.data.connectedAccounts
+            .filter((value): value is string => typeof value === "string")
+            .map((value) => value.trim().toLowerCase())
+            .filter((value) => connectionProviders.some((provider) => provider.key === value))
+        : [];
+
+      setConnectedAccounts(Array.from(new Set(nextConnectedAccounts)));
+      setConnectionProviderAvailability(response.data?.providerAvailability ?? {});
+      setConnectionProviderOAuthSupport(response.data?.providerOAuthSupport ?? {});
+
+      void loadDetectedRegisteredGames();
+
+      const providerLabel = connectionProviders.find((provider) => provider.key === providerKey)?.label ?? "Provider";
       setConnectionsStatus(
-        isCurrentlyConnected
-          ? `${connectionProviders.find((provider) => provider.key === providerKey)?.label ?? "Provider"} disconnected.`
-          : `${connectionProviders.find((provider) => provider.key === providerKey)?.label ?? "Provider"} connected.`
+        response.data?.connected
+          ? `${providerLabel} connected.`
+          : `${providerLabel} disconnected.`
       );
-    } catch {
-      setConnectedAccounts(connectedAccounts);
-      setConnectionsStatus("Could not update connections.");
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Could not update connections."
+        : "Could not update connections.";
+      setConnectionsStatus(message);
     } finally {
       setIsSavingConnectionProvider(null);
     }
   };
+
+  const loadDetectedRegisteredGames = useCallback(async () => {
+    try {
+      setIsLoadingDetectedRegisteredGames(true);
+
+      const response = await axios.get<{
+        detectedGames?: RegisteredConnectionGame[];
+        providerStates?: Record<string, RegisteredGamesProviderState>;
+      }>("/api/profile/registered-games", {
+        validateStatus: (status) => status >= 200 && status < 500,
+      });
+
+      if (response.status >= 400) {
+        return;
+      }
+
+      const games = Array.isArray(response.data?.detectedGames)
+        ? response.data.detectedGames.filter(
+            (entry): entry is RegisteredConnectionGame => Boolean(entry && typeof entry === "object")
+          )
+        : [];
+
+      setDetectedRegisteredGames(games);
+      setRegisteredGamesProviderStates(response.data?.providerStates ?? {});
+    } catch {
+      // best-effort load; UI still supports manual games
+    } finally {
+      setIsLoadingDetectedRegisteredGames(false);
+    }
+  }, []);
+
+  const formatDeviceSessionDate = (value: string | null | undefined) => {
+    const normalized = String(value ?? "").trim();
+    if (!normalized) {
+      return "N/A";
+    }
+
+    const parsed = new Date(normalized);
+    if (Number.isNaN(parsed.getTime())) {
+      return "N/A";
+    }
+
+    return parsed.toLocaleString();
+  };
+
+  const loadDeviceSessions = useCallback(async () => {
+    try {
+      setIsLoadingDeviceSessions(true);
+      setDevicesStatus(null);
+
+      const response = await axios.get<{
+        sessions?: DeviceSession[];
+      }>("/api/profile/devices");
+
+      const sessions = Array.isArray(response.data?.sessions)
+        ? response.data.sessions.filter(
+            (entry): entry is DeviceSession =>
+              Boolean(entry && typeof entry === "object" && typeof entry.sessionId === "string")
+          )
+        : [];
+
+      setDeviceSessions(sessions);
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Could not load devices."
+        : "Could not load devices.";
+      setDevicesStatus(message);
+      setDeviceSessions([]);
+    } finally {
+      setIsLoadingDeviceSessions(false);
+    }
+  }, []);
+
+  const onRevokeDeviceSession = async (sessionId: string) => {
+    if (deviceSessionActionPending) {
+      return;
+    }
+
+    try {
+      setDeviceSessionActionPending(sessionId);
+      setDevicesStatus(null);
+
+      const response = await axios.post<{
+        sessions?: DeviceSession[];
+        loggedOut?: boolean;
+      }>("/api/profile/devices", {
+        action: "revoke",
+        sessionId,
+      });
+
+      if (response.data?.loggedOut) {
+        onClose();
+        router.push("/sign-in");
+        router.refresh();
+        return;
+      }
+
+      const sessions = Array.isArray(response.data?.sessions)
+        ? response.data.sessions.filter(
+            (entry): entry is DeviceSession =>
+              Boolean(entry && typeof entry === "object" && typeof entry.sessionId === "string")
+          )
+        : [];
+
+      setDeviceSessions(sessions);
+      setDevicesStatus("Device session removed.");
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Could not update device session."
+        : "Could not update device session.";
+      setDevicesStatus(message);
+    } finally {
+      setDeviceSessionActionPending(null);
+    }
+  };
+
+  const onLogoutOtherDevices = async () => {
+    if (deviceSessionActionPending) {
+      return;
+    }
+
+    try {
+      setDeviceSessionActionPending("logout-others");
+      setDevicesStatus(null);
+
+      const response = await axios.post<{
+        sessions?: DeviceSession[];
+      }>("/api/profile/devices", {
+        action: "logout-others",
+      });
+
+      const sessions = Array.isArray(response.data?.sessions)
+        ? response.data.sessions.filter(
+            (entry): entry is DeviceSession =>
+              Boolean(entry && typeof entry === "object" && typeof entry.sessionId === "string")
+          )
+        : [];
+
+      setDeviceSessions(sessions);
+      setDevicesStatus("Logged out of other devices.");
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Could not log out other devices."
+        : "Could not log out other devices.";
+      setDevicesStatus(message);
+    } finally {
+      setDeviceSessionActionPending(null);
+    }
+  };
+
+  useEffect(() => {
+    if (!isOpen || type !== "settings") {
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const response = await axios.get<{
+          connectedAccounts?: string[];
+          providerAvailability?: Record<string, boolean>;
+          providerOAuthSupport?: Record<string, boolean>;
+        }>("/api/profile/connections");
+
+        if (cancelled) {
+          return;
+        }
+
+        const linked = Array.isArray(response.data?.connectedAccounts)
+          ? response.data.connectedAccounts
+              .filter((value): value is string => typeof value === "string")
+              .map((value) => value.trim().toLowerCase())
+              .filter((value) => connectionProviders.some((provider) => provider.key === value))
+          : [];
+
+        setConnectedAccounts(Array.from(new Set(linked)));
+        setConnectionProviderAvailability(response.data?.providerAvailability ?? {});
+        setConnectionProviderOAuthSupport(response.data?.providerOAuthSupport ?? {});
+      } catch {
+        if (cancelled) {
+          return;
+        }
+        setConnectionProviderAvailability({});
+        setConnectionProviderOAuthSupport({});
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, type]);
+
+  useEffect(() => {
+    if (!isOpen || type !== "settings" || displaySection !== "devices") {
+      return;
+    }
+
+    void loadDeviceSessions();
+  }, [displaySection, isOpen, loadDeviceSessions, type]);
+
+  useEffect(() => {
+    if (!isOpen || type !== "settings" || displaySection !== "registeredGames") {
+      return;
+    }
+
+    void loadDetectedRegisteredGames();
+  }, [connectedAccounts, displaySection, isOpen, loadDetectedRegisteredGames, type]);
+
+  useEffect(() => {
+    if (!isModalOpen || typeof window === "undefined") {
+      return;
+    }
+
+    const url = new URL(window.location.href);
+    const connectionStatus = url.searchParams.get("connectionStatus");
+    const connectionError = url.searchParams.get("connectionError");
+    const providerKey = String(url.searchParams.get("provider") ?? "").trim().toLowerCase();
+
+    if (!connectionStatus && !connectionError) {
+      return;
+    }
+
+    const providerLabel =
+      connectionProviders.find((provider) => provider.key === providerKey)?.label ?? "Connection";
+
+    if (connectionStatus === "connected") {
+      setConnectionsStatus(`${providerLabel} connected.`);
+      setActiveSection("connections");
+      setDisplaySection("connections");
+      setIsSectionVisible(true);
+    } else if (connectionError) {
+      const readableError = decodeURIComponent(connectionError)
+        .replace(/[-_]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      setConnectionsStatus(readableError || "Could not connect provider.");
+      setActiveSection("connections");
+      setDisplaySection("connections");
+      setIsSectionVisible(true);
+    }
+
+    url.searchParams.delete("connectionStatus");
+    url.searchParams.delete("connectionError");
+    url.searchParams.delete("provider");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [isModalOpen]);
 
   const onSubmitBugReport = async () => {
     const normalizedTitle = bugTitle.trim();
@@ -4079,6 +5091,7 @@ export const SettingsModal = () => {
           bannerUrl?: string | null;
           role?: string | null;
           presenceStatus?: string | null;
+          currentGame?: string | null;
         }>("/api/profile/me");
         if (!cancelled) {
           setResolvedProfileId(response.data?.id ?? null);
@@ -4122,6 +5135,7 @@ export const SettingsModal = () => {
           setBannerUrl(response.data?.bannerUrl ?? null);
           setProfileRole(response.data?.role ?? data.profileRole ?? null);
           setProfilePresenceStatus(normalizePresenceStatus(response.data?.presenceStatus));
+          setProfileCurrentGame(response.data?.currentGame?.trim() || null);
         }
       } catch (error) {
         if (!cancelled) {
@@ -7673,16 +8687,213 @@ export const SettingsModal = () => {
     }
 
     if (displaySection === "stickers") {
+      const uploadedStickerUrls = stickerPreferences.uploadedStickerUrls;
+
       return (
         <div className="space-y-4">
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
             <p className="text-sm font-medium text-white">Sticker Settings</p>
             <p className="mt-1 text-xs text-[#949ba4]">
-              Stickers menu is now available in the settings rail.
+              Configure sticker picker behavior and quick send options.
             </p>
-            <div className="mt-4 rounded-xl border border-[#5865f2]/25 bg-[#5865f2]/10 px-3 py-2 text-xs text-[#cdd2ff]">
-              Next step: wire sticker packs, sticker autoplay/preview behavior, and sticker upload defaults.
+
+            <div className="mt-3 space-y-2">
+              {([
+                {
+                  key: "showComposerStickerButton",
+                  title: "Show Composer Sticker Button",
+                  description: "Display a quick sticker button next to chat input tools.",
+                },
+                {
+                  key: "preferAnimatedStickers",
+                  title: "Prefer Animated Stickers",
+                  description: "Prefer animated sticker variants when available.",
+                },
+              ] as const).map((item) => (
+                <div key={`sticker-setting-${item.key}`} className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                  <div>
+                    <p className="text-sm font-medium text-white">{item.title}</p>
+                    <p className="mt-1 text-xs text-[#949ba4]">{item.description}</p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStickerPreferences((current) => ({
+                        ...current,
+                        [item.key]: !current[item.key],
+                      }));
+                      setStickerStatus(null);
+                    }}
+                    className={`inline-flex h-7 w-12 items-center rounded-full border transition ${
+                      stickerPreferences[item.key]
+                        ? "border-emerald-400/50 bg-emerald-500/40"
+                        : "border-zinc-600 bg-zinc-700"
+                    }`}
+                    aria-pressed={stickerPreferences[item.key]}
+                    aria-label={`Toggle ${item.title}`}
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
+                        stickerPreferences[item.key] ? "translate-x-6" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
+                </div>
+              ))}
             </div>
+
+            <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                Default Composer Sticker URL
+              </label>
+              <input
+                value={stickerPreferences.defaultComposerStickerUrl}
+                onChange={(event) => {
+                  setStickerPreferences((current) => ({
+                    ...current,
+                    defaultComposerStickerUrl: event.target.value,
+                  }));
+                  setStickerStatus(null);
+                }}
+                placeholder="https://... or /uploads/..."
+                className="mt-1 h-9 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+              />
+              <p className="mt-1 text-[11px] text-[#949ba4]">
+                Used as the default sticker quick-send option.
+              </p>
+            </div>
+
+            <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                Favorite Stickers (URLs; newline, comma, or space separated)
+              </label>
+              <textarea
+                value={stickerFavoritesInput}
+                onChange={(event) => {
+                  setStickerFavoritesInput(event.target.value);
+                  setStickerStatus(null);
+                }}
+                placeholder="https://cdn.example.com/sticker-1.webp"
+                className="mt-1 min-h-18 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+              />
+              <p className="mt-1 text-[11px] text-[#949ba4]">
+                Controls sticker quick-pick options in sticker picker UI.
+              </p>
+            </div>
+
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                  Preview ({uploadedStickerUrls.length})
+                </p>
+                <p className="mt-1 text-[11px] text-[#949ba4]">
+                  Uploaded stickers appear here immediately.
+                </p>
+
+                {uploadedStickerUrls.length === 0 ? (
+                  <p className="mt-2 text-[11px] text-[#949ba4]">No uploaded stickers yet.</p>
+                ) : (
+                  <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
+                    {uploadedStickerUrls.map((url) => (
+                      <div key={`uploaded-sticker-${url}`} className="group relative">
+                        <div className="relative h-16 w-full overflow-hidden rounded-md border border-white/10 bg-[#15161a]">
+                          <Image
+                            src={url}
+                            alt="Uploaded sticker"
+                            fill
+                            className="object-contain"
+                            unoptimized
+                          />
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStickerPreferences((current) => ({
+                              ...current,
+                              uploadedStickerUrls: current.uploadedStickerUrls.filter((item) => item !== url),
+                            }));
+                            setStickerStatus("Sticker removed from library. Click Save Stickers to persist.");
+                          }}
+                          className="absolute -right-1 -top-1 hidden h-4 w-4 items-center justify-center rounded-full border border-rose-500/50 bg-rose-500/70 text-[10px] text-white group-hover:inline-flex"
+                          aria-label="Remove uploaded sticker"
+                          title="Remove"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                  Upload Stickers
+                </p>
+                <p className="mt-1 text-[11px] text-[#949ba4]">
+                  Upload multiple sticker images at once (PNG, JPG, GIF, WEBP, SVG).
+                </p>
+
+                <div className="mt-2 rounded-md border border-white/10 bg-[#1a1b1e] p-2">
+                  <FileUpload
+                    endpoint="emojiImage"
+                    value={stickerUploadDraftUrl}
+                    multiple
+                    onChange={(value) => {
+                      const uploadedUrl = String(value ?? "").trim();
+                      setStickerUploadDraftUrl(uploadedUrl);
+                    }}
+                    onUploadComplete={(urls) => {
+                      const uploadedUrls = urls
+                        .map((item) => String(item ?? "").trim())
+                        .filter((item) => item.length > 0);
+
+                      if (uploadedUrls.length === 0) {
+                        setStickerStatus("Upload finished, but no sticker URL was returned.");
+                        return;
+                      }
+
+                      setStickerPreferences((current) => ({
+                        ...current,
+                        uploadedStickerUrls: [...uploadedUrls, ...current.uploadedStickerUrls]
+                          .filter((item, index, arr) => arr.indexOf(item) === index)
+                          .slice(0, 120),
+                      }));
+                      setStickerStatus(
+                        uploadedUrls.length === 1
+                          ? "1 sticker uploaded. Click Save Stickers to persist."
+                          : `${uploadedUrls.length} stickers uploaded. Click Save Stickers to persist.`
+                      );
+                    }}
+                    onUploadError={(message) => {
+                      setStickerStatus(`Upload failed: ${message}`);
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <p className="rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
+                Composer button: <span className="font-semibold text-white">{stickerPreferences.showComposerStickerButton ? "On" : "Off"}</span>
+              </p>
+              <Button
+                type="button"
+                onClick={() => void onSaveStickerPreferences()}
+                disabled={isSavingStickerPreferences}
+                className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSavingStickerPreferences ? "Saving..." : "Save Stickers"}
+              </Button>
+            </div>
+
+            {stickerStatus ? (
+              <p className="mt-3 rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
+                {stickerStatus}
+              </p>
+            ) : null}
           </div>
         </div>
       );
@@ -7760,6 +8971,877 @@ export const SettingsModal = () => {
       );
     }
 
+    if (displaySection === "keybinds") {
+      const keybindRows: Array<{
+        key: Exclude<keyof KeybindPreferences, "enableCustomKeybinds">;
+        label: string;
+        description: string;
+      }> = [
+        {
+          key: "openCommandPalette",
+          label: "Open Command Palette",
+          description: "Used for quick command/action search.",
+        },
+        {
+          key: "focusServerSearch",
+          label: "Focus Server Search",
+          description: "Moves focus to server/channel search input.",
+        },
+        {
+          key: "toggleMute",
+          label: "Toggle Mute",
+          description: "Toggle your current voice mute state.",
+        },
+        {
+          key: "toggleDeafen",
+          label: "Toggle Deafen",
+          description: "Toggle your current voice deafen state.",
+        },
+        {
+          key: "toggleCamera",
+          label: "Toggle Camera",
+          description: "Toggle camera in active video sessions.",
+        },
+      ];
+
+      return (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
+            <p className="text-sm font-medium text-white">Keybind Preferences</p>
+            <p className="mt-1 text-xs text-[#949ba4]">
+              Configure keyboard shortcuts used by the In-Accord client.
+            </p>
+
+            <div className="mt-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-white">Enable Custom Keybinds</p>
+                  <p className="mt-1 text-xs text-[#949ba4]">
+                    Turn this on to use the custom keybinds below.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setKeybindPreferences((current) => ({
+                      ...current,
+                      enableCustomKeybinds: !current.enableCustomKeybinds,
+                    }));
+                    setKeybindStatus(null);
+                  }}
+                  className={`inline-flex h-7 w-12 items-center rounded-full border transition ${
+                    keybindPreferences.enableCustomKeybinds
+                      ? "border-emerald-400/50 bg-emerald-500/40"
+                      : "border-zinc-600 bg-zinc-700"
+                  }`}
+                  aria-pressed={keybindPreferences.enableCustomKeybinds}
+                  aria-label="Toggle custom keybinds"
+                >
+                  <span
+                    className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
+                      keybindPreferences.enableCustomKeybinds ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-3 space-y-2">
+              {keybindRows.map((item) => (
+                <div key={`keybind-row-${item.key}`} className="rounded-lg border border-white/10 bg-black/20 p-3">
+                  <p className="text-sm font-medium text-white">{item.label}</p>
+                  <p className="mt-1 text-xs text-[#949ba4]">{item.description}</p>
+                  <input
+                    value={keybindPreferences[item.key]}
+                    onChange={(event) => {
+                      setKeybindPreferences((current) => ({
+                        ...current,
+                        [item.key]: event.target.value,
+                      }));
+                      setKeybindStatus(null);
+                    }}
+                    placeholder="Ctrl+Shift+K"
+                    className="mt-2 h-9 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <p className="rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
+                Custom keybinds: <span className="font-semibold text-white">{keybindPreferences.enableCustomKeybinds ? "On" : "Off"}</span>
+              </p>
+              <Button
+                type="button"
+                onClick={() => void onSaveKeybindPreferences()}
+                disabled={isSavingKeybindPreferences}
+                className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSavingKeybindPreferences ? "Saving..." : "Save Keybinds"}
+              </Button>
+            </div>
+
+            {keybindStatus ? (
+              <p className="mt-3 rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
+                {keybindStatus}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      );
+    }
+
+    if (displaySection === "advanced") {
+      const advancedToggleRows: Array<{
+        key: Exclude<keyof AdvancedPreferences, "diagnosticsLevel">;
+        title: string;
+        description: string;
+      }> = [
+        {
+          key: "enableHardwareAcceleration",
+          title: "Hardware Acceleration",
+          description: "Use GPU acceleration where available for smoother rendering.",
+        },
+        {
+          key: "openLinksInApp",
+          title: "Open Links In-App",
+          description: "Open supported links inside In-Accord instead of external browser windows.",
+        },
+        {
+          key: "confirmBeforeQuit",
+          title: "Confirm Before Quit",
+          description: "Show a confirmation prompt before closing the app.",
+        },
+        {
+          key: "enableDebugOverlay",
+          title: "Debug Overlay",
+          description: "Display additional runtime diagnostics in overlay panels.",
+        },
+      ];
+
+      return (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
+            <p className="text-sm font-medium text-white">Advanced Preferences</p>
+            <p className="mt-1 text-xs text-[#949ba4]">
+              Configure advanced app behavior and diagnostics controls.
+            </p>
+
+            <div className="mt-3 space-y-2">
+              {advancedToggleRows.map((item) => (
+                <div key={`advanced-setting-${item.key}`} className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                  <div>
+                    <p className="text-sm font-medium text-white">{item.title}</p>
+                    <p className="mt-1 text-xs text-[#949ba4]">{item.description}</p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAdvancedPreferences((current) => ({
+                        ...current,
+                        [item.key]: !current[item.key],
+                      }));
+                      setAdvancedStatus(null);
+                    }}
+                    className={`inline-flex h-7 w-12 items-center rounded-full border transition ${
+                      advancedPreferences[item.key]
+                        ? "border-emerald-400/50 bg-emerald-500/40"
+                        : "border-zinc-600 bg-zinc-700"
+                    }`}
+                    aria-pressed={advancedPreferences[item.key]}
+                    aria-label={`Toggle ${item.title}`}
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
+                        advancedPreferences[item.key] ? "translate-x-6" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                Diagnostics Level
+              </p>
+
+              <div className="mt-2 inline-flex rounded-md border border-white/10 bg-[#1a1b1e] p-1">
+                {([
+                  { value: "off", label: "Off" },
+                  { value: "basic", label: "Basic" },
+                  { value: "verbose", label: "Verbose" },
+                ] as const).map((option) => {
+                  const selected = advancedPreferences.diagnosticsLevel === option.value;
+
+                  return (
+                    <button
+                      key={`advanced-diagnostics-${option.value}`}
+                      type="button"
+                      onClick={() => {
+                        setAdvancedPreferences((current) => ({
+                          ...current,
+                          diagnosticsLevel: option.value,
+                        }));
+                        setAdvancedStatus(null);
+                      }}
+                      className={`h-8 rounded px-3 text-xs font-medium transition ${
+                        selected
+                          ? "bg-[#5865f2] text-white"
+                          : "text-[#b5bac1] hover:bg-white/10 hover:text-white"
+                      }`}
+                      aria-pressed={selected}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-2 text-[11px] text-[#949ba4]">
+                Choose how much runtime diagnostics the app should collect and surface.
+              </p>
+            </div>
+
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <p className="rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
+                Diagnostics: <span className="font-semibold text-white">{advancedPreferences.diagnosticsLevel}</span>
+              </p>
+              <Button
+                type="button"
+                onClick={() => void onSaveAdvancedPreferences()}
+                disabled={isSavingAdvancedPreferences}
+                className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSavingAdvancedPreferences ? "Saving..." : "Save Advanced"}
+              </Button>
+            </div>
+
+            {advancedStatus ? (
+              <p className="mt-3 rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
+                {advancedStatus}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      );
+    }
+
+    if (displaySection === "streamerMode") {
+      const streamerModeRows: Array<{
+        key: Exclude<keyof StreamerModePreferences, "enabled">;
+        title: string;
+        description: string;
+      }> = [
+        {
+          key: "hidePersonalInfo",
+          title: "Hide Personal Info",
+          description: "Mask profile identifiers and personal details while streaming.",
+        },
+        {
+          key: "hideInviteLinks",
+          title: "Hide Invite Links",
+          description: "Redact or suppress visible invite links in app surfaces.",
+        },
+        {
+          key: "hideNotificationContent",
+          title: "Hide Notification Content",
+          description: "Suppress message body previews in on-screen notification content.",
+        },
+        {
+          key: "suppressSounds",
+          title: "Suppress Sounds",
+          description: "Mute non-essential app sounds while Streamer Mode is enabled.",
+        },
+      ];
+
+      return (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
+            <p className="text-sm font-medium text-white">Streamer Mode</p>
+            <p className="mt-1 text-xs text-[#949ba4]">
+              Control streamer mode privacy options.
+            </p>
+
+            <div className="mt-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-white">Enable Streamer Mode</p>
+                  <p className="mt-1 text-xs text-[#949ba4]">Apply privacy-first behavior designed for live streaming.</p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStreamerModePreferences((current) => ({
+                      ...current,
+                      enabled: !current.enabled,
+                    }));
+                    setStreamerModeStatus(null);
+                  }}
+                  className={`inline-flex h-7 w-12 items-center rounded-full border transition ${
+                    streamerModePreferences.enabled
+                      ? "border-emerald-400/50 bg-emerald-500/40"
+                      : "border-zinc-600 bg-zinc-700"
+                  }`}
+                  aria-pressed={streamerModePreferences.enabled}
+                  aria-label="Toggle streamer mode"
+                >
+                  <span
+                    className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
+                      streamerModePreferences.enabled ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-3 space-y-2">
+              {streamerModeRows.map((item) => (
+                <div key={`streamer-mode-setting-${item.key}`} className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                  <div>
+                    <p className="text-sm font-medium text-white">{item.title}</p>
+                    <p className="mt-1 text-xs text-[#949ba4]">{item.description}</p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStreamerModePreferences((current) => ({
+                        ...current,
+                        [item.key]: !current[item.key],
+                      }));
+                      setStreamerModeStatus(null);
+                    }}
+                    className={`inline-flex h-7 w-12 items-center rounded-full border transition ${
+                      streamerModePreferences[item.key]
+                        ? "border-emerald-400/50 bg-emerald-500/40"
+                        : "border-zinc-600 bg-zinc-700"
+                    }`}
+                    aria-pressed={streamerModePreferences[item.key]}
+                    aria-label={`Toggle ${item.title}`}
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
+                        streamerModePreferences[item.key] ? "translate-x-6" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <p className="rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
+                Status: <span className="font-semibold text-white">{streamerModePreferences.enabled ? "Enabled" : "Disabled"}</span>
+              </p>
+              <Button
+                type="button"
+                onClick={() => void onSaveStreamerModePreferences()}
+                disabled={isSavingStreamerModePreferences}
+                className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSavingStreamerModePreferences ? "Saving..." : "Save Streamer Mode"}
+              </Button>
+            </div>
+
+            {streamerModeStatus ? (
+              <p className="mt-3 rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
+                {streamerModeStatus}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      );
+    }
+
+    if (displaySection === "gameOverlay") {
+      const toggleRows: Array<{
+        key: Exclude<keyof GameOverlayPreferences, "opacity" | "position">;
+        title: string;
+        description: string;
+      }> = [
+        {
+          key: "enabled",
+          title: "Enable In-Game Overlay",
+          description: "Show the In-Accord game overlay while supported games are active.",
+        },
+        {
+          key: "showPerformanceStats",
+          title: "Show Performance Stats",
+          description: "Display FPS/latency indicators in the overlay UI.",
+        },
+        {
+          key: "enableClickThrough",
+          title: "Enable Click-Through",
+          description: "Allow mouse input to pass through overlay when not focused.",
+        },
+      ];
+
+      return (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
+            <p className="text-sm font-medium text-white">Game Overlay</p>
+            <p className="mt-1 text-xs text-[#949ba4]">
+              Configure in-game overlay behavior.
+            </p>
+
+            <div className="mt-3 space-y-2">
+              {toggleRows.map((item) => (
+                <div key={`game-overlay-setting-${item.key}`} className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                  <div>
+                    <p className="text-sm font-medium text-white">{item.title}</p>
+                    <p className="mt-1 text-xs text-[#949ba4]">{item.description}</p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGameOverlayPreferences((current) => ({
+                        ...current,
+                        [item.key]: !current[item.key],
+                      }));
+                      setGameOverlayStatus(null);
+                    }}
+                    className={`inline-flex h-7 w-12 items-center rounded-full border transition ${
+                      gameOverlayPreferences[item.key]
+                        ? "border-emerald-400/50 bg-emerald-500/40"
+                        : "border-zinc-600 bg-zinc-700"
+                    }`}
+                    aria-pressed={gameOverlayPreferences[item.key]}
+                    aria-label={`Toggle ${item.title}`}
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
+                        gameOverlayPreferences[item.key] ? "translate-x-6" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                Overlay Opacity ({gameOverlayPreferences.opacity}%)
+              </label>
+              <input
+                type="range"
+                min={20}
+                max={100}
+                step={1}
+                value={gameOverlayPreferences.opacity}
+                onChange={(event) => {
+                  setGameOverlayPreferences((current) => ({
+                    ...current,
+                    opacity: Number(event.target.value),
+                  }));
+                  setGameOverlayStatus(null);
+                }}
+                className="mt-2 w-full"
+              />
+            </div>
+
+            <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                Overlay Position
+              </label>
+              <select
+                value={gameOverlayPreferences.position}
+                onChange={(event) => {
+                  const nextPosition = event.target.value as GameOverlayPreferences["position"];
+                  setGameOverlayPreferences((current) => ({
+                    ...current,
+                    position: nextPosition,
+                  }));
+                  setGameOverlayStatus(null);
+                }}
+                className="mt-2 h-9 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+              >
+                <option value="top-left">Top Left</option>
+                <option value="top-right">Top Right</option>
+                <option value="bottom-left">Bottom Left</option>
+                <option value="bottom-right">Bottom Right</option>
+              </select>
+            </div>
+
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <p className="rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
+                Status: <span className="font-semibold text-white">{gameOverlayPreferences.enabled ? "Enabled" : "Disabled"}</span>
+              </p>
+              <Button
+                type="button"
+                onClick={() => void onSaveGameOverlayPreferences()}
+                disabled={isSavingGameOverlayPreferences}
+                className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSavingGameOverlayPreferences ? "Saving..." : "Save Game Overlay"}
+              </Button>
+            </div>
+
+            {gameOverlayStatus ? (
+              <p className="mt-3 rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
+                {gameOverlayStatus}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      );
+    }
+
+    if (displaySection === "activityPrivacy") {
+      const toggleRows: Array<{
+        key: Exclude<keyof ActivityPrivacyPreferences, "activityVisibility">;
+        title: string;
+        description: string;
+      }> = [
+        {
+          key: "shareActivityStatus",
+          title: "Share Activity Status",
+          description: "Allow others to see when you are active and what you're doing.",
+        },
+        {
+          key: "shareCurrentGame",
+          title: "Share Current Game",
+          description: "Show your currently played game in profile and friend list contexts.",
+        },
+        {
+          key: "allowFriendJoinRequests",
+          title: "Allow Friend Join Requests",
+          description: "Permit friends to request joining your activity when supported.",
+        },
+        {
+          key: "allowSpectateRequests",
+          title: "Allow Spectate Requests",
+          description: "Allow friends to request spectating your active sessions.",
+        },
+        {
+          key: "logActivityHistory",
+          title: "Log Activity History",
+          description: "Store recent activity history for quick resume and insights.",
+        },
+      ];
+
+      return (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
+            <p className="text-sm font-medium text-white">Activity Privacy</p>
+            <p className="mt-1 text-xs text-[#949ba4]">Control how your activity is shared.</p>
+
+            <div className="mt-3 space-y-2">
+              {toggleRows.map((item) => (
+                <div key={`activity-privacy-setting-${item.key}`} className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                  <div>
+                    <p className="text-sm font-medium text-white">{item.title}</p>
+                    <p className="mt-1 text-xs text-[#949ba4]">{item.description}</p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActivityPrivacyPreferences((current) => ({
+                        ...current,
+                        [item.key]: !current[item.key],
+                      }));
+                      setActivityPrivacyStatus(null);
+                    }}
+                    className={`inline-flex h-7 w-12 items-center rounded-full border transition ${
+                      activityPrivacyPreferences[item.key]
+                        ? "border-emerald-400/50 bg-emerald-500/40"
+                        : "border-zinc-600 bg-zinc-700"
+                    }`}
+                    aria-pressed={activityPrivacyPreferences[item.key]}
+                    aria-label={`Toggle ${item.title}`}
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
+                        activityPrivacyPreferences[item.key] ? "translate-x-6" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                Activity Visibility
+              </label>
+              <select
+                value={activityPrivacyPreferences.activityVisibility}
+                onChange={(event) => {
+                  const nextValue = event.target.value as ActivityPrivacyPreferences["activityVisibility"];
+                  setActivityPrivacyPreferences((current) => ({
+                    ...current,
+                    activityVisibility: nextValue,
+                  }));
+                  setActivityPrivacyStatus(null);
+                }}
+                className="mt-2 h-9 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+              >
+                <option value="everyone">Everyone</option>
+                <option value="friends">Friends Only</option>
+                <option value="none">No One</option>
+              </select>
+            </div>
+
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <p className="rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
+                Visibility: <span className="font-semibold text-white">{activityPrivacyPreferences.activityVisibility}</span>
+              </p>
+              <Button
+                type="button"
+                onClick={() => void onSaveActivityPrivacyPreferences()}
+                disabled={isSavingActivityPrivacyPreferences}
+                className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSavingActivityPrivacyPreferences ? "Saving..." : "Save Activity Privacy"}
+              </Button>
+            </div>
+
+            {activityPrivacyStatus ? (
+              <p className="mt-3 rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
+                {activityPrivacyStatus}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      );
+    }
+
+    if (displaySection === "registeredGames") {
+      const connectedProviderKeys = connectionProviders
+        .map((provider) => provider.key)
+        .filter((providerKey) => connectedAccounts.includes(providerKey));
+
+      const detectedGames = detectedRegisteredGames
+        .filter((game) => connectedProviderKeys.includes(game.provider))
+        .filter((game) => !registeredGamesPreferences.hiddenGameIds.includes(game.id));
+
+      const visibleDetectedGames = registeredGamesPreferences.showDetectedGames ? detectedGames : [];
+      const visibleManualGames = registeredGamesPreferences.manualGames.filter(
+        (game) => !registeredGamesPreferences.hiddenGameIds.includes(game.id)
+      );
+
+      const manualProviderOptions = Array.from(
+        new Set(["manual", ...connectedProviderKeys])
+      );
+
+      return (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-white">Registered Games</p>
+                <p className="mt-1 text-xs text-[#949ba4]">
+                  Manage detected and manually-added games across your connected accounts.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setRegisteredGamesPreferences((current) => ({
+                    ...current,
+                    showDetectedGames: !current.showDetectedGames,
+                  }));
+                  setRegisteredGamesStatus(null);
+                }}
+                className={`inline-flex h-7 w-12 items-center rounded-full border transition ${
+                  registeredGamesPreferences.showDetectedGames
+                    ? "border-emerald-400/50 bg-emerald-500/40"
+                    : "border-zinc-600 bg-zinc-700"
+                }`}
+                aria-pressed={registeredGamesPreferences.showDetectedGames}
+                aria-label="Toggle detected games"
+              >
+                <span
+                  className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
+                    registeredGamesPreferences.showDetectedGames ? "translate-x-6" : "translate-x-1"
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {connectionProviders.map((provider) => {
+                const isConnected = connectedAccounts.includes(provider.key);
+                const gameCount = registeredGamesProviderStates[provider.key]?.count ?? 0;
+                const source = registeredGamesProviderStates[provider.key]?.source;
+
+                return (
+                  <span
+                    key={`registered-games-provider-${provider.key}`}
+                    className={`rounded-full border px-2 py-1 text-[11px] ${
+                      isConnected
+                        ? "border-emerald-400/30 bg-emerald-500/20 text-emerald-200"
+                        : "border-white/10 bg-black/20 text-[#949ba4]"
+                    }`}
+                  >
+                    {provider.label}: {isConnected ? `${gameCount} detected${source ? ` (${source})` : ""}` : "not connected"}
+                  </span>
+                );
+              })}
+            </div>
+
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {visibleDetectedGames.length > 0 ? (
+                visibleDetectedGames.map((game) => (
+                  <div key={`detected-game-${game.id}`} className="rounded-lg border border-white/10 bg-black/20 p-2">
+                    <div className="flex items-start gap-2">
+                      <div className="h-16 w-28 overflow-hidden rounded-md border border-white/10 bg-[#111]">
+                        {game.thumbnailUrl ? (
+                          <img src={game.thumbnailUrl} alt={`${game.name} thumbnail`} className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-xs text-[#949ba4]">No Image</div>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-white">{game.name}</p>
+                        <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">{game.provider}</p>
+                        <p className="mt-1 line-clamp-2 text-xs text-[#b5bac1]">{game.shortDescription}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 flex justify-end">
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          setRegisteredGamesPreferences((current) => ({
+                            ...current,
+                            hiddenGameIds: Array.from(new Set([...current.hiddenGameIds, game.id])).slice(0, 240),
+                          }));
+                          setRegisteredGamesStatus(null);
+                        }}
+                        className="h-7 bg-[#3f4248] px-2 text-xs text-white hover:bg-[#4a4e55]"
+                      >
+                        Hide
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="col-span-full rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-xs text-[#949ba4]">
+                  {connectedProviderKeys.length === 0
+                    ? "No connected providers found. Connect accounts in Connections to detect games."
+                    : "No detected games visible (either disabled or hidden)."}
+                </p>
+              )}
+            </div>
+
+            <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">Add a game manually</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                <input
+                  value={manualGameNameInput}
+                  onChange={(event) => setManualGameNameInput(event.target.value)}
+                  placeholder="Game name"
+                  className="h-9 rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                />
+                <select
+                  value={manualGameProviderInput}
+                  onChange={(event) => setManualGameProviderInput(event.target.value)}
+                  className="h-9 rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                >
+                  {manualProviderOptions.map((providerKey) => (
+                    <option key={`manual-game-provider-${providerKey}`} value={providerKey}>
+                      {providerKey}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  value={manualGameThumbnailInput}
+                  onChange={(event) => setManualGameThumbnailInput(event.target.value)}
+                  placeholder="Thumbnail URL (optional)"
+                  className="h-9 rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                />
+                <input
+                  value={manualGameDescriptionInput}
+                  onChange={(event) => setManualGameDescriptionInput(event.target.value)}
+                  placeholder="Short details"
+                  className="h-9 rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                />
+              </div>
+
+              <div className="mt-2 flex justify-end">
+                <Button
+                  type="button"
+                  onClick={onAddManualRegisteredGame}
+                  className="h-8 bg-[#3f4248] px-3 text-xs text-white hover:bg-[#4a4e55]"
+                >
+                  Add Manual Game
+                </Button>
+              </div>
+            </div>
+
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {visibleManualGames.length > 0 ? (
+                visibleManualGames.map((game) => (
+                  <div key={`manual-game-${game.id}`} className="rounded-lg border border-white/10 bg-black/20 p-2">
+                    <div className="flex items-start gap-2">
+                      <div className="h-16 w-28 overflow-hidden rounded-md border border-white/10 bg-[#111]">
+                        {game.thumbnailUrl ? (
+                          <img src={game.thumbnailUrl} alt={`${game.name} thumbnail`} className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-xs text-[#949ba4]">No Image</div>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-white">{game.name}</p>
+                        <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">{game.provider}</p>
+                        <p className="mt-1 line-clamp-2 text-xs text-[#b5bac1]">{game.shortDescription || "Manually added game."}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 flex justify-end gap-2">
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          setRegisteredGamesPreferences((current) => ({
+                            ...current,
+                            manualGames: current.manualGames.filter((entry) => entry.id !== game.id),
+                          }));
+                          setRegisteredGamesStatus(null);
+                        }}
+                        className="h-7 bg-[#3f4248] px-2 text-xs text-white hover:bg-[#4a4e55]"
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="col-span-full rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-xs text-[#949ba4]">
+                  No manual games added yet.
+                </p>
+              )}
+            </div>
+
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <p className="rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
+                Showing <span className="font-semibold text-white">{visibleDetectedGames.length + visibleManualGames.length}</span> games
+              </p>
+              <Button
+                type="button"
+                onClick={() => void onSaveRegisteredGamesPreferences()}
+                disabled={isSavingRegisteredGamesPreferences}
+                className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSavingRegisteredGamesPreferences ? "Saving..." : "Save Registered Games"}
+              </Button>
+            </div>
+
+            {registeredGamesStatus ? (
+              <p className="mt-3 rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
+                {registeredGamesStatus}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      );
+    }
+
     if (displaySection === "connections") {
       return (
         <div className="space-y-4">
@@ -7781,6 +9863,10 @@ export const SettingsModal = () => {
               {connectionProviders.map((provider) => {
                 const isConnected = connectedAccounts.includes(provider.key);
                 const isSaving = isSavingConnectionProvider === provider.key;
+                const isProviderConfigured = connectionProviderAvailability[provider.key] !== false;
+                const isOAuthSupported = connectionProviderOAuthSupport[provider.key] ?? oauthConnectionProviders.has(provider.key);
+                const canConnect = isConnected || (isProviderConfigured && isOAuthSupported);
+                const connectLabel = isConnected ? "Disconnect" : isOAuthSupported ? "Connect" : "Coming Soon";
 
                 return (
                   <div
@@ -7788,18 +9874,30 @@ export const SettingsModal = () => {
                     className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2"
                   >
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-white">{provider.label}</p>
+                      <p className="text-sm font-semibold text-white">
+                        {connectedAccounts.includes(provider.key) && (registeredGamesProviderStates[provider.key]?.count ?? 0) > 0
+                          ? "🎮 "
+                          : ""}
+                        {provider.label}
+                      </p>
                       <p className="truncate text-xs text-[#949ba4]">{provider.description}</p>
+                      {!isProviderConfigured ? (
+                        <p className="mt-1 text-[10px] text-amber-300">Provider is not configured on this server yet.</p>
+                      ) : !isOAuthSupported ? (
+                        <p className="mt-1 text-[10px] text-[#949ba4]">Connect flow is not available for this provider yet.</p>
+                      ) : null}
                     </div>
 
                     <Button
                       type="button"
                       onClick={() => onToggleConnectionProvider(provider.key)}
-                      disabled={Boolean(isSavingConnectionProvider)}
+                      disabled={Boolean(isSavingConnectionProvider) || !canConnect}
                       className={`h-8 px-3 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60 ${
                         isConnected
                           ? "border border-rose-500/35 bg-rose-500/15 text-rose-200 hover:bg-rose-500/25"
-                          : "border border-emerald-500/35 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
+                          : isOAuthSupported
+                            ? "border border-emerald-500/35 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
+                            : "border border-white/20 bg-white/5 text-[#949ba4]"
                       }`}
                     >
                       {isSaving ? (
@@ -7807,10 +9905,8 @@ export const SettingsModal = () => {
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
                           Saving...
                         </span>
-                      ) : isConnected ? (
-                        "Disconnect"
                       ) : (
-                        "Connect"
+                        connectLabel
                       )}
                     </Button>
                   </div>
@@ -7821,6 +9917,101 @@ export const SettingsModal = () => {
             {connectionsStatus ? (
               <p className="mt-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-[#b5bac1]">
                 {connectionsStatus}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      );
+    }
+
+    if (displaySection === "devices") {
+      const activeCount = deviceSessions.length;
+
+      return (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-white">Signed-in Devices</p>
+                <p className="mt-1 text-xs text-[#949ba4]">
+                  Manage active sessions for your account.
+                </p>
+              </div>
+
+              <span className="rounded bg-[#3f4248] px-2 py-1 text-xs text-[#dbdee1]">
+                Active: {activeCount}
+              </span>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                onClick={() => void loadDeviceSessions()}
+                disabled={isLoadingDeviceSessions || Boolean(deviceSessionActionPending)}
+                className="h-8 border border-[#5865f2]/35 bg-[#5865f2]/15 px-3 text-xs font-semibold text-[#cdd4ff] hover:bg-[#5865f2]/25 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isLoadingDeviceSessions ? "Refreshing..." : "Refresh"}
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void onLogoutOtherDevices()}
+                disabled={Boolean(deviceSessionActionPending) || deviceSessions.length <= 1}
+                className="h-8 border border-rose-500/35 bg-rose-500/15 px-3 text-xs font-semibold text-rose-200 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {deviceSessionActionPending === "logout-others" ? "Working..." : "Log Out Other Devices"}
+              </Button>
+            </div>
+
+            <div className="mt-4 max-h-[50vh] space-y-2 overflow-y-auto pr-1">
+              {isLoadingDeviceSessions ? (
+                <p className="text-xs text-[#b5bac1]">Loading devices...</p>
+              ) : deviceSessions.length === 0 ? (
+                <p className="text-xs text-[#b5bac1]">No active device sessions found.</p>
+              ) : (
+                deviceSessions.map((session) => {
+                  const pending = deviceSessionActionPending === session.sessionId;
+
+                  return (
+                    <div
+                      key={session.sessionId}
+                      className="rounded-lg border border-white/10 bg-black/20 px-3 py-2"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-white">
+                            {session.deviceName}
+                            {session.isCurrent ? (
+                              <span className="ml-2 rounded border border-emerald-500/35 bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-emerald-200">
+                                Current
+                              </span>
+                            ) : null}
+                          </p>
+                          <p className="truncate text-xs text-[#949ba4]" title={session.userAgent || "Unknown user agent"}>
+                            {session.userAgent || "Unknown user agent"}
+                          </p>
+                          <p className="mt-1 text-[11px] text-[#b5bac1]">
+                            IP: {session.ipAddress || "Unknown"} · Created: {formatDeviceSessionDate(session.createdAt)} · Last Seen: {formatDeviceSessionDate(session.lastSeenAt)}
+                          </p>
+                        </div>
+
+                        <Button
+                          type="button"
+                          onClick={() => void onRevokeDeviceSession(session.sessionId)}
+                          disabled={Boolean(deviceSessionActionPending)}
+                          className="h-8 border border-rose-500/35 bg-rose-500/15 px-3 text-xs font-semibold text-rose-200 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {pending ? "Working..." : session.isCurrent ? "Log Out" : "Remove"}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {devicesStatus ? (
+              <p className="mt-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-[#b5bac1]">
+                {devicesStatus}
               </p>
             ) : null}
           </div>
@@ -9648,7 +11839,7 @@ export const SettingsModal = () => {
                           </p>
                           <p>
                             <span className="text-[#949ba4]">Status:</span>{" "}
-                            <span className="text-white">{presenceStatusLabelMap[profilePresenceStatus]}</span>
+                            <span className="text-white">{formatPresenceStatusLabel(profilePresenceStatus, { showGameIcon: Boolean(profileCurrentGame?.trim()) })}</span>
                           </p>
                           <p>
                             <span className="text-[#949ba4]">Role:</span>{" "}

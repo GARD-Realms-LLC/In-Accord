@@ -106,6 +106,8 @@ const normalizeUrlLike = (value: unknown, maxLength = 512) => {
   return trimmed.slice(0, maxLength);
 };
 
+const createConfigId = () => `cfg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+
 export async function GET() {
   try {
     const auth = await ensureAdmin();
@@ -501,6 +503,87 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("[ADMIN_INTEGRATIONS_PATCH]", error);
+    return new NextResponse("Internal Error", { status: 500 });
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const auth = await ensureAdmin();
+    if (!auth.ok) {
+      return auth.response;
+    }
+
+    const body = (await req.json().catch(() => ({}))) as {
+      userId?: unknown;
+      type?: unknown;
+      configName?: unknown;
+      applicationId?: unknown;
+      enabled?: unknown;
+    };
+
+    const userId = typeof body.userId === "string" ? body.userId.trim() : "";
+    const type = body.type === "APP" || body.type === "BOT" ? body.type : null;
+    const configName = normalizeHumanLabel(body.configName, 80);
+    const applicationId = normalizeIdLike(body.applicationId, 64);
+    const enabled = body.enabled !== false;
+
+    if (!userId || !type || !configName || !applicationId) {
+      return new NextResponse("userId, type, configName and applicationId are required", { status: 400 });
+    }
+
+    const preferences = await getUserPreferences(userId);
+
+    if (type === "APP") {
+      const nextApps = [...preferences.OtherApps];
+      if (
+        nextApps.some(
+          (entry) => normalizeIdLike(entry.applicationId, 64) === applicationId
+        )
+      ) {
+        return new NextResponse("App with this applicationId already exists for the user", { status: 409 });
+      }
+
+      nextApps.push({
+        id: createConfigId(),
+        name: configName,
+        applicationId,
+        clientId: "",
+        redirectUri: "",
+        scopes: [],
+        enabled,
+        createdAt: new Date().toISOString(),
+      });
+
+      await updateUserPreferences(userId, { OtherApps: nextApps });
+      return NextResponse.json({ ok: true });
+    }
+
+    const nextBots = [...preferences.OtherBots];
+    if (
+      nextBots.some(
+        (entry) => normalizeIdLike(entry.applicationId, 64) === applicationId
+      )
+    ) {
+      return new NextResponse("Bot with this applicationId already exists for the user", { status: 409 });
+    }
+
+    nextBots.push({
+      id: createConfigId(),
+      name: configName,
+      applicationId,
+      botUserId: "",
+      tokenHint: "",
+      commands: [],
+      permissions: [],
+      enabled,
+      createdAt: new Date().toISOString(),
+    });
+
+    await updateUserPreferences(userId, { OtherBots: nextBots });
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error("[ADMIN_INTEGRATIONS_POST]", error);
     return new NextResponse("Internal Error", { status: 500 });
   }
 }

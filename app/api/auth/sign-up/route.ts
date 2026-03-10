@@ -132,7 +132,7 @@ export async function POST(request: Request) {
       values (${userId}, ${passwordHash}, ${now}, ${now})
     `);
 
-    await setSessionUserId(userId);
+    await setSessionUserId(userId, { request });
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("[AUTH_SIGN_UP_POST]", error);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ComponentType, type MouseEvent as ReactMouseEvent } from "react";
-import { Baby, Bot, Briefcase, Bug, ChevronDown, ChevronRight, Crown, Database, ExternalLink, Eye, EyeOff, Flag, Heart, Link2, Mail, MessageCircle, School, ScrollText, Server, Settings2, ShieldAlert, ShieldCheck, Smile, Trash2, Users, Webhook, Wrench } from "lucide-react";
+import { Baby, Bot, Briefcase, Bug, ChevronDown, ChevronRight, Cloud, Crown, Database, ExternalLink, Eye, EyeOff, Flag, Heart, Link2, Mail, MessageCircle, School, ScrollText, Server, Settings2, ShieldAlert, ShieldCheck, Smile, Trash2, Users, Webhook, Wrench } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 
@@ -25,7 +25,7 @@ import { getInAccordStaffLabel, isInAccordAdministrator, isInAccordDeveloper, is
 import { resolveProfileIcons } from "@/lib/profile-icons";
 import { ADMINISTRATOR_ROLE_KEY, IMMUTABLE_ACCOUNT_USER_ID } from "@/lib/account-security-constants";
 import { isBotUser } from "@/lib/is-bot-user";
-import { normalizePresenceStatus, presenceStatusLabelMap } from "@/lib/presence-status";
+import { formatPresenceStatusLabel, normalizePresenceStatus } from "@/lib/presence-status";
 import { cn } from "@/lib/utils";
 
 type AdminSection =
@@ -47,6 +47,7 @@ type AdminSection =
   | "webhooks"
   | "security"
   | "databaseManagement"
+  | "cloudflareManagement"
   | "integrations"
   | "patronage"
   | "OtherAppsBots";
@@ -70,6 +71,7 @@ const adminSections = [
   "webhooks",
   "security",
   "databaseManagement",
+  "cloudflareManagement",
   "integrations",
   "OtherAppsBots",
 ] as const;
@@ -149,6 +151,10 @@ const adminSectionMeta: Record<AdminSection, { label: string; description: strin
     label: "I-A DB",
     description: "View database-related information and maintenance entry points.",
   },
+  cloudflareManagement: {
+    label: "Cloudflare",
+    description: "Set up Cloudflare account access, zone selection, DNS records, and cache actions.",
+  },
   integrations: {
     label: "Integrations",
     description: "Manage third-party connections and integration health.",
@@ -167,7 +173,6 @@ type AdminMenuGroupId =
   | "workspace"
   | "serverOperations"
   | "moderationSafety"
-  | "connections"
   | "communityPrograms"
   | "supportRevenue";
 
@@ -175,22 +180,17 @@ const adminMenuGroups: Array<{ id: AdminMenuGroupId; label: string; sections: Ad
   {
     id: "workspace",
     label: "Workspace",
-    sections: ["general", "members", "roles", "iaServerMenu", "databaseManagement", "security"],
+    sections: ["general", "members", "roles", "iaServerMenu", "databaseManagement", "cloudflareManagement", "integrations"],
   },
   {
     id: "serverOperations",
     label: "Server Operations",
-    sections: ["servers", "serverTags", "invites", "emojiStickers", "webhooks"],
+    sections: ["servers", "serverTags", "invites", "emojiStickers", "OtherAppsBots", "webhooks"],
   },
   {
     id: "moderationSafety",
     label: "Moderation & Safety",
-    sections: ["moderation", "reported", "issuesBugs"],
-  },
-  {
-    id: "connections",
-    label: "Connections",
-    sections: ["integrations", "OtherAppsBots"],
+    sections: ["moderation", "reported", "issuesBugs", "security"],
   },
   {
     id: "communityPrograms",
@@ -199,7 +199,7 @@ const adminMenuGroups: Array<{ id: AdminMenuGroupId; label: string; sections: Ad
   },
   {
     id: "supportRevenue",
-    label: "Support & Revenue",
+    label: "!ncome",
     sections: ["patronage"],
   },
 ];
@@ -223,6 +223,7 @@ const adminMenuItemMeta: Record<AdminSection, { label: string; icon: ComponentTy
   webhooks: { label: "Webhooks", icon: Webhook },
   security: { label: "Security & Audit", icon: ShieldCheck },
   databaseManagement: { label: "I-A DB", icon: Database },
+  cloudflareManagement: { label: "Cloudflare", icon: Cloud },
   integrations: { label: "Integrations", icon: ExternalLink },
   patronage: { label: "Patronage", icon: Heart },
   OtherAppsBots: { label: "Apps & Bots", icon: Bot },
@@ -248,6 +249,7 @@ type AdminUser = {
   comment: string | null;
   bannerUrl: string | null;
   presenceStatus: string;
+  currentGame: string | null;
   email: string;
   role: string;
   phoneNumber: string;
@@ -336,6 +338,19 @@ type OtherSortDirection = "asc" | "desc";
 type AdminIntegrationProvider = {
   key: string;
   connectedUsers: number;
+};
+
+type AdminIntegrationProviderSetupEntry = {
+  key: string;
+  hasClientId: boolean;
+  hasClientSecret: boolean;
+  clientIdPreview: string;
+  clientSecretPreview: string;
+};
+
+type AdminIntegrationProviderSetup = {
+  updatedAt: string | null;
+  providers: Record<string, AdminIntegrationProviderSetupEntry>;
 };
 
 type AdminTopConnectedUser = {
@@ -441,6 +456,36 @@ type AdminManagedFile = {
   sizeBytes: number;
   updatedAt: string;
   url: string | null;
+};
+
+type AdminDatabaseManagerTable = {
+  schemaName: string;
+  tableName: string;
+  fullName: string;
+};
+
+type AdminCloudflareSetup = {
+  hasApiToken: boolean;
+  apiTokenPreview: string;
+  accountId: string | null;
+  zoneId: string | null;
+  zoneName: string | null;
+  updatedAt: string | null;
+};
+
+type AdminCloudflareZone = {
+  id: string;
+  name: string;
+  status?: string;
+};
+
+type AdminCloudflareDnsRecord = {
+  id: string;
+  type: string;
+  name: string;
+  content: string;
+  proxied?: boolean;
+  ttl?: number;
 };
 
 type AdminEmojiStickerServer = {
@@ -646,7 +691,6 @@ export const InAccordAdminModal = () => {
     workspace: false,
     serverOperations: false,
     moderationSafety: false,
-    connections: false,
     communityPrograms: true,
     supportRevenue: true,
   });
@@ -697,6 +741,20 @@ export const InAccordAdminModal = () => {
   const [moderationSearch, setModerationSearch] = useState("");
   const [integrationsSummary, setIntegrationsSummary] = useState<AdminIntegrationsSummary | null>(null);
   const [integrationProviders, setIntegrationProviders] = useState<AdminIntegrationProvider[]>([]);
+  const [integrationProviderSetup, setIntegrationProviderSetup] = useState<AdminIntegrationProviderSetup | null>(null);
+  const [isLoadingIntegrationProviderSetup, setIsLoadingIntegrationProviderSetup] = useState(false);
+  const [isSavingIntegrationProviderSetup, setIsSavingIntegrationProviderSetup] = useState<string | null>(null);
+  const [integrationProviderSetupError, setIntegrationProviderSetupError] = useState<string | null>(null);
+  const [integrationProviderSetupSuccess, setIntegrationProviderSetupSuccess] = useState<string | null>(null);
+  const [integrationProviderDrafts, setIntegrationProviderDrafts] = useState<
+    Record<string, { clientId: string; clientSecret: string }>
+  >({
+    github: { clientId: "", clientSecret: "" },
+    google: { clientId: "", clientSecret: "" },
+    twitch: { clientId: "", clientSecret: "" },
+    xbox: { clientId: "", clientSecret: "" },
+    youtube: { clientId: "", clientSecret: "" },
+  });
   const [topConnectedUsers, setTopConnectedUsers] = useState<AdminTopConnectedUser[]>([]);
   const [recentOtherConfigs, setRecentOtherConfigs] = useState<AdminOtherConfig[]>([]);
   const [OtherConfigQuery, setOtherConfigQuery] = useState("");
@@ -707,6 +765,12 @@ export const InAccordAdminModal = () => {
   const [OtherConfigActionPendingKey, setOtherConfigActionPendingKey] = useState<string | null>(null);
   const [OtherConfigActionError, setOtherConfigActionError] = useState<string | null>(null);
   const [OtherConfigActionSuccess, setOtherConfigActionSuccess] = useState<string | null>(null);
+  const [newIntegrationUserId, setNewIntegrationUserId] = useState("");
+  const [newIntegrationType, setNewIntegrationType] = useState<"APP" | "BOT">("APP");
+  const [newIntegrationName, setNewIntegrationName] = useState("");
+  const [newIntegrationApplicationId, setNewIntegrationApplicationId] = useState("");
+  const [newIntegrationEnabled, setNewIntegrationEnabled] = useState(true);
+  const [isCreatingIntegrationConfig, setIsCreatingIntegrationConfig] = useState(false);
   const [OtherConfigSortKey, setOtherConfigSortKey] = useState<OtherConfigSortKey>("createdAt");
   const [OtherConfigSortDirection, setOtherConfigSortDirection] = useState<OtherSortDirection>("desc");
   const [isLoadingIntegrations, setIsLoadingIntegrations] = useState(false);
@@ -771,6 +835,32 @@ export const InAccordAdminModal = () => {
   const [isUploadingManagedFile, setIsUploadingManagedFile] = useState(false);
   const [deletingManagedFilePath, setDeletingManagedFilePath] = useState<string | null>(null);
   const [selectedManagedFilePaths, setSelectedManagedFilePaths] = useState<string[]>([]);
+  const [databaseManagerTables, setDatabaseManagerTables] = useState<AdminDatabaseManagerTable[]>([]);
+  const [selectedDatabaseManagerTable, setSelectedDatabaseManagerTable] = useState("");
+  const [databaseManagerColumns, setDatabaseManagerColumns] = useState<string[]>([]);
+  const [databaseManagerRows, setDatabaseManagerRows] = useState<Array<Record<string, unknown>>>([]);
+  const [isLoadingDatabaseManager, setIsLoadingDatabaseManager] = useState(false);
+  const [databaseManagerError, setDatabaseManagerError] = useState<string | null>(null);
+  const [cloudflareSetup, setCloudflareSetup] = useState<AdminCloudflareSetup | null>(null);
+  const [cloudflareZones, setCloudflareZones] = useState<AdminCloudflareZone[]>([]);
+  const [cloudflareDnsRecords, setCloudflareDnsRecords] = useState<AdminCloudflareDnsRecord[]>([]);
+  const [cloudflareApiTokenDraft, setCloudflareApiTokenDraft] = useState("");
+  const [cloudflareAccountIdDraft, setCloudflareAccountIdDraft] = useState("");
+  const [cloudflareSelectedZoneId, setCloudflareSelectedZoneId] = useState("");
+  const [cloudflareSelectedZoneName, setCloudflareSelectedZoneName] = useState("");
+  const [cloudflareDnsTypeDraft, setCloudflareDnsTypeDraft] = useState("A");
+  const [cloudflareDnsNameDraft, setCloudflareDnsNameDraft] = useState("");
+  const [cloudflareDnsContentDraft, setCloudflareDnsContentDraft] = useState("");
+  const [cloudflareDnsTtlDraft, setCloudflareDnsTtlDraft] = useState("1");
+  const [cloudflareDnsProxiedDraft, setCloudflareDnsProxiedDraft] = useState(false);
+  const [cloudflareEditingDnsRecordId, setCloudflareEditingDnsRecordId] = useState<string | null>(null);
+  const [cloudflarePurgeUrlDraft, setCloudflarePurgeUrlDraft] = useState("");
+  const [isLoadingCloudflare, setIsLoadingCloudflare] = useState(false);
+  const [isSavingCloudflare, setIsSavingCloudflare] = useState(false);
+  const [isCloudflareActionPending, setIsCloudflareActionPending] = useState(false);
+  const [cloudflareActionPendingRecordId, setCloudflareActionPendingRecordId] = useState<string | null>(null);
+  const [cloudflareError, setCloudflareError] = useState<string | null>(null);
+  const [cloudflareSuccess, setCloudflareSuccess] = useState<string | null>(null);
   const [newPatronageDonorName, setNewPatronageDonorName] = useState("");
   const [newPatronageDonorEmail, setNewPatronageDonorEmail] = useState("");
   const [newPatronageType, setNewPatronageType] = useState<"ONE_TIME" | "MONTHLY">("ONE_TIME");
@@ -985,7 +1075,7 @@ export const InAccordAdminModal = () => {
   }, [data.query, isModalOpen]);
 
   useEffect(() => {
-    if (!isModalOpen || (activeSection !== "members" && activeSection !== "roles")) {
+    if (!isModalOpen || (activeSection !== "members" && activeSection !== "roles" && activeSection !== "integrations")) {
       return;
     }
 
@@ -1135,6 +1225,82 @@ export const InAccordAdminModal = () => {
       setIsLoadingIntegrations(false);
     }
   }, []);
+
+  const loadIntegrationProviderSetup = useCallback(async () => {
+    try {
+      setIsLoadingIntegrationProviderSetup(true);
+      setIntegrationProviderSetupError(null);
+
+      const response = await fetch("/api/admin/integration-provider-settings", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load integration provider setup (${response.status})`);
+      }
+
+      const payload = (await response.json()) as { setup?: AdminIntegrationProviderSetup };
+      const setup = payload.setup ?? null;
+      setIntegrationProviderSetup(setup);
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_INTEGRATION_PROVIDER_SETUP_LOAD]", error);
+      setIntegrationProviderSetup(null);
+      setIntegrationProviderSetupError("Unable to load provider setup right now.");
+    } finally {
+      setIsLoadingIntegrationProviderSetup(false);
+    }
+  }, []);
+
+  const onSaveIntegrationProviderSetup = async (providerKey: string) => {
+    if (!["github", "google", "twitch", "xbox", "youtube"].includes(providerKey)) {
+      return;
+    }
+
+    try {
+      setIsSavingIntegrationProviderSetup(providerKey);
+      setIntegrationProviderSetupError(null);
+      setIntegrationProviderSetupSuccess(null);
+
+      const draft = integrationProviderDrafts[providerKey] ?? { clientId: "", clientSecret: "" };
+
+      const response = await fetch("/api/admin/integration-provider-settings", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          provider: providerKey,
+          clientId: draft.clientId,
+          clientSecret: draft.clientSecret,
+        }),
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Failed to save provider setup (${response.status})`;
+        throw new Error(message);
+      }
+
+      const payload = (await response.json()) as { setup?: AdminIntegrationProviderSetup };
+      setIntegrationProviderSetup(payload.setup ?? null);
+      setIntegrationProviderDrafts((current) => ({
+        ...current,
+        [providerKey]: { clientId: "", clientSecret: "" },
+      }));
+      setIntegrationProviderSetupSuccess(`${providerKey.toUpperCase()} setup saved.`);
+      await loadIntegrations();
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_INTEGRATION_PROVIDER_SETUP_SAVE]", error);
+      setIntegrationProviderSetupError(
+        error instanceof Error ? error.message : "Unable to save provider setup."
+      );
+    } finally {
+      setIsSavingIntegrationProviderSetup(null);
+    }
+  };
 
   const loadReports = useCallback(async () => {
     try {
@@ -1545,25 +1711,411 @@ export const InAccordAdminModal = () => {
     }
   };
 
-  const onOpenCheckedFolder = async () => {
+  const onOpenFolder = async () => {
     const selectedFolders = managedFiles.filter(
       (file) => selectedManagedFilePaths.includes(file.path) && file.isDirectory
     );
 
-    if (selectedFolders.length === 0) {
-      setManagedFilesError("Select at least one folder checkbox first.");
+    if (selectedFolders.length > 0) {
+      if (selectedFolders.length > 1) {
+        setManagedFilesError("Select only one folder checkbox to open.");
+        return;
+      }
+
+      const targetFolder = selectedFolders[0]?.path ?? "";
+      setManagedFilesError(null);
+      setManagedFilesSuccess(null);
+      await loadManagedFiles(targetFolder);
       return;
     }
 
-    if (selectedFolders.length > 1) {
-      setManagedFilesError("Select only one folder to open.");
-      return;
-    }
+    const folderFromInput = managedFilesFolderDraft.trim();
 
-    const targetFolder = selectedFolders[0]?.path ?? "";
     setManagedFilesError(null);
     setManagedFilesSuccess(null);
-    await loadManagedFiles(targetFolder);
+    await loadManagedFiles(folderFromInput);
+  };
+
+  const loadDatabaseManager = useCallback(async (tableFullName?: string) => {
+    try {
+      setIsLoadingDatabaseManager(true);
+      setDatabaseManagerError(null);
+
+      const requestedTable = String(tableFullName ?? selectedDatabaseManagerTable).trim();
+      const query = new URLSearchParams();
+      if (requestedTable) {
+        query.set("table", requestedTable);
+      }
+
+      const response = await fetch(`/api/admin/database-manager${query.toString() ? `?${query.toString()}` : ""}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load database manager (${response.status})`);
+      }
+
+      const payload = (await response.json()) as {
+        tables?: AdminDatabaseManagerTable[];
+        selectedTable?: string | null;
+        columns?: string[];
+        rows?: Array<Record<string, unknown>>;
+      };
+
+      const nextTables = payload.tables ?? [];
+      const nextSelectedTable = String(payload.selectedTable ?? requestedTable ?? "").trim();
+
+      setDatabaseManagerTables(nextTables);
+      setSelectedDatabaseManagerTable(nextSelectedTable);
+      setDatabaseManagerColumns(payload.columns ?? []);
+      setDatabaseManagerRows(payload.rows ?? []);
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_DATABASE_MANAGER_LOAD]", error);
+      setDatabaseManagerTables([]);
+      setDatabaseManagerColumns([]);
+      setDatabaseManagerRows([]);
+      setDatabaseManagerError("Unable to load database manager right now.");
+    } finally {
+      setIsLoadingDatabaseManager(false);
+    }
+  }, [selectedDatabaseManagerTable]);
+
+  const loadCloudflare = useCallback(async () => {
+    try {
+      setIsLoadingCloudflare(true);
+      setCloudflareError(null);
+
+      const response = await fetch("/api/admin/cloudflare", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load Cloudflare setup (${response.status})`);
+      }
+
+      const payload = (await response.json()) as {
+        setup?: AdminCloudflareSetup;
+        zones?: AdminCloudflareZone[];
+        dnsRecords?: AdminCloudflareDnsRecord[];
+        apiError?: string | null;
+      };
+
+      const setup = payload.setup ?? null;
+      setCloudflareSetup(setup);
+      setCloudflareZones(payload.zones ?? []);
+      setCloudflareDnsRecords(payload.dnsRecords ?? []);
+      setCloudflareAccountIdDraft(setup?.accountId ?? "");
+      setCloudflareSelectedZoneId(setup?.zoneId ?? "");
+      setCloudflareSelectedZoneName(setup?.zoneName ?? "");
+
+      if (payload.apiError) {
+        setCloudflareError(payload.apiError);
+      }
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_CLOUDFLARE_LOAD]", error);
+      setCloudflareSetup(null);
+      setCloudflareZones([]);
+      setCloudflareDnsRecords([]);
+      setCloudflareError("Unable to load Cloudflare manager right now.");
+    } finally {
+      setIsLoadingCloudflare(false);
+    }
+  }, []);
+
+  const onSaveCloudflareSetup = async () => {
+    try {
+      setIsSavingCloudflare(true);
+      setCloudflareError(null);
+      setCloudflareSuccess(null);
+
+      const response = await fetch("/api/admin/cloudflare", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...(cloudflareApiTokenDraft.trim() ? { apiToken: cloudflareApiTokenDraft.trim() } : {}),
+          accountId: cloudflareAccountIdDraft.trim(),
+          zoneId: cloudflareSelectedZoneId.trim(),
+          zoneName: cloudflareSelectedZoneName.trim(),
+        }),
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Failed to save Cloudflare setup (${response.status})`;
+        throw new Error(message);
+      }
+
+      const payload = (await response.json()) as { setup?: AdminCloudflareSetup };
+      setCloudflareSetup(payload.setup ?? null);
+      setCloudflareApiTokenDraft("");
+      setCloudflareSuccess("Cloudflare setup saved.");
+      await loadCloudflare();
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_CLOUDFLARE_SAVE]", error);
+      setCloudflareError(error instanceof Error ? error.message : "Unable to save Cloudflare setup.");
+    } finally {
+      setIsSavingCloudflare(false);
+    }
+  };
+
+  const onSelectCloudflareZone = async () => {
+    if (!cloudflareSelectedZoneId.trim()) {
+      setCloudflareError("Select a zone first.");
+      return;
+    }
+
+    try {
+      setIsCloudflareActionPending(true);
+      setCloudflareError(null);
+      setCloudflareSuccess(null);
+
+      const response = await fetch("/api/admin/cloudflare", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "SELECT_ZONE",
+          zoneId: cloudflareSelectedZoneId.trim(),
+          zoneName: cloudflareSelectedZoneName.trim(),
+        }),
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Failed to select Cloudflare zone (${response.status})`;
+        throw new Error(message);
+      }
+
+      const payload = (await response.json()) as {
+        setup?: AdminCloudflareSetup;
+        dnsRecords?: AdminCloudflareDnsRecord[];
+      };
+
+      setCloudflareSetup(payload.setup ?? null);
+      setCloudflareDnsRecords(payload.dnsRecords ?? []);
+      setCloudflareSuccess("Cloudflare zone selected.");
+      setCloudflareEditingDnsRecordId(null);
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_CLOUDFLARE_SELECT_ZONE]", error);
+      setCloudflareError(error instanceof Error ? error.message : "Unable to select Cloudflare zone.");
+    } finally {
+      setIsCloudflareActionPending(false);
+    }
+  };
+
+  const onPurgeCloudflareCache = async () => {
+    if (!cloudflareSelectedZoneId.trim()) {
+      setCloudflareError("Select a zone first.");
+      return;
+    }
+
+    const confirmed = window.confirm("Purge Cloudflare cache for this zone? This clears cached content globally.");
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setIsCloudflareActionPending(true);
+      setCloudflareError(null);
+      setCloudflareSuccess(null);
+
+      const response = await fetch("/api/admin/cloudflare", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "PURGE_CACHE",
+          zoneId: cloudflareSelectedZoneId.trim(),
+        }),
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Failed to purge Cloudflare cache (${response.status})`;
+        throw new Error(message);
+      }
+
+      setCloudflareSuccess("Cloudflare cache purge requested.");
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_CLOUDFLARE_PURGE_CACHE]", error);
+      setCloudflareError(error instanceof Error ? error.message : "Unable to purge Cloudflare cache.");
+    } finally {
+      setIsCloudflareActionPending(false);
+    }
+  };
+
+  const onPurgeCloudflareUrl = async () => {
+    if (!cloudflareSelectedZoneId.trim()) {
+      setCloudflareError("Select a zone first.");
+      return;
+    }
+
+    const urlToPurge = cloudflarePurgeUrlDraft.trim();
+    if (!urlToPurge) {
+      setCloudflareError("Enter a URL to purge.");
+      return;
+    }
+
+    try {
+      setIsCloudflareActionPending(true);
+      setCloudflareError(null);
+      setCloudflareSuccess(null);
+
+      const response = await fetch("/api/admin/cloudflare", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "PURGE_CACHE_URL",
+          zoneId: cloudflareSelectedZoneId.trim(),
+          url: urlToPurge,
+        }),
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Failed to purge cache URL (${response.status})`;
+        throw new Error(message);
+      }
+
+      setCloudflareSuccess("Cloudflare single URL cache purge requested.");
+      setCloudflarePurgeUrlDraft("");
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_CLOUDFLARE_PURGE_URL]", error);
+      setCloudflareError(error instanceof Error ? error.message : "Unable to purge cache URL.");
+    } finally {
+      setIsCloudflareActionPending(false);
+    }
+  };
+
+  const onEditCloudflareDns = (record: AdminCloudflareDnsRecord) => {
+    setCloudflareEditingDnsRecordId(record.id);
+    setCloudflareDnsTypeDraft(record.type || "A");
+    setCloudflareDnsNameDraft(record.name || "");
+    setCloudflareDnsContentDraft(record.content || "");
+    setCloudflareDnsTtlDraft(String(record.ttl ?? 1));
+    setCloudflareDnsProxiedDraft(Boolean(record.proxied));
+    setCloudflareError(null);
+    setCloudflareSuccess(null);
+  };
+
+  const onCancelEditCloudflareDns = () => {
+    setCloudflareEditingDnsRecordId(null);
+    setCloudflareDnsTypeDraft("A");
+    setCloudflareDnsNameDraft("");
+    setCloudflareDnsContentDraft("");
+    setCloudflareDnsTtlDraft("1");
+    setCloudflareDnsProxiedDraft(false);
+  };
+
+  const onSaveCloudflareDns = async () => {
+    if (!cloudflareSelectedZoneId.trim()) {
+      setCloudflareError("Select a zone first.");
+      return;
+    }
+
+    if (!cloudflareDnsNameDraft.trim() || !cloudflareDnsContentDraft.trim()) {
+      setCloudflareError("DNS name and content are required.");
+      return;
+    }
+
+    try {
+      setIsCloudflareActionPending(true);
+      setCloudflareError(null);
+      setCloudflareSuccess(null);
+
+      const response = await fetch("/api/admin/cloudflare", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "UPSERT_DNS",
+          zoneId: cloudflareSelectedZoneId.trim(),
+          ...(cloudflareEditingDnsRecordId ? { recordId: cloudflareEditingDnsRecordId } : {}),
+          type: cloudflareDnsTypeDraft.trim(),
+          name: cloudflareDnsNameDraft.trim(),
+          content: cloudflareDnsContentDraft.trim(),
+          ttl: Number(cloudflareDnsTtlDraft),
+          proxied: cloudflareDnsProxiedDraft,
+        }),
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Failed to save DNS record (${response.status})`;
+        throw new Error(message);
+      }
+
+      const payload = (await response.json()) as { dnsRecords?: AdminCloudflareDnsRecord[] };
+      setCloudflareDnsRecords(payload.dnsRecords ?? []);
+      setCloudflareDnsNameDraft("");
+      setCloudflareDnsContentDraft("");
+      setCloudflareDnsTtlDraft("1");
+      setCloudflareDnsProxiedDraft(false);
+      setCloudflareEditingDnsRecordId(null);
+      setCloudflareSuccess(cloudflareEditingDnsRecordId ? "Cloudflare DNS record updated." : "Cloudflare DNS record saved.");
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_CLOUDFLARE_DNS_SAVE]", error);
+      setCloudflareError(error instanceof Error ? error.message : "Unable to save DNS record.");
+    } finally {
+      setIsCloudflareActionPending(false);
+    }
+  };
+
+  const onDeleteCloudflareDns = async (record: AdminCloudflareDnsRecord) => {
+    if (!cloudflareSelectedZoneId.trim()) {
+      setCloudflareError("Select a zone first.");
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete DNS record ${record.type} ${record.name}?`);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setCloudflareActionPendingRecordId(record.id);
+      setCloudflareError(null);
+      setCloudflareSuccess(null);
+
+      const response = await fetch("/api/admin/cloudflare", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "DELETE_DNS",
+          zoneId: cloudflareSelectedZoneId.trim(),
+          recordId: record.id,
+        }),
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Failed to delete DNS record (${response.status})`;
+        throw new Error(message);
+      }
+
+      const payload = (await response.json()) as { dnsRecords?: AdminCloudflareDnsRecord[] };
+      setCloudflareDnsRecords(payload.dnsRecords ?? []);
+      setCloudflareSuccess("Cloudflare DNS record deleted.");
+      if (cloudflareEditingDnsRecordId === record.id) {
+        onCancelEditCloudflareDns();
+      }
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_CLOUDFLARE_DNS_DELETE]", error);
+      setCloudflareError(error instanceof Error ? error.message : "Unable to delete DNS record.");
+    } finally {
+      setCloudflareActionPendingRecordId(null);
+    }
   };
 
   const loadServers = useCallback(async () => {
@@ -1754,6 +2306,14 @@ export const InAccordAdminModal = () => {
   }, [activeSection, isModalOpen, loadIntegrations]);
 
   useEffect(() => {
+    if (!isModalOpen || activeSection !== "integrations") {
+      return;
+    }
+
+    void loadIntegrationProviderSetup();
+  }, [activeSection, isModalOpen, loadIntegrationProviderSetup]);
+
+  useEffect(() => {
     if (!isModalOpen || activeSection !== "general") {
       return;
     }
@@ -1834,6 +2394,22 @@ export const InAccordAdminModal = () => {
   }, [activeSection, isModalOpen, loadSiteUrlSetup]);
 
   useEffect(() => {
+    if (!isModalOpen || activeSection !== "databaseManagement") {
+      return;
+    }
+
+    void loadDatabaseManager();
+  }, [activeSection, isModalOpen, loadDatabaseManager]);
+
+  useEffect(() => {
+    if (!isModalOpen || activeSection !== "cloudflareManagement") {
+      return;
+    }
+
+    void loadCloudflare();
+  }, [activeSection, isModalOpen, loadCloudflare]);
+
+  useEffect(() => {
     if (!isModalOpen || activeSection !== "iaServerMenu") {
       return;
     }
@@ -1867,7 +2443,6 @@ export const InAccordAdminModal = () => {
         workspace: false,
         serverOperations: false,
         moderationSafety: false,
-        connections: false,
         communityPrograms: true,
         supportRevenue: true,
       });
@@ -1915,6 +2490,18 @@ export const InAccordAdminModal = () => {
       setModerationSearch("");
       setIntegrationsSummary(null);
       setIntegrationProviders([]);
+      setIntegrationProviderSetup(null);
+      setIsLoadingIntegrationProviderSetup(false);
+      setIsSavingIntegrationProviderSetup(null);
+      setIntegrationProviderSetupError(null);
+      setIntegrationProviderSetupSuccess(null);
+      setIntegrationProviderDrafts({
+        github: { clientId: "", clientSecret: "" },
+        google: { clientId: "", clientSecret: "" },
+        twitch: { clientId: "", clientSecret: "" },
+        xbox: { clientId: "", clientSecret: "" },
+        youtube: { clientId: "", clientSecret: "" },
+      });
       setTopConnectedUsers([]);
       setRecentOtherConfigs([]);
       setOtherConfigQuery("");
@@ -1925,6 +2512,12 @@ export const InAccordAdminModal = () => {
       setOtherConfigActionPendingKey(null);
       setOtherConfigActionError(null);
       setOtherConfigActionSuccess(null);
+      setNewIntegrationUserId("");
+      setNewIntegrationType("APP");
+      setNewIntegrationName("");
+      setNewIntegrationApplicationId("");
+      setNewIntegrationEnabled(true);
+      setIsCreatingIntegrationConfig(false);
       setOtherConfigSortKey("createdAt");
       setOtherConfigSortDirection("desc");
       setIsLoadingIntegrations(false);
@@ -1989,6 +2582,32 @@ export const InAccordAdminModal = () => {
       setIsUploadingManagedFile(false);
       setDeletingManagedFilePath(null);
       setSelectedManagedFilePaths([]);
+      setDatabaseManagerTables([]);
+      setSelectedDatabaseManagerTable("");
+      setDatabaseManagerColumns([]);
+      setDatabaseManagerRows([]);
+      setIsLoadingDatabaseManager(false);
+      setDatabaseManagerError(null);
+      setCloudflareSetup(null);
+      setCloudflareZones([]);
+      setCloudflareDnsRecords([]);
+      setCloudflareApiTokenDraft("");
+      setCloudflareAccountIdDraft("");
+      setCloudflareSelectedZoneId("");
+      setCloudflareSelectedZoneName("");
+      setCloudflareDnsTypeDraft("A");
+      setCloudflareDnsNameDraft("");
+      setCloudflareDnsContentDraft("");
+      setCloudflareDnsTtlDraft("1");
+      setCloudflareDnsProxiedDraft(false);
+      setCloudflareEditingDnsRecordId(null);
+      setCloudflarePurgeUrlDraft("");
+      setIsLoadingCloudflare(false);
+      setIsSavingCloudflare(false);
+      setIsCloudflareActionPending(false);
+      setCloudflareActionPendingRecordId(null);
+      setCloudflareError(null);
+      setCloudflareSuccess(null);
       setNewPatronageDonorName("");
       setNewPatronageDonorEmail("");
       setNewPatronageType("ONE_TIME");
@@ -3718,6 +4337,54 @@ export const InAccordAdminModal = () => {
     }
   };
 
+  const onCreateIntegrationConfig = async () => {
+    setOtherConfigActionError(null);
+    setOtherConfigActionSuccess(null);
+
+    const userId = newIntegrationUserId.trim();
+    const configName = newIntegrationName.trim();
+    const applicationId = newIntegrationApplicationId.trim();
+
+    if (!userId || !configName || !applicationId) {
+      setOtherConfigActionError("User ID, Name, and Application ID are required.");
+      return;
+    }
+
+    try {
+      setIsCreatingIntegrationConfig(true);
+
+      const response = await fetch("/api/admin/integrations", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId,
+          type: newIntegrationType,
+          configName,
+          applicationId,
+          enabled: newIntegrationEnabled,
+        }),
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Failed to create integration config (${response.status})`;
+        throw new Error(message);
+      }
+
+      setOtherConfigActionSuccess(`${newIntegrationType} config created for ${userId}.`);
+      setNewIntegrationName("");
+      setNewIntegrationApplicationId("");
+      setNewIntegrationEnabled(true);
+      await loadIntegrations();
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_INTEGRATION_CONFIG_CREATE]", error);
+      setOtherConfigActionError(error instanceof Error ? error.message : "Unable to create integration config.");
+    } finally {
+      setIsCreatingIntegrationConfig(false);
+    }
+  };
+
   const setServerTagDraft = (
     serverId: string,
     updates: Partial<{ tagCode: string; iconKey: string }>
@@ -4252,7 +4919,8 @@ export const InAccordAdminModal = () => {
                             <div className="space-y-1 text-[#dbdee1]">
                               <p>Name: {user.name}</p>
                               <p>Profile Name: {user.profileName || "Not set"}</p>
-                              <p>Status: {presenceStatusLabelMap[normalizedPresenceStatus]}</p>
+                              <p>Status: {formatPresenceStatusLabel(normalizedPresenceStatus, { showGameIcon: Boolean(user.currentGame?.trim()) })}</p>
+                              <p>Current Game: {user.currentGame?.trim() || "Not in game"}</p>
                               <p>Role: {user.role || "USER"}</p>
                               <p>Joined: {formatDateTime(user.joinedAt)}</p>
                               <p>Last Login: {formatDateTime(user.lastLogin)}</p>
@@ -4485,11 +5153,11 @@ export const InAccordAdminModal = () => {
         </DialogHeader>
 
         <div dir="ltr" className="grid min-h-0 flex-1 grid-cols-[220px_minmax(0,1fr)]">
-          <aside dir="ltr" className="order-1 border-r border-zinc-200 bg-zinc-50/80 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
+          <aside dir="ltr" className="order-1 flex min-h-0 flex-col border-r border-zinc-200 bg-zinc-50/80 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
             <p className="px-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
               Admin Menu
             </p>
-            <nav className="mt-3 flex flex-col gap-1">
+            <nav className="mt-3 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1">
               {adminMenuGroups.map((group) => {
                 const isCollapsed = collapsedMenuGroups[group.id];
 
@@ -4934,20 +5602,10 @@ export const InAccordAdminModal = () => {
                     />
                     <button
                       type="button"
-                      onClick={() => void loadManagedFiles(managedFilesFolderDraft)}
+                      onClick={() => void onOpenFolder()}
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
                     >
                       Open Folder
-                    </button>
-                  </div>
-
-                  <div className="mb-2 flex items-center justify-end">
-                    <button
-                      type="button"
-                      onClick={() => void onOpenCheckedFolder()}
-                      className="h-8 rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                    >
-                      Open Checked Folder
                     </button>
                   </div>
 
@@ -5157,7 +5815,10 @@ export const InAccordAdminModal = () => {
                   <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Database Information</p>
                   <button
                     type="button"
-                    onClick={() => void loadSiteUrlSetup()}
+                    onClick={() => {
+                      void loadSiteUrlSetup();
+                      void loadDatabaseManager(selectedDatabaseManagerTable);
+                    }}
                     className="h-8 rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
                   >
                     Refresh
@@ -5228,6 +5889,342 @@ export const InAccordAdminModal = () => {
                 ) : null}
                 {siteUrlError ? <p className="mt-3 text-xs text-rose-500">{siteUrlError}</p> : null}
                 {siteUrlSuccess ? <p className="mt-3 text-xs text-emerald-500">{siteUrlSuccess}</p> : null}
+
+                <div className="mt-4 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Database Manager</p>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Preview limit: 100 rows</p>
+                  </div>
+
+                  <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                    <select
+                      value={selectedDatabaseManagerTable}
+                      onChange={(event) => {
+                        const nextTable = event.target.value;
+                        setSelectedDatabaseManagerTable(nextTable);
+                        void loadDatabaseManager(nextTable);
+                      }}
+                      className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                    >
+                      <option value="">Select a table</option>
+                      {databaseManagerTables.map((table) => (
+                        <option key={table.fullName} value={table.fullName}>
+                          {table.fullName}
+                        </option>
+                      ))}
+                    </select>
+
+                    <button
+                      type="button"
+                      onClick={() => void loadDatabaseManager(selectedDatabaseManagerTable)}
+                      className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                    >
+                      Refresh Table
+                    </button>
+                  </div>
+
+                  {isLoadingDatabaseManager ? (
+                    <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">Loading database manager...</p>
+                  ) : null}
+                  {databaseManagerError ? <p className="mt-3 text-xs text-rose-500">{databaseManagerError}</p> : null}
+
+                  {selectedDatabaseManagerTable && databaseManagerColumns.length > 0 ? (
+                    <div className="mt-3 overflow-hidden rounded-lg border border-zinc-300 dark:border-zinc-700">
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full border-collapse text-left text-xs">
+                          <thead className="bg-zinc-200/80 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
+                            <tr>
+                              {databaseManagerColumns.map((column) => (
+                                <th key={`${selectedDatabaseManagerTable}-head-${column}`} className="px-2 py-2 font-semibold uppercase tracking-[0.05em]">
+                                  {column}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {databaseManagerRows.length === 0 ? (
+                              <tr>
+                                <td className="px-2 py-3 text-zinc-500 dark:text-zinc-400" colSpan={databaseManagerColumns.length}>
+                                  No rows found.
+                                </td>
+                              </tr>
+                            ) : (
+                              databaseManagerRows.map((row, rowIndex) => (
+                                <tr
+                                  key={`${selectedDatabaseManagerTable}-row-${rowIndex}`}
+                                  className={rowIndex % 2 === 0 ? "bg-white/80 dark:bg-zinc-950/35" : "bg-zinc-100/70 dark:bg-zinc-900/35"}
+                                >
+                                  {databaseManagerColumns.map((column) => {
+                                    const value = row[column];
+                                    const displayValue =
+                                      value === null || value === undefined
+                                        ? "—"
+                                        : typeof value === "object"
+                                          ? JSON.stringify(value)
+                                          : String(value);
+
+                                    return (
+                                      <td
+                                        key={`${selectedDatabaseManagerTable}-${rowIndex}-${column}`}
+                                        className="max-w-[280px] truncate px-2 py-2 text-zinc-800 dark:text-zinc-200"
+                                        title={displayValue}
+                                      >
+                                        {displayValue}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
+                      Select a table to preview its columns and rows.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {activeSection === "cloudflareManagement" && (
+              <div className="rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Cloudflare Management</p>
+                  <button
+                    type="button"
+                    onClick={() => void loadCloudflare()}
+                    className="h-8 rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                  >
+                    Refresh
+                  </button>
+                </div>
+
+                <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                  <p className="mb-2 text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Connection Setup</p>
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <input
+                      type="password"
+                      value={cloudflareApiTokenDraft}
+                      onChange={(event) => setCloudflareApiTokenDraft(event.target.value)}
+                      placeholder={cloudflareSetup?.hasApiToken ? "Cloudflare API Token (leave blank to keep current)" : "Cloudflare API Token"}
+                      className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
+                    />
+                    <input
+                      type="text"
+                      value={cloudflareAccountIdDraft}
+                      onChange={(event) => setCloudflareAccountIdDraft(event.target.value)}
+                      placeholder="Cloudflare Account ID"
+                      className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
+                    />
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                      Token: {cloudflareSetup?.hasApiToken ? cloudflareSetup.apiTokenPreview : "Not configured"}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void onSaveCloudflareSetup()}
+                      disabled={isSavingCloudflare}
+                      className="h-9 rounded-md bg-indigo-600 px-3 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isSavingCloudflare ? "Saving..." : "Save Setup"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                  <p className="mb-2 text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Zone Selection</p>
+
+                  <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+                    <select
+                      value={cloudflareSelectedZoneId}
+                      onChange={(event) => {
+                        const nextId = event.target.value;
+                        const zone = cloudflareZones.find((entry) => entry.id === nextId);
+                        setCloudflareSelectedZoneId(nextId);
+                        setCloudflareSelectedZoneName(zone?.name ?? "");
+                      }}
+                      className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                    >
+                      <option value="">Select zone</option>
+                      {cloudflareZones.map((zone) => (
+                        <option key={zone.id} value={zone.id}>
+                          {zone.name}{zone.status ? ` (${zone.status})` : ""}
+                        </option>
+                      ))}
+                    </select>
+
+                    <button
+                      type="button"
+                      onClick={() => void onSelectCloudflareZone()}
+                      disabled={isCloudflareActionPending}
+                      className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                    >
+                      {isCloudflareActionPending ? "Working..." : "Use Zone"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => void onPurgeCloudflareCache()}
+                      disabled={isCloudflareActionPending || !cloudflareSelectedZoneId}
+                      className="h-9 rounded-md border border-amber-400/50 bg-amber-500/15 px-3 text-sm font-medium text-amber-300 transition hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Purge Cache
+                    </button>
+                  </div>
+
+                  <p className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+                    Selected: {(cloudflareSetup?.zoneName ?? cloudflareSelectedZoneName) || "None"} · Updated: {formatDateTime(cloudflareSetup?.updatedAt ?? null)}
+                  </p>
+
+                  <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+                    <input
+                      type="url"
+                      value={cloudflarePurgeUrlDraft}
+                      onChange={(event) => setCloudflarePurgeUrlDraft(event.target.value)}
+                      placeholder="https://yourdomain.com/path/to/purge"
+                      className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void onPurgeCloudflareUrl()}
+                      disabled={isCloudflareActionPending || !cloudflareSelectedZoneId}
+                      className="h-9 rounded-md border border-amber-400/50 bg-amber-500/15 px-3 text-sm font-medium text-amber-300 transition hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Purge URL
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                  <p className="mb-2 text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">DNS Manager</p>
+
+                  <div className="grid gap-2 md:grid-cols-6">
+                    <select
+                      value={cloudflareDnsTypeDraft}
+                      onChange={(event) => setCloudflareDnsTypeDraft(event.target.value)}
+                      className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                    >
+                      {["A", "AAAA", "CNAME", "TXT", "MX", "NS"].map((dnsType) => (
+                        <option key={dnsType} value={dnsType}>{dnsType}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      value={cloudflareDnsNameDraft}
+                      onChange={(event) => setCloudflareDnsNameDraft(event.target.value)}
+                      placeholder="Name"
+                      className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400 md:col-span-2"
+                    />
+                    <input
+                      type="text"
+                      value={cloudflareDnsContentDraft}
+                      onChange={(event) => setCloudflareDnsContentDraft(event.target.value)}
+                      placeholder="Content"
+                      className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400 md:col-span-2"
+                    />
+                    <input
+                      type="number"
+                      value={cloudflareDnsTtlDraft}
+                      onChange={(event) => setCloudflareDnsTtlDraft(event.target.value)}
+                      min={1}
+                      className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
+                    />
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                    <label className="inline-flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300">
+                      <input
+                        type="checkbox"
+                        checked={cloudflareDnsProxiedDraft}
+                        onChange={(event) => setCloudflareDnsProxiedDraft(event.target.checked)}
+                      />
+                      Proxied
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() => void onSaveCloudflareDns()}
+                      disabled={isCloudflareActionPending}
+                      className="h-9 rounded-md bg-indigo-600 px-3 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isCloudflareActionPending
+                        ? "Saving..."
+                        : cloudflareEditingDnsRecordId
+                          ? "Update DNS Record"
+                          : "Add DNS Record"}
+                    </button>
+
+                    {cloudflareEditingDnsRecordId ? (
+                      <button
+                        type="button"
+                        onClick={onCancelEditCloudflareDns}
+                        disabled={isCloudflareActionPending}
+                        className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                      >
+                        Cancel Edit
+                      </button>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-3 overflow-hidden rounded-lg border border-zinc-300 dark:border-zinc-700">
+                    <div className="grid grid-cols-[90px_1.2fr_1.2fr_90px_160px] gap-2 bg-zinc-200/80 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                      <p>Type</p>
+                      <p>Name</p>
+                      <p>Content</p>
+                      <p>TTL</p>
+                      <p>Actions</p>
+                    </div>
+                    <div className="max-h-72 overflow-y-auto bg-white/80 text-xs text-zinc-800 dark:bg-zinc-950/30 dark:text-zinc-200">
+                      {cloudflareDnsRecords.length === 0 ? (
+                        <p className="px-3 py-3 text-zinc-500 dark:text-zinc-400">No DNS records loaded.</p>
+                      ) : (
+                        cloudflareDnsRecords.map((record, index) => (
+                          <div
+                            key={record.id}
+                            className={cn(
+                              "grid grid-cols-[90px_1.2fr_1.2fr_90px_160px] items-center gap-2 px-3 py-2",
+                              index % 2 === 0
+                                ? "bg-white/70 dark:bg-zinc-950/25"
+                                : "bg-zinc-100/70 dark:bg-zinc-900/35"
+                            )}
+                          >
+                            <p className="font-semibold">{record.type}</p>
+                            <p className="truncate" title={record.name}>{record.name}</p>
+                            <p className="truncate" title={record.content}>{record.content}</p>
+                            <p>{record.ttl ?? "auto"}</p>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => onEditCloudflareDns(record)}
+                                disabled={isCloudflareActionPending}
+                                className="h-7 rounded-md border border-indigo-500/35 bg-indigo-500/15 px-2 text-[10px] font-semibold text-indigo-200 transition hover:bg-indigo-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void onDeleteCloudflareDns(record)}
+                                disabled={cloudflareActionPendingRecordId === record.id}
+                                className="h-7 rounded-md border border-rose-500/35 bg-rose-500/15 px-2 text-[10px] font-semibold text-rose-200 transition hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {cloudflareActionPendingRecordId === record.id ? "Deleting..." : "Delete"}
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {isLoadingCloudflare ? <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">Loading Cloudflare manager...</p> : null}
+                {cloudflareError ? <p className="mt-3 text-xs text-rose-500">{cloudflareError}</p> : null}
+                {cloudflareSuccess ? <p className="mt-3 text-xs text-emerald-500">{cloudflareSuccess}</p> : null}
               </div>
             )}
 
@@ -7116,6 +8113,175 @@ export const InAccordAdminModal = () => {
                         )}
                       </div>
                     </div>
+
+                    <div className="mt-4 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                      <p className="mb-3 text-sm font-semibold text-zinc-800 dark:text-zinc-100">Integration Setup & Management</p>
+
+                      <div className="mb-3 grid gap-2 md:grid-cols-[1fr_140px_1fr_1fr_auto]">
+                        <input
+                          type="text"
+                          value={newIntegrationUserId}
+                          onChange={(event) => setNewIntegrationUserId(event.target.value)}
+                          list="integration-user-id-list"
+                          placeholder="User ID (pick from list or type)"
+                          className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
+                        />
+                        <datalist id="integration-user-id-list">
+                          {users.map((user) => (
+                            <option
+                              key={`integration-user-option-${user.userId}`}
+                              value={user.userId}
+                              label={`${user.profileName || user.name || user.userId}${user.email ? ` • ${user.email}` : ""}`}
+                            />
+                          ))}
+                        </datalist>
+                        <select
+                          value={newIntegrationType}
+                          onChange={(event) => setNewIntegrationType(event.target.value as "APP" | "BOT")}
+                          className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                        >
+                          <option value="APP">APP</option>
+                          <option value="BOT">BOT</option>
+                        </select>
+                        <input
+                          type="text"
+                          value={newIntegrationName}
+                          onChange={(event) => setNewIntegrationName(event.target.value)}
+                          placeholder="Config Name"
+                          className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
+                        />
+                        <input
+                          type="text"
+                          value={newIntegrationApplicationId}
+                          onChange={(event) => setNewIntegrationApplicationId(event.target.value)}
+                          placeholder="Application ID"
+                          className="h-9 rounded-md border border-zinc-300 bg-white px-3 font-mono text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void onCreateIntegrationConfig()}
+                          disabled={isCreatingIntegrationConfig}
+                          className="h-9 rounded-md bg-indigo-600 px-3 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isCreatingIntegrationConfig ? "Adding..." : "Add"}
+                        </button>
+                      </div>
+
+                      <label className="mb-3 inline-flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300">
+                        <input
+                          type="checkbox"
+                          checked={newIntegrationEnabled}
+                          onChange={(event) => setNewIntegrationEnabled(event.target.checked)}
+                        />
+                        Enabled on create
+                      </label>
+
+                      <div className="mb-3 grid gap-2 md:grid-cols-5">
+                        <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                          <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Users w/ Configs</p>
+                          <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{integrationsSummary?.usersWithOtherConfigs ?? 0}</p>
+                        </div>
+                        <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                          <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Apps</p>
+                          <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{integrationsSummary?.appsTotal ?? 0}</p>
+                        </div>
+                        <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                          <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Bots</p>
+                          <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{integrationsSummary?.botsTotal ?? 0}</p>
+                        </div>
+                        <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                          <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Enabled Apps</p>
+                          <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{integrationsSummary?.enabledApps ?? 0}</p>
+                        </div>
+                        <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                          <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Enabled Bots</p>
+                          <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{integrationsSummary?.enabledBots ?? 0}</p>
+                        </div>
+                      </div>
+
+                      <div className="mb-3 grid gap-2 sm:grid-cols-[1fr_140px_140px_auto]">
+                        <input
+                          type="text"
+                          value={OtherConfigQuery}
+                          onChange={(event) => setOtherConfigQuery(event.target.value)}
+                          placeholder="Search by user, email, name, app ID"
+                          className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
+                        />
+
+                        <select
+                          value={OtherConfigTypeFilter}
+                          onChange={(event) => setOtherConfigTypeFilter(event.target.value as typeof OtherConfigTypeFilter)}
+                          className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                        >
+                          <option value="ALL">All types</option>
+                          <option value="APP">Apps</option>
+                          <option value="BOT">Bots</option>
+                        </select>
+
+                        <select
+                          value={OtherConfigStatusFilter}
+                          onChange={(event) => setOtherConfigStatusFilter(event.target.value as typeof OtherConfigStatusFilter)}
+                          className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                        >
+                          <option value="ALL">All status</option>
+                          <option value="ENABLED">Enabled</option>
+                          <option value="DISABLED">Disabled</option>
+                        </select>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOtherConfigQuery("");
+                            setOtherConfigTypeFilter("ALL");
+                            setOtherConfigStatusFilter("ALL");
+                          }}
+                          disabled={!hasActiveOtherConfigFilters}
+                          className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                        >
+                          Clear filters
+                        </button>
+                      </div>
+
+                      <div className="mb-3 flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
+                          Sort
+                        </span>
+                        <select
+                          value={OtherConfigSortKey}
+                          onChange={(event) => onOtherConfigSort(event.target.value as OtherConfigSortKey)}
+                          className="h-8 rounded-md border border-zinc-300 bg-white px-2 text-xs text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                        >
+                          <option value="createdAt">Created date</option>
+                          <option value="status">Status</option>
+                          <option value="type">Type</option>
+                        </select>
+                        <select
+                          value={OtherConfigSortDirection}
+                          onChange={(event) =>
+                            setOtherConfigSortDirection(event.target.value as OtherSortDirection)
+                          }
+                          className="h-8 rounded-md border border-zinc-300 bg-white px-2 text-xs text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                        >
+                          <option value="asc">Ascending</option>
+                          <option value="desc">Descending</option>
+                        </select>
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                          Tip: click Type / Status / Created headers to toggle sorting.
+                        </p>
+                      </div>
+
+                      {OtherConfigActionError ? (
+                        <p className="mb-3 text-xs text-rose-500">{OtherConfigActionError}</p>
+                      ) : null}
+                      {OtherConfigActionSuccess ? (
+                        <p className="mb-3 text-xs text-emerald-500">{OtherConfigActionSuccess}</p>
+                      ) : null}
+
+                      {renderOtherConfigTable(
+                        filteredRecentOtherConfigs,
+                        `No app or bot configs found${hasActiveOtherConfigFilters ? " for current filters" : ""}.`
+                      )}
+                    </div>
                   </>
                 )}
               </div>
@@ -7706,6 +8872,120 @@ export const InAccordAdminModal = () => {
                   <p className="text-sm text-rose-500">{integrationsError}</p>
                 ) : (
                   <>
+                    <div className="mb-4 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                      <div className="mb-3 flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Provider Setup</p>
+                        <button
+                          type="button"
+                          onClick={() => void loadIntegrationProviderSetup()}
+                          className="h-8 rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                        >
+                          Refresh Setup
+                        </button>
+                      </div>
+
+                      {isLoadingIntegrationProviderSetup ? (
+                        <p className="text-xs text-zinc-600 dark:text-zinc-300">Loading provider setup...</p>
+                      ) : (
+                        <>
+                          {integrationProviderSetupError ? (
+                            <p className="mb-2 text-xs text-rose-500">{integrationProviderSetupError}</p>
+                          ) : null}
+                          {integrationProviderSetupSuccess ? (
+                            <p className="mb-2 text-xs text-emerald-500">{integrationProviderSetupSuccess}</p>
+                          ) : null}
+
+                          <div className="space-y-3">
+                            {[
+                              { key: "github", label: "GitHub" },
+                              { key: "google", label: "Google" },
+                              { key: "steam", label: "Steam" },
+                              { key: "twitch", label: "Twitch" },
+                              { key: "xbox", label: "Xbox" },
+                              { key: "youtube", label: "YouTube" },
+                            ].map((provider) => {
+                              const status = integrationProviderSetup?.providers?.[provider.key];
+                              const draft = integrationProviderDrafts[provider.key] ?? { clientId: "", clientSecret: "" };
+                              const isSteam = provider.key === "steam";
+                              const isSavingProvider = isSavingIntegrationProviderSetup === provider.key;
+
+                              return (
+                                <div
+                                  key={`integration-provider-setup-${provider.key}`}
+                                  className="rounded-md border border-zinc-300 bg-white p-3 dark:border-zinc-600 dark:bg-zinc-900"
+                                >
+                                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-700 dark:text-zinc-200">
+                                      {provider.label}
+                                    </p>
+                                    <div className="flex items-center gap-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+                                      <span>ID: {status?.hasClientId ? "Configured" : "Missing"}</span>
+                                      <span>Secret: {status?.hasClientSecret ? "Configured" : "Missing"}</span>
+                                    </div>
+                                  </div>
+
+                                  {isSteam ? (
+                                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                                      Steam uses OpenID and does not require client ID/secret setup.
+                                    </p>
+                                  ) : (
+                                    <>
+                                      <div className="grid gap-2 md:grid-cols-2">
+                                        <input
+                                          type="text"
+                                          value={draft.clientId}
+                                          onChange={(event) =>
+                                            setIntegrationProviderDrafts((current) => ({
+                                              ...current,
+                                              [provider.key]: {
+                                                ...(current[provider.key] ?? { clientId: "", clientSecret: "" }),
+                                                clientId: event.target.value,
+                                              },
+                                            }))
+                                          }
+                                          placeholder={`Set ${provider.label} Client ID`}
+                                          className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
+                                        />
+                                        <input
+                                          type="password"
+                                          value={draft.clientSecret}
+                                          onChange={(event) =>
+                                            setIntegrationProviderDrafts((current) => ({
+                                              ...current,
+                                              [provider.key]: {
+                                                ...(current[provider.key] ?? { clientId: "", clientSecret: "" }),
+                                                clientSecret: event.target.value,
+                                              },
+                                            }))
+                                          }
+                                          placeholder={`Set ${provider.label} Client Secret`}
+                                          className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
+                                        />
+                                      </div>
+
+                                      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                                          Current ID: {status?.clientIdPreview || "Not set"} · Secret: {status?.clientSecretPreview || "Not set"}
+                                        </p>
+                                        <button
+                                          type="button"
+                                          onClick={() => void onSaveIntegrationProviderSetup(provider.key)}
+                                          disabled={Boolean(isSavingIntegrationProviderSetup)}
+                                          className="h-8 rounded-md bg-indigo-600 px-3 text-xs font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                        >
+                                          {isSavingProvider ? "Saving..." : `Save ${provider.label}`}
+                                        </button>
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </>
+                      )}
+                    </div>
+
                     <div className="mb-4 grid gap-2 md:grid-cols-2">
                       <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
                         <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Users with Connections</p>

@@ -19,7 +19,7 @@ import { MemberRole } from "@/lib/db/types";
 import { isInAccordAdministrator, isInAccordDeveloper, isInAccordModerator } from "@/lib/in-accord-admin";
 import { isBotUser } from "@/lib/is-bot-user";
 import { resolveProfileIcons, type ProfileIcon } from "@/lib/profile-icons";
-import { normalizePresenceStatus, presenceStatusDotClassMap, presenceStatusLabelMap } from "@/lib/presence-status";
+import { formatPresenceStatusLabel, normalizePresenceStatus, presenceStatusDotClassMap } from "@/lib/presence-status";
 
 type OnlineRailUser = {
   id: string;
@@ -32,6 +32,7 @@ type OnlineRailUser = {
   profileName: string | null;
   bannerUrl: string | null;
   presenceStatus: string;
+  currentGame?: string | null;
   email: string | null;
   imageUrl: string | null;
   joinedAt: string | null;
@@ -311,6 +312,7 @@ export const OnlineUsersList = ({ users, roleGroups = [] }: OnlineUsersListProps
   const renderMember = (member: OnlineRailUser) => {
     const profileCard = profileCardCache[member.profileId];
     const normalizedPresenceStatus = normalizePresenceStatus(member.presenceStatus);
+    const memberCurrentGame = member.currentGame?.trim() || null;
     const isGlobalAdmin = isInAccordAdministrator(member.globalRole);
     const isGlobalDeveloper = isInAccordDeveloper(member.globalRole);
     const isGlobalModerator = isInAccordModerator(member.globalRole);
@@ -521,6 +523,7 @@ export const OnlineUsersList = ({ users, roleGroups = [] }: OnlineUsersListProps
               <div className="space-y-1 text-[#dbdee1]">
                 <p>Name: {member.realName || member.profileName || member.displayName || "Unknown User"}</p>
                 <p>Email: {member.email || "N/A"}</p>
+                <p>Current Game: {memberCurrentGame || "Not in game"}</p>
                 <p>Role: {member.role}</p>
                 <p>Last logon: {formatDate(member.lastLogonAt)}</p>
                 <p>Created: {formatDate(member.joinedAt)}</p>
@@ -616,7 +619,7 @@ export const OnlineUsersList = ({ users, roleGroups = [] }: OnlineUsersListProps
 
           <div className="flex items-center border-t border-white/10 p-3 pt-2 text-xs text-[#b5bac1]">
             {renderMemberRoleIcon(member.role)}
-            {presenceStatusLabelMap[normalizedPresenceStatus]} member
+            {formatPresenceStatusLabel(normalizedPresenceStatus, { showGameIcon: Boolean(memberCurrentGame) })} member
           </div>
         </PopoverContent>
 

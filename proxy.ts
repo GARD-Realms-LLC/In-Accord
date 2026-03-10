@@ -22,11 +22,11 @@ const hasPlausibleSessionToken = (token?: string) => {
   }
 
   const parts = token.split(".");
-  if (parts.length < 3) {
+  if (parts.length !== 4) {
     return false;
   }
 
-  const issuedAtRaw = parts[parts.length - 2];
+  const issuedAtRaw = parts[1];
   const issuedAt = Number(issuedAtRaw);
   if (!Number.isFinite(issuedAt)) {
     return false;

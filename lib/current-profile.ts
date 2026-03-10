@@ -32,6 +32,7 @@ type CachedProfile = {
   familyParentUserId: string | null;
   bannerUrl: string | null;
   presenceStatus: string;
+  currentGame: string | null;
   role: string | null;
   imageUrl: string;
   email: string;
@@ -110,6 +111,7 @@ export const currentProfile = async () => {
         nullif(trim(to_jsonb(u)->>'familyParentUserId'), '') as "familyParentUserId",
         up."bannerUrl" as "bannerUrl",
         up."presenceStatus" as "presenceStatus",
+        nullif(trim(to_jsonb(up)->>'currentGame'), '') as "currentGame",
         u."role" as "role",
         u."email" as "email",
         coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
@@ -140,6 +142,7 @@ export const currentProfile = async () => {
         familyParentUserId: string | null;
         bannerUrl: string | null;
         presenceStatus: string | null;
+        currentGame: string | null;
         role: string | null;
         email: string | null;
         imageUrl: string | null;
@@ -178,6 +181,7 @@ export const currentProfile = async () => {
           familyParentUserId: normalizedFamily?.familyParentUserId ?? user.familyParentUserId ?? null,
           bannerUrl: resolvedBannerUrl,
           presenceStatus: normalizePresenceStatus(user.presenceStatus),
+          currentGame: user.currentGame ?? null,
           role: user.role ?? null,
           imageUrl: user.imageUrl ?? "/in-accord-steampunk-logo.png",
           email: user.email ?? "",

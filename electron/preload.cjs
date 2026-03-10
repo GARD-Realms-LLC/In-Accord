@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("electronAPI", {
   platform: process.platform,
   getRuntimeMeta: () => ipcRenderer.invoke("inaccord:runtime-meta-get"),
+  getRuntimeActivity: () => ipcRenderer.invoke("inaccord:runtime-activity-get"),
   getUpdaterStatus: () => ipcRenderer.invoke("inaccord:updater-status-get"),
   checkForUpdatesNow: () => ipcRenderer.invoke("inaccord:updater-check-now"),
   upgradeNow: () => ipcRenderer.invoke("inaccord:updater-upgrade-now"),

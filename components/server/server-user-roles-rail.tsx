@@ -26,6 +26,7 @@ type RoleRow = {
   profileName: string | null;
   bannerUrl: string | null;
   presenceStatus: string | null;
+  currentGame: string | null;
   email: string | null;
   imageUrl: string | null;
   joinedAt: Date | string | null;
@@ -75,6 +76,7 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
       up."profileName" as "profileName",
       up."bannerUrl" as "bannerUrl",
       up."presenceStatus" as "presenceStatus",
+      nullif(trim(to_jsonb(up)->>'currentGame'), '') as "currentGame",
       u."email" as "email",
       coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
       u."account.created" as "joinedAt",
@@ -185,6 +187,7 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
     realName: row.realName ?? "",
     displayName: row.realName || row.email || row.profileId,
     presenceStatus: String(row.presenceStatus ?? "ONLINE").toUpperCase(),
+    currentGame: row.currentGame ?? null,
     joinedAt: row.joinedAt ? new Date(row.joinedAt).toISOString() : null,
     lastLogonAt: row.lastLogonAt ? new Date(row.lastLogonAt).toISOString() : null,
   }))

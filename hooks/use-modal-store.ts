@@ -43,6 +43,7 @@ interface ModalData {
   profileNameplateImageUrl?: string | null;
   profileBannerUrl?: string | null;
   profilePresenceStatus?: string | null;
+  profileCurrentGame?: string | null;
   profileJoinedAt?: string | null;
   profileLastLogonAt?: string | null;
   apiUrl?: string;

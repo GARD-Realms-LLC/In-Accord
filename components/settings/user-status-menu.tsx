@@ -16,7 +16,7 @@ import { UserAvatar } from "@/components/user-avatar";
 import { useModal } from "@/hooks/use-modal-store";
 import { hasInAccordAdministrativeAccess, isInAccordAdministrator, isInAccordDeveloper, isInAccordModerator } from "@/lib/in-accord-admin";
 import { resolveProfileIcons, type ProfileIcon } from "@/lib/profile-icons";
-import { PresenceStatus, presenceStatusLabelMap, normalizePresenceStatus, presenceStatusValues } from "@/lib/presence-status";
+import { PresenceStatus, formatPresenceStatusLabel, normalizePresenceStatus, presenceStatusLabelMap, presenceStatusValues } from "@/lib/presence-status";
 
 const VOICE_TOGGLE_CAMERA_EVENT = "inaccord:voice-toggle-camera";
 const VOICE_STATE_SYNC_EVENT = "inaccord:voice-state-sync";
@@ -38,6 +38,7 @@ interface UserStatusMenuProps {
   profileNameplateImageUrl?: string | null;
   profileBannerUrl?: string | null;
   profilePresenceStatus?: string | null;
+  profileCurrentGame?: string | null;
   profileJoinedAt?: string | null;
   profileLastLogonAt?: string | null;
 }
@@ -57,6 +58,7 @@ export const UserStatusMenu = ({
   profileNameplateImageUrl,
   profileBannerUrl,
   profilePresenceStatus,
+  profileCurrentGame,
   profileJoinedAt,
   profileLastLogonAt,
 }: UserStatusMenuProps) => {
@@ -94,6 +96,7 @@ export const UserStatusMenu = ({
   const [menuPresenceStatus, setMenuPresenceStatus] = useState<PresenceStatus>(
     normalizePresenceStatus(profilePresenceStatus)
   );
+  const [menuCurrentGame, setMenuCurrentGame] = useState<string | null>(profileCurrentGame?.trim() || null);
 
   useEffect(() => {
     setMenuRealName(profileRealName ?? null);
@@ -115,7 +118,8 @@ export const UserStatusMenu = ({
     setMenuBannerUrl(profileBannerUrl ?? null);
     setMenuProfileRole(profileRole ?? null);
     setMenuPresenceStatus(normalizePresenceStatus(profilePresenceStatus));
-  }, [profileAvatarDecorationUrl, profileBannerUrl, profileComment, profileEmail, profileId, profileJoinedAt, profileName, profileNameplateColor, profileNameplateImageUrl, profileNameplateLabel, profilePresenceStatus, profilePronouns, profileRealName, profileRole]);
+    setMenuCurrentGame(profileCurrentGame?.trim() || null);
+  }, [profileAvatarDecorationUrl, profileBannerUrl, profileComment, profileCurrentGame, profileEmail, profileId, profileJoinedAt, profileName, profileNameplateColor, profileNameplateImageUrl, profileNameplateLabel, profilePresenceStatus, profilePronouns, profileRealName, profileRole]);
 
   useEffect(() => {
     if (!isPopoverOpen) {
@@ -148,6 +152,7 @@ export const UserStatusMenu = ({
           bannerUrl?: string | null;
           role?: string | null;
           presenceStatus?: string | null;
+          currentGame?: string | null;
         };
 
         if (!cancelled) {
@@ -172,6 +177,7 @@ export const UserStatusMenu = ({
           setMenuBannerUrl(payload.bannerUrl ?? null);
           setMenuProfileRole(payload.role ?? profileRole ?? null);
           setMenuPresenceStatus(normalizePresenceStatus(payload.presenceStatus));
+          setMenuCurrentGame(payload.currentGame?.trim() || null);
         }
       } catch (error) {
         console.error("[USER_STATUS_PROFILE_REFRESH]", error);
@@ -197,6 +203,7 @@ export const UserStatusMenu = ({
         nameplateImageUrl?: string | null;
         profileRole?: string | null;
         presenceStatus?: string;
+        currentGame?: string | null;
       }>;
 
       if (typeof customEvent.detail?.realName === "string") {
@@ -242,6 +249,10 @@ export const UserStatusMenu = ({
       if (typeof customEvent.detail?.presenceStatus === "string") {
         setMenuPresenceStatus(normalizePresenceStatus(customEvent.detail.presenceStatus));
       }
+
+      if (customEvent.detail?.currentGame === null || typeof customEvent.detail?.currentGame === "string") {
+        setMenuCurrentGame(customEvent.detail.currentGame?.trim() || null);
+      }
     };
 
     window.addEventListener("inaccord:profile-updated", handleProfileUpdated);
@@ -278,6 +289,7 @@ export const UserStatusMenu = ({
       profileNameplateColor: menuNameplateColor,
       profileBannerUrl,
       profilePresenceStatus: menuPresenceStatus,
+      profileCurrentGame: menuCurrentGame,
       profileJoinedAt,
       profileLastLogonAt,
     });
@@ -296,6 +308,7 @@ export const UserStatusMenu = ({
       profileNameplateColor: menuNameplateColor,
       profileBannerUrl,
       profilePresenceStatus: menuPresenceStatus,
+      profileCurrentGame: menuCurrentGame,
       profileJoinedAt,
       profileLastLogonAt,
       query: {
@@ -545,6 +558,7 @@ export const UserStatusMenu = ({
   const canControlVoiceCamera = isVoiceSessionActive && isVideoSession;
   const canUseCameraControls = canControlVoiceCamera || isPmVideoSessionActive;
   const effectiveCameraOn = canControlVoiceCamera ? isCameraOn : isPmCameraOn;
+  const showCurrentGameIcon = Boolean(menuCurrentGame?.trim());
 
   return (
     <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
@@ -568,7 +582,7 @@ export const UserStatusMenu = ({
               />
               {highestRoleIcon}
             </div>
-            <p className="truncate text-[10px] text-[#b5bac1]">{presenceStatusLabelMap[menuPresenceStatus]}</p>
+            <p className="truncate text-[10px] text-[#b5bac1]">{formatPresenceStatusLabel(menuPresenceStatus, { showGameIcon: showCurrentGameIcon })}</p>
           </div>
         </button>
       </PopoverTrigger>
@@ -628,7 +642,8 @@ export const UserStatusMenu = ({
               <p>Name: {displayNameForProfileCard}</p>
               <p>Profile Name: {menuProfileName || "Not set"}</p>
               <p>Email: {profileEmail || ""}</p>
-              <p>Status: {presenceStatusLabelMap[menuPresenceStatus]}</p>
+              <p>Status: {formatPresenceStatusLabel(menuPresenceStatus, { showGameIcon: showCurrentGameIcon })}</p>
+              <p>Current Game: {menuCurrentGame || "Not in game"}</p>
               <p>Last logon: {lastLogon}</p>
               <p>Created: {created}</p>
             </div>
@@ -673,7 +688,7 @@ export const UserStatusMenu = ({
                   >
                     <span className="inline-flex items-center gap-2">
                       <span className={`h-2.5 w-2.5 rounded-full ${statusDotClassMap[menuPresenceStatus]}`} />
-                      {presenceStatusLabelMap[menuPresenceStatus]}
+                      {formatPresenceStatusLabel(menuPresenceStatus, { showGameIcon: showCurrentGameIcon })}
                     </span>
                     <span className="text-[10px] text-[#949ba4]">{isSavingStatus ? "Saving..." : "Change"}</span>
                   </button>

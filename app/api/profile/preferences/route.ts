@@ -41,12 +41,19 @@ export async function PATCH(req: Request) {
       textImages?: unknown;
       accessibility?: unknown;
       emoji?: unknown;
+      stickers?: unknown;
+      keybinds?: unknown;
+      advanced?: unknown;
+      streamerMode?: unknown;
+      gameOverlay?: unknown;
       botGhost?: unknown;
       customCss?: unknown;
       languagePreference?: unknown;
       connectedAccounts?: unknown;
       contentSocial?: unknown;
       dataPrivacy?: unknown;
+      activityPrivacy?: unknown;
+      registeredGames?: unknown;
       familyCenter?: unknown;
       businessCenter?: unknown;
       schoolCenter?: unknown;
@@ -84,6 +91,26 @@ export async function PATCH(req: Request) {
       updates.emoji = body.emoji as Parameters<typeof updateUserPreferences>[1]["emoji"];
     }
 
+    if (Object.prototype.hasOwnProperty.call(body, "stickers")) {
+      updates.stickers = body.stickers as Parameters<typeof updateUserPreferences>[1]["stickers"];
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "keybinds")) {
+      updates.keybinds = body.keybinds as Parameters<typeof updateUserPreferences>[1]["keybinds"];
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "advanced")) {
+      updates.advanced = body.advanced as Parameters<typeof updateUserPreferences>[1]["advanced"];
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "streamerMode")) {
+      updates.streamerMode = body.streamerMode as Parameters<typeof updateUserPreferences>[1]["streamerMode"];
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "gameOverlay")) {
+      updates.gameOverlay = body.gameOverlay as Parameters<typeof updateUserPreferences>[1]["gameOverlay"];
+    }
+
     if (Object.prototype.hasOwnProperty.call(body, "botGhost")) {
       updates.botGhost = body.botGhost as Parameters<typeof updateUserPreferences>[1]["botGhost"];
     }
@@ -108,6 +135,14 @@ export async function PATCH(req: Request) {
 
     if (Object.prototype.hasOwnProperty.call(body, "dataPrivacy")) {
       updates.dataPrivacy = body.dataPrivacy as Parameters<typeof updateUserPreferences>[1]["dataPrivacy"];
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "activityPrivacy")) {
+      updates.activityPrivacy = body.activityPrivacy as Parameters<typeof updateUserPreferences>[1]["activityPrivacy"];
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "registeredGames")) {
+      updates.registeredGames = body.registeredGames as Parameters<typeof updateUserPreferences>[1]["registeredGames"];
     }
 
     if (Object.prototype.hasOwnProperty.call(body, "familyCenter")) {

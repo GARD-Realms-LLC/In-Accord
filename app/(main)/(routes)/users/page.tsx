@@ -23,7 +23,7 @@ import { PendingRequestItem } from "@/components/friends/pending-request-item";
 import { UsersPageAutoRefresh } from "@/components/friends/users-page-auto-refresh";
 import { IncomingPmCallTabNotifier } from "@/components/friends/incoming-pm-call-tab-notifier";
 import { isBotUser } from "@/lib/is-bot-user";
-import { presenceStatusDotClassMap, presenceStatusLabelMap, resolveAutoPresenceStatus } from "@/lib/presence-status";
+import { formatPresenceStatusLabel, presenceStatusDotClassMap, resolveAutoPresenceStatus } from "@/lib/presence-status";
 import { ensureFriendRelationsSchema } from "@/lib/friend-relations";
 import { NewUserCloverBadge } from "@/components/new-user-clover-badge";
 import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
@@ -205,6 +205,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
     imageUrl: string | null;
     profileCreatedAt: Date | string | null;
     presenceStatus: string | null;
+    currentGame: string | null;
     presenceUpdatedAt: Date | string | null;
     hasConversation: boolean;
     isFriend: boolean;
@@ -220,6 +221,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
     imageUrl: string | null;
     profileCreatedAt: Date | string | null;
     status: ReturnType<typeof resolveAutoPresenceStatus>;
+    currentGame: string | null;
     hasConversation: boolean;
     isFriend: boolean;
     isBlocked: boolean;
@@ -337,6 +339,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
         coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
         u."account.created" as "profileCreatedAt",
         up."presenceStatus" as "presenceStatus",
+        nullif(trim(to_jsonb(up)->>'currentGame'), '') as "currentGame",
         up."updatedAt" as "presenceUpdatedAt",
         exists (
           select 1
@@ -385,6 +388,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
         imageUrl: row.imageUrl,
         profileCreatedAt: row.profileCreatedAt,
         status: resolveAutoPresenceStatus(row.presenceStatus, row.presenceUpdatedAt),
+        currentGame: row.currentGame ?? null,
         hasConversation: Boolean(row.hasConversation),
         isFriend: Boolean(row.isFriend),
         isBlocked: Boolean(row.isBlocked),
@@ -1466,7 +1470,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                                   <NewUserCloverBadge createdAt={friend.profileCreatedAt} className="text-xs" />
                                 </p>
                                 <p className="truncate text-xs text-[#949ba4]">
-                                  {presenceStatusLabelMap[friend.status]}
+                                  {formatPresenceStatusLabel(friend.status, { showGameIcon: Boolean(friend.currentGame?.trim()) })}
                                   {friend.email ? ` • ${friend.email}` : ""}
                                 </p>
                               </div>

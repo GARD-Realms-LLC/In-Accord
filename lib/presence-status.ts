@@ -17,6 +17,22 @@ export const presenceStatusLabelMap: Record<PresenceStatus, string> = {
   OFFLINE: "Offline",
 };
 
+export const formatPresenceStatusLabel = (
+  value: unknown,
+  options?: {
+    showGameIcon?: boolean;
+  }
+) => {
+  const normalized = normalizePresenceStatus(value);
+  const label = presenceStatusLabelMap[normalized];
+
+  if (options?.showGameIcon && normalized === "ONLINE") {
+    return `🎮 ${label}`;
+  }
+
+  return label;
+};
+
 export const presenceStatusDotClassMap: Record<PresenceStatus, string> = {
   ONLINE: "bg-emerald-500",
   DND: "bg-rose-500",

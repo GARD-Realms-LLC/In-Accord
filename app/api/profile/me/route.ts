@@ -30,6 +30,7 @@ export async function GET() {
       dateOfBirth: profile.dateOfBirth ?? null,
       bannerUrl: profile.bannerUrl ?? null,
       presenceStatus: profile.presenceStatus ?? "ONLINE",
+      currentGame: profile.currentGame ?? null,
       role: profile.role ?? null,
       profileIcons: resolveProfileIcons({
         userId: profile.id,
