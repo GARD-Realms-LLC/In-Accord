@@ -19,6 +19,8 @@ import type { Profile } from "@/lib/db/types";
 import { extractQuotedContent } from "@/lib/message-quotes";
 import { ThreadToolbar } from "@/components/chat/thread-toolbar";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
+import { resolveChannelRouteContext, resolveServerRouteContext } from "@/lib/route-slug-resolver";
+import { buildChannelPath } from "@/lib/route-slugs";
 
 interface ThreadPageProps {
   params: Promise<{
@@ -31,13 +33,35 @@ interface ThreadPageProps {
 const ThreadPage = async ({ params }: ThreadPageProps) => {
   const perfStart = Date.now();
   const isPerfLoggingEnabled = process.env.NODE_ENV !== "production";
-  const { serverId, channelId, threadId } = await params;
+  const { serverId: serverParam, channelId: channelParam, threadId } = await params;
 
   const profile = await currentProfile();
 
   if (!profile) {
     return redirect("/sign-in");
   }
+
+  const resolvedServer = await resolveServerRouteContext({
+    profileId: profile.id,
+    serverParam,
+  });
+
+  if (!resolvedServer) {
+    return redirect("/");
+  }
+
+  const serverId = resolvedServer.id;
+
+  const resolvedChannel = await resolveChannelRouteContext({
+    serverId,
+    channelParam,
+  });
+
+  if (!resolvedChannel) {
+    return redirect(`/servers/${resolvedServer.segment}`);
+  }
+
+  const channelId = resolvedChannel.id;
 
   if (isPerfLoggingEnabled) {
     console.info(
@@ -50,7 +74,7 @@ const ThreadPage = async ({ params }: ThreadPageProps) => {
   });
 
   if (!currentChannel) {
-    return redirect(`/servers/${serverId}`);
+    return redirect(`/servers/${resolvedServer.segment}`);
   }
 
   const access = await canAccessChannelAsProfile({
@@ -59,8 +83,13 @@ const ThreadPage = async ({ params }: ThreadPageProps) => {
     channelId,
   });
 
+  const canonicalChannelPath = buildChannelPath({
+    server: { id: serverId, name: resolvedServer.name },
+    channel: { id: currentChannel.id, name: currentChannel.name },
+  });
+
   if (!access.allowed || !access.currentMember) {
-    return redirect(`/servers/${serverId}`);
+    return redirect(`/servers/${resolvedServer.segment}`);
   }
 
   const threadResult = await db.execute(sql`
@@ -102,7 +131,7 @@ const ThreadPage = async ({ params }: ThreadPageProps) => {
   }).rows?.[0];
 
   if (!threadRow) {
-    return redirect(`/servers/${serverId}/channels/${channelId}`);
+    return redirect(canonicalChannelPath);
   }
 
   await markThreadRead({
@@ -217,7 +246,7 @@ const ThreadPage = async ({ params }: ThreadPageProps) => {
       mentionProfileNameMap.get(item.profileId) ??
       item.profile.name ??
       item.profile.email ??
-      "User";
+      "Unknown User";
 
     return {
       id: item.profileId,
@@ -229,6 +258,7 @@ const ThreadPage = async ({ params }: ThreadPageProps) => {
     select "id", "name"
     from "ServerRole"
     where "serverId" = ${serverId}
+      and "isMentionable" = true
     order by "position" asc, "name" asc
   `);
 
@@ -263,6 +293,7 @@ const ThreadPage = async ({ params }: ThreadPageProps) => {
       <div className="theme-server-chat-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-border bg-background shadow-xl shadow-black/35">
         <ChatHeader
           channelId={channelId}
+          channelPath={canonicalChannelPath}
           channelIcon={(currentChannel as { icon?: string | null }).icon ?? null}
           name={threadRow.title}
           topic={`Thread in #${currentChannel.name}`}

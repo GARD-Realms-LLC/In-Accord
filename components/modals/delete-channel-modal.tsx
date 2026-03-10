@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { buildServerPath } from "@/lib/route-slugs";
 
 export const DeleteChannelModal = () => {
   const { isOpen, onClose, type, data } = useModal();
@@ -41,7 +42,11 @@ export const DeleteChannelModal = () => {
 
       onClose();
       if (server?.id) {
-        window.location.assign(`/servers/${server.id}`);
+        window.location.assign(
+          server?.name
+            ? buildServerPath({ id: server.id, name: server.name })
+            : `/servers/${server.id}`
+        );
         return;
       }
 

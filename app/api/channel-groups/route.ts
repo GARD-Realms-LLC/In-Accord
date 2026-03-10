@@ -48,7 +48,16 @@ export async function GET(req: Request) {
       sortOrder: Number(row.sortOrder ?? 0),
     }));
 
-    return NextResponse.json({ groups });
+    return NextResponse.json(
+      { groups, channelGroups: groups },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      }
+    );
   } catch (error) {
     console.error("[CHANNEL_GROUPS_GET]", error);
     return new NextResponse("Internal Error", { status: 500 });

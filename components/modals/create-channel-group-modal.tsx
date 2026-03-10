@@ -52,6 +52,8 @@ const FREE_GROUP_ICONS = [
   "🧩",
 ];
 
+const CHANNEL_GROUP_CREATED_EVENT = "inaccord:channel-group-created";
+
 export const CreateChannelGroupModal = () => {
   const { isOpen, onClose, type, data } = useModal();
   const router = useRouter();
@@ -88,11 +90,27 @@ export const CreateChannelGroupModal = () => {
         return;
       }
 
-      await axios.post("/api/channel-groups", {
+      const response = await axios.post("/api/channel-groups", {
         name: values.name,
         icon: (values.icon ?? "").trim() || null,
         serverId,
       });
+
+      const createdGroup = (response.data as { group?: { id?: string; name?: string; icon?: string | null } })?.group;
+      if (typeof window !== "undefined" && createdGroup?.id) {
+        window.dispatchEvent(
+          new CustomEvent(CHANNEL_GROUP_CREATED_EVENT, {
+            detail: {
+              serverId,
+              group: {
+                id: createdGroup.id,
+                name: createdGroup.name ?? values.name,
+                icon: createdGroup.icon ?? ((values.icon ?? "").trim() || null),
+              },
+            },
+          }),
+        );
+      }
 
       form.reset();
       router.refresh();

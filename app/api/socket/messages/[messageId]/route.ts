@@ -5,6 +5,7 @@ import { currentProfile } from "@/lib/current-profile";
 import { channel, db, member, MemberRole, message, server } from "@/lib/db";
 import { computeChannelPermissionForRole, resolveMemberContext } from "@/lib/channel-permissions";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
+import { parseMentionSegments } from "@/lib/mentions";
 
 type RouteParams = { messageId: string };
 
@@ -14,6 +15,54 @@ const resolveIds = (req: Request) => {
     serverId: searchParams.get("serverId")?.trim() ?? "",
     channelId: searchParams.get("channelId")?.trim() ?? "",
   };
+};
+
+const sanitizeRoleMentions = async (content: string, serverId: string) => {
+  if (!content) {
+    return content;
+  }
+
+  const segments = parseMentionSegments(content);
+  const roleMentionIds = Array.from(
+    new Set(
+      segments
+        .filter((segment) => segment.kind === "mention" && segment.entityType === "role")
+        .map((segment) => (segment.kind === "mention" ? String(segment.entityId ?? "").trim() : ""))
+        .filter(Boolean)
+    )
+  );
+
+  if (!roleMentionIds.length) {
+    return content;
+  }
+
+  const mentionableRoleRows = await db.execute(sql`
+    select "id"
+    from "ServerRole"
+    where "serverId" = ${serverId}
+      and "isMentionable" = true
+      and "id" in (${sql.join(roleMentionIds.map((id) => sql`${id}`), sql`, `)})
+  `);
+
+  const mentionableRoleIds = new Set(
+    ((mentionableRoleRows as unknown as { rows?: Array<{ id: string }> }).rows ?? [])
+      .map((row) => String(row.id ?? "").trim())
+      .filter(Boolean)
+  );
+
+  return segments
+    .map((segment) => {
+      if (segment.kind === "text") {
+        return segment.value;
+      }
+
+      if (segment.entityType === "role" && !mentionableRoleIds.has(String(segment.entityId ?? "").trim())) {
+        return `@${segment.label}`;
+      }
+
+      return segment.raw;
+    })
+    .join("");
 };
 
 export async function PATCH(
@@ -44,6 +93,12 @@ export async function PATCH(
     }
 
     if (!content) {
+      return new NextResponse("Content is required", { status: 400 });
+    }
+
+    const sanitizedContent = await sanitizeRoleMentions(content, serverId);
+
+    if (!sanitizedContent) {
       return new NextResponse("Content is required", { status: 400 });
     }
 
@@ -105,7 +160,7 @@ export async function PATCH(
     const updated = await db
       .update(message)
       .set({
-        content,
+        content: sanitizedContent,
         updatedAt: now,
       })
       .where(and(eq(message.id, messageId), eq(message.channelId, channelId)))

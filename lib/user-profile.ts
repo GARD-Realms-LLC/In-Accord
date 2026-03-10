@@ -17,7 +17,9 @@ export const ensureUserProfileSchema = async () => {
       "nameplateLabel" varchar(40),
       "nameplateColor" varchar(20),
       "nameplateImageUrl" text,
-      "pronouns" varchar(40),
+      "pronouns" varchar(80),
+      "businessRole" varchar(80),
+      "businessSection" varchar(80),
       "comment" varchar(280),
       "avatarDecorationUrl" text,
       "bannerUrl" text,
@@ -69,7 +71,32 @@ export const ensureUserProfileSchema = async () => {
 
   await db.execute(sql`
     alter table "UserProfile"
-    add column if not exists "pronouns" varchar(40)
+    add column if not exists "pronouns" varchar(80)
+  `);
+
+  await db.execute(sql`
+    alter table "UserProfile"
+    alter column "pronouns" type varchar(80)
+  `);
+
+  await db.execute(sql`
+    alter table "UserProfile"
+    add column if not exists "businessRole" varchar(80)
+  `);
+
+  await db.execute(sql`
+    alter table "UserProfile"
+    add column if not exists "businessSection" varchar(80)
+  `);
+
+  await db.execute(sql`
+    alter table "UserProfile"
+    alter column "businessRole" type varchar(80)
+  `);
+
+  await db.execute(sql`
+    alter table "UserProfile"
+    alter column "businessSection" type varchar(80)
   `);
 
   await db.execute(sql`

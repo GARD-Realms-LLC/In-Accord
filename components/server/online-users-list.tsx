@@ -2,7 +2,7 @@
 
 import { Ban, Crown, Flag, MessageCircle, UserPlus, Wrench } from "lucide-react";
 import Image from "next/image";
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import axios from "axios";
 
@@ -14,6 +14,7 @@ import { NewUserCloverBadge } from "@/components/new-user-clover-badge";
 import { ProfileIconRow } from "@/components/profile-icon-row";
 import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
 import { UserAvatar } from "@/components/user-avatar";
+import { BotCommandsDialog } from "@/components/bot-commands-dialog";
 import { MemberRole } from "@/lib/db/types";
 import { isInAccordAdministrator, isInAccordDeveloper, isInAccordModerator } from "@/lib/in-accord-admin";
 import { isBotUser } from "@/lib/is-bot-user";
@@ -24,6 +25,7 @@ type OnlineRailUser = {
   id: string;
   profileId: string;
   role: MemberRole;
+  assignedRoleName?: string | null;
   globalRole: string | null;
   displayName: string;
   realName: string;
@@ -38,7 +40,11 @@ type OnlineRailUser = {
 
 interface OnlineUsersListProps {
   users: OnlineRailUser[];
+  roleGroups?: Array<{ id: string; name: string; position?: number }>;
 }
+
+const PROFILE_CARD_CACHE_LIMIT = 600;
+const BOT_COMMANDS_CACHE_LIMIT = 300;
 
 const formatDate = (value: string | null) => {
   if (!value) {
@@ -53,7 +59,7 @@ const formatDate = (value: string | null) => {
   return parsed.toLocaleString();
 };
 
-export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
+export const OnlineUsersList = ({ users, roleGroups = [] }: OnlineUsersListProps) => {
   const params = useParams();
   const router = useRouter();
   const [profileCardCache, setProfileCardCache] = useState<
@@ -82,18 +88,45 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
     >
   >({});
   const [loadingProfileCardId, setLoadingProfileCardId] = useState<string | null>(null);
-  const [collapsed, setCollapsed] = useState<Record<MemberRole, boolean>>({
-    [MemberRole.ADMIN]: false,
-    [MemberRole.MODERATOR]: false,
-    [MemberRole.GUEST]: false,
-  });
+  const [botCommandsByProfileId, setBotCommandsByProfileId] = useState<
+    Record<string, { botName: string; commands: string[] }>
+  >({});
+  const [loadingBotCommandsProfileId, setLoadingBotCommandsProfileId] = useState<string | null>(null);
+  const [commandsDialogProfileId, setCommandsDialogProfileId] = useState<string | null>(null);
+  const [collapsedByGroup, setCollapsedByGroup] = useState<Record<string, boolean>>({});
+  const loadingProfileCardIdsRef = useRef(new Set<string>());
+  const loadingBotCommandIdsRef = useRef(new Set<string>());
+
+  const putBoundedRecordEntry = <TValue,>(
+    current: Record<string, TValue>,
+    key: string,
+    value: TValue,
+    limit: number
+  ) => {
+    const keys = Object.keys(current);
+    const keyExists = Object.prototype.hasOwnProperty.call(current, key);
+    const next: Record<string, TValue> = {
+      ...current,
+      [key]: value,
+    };
+
+    if (!keyExists && keys.length >= limit) {
+      const oldestKey = keys[0];
+      if (oldestKey && oldestKey !== key) {
+        delete next[oldestKey];
+      }
+    }
+
+    return next;
+  };
 
   const loadProfileCard = async (memberId: string, profileId: string) => {
-    if (!profileId || profileCardCache[profileId]) {
+    if (!profileId || profileCardCache[profileId] || loadingProfileCardIdsRef.current.has(profileId)) {
       return;
     }
 
     try {
+      loadingProfileCardIdsRef.current.add(profileId);
       setLoadingProfileCardId(profileId);
 
       const response = await axios.get<{
@@ -137,125 +170,131 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
           ? response.data.comment.trim()
           : null;
 
-      setProfileCardCache((prev) => ({
-        ...prev,
-        [profileId]: {
-          pronouns,
-          comment,
-          nameplateLabel:
-            typeof response.data?.nameplateLabel === "string" && response.data.nameplateLabel.trim().length > 0
-              ? response.data.nameplateLabel.trim()
-              : null,
-          nameplateColor:
-            typeof response.data?.nameplateColor === "string" && response.data.nameplateColor.trim().length > 0
-              ? response.data.nameplateColor.trim()
-              : null,
-          nameplateImageUrl:
-            typeof response.data?.nameplateImageUrl === "string" && response.data.nameplateImageUrl.trim().length > 0
-              ? response.data.nameplateImageUrl.trim()
-              : null,
-          effectiveNameplateLabel:
-            typeof response.data?.effectiveNameplateLabel === "string" && response.data.effectiveNameplateLabel.trim().length > 0
-              ? response.data.effectiveNameplateLabel.trim()
-              : null,
-          effectiveNameplateColor:
-            typeof response.data?.effectiveNameplateColor === "string" && response.data.effectiveNameplateColor.trim().length > 0
-              ? response.data.effectiveNameplateColor.trim()
-              : null,
-          effectiveNameplateImageUrl:
-            typeof response.data?.effectiveNameplateImageUrl === "string" && response.data.effectiveNameplateImageUrl.trim().length > 0
-              ? response.data.effectiveNameplateImageUrl.trim()
-              : null,
-          profileIcons: Array.isArray(response.data?.profileIcons) ? response.data.profileIcons : [],
-          effectiveAvatarDecorationUrl:
-            typeof response.data?.effectiveAvatarDecorationUrl === "string" &&
-            response.data.effectiveAvatarDecorationUrl.trim().length > 0
-              ? response.data.effectiveAvatarDecorationUrl.trim()
-              : null,
-          effectiveBannerUrl:
-            typeof response.data?.effectiveBannerUrl === "string" &&
-            response.data.effectiveBannerUrl.trim().length > 0
-              ? response.data.effectiveBannerUrl.trim()
-              : null,
-          selectedServerTag,
-        },
-      }));
+      setProfileCardCache((prev) =>
+        putBoundedRecordEntry(
+          prev,
+          profileId,
+          {
+            pronouns,
+            comment,
+            nameplateLabel:
+              typeof response.data?.nameplateLabel === "string" && response.data.nameplateLabel.trim().length > 0
+                ? response.data.nameplateLabel.trim()
+                : null,
+            nameplateColor:
+              typeof response.data?.nameplateColor === "string" && response.data.nameplateColor.trim().length > 0
+                ? response.data.nameplateColor.trim()
+                : null,
+            nameplateImageUrl:
+              typeof response.data?.nameplateImageUrl === "string" && response.data.nameplateImageUrl.trim().length > 0
+                ? response.data.nameplateImageUrl.trim()
+                : null,
+            effectiveNameplateLabel:
+              typeof response.data?.effectiveNameplateLabel === "string" && response.data.effectiveNameplateLabel.trim().length > 0
+                ? response.data.effectiveNameplateLabel.trim()
+                : null,
+            effectiveNameplateColor:
+              typeof response.data?.effectiveNameplateColor === "string" && response.data.effectiveNameplateColor.trim().length > 0
+                ? response.data.effectiveNameplateColor.trim()
+                : null,
+            effectiveNameplateImageUrl:
+              typeof response.data?.effectiveNameplateImageUrl === "string" && response.data.effectiveNameplateImageUrl.trim().length > 0
+                ? response.data.effectiveNameplateImageUrl.trim()
+                : null,
+            profileIcons: Array.isArray(response.data?.profileIcons) ? response.data.profileIcons : [],
+            effectiveAvatarDecorationUrl:
+              typeof response.data?.effectiveAvatarDecorationUrl === "string" &&
+              response.data.effectiveAvatarDecorationUrl.trim().length > 0
+                ? response.data.effectiveAvatarDecorationUrl.trim()
+                : null,
+            effectiveBannerUrl:
+              typeof response.data?.effectiveBannerUrl === "string" &&
+              response.data.effectiveBannerUrl.trim().length > 0
+                ? response.data.effectiveBannerUrl.trim()
+                : null,
+            selectedServerTag,
+          },
+          PROFILE_CARD_CACHE_LIMIT
+        )
+      );
     } catch {
-      setProfileCardCache((prev) => ({
-        ...prev,
-        [profileId]: {
-          pronouns: null,
-          comment: null,
-          nameplateLabel: null,
-          nameplateColor: null,
-          nameplateImageUrl: null,
-          effectiveNameplateLabel: null,
-          effectiveNameplateColor: null,
-          effectiveNameplateImageUrl: null,
-          effectiveAvatarDecorationUrl: null,
-          effectiveBannerUrl: null,
-          selectedServerTag: null,
-        },
-      }));
+      setProfileCardCache((prev) =>
+        putBoundedRecordEntry(
+          prev,
+          profileId,
+          {
+            pronouns: null,
+            comment: null,
+            nameplateLabel: null,
+            nameplateColor: null,
+            nameplateImageUrl: null,
+            effectiveNameplateLabel: null,
+            effectiveNameplateColor: null,
+            effectiveNameplateImageUrl: null,
+            effectiveAvatarDecorationUrl: null,
+            effectiveBannerUrl: null,
+            selectedServerTag: null,
+          },
+          PROFILE_CARD_CACHE_LIMIT
+        )
+      );
     } finally {
+      loadingProfileCardIdsRef.current.delete(profileId);
       setLoadingProfileCardId((prev) => (prev === profileId ? null : prev));
     }
   };
 
-  const normalizeRole = (role: unknown): MemberRole => {
-    const normalized = String(role ?? "").trim().toUpperCase();
-
-    if (
-      normalized === MemberRole.ADMIN ||
-      normalized.includes("ADMIN")
-    ) {
-      return MemberRole.ADMIN;
+  const loadBotCommands = async (memberId: string, profileId: string) => {
+    if (!profileId || botCommandsByProfileId[profileId] || loadingBotCommandIdsRef.current.has(profileId)) {
+      return;
     }
 
-    if (
-      normalized === MemberRole.MODERATOR ||
-      normalized.includes("MODERATOR") ||
-      normalized === "MOD"
-    ) {
-      return MemberRole.MODERATOR;
+    try {
+      loadingBotCommandIdsRef.current.add(profileId);
+      setLoadingBotCommandsProfileId(profileId);
+
+      const response = await axios.get<{ botName?: string; commands?: string[] }>(
+        `/api/profile/${encodeURIComponent(profileId)}/bot-commands`,
+        {
+          params: {
+            memberId,
+          },
+        }
+      );
+
+      const commands = Array.isArray(response.data?.commands)
+        ? response.data.commands
+            .filter((item): item is string => typeof item === "string")
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0)
+        : [];
+
+      setBotCommandsByProfileId((prev) =>
+        putBoundedRecordEntry(
+          prev,
+          profileId,
+          {
+            botName: String(response.data?.botName ?? "").trim() || "Bot",
+            commands,
+          },
+          BOT_COMMANDS_CACHE_LIMIT
+        )
+      );
+    } catch {
+      // not a configured bot profile or unavailable
+    } finally {
+      loadingBotCommandIdsRef.current.delete(profileId);
+      setLoadingBotCommandsProfileId((prev) => (prev === profileId ? null : prev));
     }
-
-    return MemberRole.GUEST;
   };
 
-  const roleRank = (role: string) => {
-    const normalized = String(normalizeRole(role));
-    if (normalized === "ADMIN") return 1;
-    if (normalized === "MODERATOR") return 2;
-    return 3;
-  };
-
-  const sortedUsers = [...users].sort((a, b) => {
-    const byRole = roleRank(a.role) - roleRank(b.role);
-    if (byRole !== 0) {
-      return byRole;
-    }
-
-    const aName = (a.profileName || a.realName || a.displayName || a.email || a.profileId || "").toLowerCase();
-    const bName = (b.profileName || b.realName || b.displayName || b.email || b.profileId || "").toLowerCase();
-    return aName.localeCompare(bName);
-  });
-
-  const usersByRole: Record<MemberRole, OnlineRailUser[]> = {
-    [MemberRole.ADMIN]: [],
-    [MemberRole.MODERATOR]: [],
-    [MemberRole.GUEST]: [],
-  };
-
-  for (const item of sortedUsers) {
-    usersByRole[normalizeRole(item.role)].push(item);
-  }
-
-  const roleSections: Array<{ role: MemberRole; label: string }> = [
-    { role: MemberRole.ADMIN, label: "Admins" },
-    { role: MemberRole.MODERATOR, label: "Moderators" },
-    { role: MemberRole.GUEST, label: "Guests" },
-  ];
+  const sortedUsers = useMemo(() => {
+    return [...users].sort((a, b) => {
+      const aName = (a.profileName || a.realName || a.displayName || a.email || a.profileId || "").toLowerCase();
+      const bName = (b.profileName || b.realName || b.displayName || b.email || b.profileId || "").toLowerCase();
+      return aName.localeCompare(bName);
+    });
+  }, [users]);
 
   const renderMemberRoleIcon = (role: unknown) => {
     if (isInAccordAdministrator(String(role ?? ""))) {
@@ -302,6 +341,7 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
       name: member.profileName || member.realName || member.displayName,
       email: member.email,
     });
+    const canShowBotCommands = showBotBadge || member.profileId.startsWith("botcfg_");
     const roleAndMetaIcons = (
       <>
         <NewUserCloverBadge createdAt={member.joinedAt} className="text-[11px]" />
@@ -331,7 +371,7 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
             : "";
 
       if (!serverIdFromRoute) {
-        window.alert("Unable to open DM from this view.");
+        window.alert("Unable to open PM from this view.");
         return;
       }
 
@@ -406,7 +446,7 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
                 className="h-6 w-6"
               />
               <span
-                className={`absolute -bottom-0.5 -right-0.5 inline-flex h-2.5 w-2.5 rounded-full border border-[#111214] ${presenceStatusDotClassMap[normalizedPresenceStatus]}`}
+                className={`absolute -bottom-0.5 -left-0.5 inline-flex h-2.5 w-2.5 rounded-full border border-[#111214] ${presenceStatusDotClassMap[normalizedPresenceStatus]}`}
                 aria-hidden="true"
               />
             </span>
@@ -507,6 +547,23 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
             ) : null}
 
             <div className="mt-3 flex items-center gap-2 border-t border-white/10 pt-3">
+              {canShowBotCommands ? (
+                <ActionTooltip label="Commands" align="center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCommandsDialogProfileId(member.profileId);
+                      void loadBotCommands(member.id, member.profileId);
+                    }}
+                    className="inline-flex h-8 items-center justify-center rounded-md border border-indigo-500/35 bg-indigo-500/15 px-2 text-[11px] font-semibold tracking-[0.05em] text-indigo-200 transition hover:bg-indigo-500/25"
+                    aria-label="Show bot commands"
+                    title="Commands"
+                  >
+                    {loadingBotCommandsProfileId === member.profileId ? "..." : "COMMANDS"}
+                  </button>
+                </ActionTooltip>
+              ) : null}
+
               <ActionTooltip label="Add Friend" align="center">
                 <button
                   type="button"
@@ -531,13 +588,13 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
                 </button>
               </ActionTooltip>
 
-              <ActionTooltip label="Direct Message" align="center">
+              <ActionTooltip label="Private Message" align="center">
                 <button
                   type="button"
                   onClick={onStartDirectMessage}
                   className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/15 bg-[#1e1f22] text-[#dbdee1] transition hover:bg-[#2a2b30]"
-                  aria-label="Open direct message"
-                  title="Direct Message"
+                  aria-label="Open private message"
+                  title="Private Message"
                 >
                   <MessageCircle className="h-4 w-4" />
                 </button>
@@ -562,50 +619,124 @@ export const OnlineUsersList = ({ users }: OnlineUsersListProps) => {
             {presenceStatusLabelMap[normalizedPresenceStatus]} member
           </div>
         </PopoverContent>
+
+        <BotCommandsDialog
+          open={commandsDialogProfileId === member.profileId}
+          onOpenChange={(open) => {
+            if (!open) {
+              setCommandsDialogProfileId((current) =>
+                current === member.profileId ? null : current
+              );
+            }
+          }}
+          botName={
+            botCommandsByProfileId[member.profileId]?.botName ||
+            member.profileName ||
+            member.displayName ||
+            "Bot"
+          }
+          commands={botCommandsByProfileId[member.profileId]?.commands ?? []}
+        />
       </Popover>
     );
   };
 
+  const orderedGroups = useMemo(() => {
+    return [...roleGroups].sort((a, b) => {
+      const byPosition = Number(a.position ?? 0) - Number(b.position ?? 0);
+      if (byPosition !== 0) {
+        return byPosition;
+      }
+
+      return a.name.localeCompare(b.name);
+    });
+  }, [roleGroups]);
+
+  const { usersByRoleGroup, unassignedUsers } = useMemo(() => {
+    const groupedUsers = new Map<string, OnlineRailUser[]>();
+    for (const group of orderedGroups) {
+      groupedUsers.set(group.id, []);
+    }
+
+    const groupIdByNormalizedName = new Map<string, string>();
+    for (const group of orderedGroups) {
+      groupIdByNormalizedName.set(group.name.trim().toLowerCase(), group.id);
+    }
+
+    const usersWithoutGroup: OnlineRailUser[] = [];
+
+    for (const member of sortedUsers) {
+      const assignedRoleName = String(member.assignedRoleName ?? "").trim().toLowerCase();
+      if (!assignedRoleName) {
+        usersWithoutGroup.push(member);
+        continue;
+      }
+
+      const matchedGroupId = groupIdByNormalizedName.get(assignedRoleName);
+      if (!matchedGroupId) {
+        usersWithoutGroup.push(member);
+        continue;
+      }
+
+      groupedUsers.get(matchedGroupId)?.push(member);
+    }
+
+    return {
+      usersByRoleGroup: groupedUsers,
+      unassignedUsers: usersWithoutGroup,
+    };
+  }, [orderedGroups, sortedUsers]);
+
   return (
     <div className="space-y-3">
-      {roleSections.map(({ role, label }) => {
-        const sectionUsers = usersByRole[role];
-        if (!sectionUsers.length) {
-          return null;
-        }
-
-        const onlineSectionUsers = sectionUsers.filter(
-          (item) => String(item.presenceStatus ?? "ONLINE").toUpperCase() !== "OFFLINE"
-        );
-        const offlineSectionUsers = sectionUsers.filter(
-          (item) => String(item.presenceStatus ?? "ONLINE").toUpperCase() === "OFFLINE"
-        );
-
-        const isCollapsed = collapsed[role];
+      {orderedGroups.map((group) => {
+        const groupUsers = usersByRoleGroup.get(group.id) ?? [];
+        const isCollapsed = Boolean(collapsedByGroup[group.id]);
 
         return (
-          <div key={role} className="space-y-1.5">
+          <div key={group.id} className="space-y-1.5">
             <button
               type="button"
               onClick={() =>
-                setCollapsed((prev) => ({
+                setCollapsedByGroup((prev) => ({
                   ...prev,
-                  [role]: !prev[role],
+                  [group.id]: !prev[group.id],
                 }))
               }
               className="flex w-full items-center justify-between rounded px-1 py-1 text-left hover:bg-[#2a2b2f]"
               aria-expanded={!isCollapsed}
             >
               <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
-                {label} — {sectionUsers.length}
+                {group.name} — {groupUsers.length}
               </span>
               <span className="text-xs text-[#949ba4]">{isCollapsed ? "▸" : "▾"}</span>
             </button>
 
-            {isCollapsed ? null : sectionUsers.map((member) => renderMember(member))}
+            {isCollapsed ? null : groupUsers.map((member) => renderMember(member))}
           </div>
         );
       })}
+
+      <div className="space-y-1.5">
+        <button
+          type="button"
+          onClick={() =>
+            setCollapsedByGroup((prev) => ({
+              ...prev,
+              __unassigned: !prev.__unassigned,
+            }))
+          }
+          className="flex w-full items-center justify-between rounded px-1 py-1 text-left hover:bg-[#2a2b2f]"
+          aria-expanded={!collapsedByGroup.__unassigned}
+        >
+          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+            Online — {unassignedUsers.length}
+          </span>
+          <span className="text-xs text-[#949ba4]">{collapsedByGroup.__unassigned ? "▸" : "▾"}</span>
+        </button>
+
+        {collapsedByGroup.__unassigned ? null : unassignedUsers.map((member) => renderMember(member))}
+      </div>
     </div>
   );
 };

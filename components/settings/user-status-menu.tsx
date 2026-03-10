@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, Crown, LogOut, MessageCircle, RefreshCw, Settings, ShieldAlert, UserPlus, Wrench } from "lucide-react";
+import { Copy, Crown, LogOut, RefreshCw, Settings, ShieldAlert, Video, VideoOff, Wrench } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import axios from "axios";
@@ -17,6 +17,11 @@ import { useModal } from "@/hooks/use-modal-store";
 import { hasInAccordAdministrativeAccess, isInAccordAdministrator, isInAccordDeveloper, isInAccordModerator } from "@/lib/in-accord-admin";
 import { resolveProfileIcons, type ProfileIcon } from "@/lib/profile-icons";
 import { PresenceStatus, presenceStatusLabelMap, normalizePresenceStatus, presenceStatusValues } from "@/lib/presence-status";
+
+const VOICE_TOGGLE_CAMERA_EVENT = "inaccord:voice-toggle-camera";
+const VOICE_STATE_SYNC_EVENT = "inaccord:voice-state-sync";
+const PM_TOGGLE_CAMERA_EVENT = "inaccord:pm-toggle-camera";
+const PM_CAMERA_STATE_SYNC_EVENT = "inaccord:pm-camera-state-sync";
 
 interface UserStatusMenuProps {
   profileId?: string | null;
@@ -63,6 +68,11 @@ export const UserStatusMenu = ({
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isSwitchingAccounts, setIsSwitchingAccounts] = useState(false);
   const [isSavingStatus, setIsSavingStatus] = useState(false);
+  const [isVoiceSessionActive, setIsVoiceSessionActive] = useState(false);
+  const [isVideoSession, setIsVideoSession] = useState(false);
+  const [isCameraOn, setIsCameraOn] = useState(false);
+  const [isPmVideoSessionActive, setIsPmVideoSessionActive] = useState(false);
+  const [isPmCameraOn, setIsPmCameraOn] = useState(false);
   const [menuRealName, setMenuRealName] = useState<string | null>(profileRealName ?? null);
   const [menuProfileName, setMenuProfileName] = useState<string | null>(profileName ?? null);
   const [menuPronouns, setMenuPronouns] = useState<string | null>(profilePronouns ?? null);
@@ -273,6 +283,27 @@ export const UserStatusMenu = ({
     });
   };
 
+  const openPatronSettings = () => {
+    onOpen("settings", {
+      profileId,
+      profileRealName: menuRealName,
+      profileName: menuProfileName,
+      profileRole: menuProfileRole ?? profileRole,
+      profileEmail,
+      profileImageUrl,
+      profileAvatarDecorationUrl: menuAvatarDecorationUrl,
+      profileNameplateLabel: menuNameplateLabel,
+      profileNameplateColor: menuNameplateColor,
+      profileBannerUrl,
+      profilePresenceStatus: menuPresenceStatus,
+      profileJoinedAt,
+      profileLastLogonAt,
+      query: {
+        settingsSection: "becomePatron",
+      },
+    });
+  };
+
   const openInAccordAdminPanel = () => {
     onOpen("inAccordAdmin", {
       profileId,
@@ -315,8 +346,77 @@ export const UserStatusMenu = ({
       });
   };
 
-  const onStartDirectMessage = () => {
-    window.alert("Open the Users tab to start direct messages.");
+  useEffect(() => {
+    const onVoiceStateSync = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        active?: boolean;
+        isVideoChannel?: boolean;
+        isCameraOn?: boolean;
+      }>;
+
+      if (typeof customEvent.detail?.active === "boolean") {
+        setIsVoiceSessionActive(customEvent.detail.active);
+      }
+
+      if (typeof customEvent.detail?.isVideoChannel === "boolean") {
+        setIsVideoSession(customEvent.detail.isVideoChannel);
+      }
+
+      if (typeof customEvent.detail?.isCameraOn === "boolean") {
+        setIsCameraOn(customEvent.detail.isCameraOn);
+      }
+    };
+
+    window.addEventListener(VOICE_STATE_SYNC_EVENT, onVoiceStateSync as EventListener);
+
+    return () => {
+      window.removeEventListener(VOICE_STATE_SYNC_EVENT, onVoiceStateSync as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    const onPmCameraStateSync = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        active?: boolean;
+        isCameraOn?: boolean;
+      }>;
+
+      if (typeof customEvent.detail?.active === "boolean") {
+        setIsPmVideoSessionActive(customEvent.detail.active);
+      }
+
+      if (typeof customEvent.detail?.isCameraOn === "boolean") {
+        setIsPmCameraOn(customEvent.detail.isCameraOn);
+      }
+    };
+
+    window.addEventListener(PM_CAMERA_STATE_SYNC_EVENT, onPmCameraStateSync as EventListener);
+
+    return () => {
+      window.removeEventListener(PM_CAMERA_STATE_SYNC_EVENT, onPmCameraStateSync as EventListener);
+    };
+  }, []);
+
+  const onToggleCamera = () => {
+    const canControlVoiceCamera = isVoiceSessionActive && isVideoSession;
+    const canControlPmCamera = isPmVideoSessionActive;
+
+    if (!canControlVoiceCamera && !canControlPmCamera) {
+      window.alert("Join a live video channel or start a PM video call to use camera controls.");
+      return;
+    }
+
+    const next = !(canControlVoiceCamera ? isCameraOn : isPmCameraOn);
+
+    if (canControlVoiceCamera) {
+      setIsCameraOn(next);
+      window.dispatchEvent(new CustomEvent(VOICE_TOGGLE_CAMERA_EVENT, { detail: { isCameraOn: next } }));
+    }
+
+    if (canControlPmCamera) {
+      setIsPmCameraOn(next);
+      window.dispatchEvent(new CustomEvent(PM_TOGGLE_CAMERA_EVENT, { detail: { isCameraOn: next } }));
+    }
   };
 
   const statusDotClassMap: Record<PresenceStatus, string> = {
@@ -442,6 +542,9 @@ export const UserStatusMenu = ({
     fallbackNameFromEmail ||
     profileId ||
     "Unknown User";
+  const canControlVoiceCamera = isVoiceSessionActive && isVideoSession;
+  const canUseCameraControls = canControlVoiceCamera || isPmVideoSessionActive;
+  const effectiveCameraOn = canControlVoiceCamera ? isCameraOn : isPmCameraOn;
 
   return (
     <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
@@ -531,7 +634,36 @@ export const UserStatusMenu = ({
             </div>
 
             <div className="mt-3 rounded-md border border-white/10 bg-[#15161a] p-2">
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">User Status</p>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">User Status</p>
+                <button
+                  type="button"
+                  onClick={onToggleCamera}
+                  disabled={!canUseCameraControls}
+                  className={`inline-flex h-6 w-6 items-center justify-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                    effectiveCameraOn
+                      ? "border-emerald-400/45 bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30"
+                      : "border-zinc-600 bg-zinc-700/70 text-zinc-300 hover:bg-zinc-600"
+                  }`}
+                  aria-label={effectiveCameraOn ? "Turn camera off" : "Turn camera on"}
+                  title={
+                    !canUseCameraControls
+                      ? "Join a live video channel or start a PM video call to enable camera"
+                      : effectiveCameraOn
+                        ? "Turn camera off"
+                        : "Turn camera on"
+                  }
+                >
+                  {effectiveCameraOn ? <Video className="h-3.5 w-3.5" /> : <VideoOff className="h-3.5 w-3.5" />}
+                </button>
+              </div>
+              <p className="mb-2 text-[10px] text-[#949ba4]">
+                {!canUseCameraControls
+                  ? "Camera control unavailable"
+                  : canControlVoiceCamera
+                    ? "Voice video camera control active"
+                    : "PM camera control active"}
+              </p>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
@@ -582,6 +714,15 @@ export const UserStatusMenu = ({
           >
             <Settings className="h-4 w-4" />
             User Settings
+          </button>
+
+          <button
+            type="button"
+            onClick={openPatronSettings}
+            className="flex w-full items-center gap-2 rounded-md border border-yellow-500/20 bg-yellow-500/10 px-2 py-2 text-sm text-yellow-200 transition hover:bg-yellow-500/20"
+          >
+            <Crown className="h-4 w-4" />
+            Become a Patron
           </button>
 
           <button

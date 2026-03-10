@@ -19,6 +19,7 @@ type ProfileIconRuleContext = {
   createdAt?: Date | string | null;
   dateOfBirth?: string | null;
   familyParentUserId?: string | null;
+  isPatron?: boolean;
 };
 
 type ProfileIconRule = {
@@ -72,6 +73,15 @@ const profileIconRules: ProfileIconRule[] = [
     },
     isEarned: (context) =>
       getFamilyLifecycleState(context.dateOfBirth, context.familyParentUserId).showFamilyIcon,
+  },
+  {
+    icon: {
+      key: "patron",
+      label: "Patron",
+      shortLabel: "PATRON",
+      emoji: "💵",
+    },
+    isEarned: (context) => Boolean(context.isPatron),
   },
 ];
 

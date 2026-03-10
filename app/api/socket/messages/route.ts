@@ -6,6 +6,56 @@ import { currentProfile } from "@/lib/current-profile";
 import { channel, db, member, message } from "@/lib/db";
 import { ensureChannelThreadSchema, markThreadRead, touchThreadActivity } from "@/lib/channel-threads";
 import { computeChannelPermissionForRole } from "@/lib/channel-permissions";
+import { executeServerSlashCommand } from "@/lib/slash-commands";
+import { parseMentionSegments } from "@/lib/mentions";
+
+const sanitizeRoleMentions = async (content: string, serverId: string) => {
+  if (!content) {
+    return content;
+  }
+
+  const segments = parseMentionSegments(content);
+  const roleMentionIds = Array.from(
+    new Set(
+      segments
+        .filter((segment) => segment.kind === "mention" && segment.entityType === "role")
+        .map((segment) => (segment.kind === "mention" ? String(segment.entityId ?? "").trim() : ""))
+        .filter(Boolean)
+    )
+  );
+
+  if (!roleMentionIds.length) {
+    return content;
+  }
+
+  const mentionableRoleRows = await db.execute(sql`
+    select "id"
+    from "ServerRole"
+    where "serverId" = ${serverId}
+      and "isMentionable" = true
+      and "id" in (${sql.join(roleMentionIds.map((id) => sql`${id}`), sql`, `)})
+  `);
+
+  const mentionableRoleIds = new Set(
+    ((mentionableRoleRows as unknown as { rows?: Array<{ id: string }> }).rows ?? [])
+      .map((row) => String(row.id ?? "").trim())
+      .filter(Boolean)
+  );
+
+  return segments
+    .map((segment) => {
+      if (segment.kind === "text") {
+        return segment.value;
+      }
+
+      if (segment.entityType === "role" && !mentionableRoleIds.has(String(segment.entityId ?? "").trim())) {
+        return `@${segment.label}`;
+      }
+
+      return segment.raw;
+    })
+    .join("");
+};
 
 export async function POST(req: Request) {
   try {
@@ -96,8 +146,11 @@ export async function POST(req: Request) {
     }
 
     const normalizedContent = typeof content === "string" ? content.trim() : "";
+    const sanitizedContent = normalizedContent
+      ? await sanitizeRoleMentions(normalizedContent, serverId)
+      : normalizedContent;
 
-    if (!normalizedContent && !fileUrl) {
+    if (!sanitizedContent && !fileUrl) {
       return new NextResponse("Content is required", { status: 400 });
     }
 
@@ -107,7 +160,7 @@ export async function POST(req: Request) {
       .insert(message)
       .values({
         id: uuidv4(),
-        content: normalizedContent || "[attachment]",
+        content: sanitizedContent || "[attachment]",
         fileUrl: fileUrl ?? null,
         memberId: currentMember.id,
         channelId: currentChannel.id,
@@ -117,6 +170,36 @@ export async function POST(req: Request) {
         updatedAt: now,
       })
       .returning();
+
+    if (sanitizedContent.startsWith("/") && !fileUrl) {
+      const commandResult = await executeServerSlashCommand({
+        serverId,
+        rawInput: sanitizedContent,
+      });
+
+      if (commandResult.handled) {
+        const responderMemberId =
+          typeof commandResult.responseMemberId === "string" && commandResult.responseMemberId.trim().length > 0
+            ? commandResult.responseMemberId.trim()
+            : currentMember.id;
+
+        const responderMembership = await db.query.member.findFirst({
+          where: and(eq(member.id, responderMemberId), eq(member.serverId, serverId)),
+        });
+
+        await db.insert(message).values({
+          id: uuidv4(),
+          content: commandResult.responseContent,
+          fileUrl: null,
+          memberId: responderMembership?.id ?? currentMember.id,
+          channelId: currentChannel.id,
+          threadId: normalizedThreadId,
+          deleted: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      }
+    }
 
     if (normalizedThreadId) {
       await touchThreadActivity({

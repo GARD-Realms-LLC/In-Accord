@@ -5,6 +5,7 @@ import { currentProfile } from "@/lib/current-profile";
 import { db, localCredential } from "@/lib/db";
 import { ensureLocalAuthSchema } from "@/lib/local-auth";
 import { hashPassword, verifyPassword } from "@/lib/password";
+import { verifyCredentialChangePin } from "@/lib/account-security";
 
 export async function PATCH(req: Request) {
   try {
@@ -19,10 +20,16 @@ export async function PATCH(req: Request) {
     const body = (await req.json()) as {
       currentPassword?: string;
       newPassword?: string;
+      credentialPin?: string;
+      credentialPinConfirmOne?: string;
+      credentialPinConfirmTwo?: string;
     };
 
     const currentPassword = String(body.currentPassword ?? "").trim();
     const newPassword = String(body.newPassword ?? "").trim();
+    const credentialPin = String(body.credentialPin ?? "").trim();
+    const credentialPinConfirmOne = String(body.credentialPinConfirmOne ?? "").trim();
+    const credentialPinConfirmTwo = String(body.credentialPinConfirmTwo ?? "").trim();
 
     if (!currentPassword) {
       return NextResponse.json({ error: "Current password is required." }, { status: 400 });
@@ -39,6 +46,32 @@ export async function PATCH(req: Request) {
       return NextResponse.json(
         { error: "New password must be different from current password." },
         { status: 400 }
+      );
+    }
+
+    if (!credentialPin || !credentialPinConfirmOne || !credentialPinConfirmTwo) {
+      return NextResponse.json(
+        { error: "Security PIN and both confirmations are required." },
+        { status: 400 }
+      );
+    }
+
+    if (
+      credentialPin !== credentialPinConfirmOne ||
+      credentialPin !== credentialPinConfirmTwo ||
+      credentialPinConfirmOne !== credentialPinConfirmTwo
+    ) {
+      return NextResponse.json(
+        { error: "Security PIN confirmations must all match." },
+        { status: 400 }
+      );
+    }
+
+    const isValidCredentialPin = await verifyCredentialChangePin(credentialPin);
+    if (!isValidCredentialPin) {
+      return NextResponse.json(
+        { error: "Security PIN is invalid." },
+        { status: 403 }
       );
     }
 

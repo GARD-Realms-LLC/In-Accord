@@ -76,11 +76,12 @@ const {
   startUpdateLoop,
 } = require("./updater.cjs");
 
-const DEFAULT_URL = "http://127.0.0.1:3000";
+const DEFAULT_URL = "http://localhost:3000";
 let stopUpdateLoop = null;
 let nextServer = null;
 let activeAppUrl = DEFAULT_URL;
 let crashHandlingInProgress = false;
+let mainWindow = null;
 
 const getCrashLogPath = () => {
   try {
@@ -178,7 +179,7 @@ async function startInternalServer() {
   if (nextServer) {
     const address = nextServer.address();
     if (address && typeof address === "object" && typeof address.port === "number") {
-      return `http://127.0.0.1:${address.port}`;
+      return `http://localhost:${address.port}`;
     }
   }
 
@@ -201,7 +202,7 @@ async function startInternalServer() {
 
   await new Promise((resolve, reject) => {
     server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
+    server.listen(0, "localhost", resolve);
   });
 
   nextServer = server;
@@ -211,12 +212,12 @@ async function startInternalServer() {
     throw new Error("Could not determine internal server port");
   }
 
-  return `http://127.0.0.1:${address.port}`;
+  return `http://localhost:${address.port}`;
 }
 
 async function resolveAppUrl() {
   if (process.env.ELECTRON_START_URL) {
-    return process.env.ELECTRON_START_URL;
+    return String(process.env.ELECTRON_START_URL).replace("http://127.0.0.1", "http://localhost");
   }
 
   if (!app.isPackaged) {
@@ -267,9 +268,90 @@ function createWindow(appUrl) {
   });
 
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    const normalizedUrl = String(url || "");
+    const isMeetingPopout = /\/meeting-popout\//i.test(normalizedUrl);
+
+    if (isMeetingPopout) {
+      return {
+        action: "allow",
+        overrideBrowserWindowOptions: {
+          width: 1280,
+          height: 820,
+          minWidth: 960,
+          minHeight: 600,
+          autoHideMenuBar: true,
+          frame: false,
+          titleBarStyle: "hidden",
+          backgroundColor: "#0f1013",
+          webPreferences: {
+            preload: path.join(__dirname, "preload.cjs"),
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: false,
+          },
+        },
+      };
+    }
+
+    shell.openExternal(normalizedUrl);
     return { action: "deny" };
   });
+
+  mainWindow = win;
+  win.on("closed", () => {
+    if (mainWindow === win) {
+      mainWindow = null;
+    }
+  });
+
+  return win;
+}
+
+function createMeetingPopoutWindow(appUrl, meetingPath) {
+  const normalizedPath = String(meetingPath || "").trim();
+  if (!normalizedPath.startsWith("/meeting-popout/")) {
+    throw new Error("Invalid meeting popout path");
+  }
+
+  const popoutWindow = new BrowserWindow({
+    width: 1280,
+    height: 820,
+    minWidth: 960,
+    minHeight: 600,
+    autoHideMenuBar: true,
+    frame: false,
+    titleBarStyle: "hidden",
+    backgroundColor: "#0f1013",
+    webPreferences: {
+      preload: path.join(__dirname, "preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+
+  const targetUrl = new URL(normalizedPath, appUrl).toString();
+  void popoutWindow.loadURL(targetUrl);
+
+  popoutWindow.on("closed", () => {
+    const match = normalizedPath.match(/^\/meeting-popout\/([^/]+)\/([^/?#]+)/i);
+    const payload = {
+      serverId: match?.[1] || null,
+      channelId: match?.[2] || null,
+    };
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("inaccord:meeting-popout-closed", payload);
+    } else {
+      for (const windowInstance of BrowserWindow.getAllWindows()) {
+        if (!windowInstance.isDestroyed()) {
+          windowInstance.webContents.send("inaccord:meeting-popout-closed", payload);
+        }
+      }
+    }
+  });
+
+  return popoutWindow;
 }
 
 app
@@ -303,6 +385,28 @@ app
         runtimeMode: app.isPackaged ? "production" : "development",
         appVersion: app.getVersion(),
       };
+    });
+
+    ipcMain.handle("inaccord:window-minimize", async (event) => {
+      const targetWindow = BrowserWindow.fromWebContents(event.sender);
+      if (targetWindow && !targetWindow.isDestroyed()) {
+        targetWindow.minimize();
+      }
+      return { ok: true };
+    });
+
+    ipcMain.handle("inaccord:window-close", async (event) => {
+      const targetWindow = BrowserWindow.fromWebContents(event.sender);
+      if (targetWindow && !targetWindow.isDestroyed()) {
+        targetWindow.close();
+      }
+      return { ok: true };
+    });
+
+    ipcMain.handle("inaccord:meeting-popout-open", async (_event, payload) => {
+      const meetingPath = String(payload?.meetingPath || "");
+      createMeetingPopoutWindow(activeAppUrl, meetingPath);
+      return { ok: true };
     });
 
     app.on("activate", () => {

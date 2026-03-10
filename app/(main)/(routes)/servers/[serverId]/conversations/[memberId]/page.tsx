@@ -10,6 +10,8 @@ import { ChatHeader } from "@/components/chat/chat-header";
 // import { ChatMessages } from "@/components/chat/chat-messages";
 import { ChatInput } from "@/components/chat/chat-input";
 // import { MediaRoom } from "@/components/media-room";
+import { resolveServerRouteContext } from "@/lib/route-slug-resolver";
+import { buildServerPath } from "@/lib/route-slugs";
 
 interface MemberIdPageProps {
   params: Promise<{
@@ -25,7 +27,7 @@ const MemberIdPage = async ({
   params,
   searchParams,
 }: MemberIdPageProps) => {
-  const { memberId, serverId } = await params;
+  const { memberId, serverId: serverParam } = await params;
   const resolvedSearchParams = await searchParams;
 
   const profile = await currentProfile();
@@ -33,6 +35,18 @@ const MemberIdPage = async ({
   if (!profile) {
     return redirect("/sign-in");
   }
+
+  const resolvedServer = await resolveServerRouteContext({
+    profileId: profile.id,
+    serverParam,
+  });
+
+  if (!resolvedServer) {
+    return redirect("/");
+  }
+
+  const serverId = resolvedServer.id;
+  const serverPath = buildServerPath({ id: serverId, name: resolvedServer.name });
 
   const currentMember = await db.query.member.findFirst({
     where: and(
@@ -68,7 +82,7 @@ const MemberIdPage = async ({
   }).rows?.[0];
 
   if (!targetMemberRow) {
-    return redirect(`/servers/${serverId}`);
+    return redirect(serverPath);
   }
 
   const canBypassPresenceRestrictions = hasInAccordAdministrativeAccess(profile.role) || currentMember.role === "ADMIN";
@@ -76,18 +90,18 @@ const MemberIdPage = async ({
 
   if (targetMemberRow.profileId !== profile.id) {
     if (targetStatus === "DND") {
-      return redirect(`/servers/${serverId}`);
+      return redirect(serverPath);
     }
 
     if (!canBypassPresenceRestrictions && targetStatus === "INVISIBLE") {
-      return redirect(`/servers/${serverId}`);
+      return redirect(serverPath);
     }
   }
 
   const conversation = await getOrCreateConversation(currentMember.id, memberId);
 
   if (!conversation) {
-    return redirect(`/servers/${serverId}`);
+    return redirect(serverPath);
   }
 
   void resolvedSearchParams;
@@ -95,6 +109,7 @@ const MemberIdPage = async ({
   const { memberOne, memberTwo } = conversation;
 
   const otherMember = memberOne.profileId === profile.id ? memberTwo : memberOne;
+  const requestPmVideoCallHref = `/users?serverId=${encodeURIComponent(serverId)}&memberId=${encodeURIComponent(otherMember.id)}&pmCallAction=request-video`;
   const isOtherMemberBot = isBotUser({
     name: otherMember.profile.name,
     email: otherMember.profile.email,
@@ -111,6 +126,7 @@ const MemberIdPage = async ({
         profileCreatedAt={otherMember.profile.createdAt}
         serverId={serverId}
         type="conversation"
+        videoCallHref={requestPmVideoCallHref}
       />
       {/* {searchParams.video && (
         <MediaRoom

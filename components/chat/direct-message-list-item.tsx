@@ -29,7 +29,7 @@ export const DirectMessageListItem = ({
   unreadCount,
   isActive,
 }: DirectMessageListItemProps) => {
-  const href = `/users?serverId=${encodeURIComponent(serverId)}&memberId=${encodeURIComponent(memberId)}`;
+  const href = `/users?serverId=${encodeURIComponent(serverId)}&memberId=${encodeURIComponent(memberId)}&pmRequest=1`;
 
   return (
     <Link
@@ -37,7 +37,7 @@ export const DirectMessageListItem = ({
       className={`flex items-center gap-2 rounded-md px-2 py-1.5 transition ${
         isActive ? "bg-[#3f4248] text-white" : "text-[#dcddde] hover:bg-[#3f4248]"
       }`}
-      aria-label={`Open DM with ${displayName}`}
+      aria-label={`Open PM with ${displayName}`}
       data-conversation-id={conversationId}
     >
       <UserAvatar src={imageUrl ?? undefined} className="h-7 w-7" />

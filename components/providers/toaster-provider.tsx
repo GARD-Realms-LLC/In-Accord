@@ -37,12 +37,28 @@ export const ToasterProvider = () => {
 
     const originalFetch = window.fetch.bind(window);
 
-    window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const requestId = beginTrackedLoading();
 
-      return originalFetch(input, init).finally(() => {
+      try {
+        return await originalFetch(input, init);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error ?? "");
+        if (error instanceof TypeError && /failed to fetch|networkerror|load failed/i.test(message)) {
+          return new Response(JSON.stringify({ error: "Network request failed" }), {
+            status: 503,
+            statusText: "Service Unavailable",
+            headers: {
+              "Content-Type": "application/json",
+              "X-InAccord-Network-Error": "1",
+            },
+          });
+        }
+
+        throw error;
+      } finally {
         endTrackedLoading(requestId);
-      });
+      }
     }) as typeof window.fetch;
 
     return () => {

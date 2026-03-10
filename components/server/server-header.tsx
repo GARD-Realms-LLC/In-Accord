@@ -91,8 +91,8 @@ export const ServerHeader = ({ server, role, isServerOwner = false }: ServerHead
         <div className="absolute inset-0 bg-[#1f2023]" />
       )}
 
-      <div className="absolute left-0 right-0 top-0 z-10 grid h-11 grid-cols-[2rem_minmax(0,1fr)_2rem] items-center gap-2 bg-transparent px-2 text-white">
-        <div className="relative z-10 flex h-8 w-8 items-center justify-center">
+      <div className="absolute left-0 right-0 top-0 z-10 grid h-11 grid-cols-[0.75rem_minmax(0,1fr)_0.75rem] items-center gap-0.5 bg-transparent px-0.5 text-white">
+        <div className="relative z-10 flex h-4 w-4 items-center justify-center">
           <Star className="h-4 w-4 text-zinc-100" />
         </div>
 
@@ -106,7 +106,7 @@ export const ServerHeader = ({ server, role, isServerOwner = false }: ServerHead
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent
-            className="w-56 text-xs font-medium text-black 
+            className="w-72 text-xs font-medium text-black 
           dark:text-neutral-400 space-y-0.5"
           >
             {isModerator && (
@@ -195,14 +195,14 @@ export const ServerHeader = ({ server, role, isServerOwner = false }: ServerHead
           <button
             type="button"
             onClick={() => onOpen("invite", { server })}
-            className="relative z-10 inline-flex h-8 w-8 items-center justify-center rounded-md bg-black/20 text-zinc-100 transition hover:bg-black/35"
+            className="relative z-10 inline-flex h-4 w-4 items-center justify-center rounded-md bg-black/20 text-zinc-100 transition hover:bg-black/35"
             title="Invite People"
             aria-label="Invite People"
           >
             <UserPlus className="h-4 w-4" />
           </button>
         )}
-        {!isModerator && <div className="h-8 w-8" />}
+        {!isModerator && <div className="h-4 w-4" />}
       </div>
     </div>
   );

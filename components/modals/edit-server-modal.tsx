@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Camera, Loader2, Pause, Pencil, Play, Plus, X } from "lucide-react";
+import { Camera, ChevronDown, ChevronRight, GripVertical, Loader2, Pause, Pencil, Play, Plus, Trash2, X } from "lucide-react";
 
 import {
   Dialog,
@@ -30,6 +30,7 @@ import { UserAvatar } from "@/components/user-avatar";
 import { useModal } from "@/hooks/use-modal-store";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { isInAccordProtectedServer } from "@/lib/server-security";
 
 const formSchema = z.object({
   name: z.string().min(1, { message: "Server name is required" }),
@@ -85,7 +86,7 @@ const SETTINGS_SECTIONS: Array<{
       { key: "roles", label: "Roles" },
       { key: "members", label: "Members" },
       { key: "invites", label: "Invites" },
-      { key: "integrations", label: "Integrations" },
+      { key: "integrations", label: "Manage Bots" },
       { key: "serverGuide", label: "Server Guide" },
       { key: "onboarding", label: "Onboarding" },
       { key: "emoji", label: "Emoji" },
@@ -126,7 +127,7 @@ const SETTINGS_SECTIONS: Array<{
     items: [
       { key: "webhooks", label: "Webhooks" },
       { key: "integrationsPermissions", label: "Integration Permissions" },
-      { key: "installedApps", label: "Installed Apps" },
+      { key: "installedApps", label: "Manage Apps" },
     ],
   },
   {
@@ -332,6 +333,21 @@ const DEFAULT_SOUND_TILE_DEFS = [
   { key: "zap", label: "Zap", frequency: 1320 },
 ] as const;
 
+const Other_ROLE_COLOR_SWATCHES = [
+  "#99aab5",
+  "#1abc9c",
+  "#2ecc71",
+  "#3498db",
+  "#9b59b6",
+  "#e91e63",
+  "#f1c40f",
+  "#e67e22",
+  "#e74c3c",
+  "#95a5a6",
+] as const;
+
+const CHANNEL_GROUP_CREATED_EVENT = "inaccord:channel-group-created";
+
 const createDefaultGenericSectionSettings = (): Record<ServerSettingsSection, GenericSectionSettings> => {
   const sections = Object.keys(SECTION_TITLES) as ServerSettingsSection[];
 
@@ -348,14 +364,44 @@ const createDefaultGenericSectionSettings = (): Record<ServerSettingsSection, Ge
   );
 };
 
+const createDefaultSettingsGroupCollapseState = () =>
+  SETTINGS_SECTIONS.reduce<Record<string, boolean>>((accumulator, section, index) => {
+    const key = section.heading ?? `General-${index}`;
+    accumulator[key] = false;
+    return accumulator;
+  }, {});
+
 type ServerRoleItem = {
   id: string;
   name: string;
   color: string;
   iconUrl: string | null;
+  isMentionable: boolean;
   position: number;
   isManaged: boolean;
   memberCount?: number;
+};
+
+const reorderRoles = (items: ServerRoleItem[], draggedId: string, targetId: string) => {
+  if (!draggedId || !targetId || draggedId === targetId) {
+    return items;
+  }
+
+  const fromIndex = items.findIndex((item) => item.id === draggedId);
+  const toIndex = items.findIndex((item) => item.id === targetId);
+
+  if (fromIndex === -1 || toIndex === -1) {
+    return items;
+  }
+
+  const next = [...items];
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+
+  return next.map((item, index) => ({
+    ...item,
+    position: index + 1,
+  }));
 };
 
 type RoleMemberItem = {
@@ -365,6 +411,174 @@ type RoleMemberItem = {
   email: string | null;
   imageUrl: string | null;
   isAssigned: boolean;
+};
+
+type ServerRolePermissions = {
+  allowView: boolean;
+  allowSend: boolean;
+  allowConnect: boolean;
+  manageChannels: boolean;
+  manageRoles: boolean;
+  manageMembers: boolean;
+  moderateMembers: boolean;
+  viewAuditLog: boolean;
+  manageServer: boolean;
+  createInstantInvite: boolean;
+  changeNickname: boolean;
+  manageNicknames: boolean;
+  kickMembers: boolean;
+  banMembers: boolean;
+  manageEmojisAndStickers: boolean;
+  manageWebhooks: boolean;
+  manageEvents: boolean;
+  viewServerInsights: boolean;
+  useApplicationCommands: boolean;
+  sendMessagesInThreads: boolean;
+  createPublicThreads: boolean;
+  createPrivateThreads: boolean;
+  embedLinks: boolean;
+  attachFiles: boolean;
+  addReactions: boolean;
+  useExternalEmojis: boolean;
+  mentionEveryone: boolean;
+  manageMessages: boolean;
+  readMessageHistory: boolean;
+  sendTtsMessages: boolean;
+  speak: boolean;
+  stream: boolean;
+  useVoiceActivity: boolean;
+  prioritySpeaker: boolean;
+  muteMembers: boolean;
+  deafenMembers: boolean;
+  moveMembers: boolean;
+  requestToSpeak: boolean;
+};
+
+const SERVER_ROLE_PERMISSION_KEYS = [
+  "allowView",
+  "allowSend",
+  "allowConnect",
+  "manageChannels",
+  "manageRoles",
+  "manageMembers",
+  "moderateMembers",
+  "viewAuditLog",
+  "manageServer",
+  "createInstantInvite",
+  "changeNickname",
+  "manageNicknames",
+  "kickMembers",
+  "banMembers",
+  "manageEmojisAndStickers",
+  "manageWebhooks",
+  "manageEvents",
+  "viewServerInsights",
+  "useApplicationCommands",
+  "sendMessagesInThreads",
+  "createPublicThreads",
+  "createPrivateThreads",
+  "embedLinks",
+  "attachFiles",
+  "addReactions",
+  "useExternalEmojis",
+  "mentionEveryone",
+  "manageMessages",
+  "readMessageHistory",
+  "sendTtsMessages",
+  "speak",
+  "stream",
+  "useVoiceActivity",
+  "prioritySpeaker",
+  "muteMembers",
+  "deafenMembers",
+  "moveMembers",
+  "requestToSpeak",
+] as const;
+
+type ServerRolePermissionKey = (typeof SERVER_ROLE_PERMISSION_KEYS)[number];
+
+const ROLE_PERMISSION_GROUPS: Array<{ title: string; items: Array<{ key: ServerRolePermissionKey; label: string }> }> = [
+  {
+    title: "General Server Permissions",
+    items: [
+      { key: "allowView", label: "View Channels" },
+      { key: "createInstantInvite", label: "Create Invite" },
+      { key: "manageServer", label: "Manage Server" },
+      { key: "manageChannels", label: "Manage Channels" },
+      { key: "manageRoles", label: "Manage Roles" },
+      { key: "viewAuditLog", label: "View Audit Log" },
+      { key: "viewServerInsights", label: "View Server Insights" },
+      { key: "manageWebhooks", label: "Manage Webhooks" },
+      { key: "manageEmojisAndStickers", label: "Manage Emojis & Stickers" },
+      { key: "manageEvents", label: "Manage Events" },
+    ],
+  },
+  {
+    title: "Membership Permissions",
+    items: [
+      { key: "changeNickname", label: "Change Nickname" },
+      { key: "manageNicknames", label: "Manage Nicknames" },
+      { key: "kickMembers", label: "Kick Members" },
+      { key: "banMembers", label: "Ban Members" },
+      { key: "manageMembers", label: "Manage Members" },
+      { key: "moderateMembers", label: "Moderate Members" },
+    ],
+  },
+  {
+    title: "Text Channel Permissions",
+    items: [
+      { key: "allowSend", label: "Send Messages" },
+      { key: "sendTtsMessages", label: "Send TTS Messages" },
+      { key: "embedLinks", label: "Embed Links" },
+      { key: "attachFiles", label: "Attach Files" },
+      { key: "addReactions", label: "Add Reactions" },
+      { key: "useExternalEmojis", label: "Use External Emojis" },
+      { key: "mentionEveryone", label: "Mention @everyone, @here, and All Roles" },
+      { key: "manageMessages", label: "Manage Messages" },
+      { key: "readMessageHistory", label: "Read Message History" },
+      { key: "sendMessagesInThreads", label: "Send Messages in Threads" },
+      { key: "createPublicThreads", label: "Create Public Threads" },
+      { key: "createPrivateThreads", label: "Create Private Threads" },
+      { key: "useApplicationCommands", label: "Use Application Commands" },
+    ],
+  },
+  {
+    title: "Voice Permissions",
+    items: [
+      { key: "allowConnect", label: "Connect" },
+      { key: "speak", label: "Speak" },
+      { key: "stream", label: "Video" },
+      { key: "useVoiceActivity", label: "Use Voice Activity" },
+      { key: "prioritySpeaker", label: "Priority Speaker" },
+      { key: "muteMembers", label: "Mute Members" },
+      { key: "deafenMembers", label: "Deafen Members" },
+      { key: "moveMembers", label: "Move Members" },
+      { key: "requestToSpeak", label: "Request to Speak" },
+    ],
+  },
+];
+
+const createPermissionGroupCollapseState = (collapsed: boolean) =>
+  ROLE_PERMISSION_GROUPS.reduce<Record<string, boolean>>((accumulator, group) => {
+    accumulator[group.title] = collapsed;
+    return accumulator;
+  }, {});
+
+const createDefaultPermissionGroupCollapseState = () => createPermissionGroupCollapseState(false);
+
+const isServerRolePermissions = (value: unknown): value is ServerRolePermissions => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return SERVER_ROLE_PERMISSION_KEYS.every((key) => typeof candidate[key] === "boolean");
+};
+
+type ApiChannelGroupItem = {
+  id: string;
+  name: string;
+  icon: string | null;
 };
 
 type ServerEmojiStickerAsset = {
@@ -483,6 +697,41 @@ type OnboardingSubmissionItem = {
   }>;
 };
 
+type ServerTemplateSummary = {
+  totalRoles: number;
+  totalChannelGroups: number;
+  totalChannels: number;
+};
+
+type ServerTemplateExportPayload = {
+  version: number;
+  source: string;
+  exportedAt: string;
+  server: {
+    id: string;
+    name: string;
+  };
+  roles: Array<{
+    name: string;
+    color: string;
+    isMentionable: boolean;
+    position: number;
+  }>;
+  channelGroups: Array<{
+    id: string;
+    name: string;
+    icon: string | null;
+    sortOrder: number;
+  }>;
+  channels: Array<{
+    name: string;
+    type: string;
+    channelGroupId: string | null;
+    sortOrder: number;
+    isSystem: boolean;
+  }>;
+};
+
 const DEFAULT_ONBOARDING_CONFIG: OnboardingConfig = {
   enabled: false,
   welcomeMessage: "Welcome to the server! Complete onboarding to unlock your best channels.",
@@ -507,6 +756,7 @@ export const EditServerModal = () => {
   const [activeSection, setActiveSection] = useState<ServerSettingsSection>("overview");
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isUploadingBanner, setIsUploadingBanner] = useState(false);
+  const [uploadedServerBannerThumbnails, setUploadedServerBannerThumbnails] = useState<string[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [roles, setRoles] = useState<ServerRoleItem[]>([]);
   const [rolesError, setRolesError] = useState<string | null>(null);
@@ -517,19 +767,35 @@ export const EditServerModal = () => {
   const [newRoleName, setNewRoleName] = useState("");
   const [newRoleColor, setNewRoleColor] = useState("#99aab5");
   const [newRoleIconUrl, setNewRoleIconUrl] = useState("");
+  const [roleSearchQuery, setRoleSearchQuery] = useState("");
+  const [showRoleGroupsInList, setShowRoleGroupsInList] = useState(true);
   const [isCreateRolePopupOpen, setIsCreateRolePopupOpen] = useState(false);
   const [isCreatingRole, setIsCreatingRole] = useState(false);
   const [isUploadingNewRoleIcon, setIsUploadingNewRoleIcon] = useState(false);
   const [isSavingRole, setIsSavingRole] = useState(false);
-  const [isRoleEditorPopupOpen, setIsRoleEditorPopupOpen] = useState(false);
+  const [isDeletingRole, setIsDeletingRole] = useState(false);
+  const [isSavingRoleOrder, setIsSavingRoleOrder] = useState(false);
+  const [draggedRoleId, setDraggedRoleId] = useState<string | null>(null);
+  const [dragOverRoleId, setDragOverRoleId] = useState<string | null>(null);
+  const [roleEditorTab, setRoleEditorTab] = useState<"display" | "members" | "permissions">("display");
   const [editRoleName, setEditRoleName] = useState("");
   const [editRoleColor, setEditRoleColor] = useState("#99aab5");
   const [editRoleIconUrl, setEditRoleIconUrl] = useState("");
+  const [editRoleIsMentionable, setEditRoleIsMentionable] = useState(true);
   const [isUploadingEditRoleIcon, setIsUploadingEditRoleIcon] = useState(false);
   const [roleMembers, setRoleMembers] = useState<RoleMemberItem[]>([]);
   const [isLoadingRoleMembers, setIsLoadingRoleMembers] = useState(false);
   const [roleMembersError, setRoleMembersError] = useState<string | null>(null);
   const [canManageRoleMembers, setCanManageRoleMembers] = useState(false);
+  const [rolePermissions, setRolePermissions] = useState<ServerRolePermissions | null>(null);
+  const [savedRolePermissions, setSavedRolePermissions] = useState<ServerRolePermissions | null>(null);
+  const [isLoadingRolePermissions, setIsLoadingRolePermissions] = useState(false);
+  const [isSavingRolePermissions, setIsSavingRolePermissions] = useState(false);
+  const [rolePermissionsError, setRolePermissionsError] = useState<string | null>(null);
+  const [canManageRolePermissions, setCanManageRolePermissions] = useState(false);
+  const [collapsedPermissionGroups, setCollapsedPermissionGroups] = useState<Record<string, boolean>>(
+    () => createDefaultPermissionGroupCollapseState()
+  );
   const [togglingMemberId, setTogglingMemberId] = useState<string | null>(null);
   const [addMemberSearch, setAddMemberSearch] = useState("");
   const [emojiStickerAssets, setEmojiStickerAssets] = useState<ServerEmojiStickerAsset[]>([]);
@@ -583,6 +849,16 @@ export const EditServerModal = () => {
   const [isLoadingOnboardingSubmissions, setIsLoadingOnboardingSubmissions] = useState(false);
   const [onboardingReviewingSubmissionId, setOnboardingReviewingSubmissionId] = useState<string | null>(null);
   const [onboardingReviewNotes, setOnboardingReviewNotes] = useState<Record<string, string>>({});
+  const [isLoadingServerTemplate, setIsLoadingServerTemplate] = useState(false);
+  const [isImportingOtherTemplate, setIsImportingOtherTemplate] = useState(false);
+  const [serverTemplateError, setServerTemplateError] = useState<string | null>(null);
+  const [serverTemplateSuccess, setServerTemplateSuccess] = useState<string | null>(null);
+  const [serverTemplateSummary, setServerTemplateSummary] = useState<ServerTemplateSummary | null>(null);
+  const [serverTemplateExport, setServerTemplateExport] = useState<ServerTemplateExportPayload | null>(null);
+  const [OtherTemplateInput, setOtherTemplateInput] = useState("");
+  const [OtherServerIdInput, setOtherServerIdInput] = useState("");
+  const [replaceChannelsOnImport, setReplaceChannelsOnImport] = useState(true);
+  const [replaceRolesOnImport, setReplaceRolesOnImport] = useState(false);
   const [serverGuideQuery, setServerGuideQuery] = useState("");
   const [serverGuideScrollTop, setServerGuideScrollTop] = useState(0);
   const [serverGuideViewportHeight, setServerGuideViewportHeight] = useState(460);
@@ -590,6 +866,9 @@ export const EditServerModal = () => {
     () => createDefaultGenericSectionSettings()
   );
   const [genericSectionSaveMessage, setGenericSectionSaveMessage] = useState<string | null>(null);
+  const [collapsedSettingsGroups, setCollapsedSettingsGroups] = useState<Record<string, boolean>>(
+    () => createDefaultSettingsGroupCollapseState()
+  );
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const bannerInputRef = useRef<HTMLInputElement | null>(null);
   const newRoleIconInputRef = useRef<HTMLInputElement | null>(null);
@@ -600,6 +879,10 @@ export const EditServerModal = () => {
 
   const isModalOpen = isOpen && type === "editServer";
   const { server } = data;
+  const isProtectedInAccordServer = isInAccordProtectedServer({
+    serverId: server?.id,
+    serverName: server?.name,
+  });
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -636,6 +919,16 @@ export const EditServerModal = () => {
 
   useEffect(() => {
     if (!isModalOpen) {
+      setUploadedServerBannerThumbnails([]);
+      return;
+    }
+
+    const initialBannerUrl = (server as { bannerUrl?: string | null } | undefined)?.bannerUrl ?? "";
+    setUploadedServerBannerThumbnails(initialBannerUrl ? [initialBannerUrl] : []);
+  }, [isModalOpen, server]);
+
+  useEffect(() => {
+    if (!isModalOpen) {
       setActiveSection("overview");
       setRoles([]);
       setRolesError(null);
@@ -645,14 +938,27 @@ export const EditServerModal = () => {
       setNewRoleName("");
       setNewRoleColor("#99aab5");
       setNewRoleIconUrl("");
+      setRoleSearchQuery("");
+      setShowRoleGroupsInList(true);
       setIsCreateRolePopupOpen(false);
-      setIsRoleEditorPopupOpen(false);
+      setIsSavingRoleOrder(false);
+      setDraggedRoleId(null);
+      setDragOverRoleId(null);
+      setRoleEditorTab("display");
       setEditRoleName("");
       setEditRoleColor("#99aab5");
       setEditRoleIconUrl("");
+      setEditRoleIsMentionable(true);
       setRoleMembers([]);
       setRoleMembersError(null);
       setCanManageRoleMembers(false);
+      setRolePermissions(null);
+      setSavedRolePermissions(null);
+      setIsLoadingRolePermissions(false);
+      setIsSavingRolePermissions(false);
+      setRolePermissionsError(null);
+      setCanManageRolePermissions(false);
+      setCollapsedPermissionGroups(createDefaultPermissionGroupCollapseState());
       setTogglingMemberId(null);
       setAddMemberSearch("");
       setIsUploadingNewRoleIcon(false);
@@ -708,10 +1014,21 @@ export const EditServerModal = () => {
       setIsLoadingOnboardingSubmissions(false);
       setOnboardingReviewingSubmissionId(null);
       setOnboardingReviewNotes({});
+      setIsLoadingServerTemplate(false);
+      setIsImportingOtherTemplate(false);
+      setServerTemplateError(null);
+      setServerTemplateSuccess(null);
+      setServerTemplateSummary(null);
+      setServerTemplateExport(null);
+      setOtherTemplateInput("");
+      setOtherServerIdInput("");
+      setReplaceChannelsOnImport(true);
+      setReplaceRolesOnImport(false);
       setServerGuideQuery("");
       setServerGuideScrollTop(0);
       setGenericSectionSettings(createDefaultGenericSectionSettings());
       setGenericSectionSaveMessage(null);
+      setCollapsedSettingsGroups(createDefaultSettingsGroupCollapseState());
     }
   }, [isModalOpen]);
 
@@ -720,7 +1037,7 @@ export const EditServerModal = () => {
   }, [activeSection]);
 
   useEffect(() => {
-    if (!isModalOpen || activeSection !== "roles" || !isRoleEditorPopupOpen || !server?.id || !selectedRoleId) {
+    if (!isModalOpen || activeSection !== "roles" || !server?.id || !selectedRoleId) {
       return;
     }
 
@@ -770,7 +1087,75 @@ export const EditServerModal = () => {
     return () => {
       cancelled = true;
     };
-  }, [activeSection, isModalOpen, isRoleEditorPopupOpen, selectedRoleId, server?.id]);
+  }, [activeSection, isModalOpen, selectedRoleId, server?.id]);
+
+  useEffect(() => {
+    if (!isModalOpen || activeSection !== "roles" || roleEditorTab !== "permissions" || !server?.id || !selectedRoleId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadRolePermissions = async () => {
+      try {
+        setIsLoadingRolePermissions(true);
+        setRolePermissionsError(null);
+
+        const response = await axios.get<{
+          permissions?: Partial<ServerRolePermissions>;
+          canManageRolePermissions?: boolean;
+        }>(`/api/servers/${server.id}/roles/${selectedRoleId}/permissions`, {
+          params: { _t: Date.now() },
+          headers: {
+            "Cache-Control": "no-cache",
+            Pragma: "no-cache",
+          },
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        if (!isServerRolePermissions(response.data.permissions)) {
+          throw new Error("Role permissions response is invalid.");
+        }
+
+        const permissions = response.data.permissions;
+
+        setRolePermissions(permissions);
+        setSavedRolePermissions(permissions);
+        setCanManageRolePermissions(Boolean(response.data.canManageRolePermissions));
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        if (axios.isAxiosError(error)) {
+          const message =
+            (error.response?.data as { error?: string })?.error ||
+            (typeof error.response?.data === "string" ? error.response.data : "") ||
+            error.message;
+          setRolePermissionsError(message || "Failed to load role permissions.");
+        } else {
+          setRolePermissionsError("Failed to load role permissions.");
+        }
+
+        setRolePermissions(null);
+        setSavedRolePermissions(null);
+        setCanManageRolePermissions(false);
+      } finally {
+        if (!cancelled) {
+          setIsLoadingRolePermissions(false);
+        }
+      }
+    };
+
+    void loadRolePermissions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSection, isModalOpen, roleEditorTab, selectedRoleId, server?.id]);
 
   useEffect(() => {
     if (!isModalOpen || activeSection !== "roles" || !server?.id) {
@@ -788,7 +1173,13 @@ export const EditServerModal = () => {
           roles?: ServerRoleItem[];
           totalMembers?: number;
           canManageRoles?: boolean;
-        }>(`/api/servers/${server.id}/roles`);
+        }>(`/api/servers/${server.id}/roles`, {
+          params: { _t: Date.now() },
+          headers: {
+            "Cache-Control": "no-cache",
+            Pragma: "no-cache",
+          },
+        });
 
         if (cancelled) {
           return;
@@ -805,6 +1196,7 @@ export const EditServerModal = () => {
         setEditRoleName(initialRole?.name ?? "");
         setEditRoleColor(initialRole?.color ?? "#99aab5");
         setEditRoleIconUrl(initialRole?.iconUrl ?? "");
+        setEditRoleIsMentionable(initialRole?.isMentionable ?? true);
       } catch (error) {
         if (cancelled) {
           return;
@@ -1023,6 +1415,214 @@ export const EditServerModal = () => {
     void loadOnboardingConfig();
     void loadOnboardingSubmissions();
   }, [activeSection, isModalOpen, loadOnboardingConfig, loadOnboardingSubmissions]);
+
+  const loadServerTemplate = useCallback(async () => {
+    if (!server?.id) {
+      return;
+    }
+
+    try {
+      setIsLoadingServerTemplate(true);
+      setServerTemplateError(null);
+
+      const response = await axios.get<{
+        summary?: ServerTemplateSummary;
+        exportTemplate?: ServerTemplateExportPayload;
+      }>(`/api/servers/${server.id}/template`, {
+        params: { _t: Date.now() },
+        headers: {
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        },
+      });
+
+      setServerTemplateSummary(response.data.summary ?? null);
+      setServerTemplateExport(response.data.exportTemplate ?? null);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          (typeof error.response?.data === "string" ? error.response.data : "") ||
+          error.message;
+        setServerTemplateError(message || "Failed to load server template data.");
+      } else {
+        setServerTemplateError("Failed to load server template data.");
+      }
+
+      setServerTemplateSummary(null);
+      setServerTemplateExport(null);
+    } finally {
+      setIsLoadingServerTemplate(false);
+    }
+  }, [server?.id]);
+
+  useEffect(() => {
+    if (!isModalOpen || activeSection !== "serverTemplate") {
+      return;
+    }
+
+    void loadServerTemplate();
+  }, [activeSection, isModalOpen, loadServerTemplate]);
+
+  const onImportOtherTemplate = async () => {
+    if (!server?.id || isImportingOtherTemplate) {
+      return;
+    }
+
+    const normalizedInput = OtherTemplateInput.trim();
+    if (!normalizedInput) {
+      setServerTemplateError("Paste a Other template link, invite link/code, or server ID first.");
+      return;
+    }
+
+    try {
+      setIsImportingOtherTemplate(true);
+      setServerTemplateError(null);
+      setServerTemplateSuccess(null);
+
+      const response = await axios.post<{
+        importSource?: string;
+        importBotName?: string | null;
+        templateName?: string;
+        code?: string;
+        result?: {
+          importedRoles: number;
+          importedGroups: number;
+          importedChannels: number;
+        };
+        warnings?: string[];
+      }>(`/api/servers/${server.id}/template`, {
+        templateInput: normalizedInput,
+        replaceChannels: replaceChannelsOnImport,
+        replaceRoles: replaceRolesOnImport,
+      });
+
+      const importedRoles = Number(response.data.result?.importedRoles ?? 0);
+      const importedGroups = Number(response.data.result?.importedGroups ?? 0);
+      const importedChannels = Number(response.data.result?.importedChannels ?? 0);
+      const warningText = Array.isArray(response.data.warnings) && response.data.warnings.length > 0
+        ? ` ${response.data.warnings.join(" ")}`
+        : "";
+      const sourceLabel = response.data.importSource === "serverId" ? "Other server" : "Other template";
+      const viaBot = response.data.importBotName ? ` via ${response.data.importBotName}` : "";
+
+      setServerTemplateSuccess(
+        `Imported ${sourceLabel}${viaBot}: ${response.data.templateName || response.data.code || "source"}. Added ${importedRoles} roles, ${importedGroups} channel groups, and ${importedChannels} channels.${warningText}`
+      );
+
+      await loadServerTemplate();
+      router.refresh();
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          (typeof error.response?.data === "string" ? error.response.data : "") ||
+          error.message;
+        setServerTemplateError(message || "Other template import failed.");
+      } else {
+        setServerTemplateError("Other template import failed.");
+      }
+    } finally {
+      setIsImportingOtherTemplate(false);
+    }
+  };
+
+  const onImportOtherServerId = async () => {
+    if (!server?.id || isImportingOtherTemplate) {
+      return;
+    }
+
+    const normalizedServerId = OtherServerIdInput.trim();
+    if (!normalizedServerId) {
+      setServerTemplateError("Paste a Other server ID first.");
+      return;
+    }
+
+    try {
+      setIsImportingOtherTemplate(true);
+      setServerTemplateError(null);
+      setServerTemplateSuccess(null);
+
+      const response = await axios.post<{
+        importSource?: string;
+        importBotName?: string | null;
+        templateName?: string;
+        code?: string;
+        result?: {
+          importedRoles: number;
+          importedGroups: number;
+          importedChannels: number;
+        };
+        warnings?: string[];
+      }>(`/api/servers/${server.id}/template`, {
+        OtherServerId: normalizedServerId,
+        replaceChannels: replaceChannelsOnImport,
+        replaceRoles: replaceRolesOnImport,
+      });
+
+      const importedRoles = Number(response.data.result?.importedRoles ?? 0);
+      const importedGroups = Number(response.data.result?.importedGroups ?? 0);
+      const importedChannels = Number(response.data.result?.importedChannels ?? 0);
+      const warningText = Array.isArray(response.data.warnings) && response.data.warnings.length > 0
+        ? ` ${response.data.warnings.slice(0, 3).join(" ")}${response.data.warnings.length > 3 ? " …" : ""}`
+        : "";
+      const viaBot = response.data.importBotName ? ` via ${response.data.importBotName}` : "";
+
+      setServerTemplateSuccess(
+        `Imported from Other server ID ${response.data.code || normalizedServerId}${viaBot}. Added ${importedRoles} roles, ${importedGroups} channel groups, and ${importedChannels} channels.${warningText}`
+      );
+
+      await loadServerTemplate();
+      router.refresh();
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          (typeof error.response?.data === "string" ? error.response.data : "") ||
+          error.message;
+        setServerTemplateError(message || "Other server ID import failed.");
+      } else {
+        setServerTemplateError("Other server ID import failed.");
+      }
+    } finally {
+      setIsImportingOtherTemplate(false);
+    }
+  };
+
+  const onCopyServerTemplateJson = async () => {
+    if (!serverTemplateExport || typeof window === "undefined") {
+      return;
+    }
+
+    const serialized = JSON.stringify(serverTemplateExport, null, 2);
+
+    try {
+      await window.navigator.clipboard.writeText(serialized);
+      setServerTemplateSuccess("Server template JSON copied to clipboard.");
+      setServerTemplateError(null);
+    } catch {
+      setServerTemplateError("Could not copy template JSON automatically. Use Download JSON instead.");
+    }
+  };
+
+  const onDownloadServerTemplateJson = () => {
+    if (!serverTemplateExport || typeof window === "undefined") {
+      return;
+    }
+
+    const serialized = JSON.stringify(serverTemplateExport, null, 2);
+    const blob = new Blob([serialized], { type: "application/json" });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    const safeServerName = String(server?.name ?? "server").trim().replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "server";
+
+    anchor.href = url;
+    anchor.download = `${safeServerName}-template.json`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.URL.revokeObjectURL(url);
+  };
 
   const onReviewOnboardingSubmission = async (
     submissionId: string,
@@ -1292,6 +1892,18 @@ export const EditServerModal = () => {
   const bannerFit = form.watch("bannerFit") || "cover";
   const bannerScale = form.watch("bannerScale") || 1;
 
+  const registerServerBannerThumbnail = (url?: string | null) => {
+    const normalizedUrl = (url ?? "").trim();
+    if (!normalizedUrl) {
+      return;
+    }
+
+    setUploadedServerBannerThumbnails((previous) => [
+      normalizedUrl,
+      ...previous.filter((entry) => entry !== normalizedUrl),
+    ]);
+  };
+
   const onPickImage = () => {
     if (isUploadingImage || isLoading) {
       return;
@@ -1374,6 +1986,7 @@ export const EditServerModal = () => {
         shouldDirty: true,
         shouldValidate: true,
       });
+      registerServerBannerThumbnail(upload.data.url);
     } catch (error) {
       if (axios.isAxiosError(error)) {
         const message =
@@ -1393,6 +2006,11 @@ export const EditServerModal = () => {
   };
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    if (isProtectedInAccordServer && values.name.trim() !== String(server?.name ?? "").trim()) {
+      setSubmitError("In-Accord server name is protected and cannot be renamed.");
+      return;
+    }
+
     try {
       setSubmitError(null);
       await axios.patch(`/api/servers/${server?.id}`, values);
@@ -1427,7 +2045,8 @@ export const EditServerModal = () => {
     setEditRoleName(role.name);
     setEditRoleColor(role.color);
     setEditRoleIconUrl(role.iconUrl ?? "");
-    setIsRoleEditorPopupOpen(true);
+    setEditRoleIsMentionable(role.isMentionable ?? true);
+    setRoleEditorTab("display");
   };
 
   const onPickNewRoleIcon = () => {
@@ -1525,7 +2144,17 @@ export const EditServerModal = () => {
   };
 
   const onCreateRole = async () => {
-    if (!server?.id || !canManageRoles || isCreatingRole) {
+    if (!server?.id) {
+      setRolesError("Server is not ready yet. Please try again.");
+      return;
+    }
+
+    if (!canManageRoles) {
+      setRolesError("Only the server owner can create roles.");
+      return;
+    }
+
+    if (isCreatingRole) {
       return;
     }
 
@@ -1545,18 +2174,82 @@ export const EditServerModal = () => {
         iconUrl: newRoleIconUrl || null,
       });
 
-      const role = response.data.role;
+      let role = response.data.role;
+      if (!role) {
+        const reload = await axios.get<{
+          roles?: ServerRoleItem[];
+          totalMembers?: number;
+          canManageRoles?: boolean;
+        }>(`/api/servers/${server.id}/roles`, {
+          params: { _t: Date.now() },
+          headers: {
+            "Cache-Control": "no-cache",
+            Pragma: "no-cache",
+          },
+        });
+
+        const refreshedRoles = reload.data.roles ?? [];
+        setRoles(refreshedRoles);
+        setServerMemberTotal(Number(reload.data.totalMembers ?? 0));
+        setCanManageRoles(Boolean(reload.data.canManageRoles));
+
+        role =
+          [...refreshedRoles]
+            .sort((a, b) => b.position - a.position)
+            .find((item) => item.name.trim().toLowerCase() === name.toLowerCase())
+          ?? undefined;
+      }
+
       if (!role) {
         setRolesError("Failed to create role.");
         return;
       }
 
-      const next = [...roles, role].sort((a, b) => a.position - b.position);
+      const createdRole = role;
+
+      const next = [...roles, createdRole].sort((a, b) => a.position - b.position);
       setRoles(next);
-      setSelectedRoleId(role.id);
-      setEditRoleName(role.name);
-      setEditRoleColor(role.color);
-      setEditRoleIconUrl(role.iconUrl ?? "");
+      setSelectedRoleId(createdRole.id);
+      setEditRoleName(createdRole.name);
+      setEditRoleColor(createdRole.color);
+      setEditRoleIconUrl(createdRole.iconUrl ?? "");
+
+      try {
+        const channelGroupsResponse = await axios.get<{
+          channelGroups?: ApiChannelGroupItem[];
+          groups?: ApiChannelGroupItem[];
+        }>("/api/channel-groups", {
+          params: { serverId: server.id, _t: Date.now() },
+          headers: {
+            "Cache-Control": "no-cache",
+            Pragma: "no-cache",
+          },
+        });
+
+        const channelGroups =
+          channelGroupsResponse.data.channelGroups ?? channelGroupsResponse.data.groups ?? [];
+        const matchedRoleGroup = channelGroups.find(
+          (groupItem) => groupItem.name.trim().toLowerCase() === createdRole.name.trim().toLowerCase()
+        );
+
+        if (matchedRoleGroup && typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent(CHANNEL_GROUP_CREATED_EVENT, {
+              detail: {
+                serverId: server.id,
+                group: {
+                  id: matchedRoleGroup.id,
+                  name: matchedRoleGroup.name,
+                  icon: matchedRoleGroup.icon ?? null,
+                },
+              },
+            })
+          );
+        }
+      } catch {
+        // no-op: role is already created; group list will sync on next refresh.
+      }
+
       setNewRoleName("");
       setNewRoleColor("#99aab5");
       setNewRoleIconUrl("");
@@ -1597,6 +2290,7 @@ export const EditServerModal = () => {
           name,
           color: editRoleColor,
           iconUrl: editRoleIconUrl || null,
+          isMentionable: editRoleIsMentionable,
         }
       );
 
@@ -1610,7 +2304,7 @@ export const EditServerModal = () => {
       setEditRoleName(role.name);
       setEditRoleColor(role.color);
       setEditRoleIconUrl(role.iconUrl ?? "");
-      setIsRoleEditorPopupOpen(false);
+      setEditRoleIsMentionable(role.isMentionable ?? true);
     } catch (error) {
       if (axios.isAxiosError(error)) {
         const message =
@@ -1626,8 +2320,213 @@ export const EditServerModal = () => {
     }
   };
 
+  const onDeleteRole = async (roleItem: ServerRoleItem) => {
+    if (!server?.id || !canManageRoles || isDeletingRole) {
+      return;
+    }
+
+    if (roleItem.isManaged) {
+      setRolesError("System roles cannot be deleted.");
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete role \"${roleItem.name}\"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setRolesError(null);
+      setIsDeletingRole(true);
+
+      await axios.delete(`/api/servers/${server.id}/roles/${roleItem.id}`);
+
+      const nextRoles = roles.filter((item) => item.id !== roleItem.id);
+      setRoles(nextRoles);
+
+      if (selectedRoleId === roleItem.id) {
+        const fallbackRole = nextRoles[0] ?? null;
+        setSelectedRoleId(fallbackRole?.id ?? null);
+        setEditRoleName(fallbackRole?.name ?? "");
+        setEditRoleColor(fallbackRole?.color ?? "#99aab5");
+        setEditRoleIconUrl(fallbackRole?.iconUrl ?? "");
+      }
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          (typeof error.response?.data === "string" ? error.response.data : "") ||
+          error.message;
+        setRolesError(message || "Failed to delete role.");
+      } else {
+        setRolesError("Failed to delete role.");
+      }
+    } finally {
+      setIsDeletingRole(false);
+    }
+  };
+
+  const onSaveRolePermissions = async () => {
+    if (!server?.id || !selectedRoleId || !canManageRolePermissions || isSavingRolePermissions || !rolePermissions) {
+      return;
+    }
+
+    try {
+      setRolePermissionsError(null);
+      setIsSavingRolePermissions(true);
+
+      const response = await axios.patch<{ permissions?: unknown }>(
+        `/api/servers/${server.id}/roles/${selectedRoleId}/permissions`,
+        {
+          permissions: rolePermissions,
+        }
+      );
+
+      if (!isServerRolePermissions(response.data.permissions)) {
+        throw new Error("Role permissions save response is invalid.");
+      }
+
+      const nextPermissions = response.data.permissions;
+
+      setRolePermissions(nextPermissions);
+      setSavedRolePermissions(nextPermissions);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          (typeof error.response?.data === "string" ? error.response.data : "") ||
+          error.message;
+        setRolePermissionsError(message || "Failed to save role permissions.");
+      } else {
+        setRolePermissionsError("Failed to save role permissions.");
+      }
+    } finally {
+      setIsSavingRolePermissions(false);
+    }
+  };
+
+  const onRoleDragStart = (event: React.DragEvent<HTMLElement>, roleId: string) => {
+    if (!canManageRoles || isSavingRoleOrder) {
+      return;
+    }
+
+    setDraggedRoleId(roleId);
+    event.dataTransfer.setData("inaccord/server-role-id", roleId);
+    event.dataTransfer.setData("text/plain", roleId);
+    event.dataTransfer.effectAllowed = "move";
+  };
+
+  const onRoleDragEnd = () => {
+    setDraggedRoleId(null);
+    setDragOverRoleId(null);
+  };
+
+  const onRoleDragOver = (event: React.DragEvent<HTMLElement>, targetRoleId: string) => {
+    const hasRoleType = event.dataTransfer.types.includes("inaccord/server-role-id");
+    if (!hasRoleType || !canManageRoles || isSavingRoleOrder) {
+      return;
+    }
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+
+    if (dragOverRoleId !== targetRoleId) {
+      setDragOverRoleId(targetRoleId);
+    }
+  };
+
+  const onRoleDrop = async (event: React.DragEvent<HTMLElement>, targetRoleId: string) => {
+    event.preventDefault();
+
+    if (!server?.id || !canManageRoles || isSavingRoleOrder) {
+      return;
+    }
+
+    const payloadDraggedId =
+      event.dataTransfer.getData("inaccord/server-role-id")?.trim() || draggedRoleId || "";
+
+    setDraggedRoleId(null);
+    setDragOverRoleId(null);
+
+    if (!payloadDraggedId || payloadDraggedId === targetRoleId) {
+      return;
+    }
+
+    const previousOrder = roles;
+    const nextOrder = reorderRoles(previousOrder, payloadDraggedId, targetRoleId);
+
+    if (nextOrder === previousOrder) {
+      return;
+    }
+
+    setRoles(nextOrder);
+
+    try {
+      setRolesError(null);
+      setIsSavingRoleOrder(true);
+
+      await axios.patch(`/api/servers/${server.id}/roles/reorder`, {
+        orderedRoleIds: nextOrder.map((roleItem) => roleItem.id),
+      });
+
+      router.refresh();
+    } catch (error) {
+      setRoles(previousOrder);
+
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          (typeof error.response?.data === "string" ? error.response.data : "") ||
+          error.message;
+        setRolesError(message || "Failed to reorder roles.");
+      } else {
+        setRolesError("Failed to reorder roles.");
+      }
+    } finally {
+      setIsSavingRoleOrder(false);
+    }
+  };
+
   const selectedRole = roles.find((role) => role.id === selectedRoleId) ?? null;
+  const normalizedEditRoleName = editRoleName.trim();
+  const normalizedEditRoleIconUrl = editRoleIconUrl.trim();
+  const hasRoleUnsavedChanges = Boolean(
+    selectedRole &&
+    (
+      normalizedEditRoleName !== selectedRole.name.trim() ||
+      editRoleColor.trim().toLowerCase() !== selectedRole.color.trim().toLowerCase() ||
+      normalizedEditRoleIconUrl !== String(selectedRole.iconUrl ?? "").trim() ||
+      editRoleIsMentionable !== Boolean(selectedRole.isMentionable)
+    )
+  );
+  const hasRolePermissionsUnsavedChanges =
+    rolePermissions !== null &&
+    savedRolePermissions !== null &&
+    JSON.stringify(rolePermissions) !== JSON.stringify(savedRolePermissions);
+  const isAdministratorPermissionsEnabled = Boolean(
+    rolePermissions &&
+    SERVER_ROLE_PERMISSION_KEYS.every((key) => rolePermissions[key])
+  );
   const normalizedAddMemberSearch = addMemberSearch.trim().toLowerCase();
+  const normalizedRoleSearchQuery = roleSearchQuery.trim().toLowerCase();
+  const isRoleGroupEntry = (role: ServerRoleItem) => {
+    if (!role.isManaged) {
+      return false;
+    }
+
+    const normalizedName = role.name.trim().toLowerCase();
+    return !normalizedName.includes("bot") && !normalizedName.includes("app");
+  };
+
+  const visibleRoles = showRoleGroupsInList ? roles : roles.filter((role) => !isRoleGroupEntry(role));
+  const filteredRoles = visibleRoles.filter((role) => {
+    if (!normalizedRoleSearchQuery) {
+      return true;
+    }
+
+    const haystack = `${role.name} ${role.id}`.toLowerCase();
+    return haystack.includes(normalizedRoleSearchQuery);
+  });
   const assignedRoleMembers = roleMembers.filter((memberItem) => memberItem.isAssigned);
   const addableRoleMembers = roleMembers.filter((memberItem) => {
     if (!normalizedAddMemberSearch) {
@@ -2115,6 +3014,7 @@ export const EditServerModal = () => {
   const hasDedicatedSectionPanel =
     activeSection === "roles" ||
     activeSection === "onboarding" ||
+    activeSection === "serverTemplate" ||
     activeSection === "serverGuide" ||
     activeSection === "integrations" ||
     activeSection === "soundboard" ||
@@ -2270,83 +3170,602 @@ export const EditServerModal = () => {
                   >
                     {activeSection === "roles" ? (
                       <div className="rounded-xl border border-zinc-700 bg-[#2B2D31] p-3">
-                          <div className="mb-3 flex items-center justify-between">
-                            <p className="text-sm font-semibold uppercase tracking-[0.08em] text-zinc-200">
-                              Server Roles
-                            </p>
-                            <span className="rounded bg-[#1e1f22] px-2.5 py-1 text-xs text-zinc-300">
-                              {roles.length}
-                            </span>
-                          </div>
+                        <div className="mb-3 flex items-center justify-between">
+                          <p className="text-sm font-semibold uppercase tracking-[0.08em] text-zinc-200">
+                            Server Roles
+                          </p>
+                          <span className="rounded bg-[#1e1f22] px-2.5 py-1 text-xs text-zinc-300">
+                            {normalizedRoleSearchQuery || !showRoleGroupsInList
+                              ? `${filteredRoles.length}/${visibleRoles.length}`
+                              : visibleRoles.length}
+                          </span>
+                        </div>
 
-                          <div className="mb-3">
-                            <Button
-                              type="button"
-                              onClick={() => setIsCreateRolePopupOpen(true)}
-                              disabled={!canManageRoles}
-                              className="w-full bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              Create Role
-                            </Button>
-                          </div>
+                        <div className="mb-2 flex items-center justify-end">
+                          <label className="inline-flex cursor-pointer items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">
+                            <input
+                              type="checkbox"
+                              checked={showRoleGroupsInList}
+                              onChange={(event) => setShowRoleGroupsInList(event.target.checked)}
+                            />
+                            Show Role Groups
+                          </label>
+                        </div>
 
-                          <div className="mb-2 grid grid-cols-[1fr_96px_80px] items-center px-2 text-xs font-semibold text-zinc-300">
-                            <span className="text-left">Roles - {roles.length}</span>
-                            <span className="text-center">Members: {serverMemberTotal}</span>
-                            <span className="text-right">Edit</span>
-                          </div>
+                        <div className="mb-3 grid grid-cols-2 gap-2">
+                          <input
+                            value={roleSearchQuery}
+                            onChange={(event) => setRoleSearchQuery(event.target.value)}
+                            placeholder="Search role by name or ID"
+                            className="h-10 w-full rounded-md border border-zinc-700 bg-[#15161a] px-3 text-sm text-white outline-none focus:border-indigo-500"
+                            aria-label="Search roles"
+                          />
+                          <Button
+                            type="button"
+                            onClick={() => {
+                              const trimmedQuery = roleSearchQuery.trim();
+                              if (trimmedQuery) {
+                                const roleAlreadyExists = roles.some(
+                                  (role) => role.name.trim().toLowerCase() === trimmedQuery.toLowerCase()
+                                );
 
-                          <div className="max-h-[320px] space-y-1 overflow-y-auto overflow-x-hidden pr-1">
-                            {isLoadingRoles ? (
-                              <div className="flex items-center gap-2 rounded-md bg-[#1e1f22] px-3 py-2 text-sm text-zinc-300">
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                                Loading roles...
-                              </div>
-                            ) : roles.length === 0 ? (
-                              <p className="rounded-md bg-[#1e1f22] px-3 py-2 text-xs text-zinc-400">No roles found.</p>
-                            ) : (
-                              roles.map((role) => (
-                                <button
-                                  key={role.id}
-                                  type="button"
-                                  onClick={() => onSelectRole(role)}
-                                  className={cn(
-                                    "grid w-full grid-cols-[1fr_96px_80px] items-center gap-2 rounded-md px-2 py-2.5 text-left text-base transition",
-                                    selectedRoleId === role.id
-                                      ? "bg-[#404249] text-white"
-                                      : "text-zinc-300 hover:bg-[#36393f]"
-                                  )}
-                                >
-                                  <span className="flex min-w-0 items-center gap-2">
-                                    {role.iconUrl ? (
-                                      <span className="relative inline-flex h-6 w-6 overflow-hidden rounded-sm border border-zinc-600">
-                                        <Image src={role.iconUrl} alt={`${role.name} icon`} fill className="object-cover" unoptimized />
-                                      </span>
-                                    ) : (
-                                      <span className="inline-flex h-6 w-6 items-center justify-center rounded-sm border border-zinc-600 bg-[#1e1f22] text-xs font-semibold uppercase text-zinc-200">
-                                        {role.name.slice(0, 1)}
-                                      </span>
+                                if (!roleAlreadyExists) {
+                                  setNewRoleName(trimmedQuery);
+                                }
+                              }
+
+                              setIsCreateRolePopupOpen(true);
+                            }}
+                            disabled={!canManageRoles}
+                            className="w-full bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            Create Role
+                          </Button>
+                        </div>
+
+                        <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
+                          <div className="rounded-lg border border-zinc-700 bg-[#1e1f22] p-2">
+                            <div className="mb-2 grid grid-cols-[1fr_88px_84px] items-center px-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-zinc-400">
+                              <span className="text-left">Roles</span>
+                              <span className="text-center">Members</span>
+                              <span className="text-right">Actions</span>
+                            </div>
+
+                            <div className="max-h-80 space-y-1 overflow-y-auto overflow-x-hidden pr-1">
+                              {isLoadingRoles ? (
+                                <div className="flex items-center gap-2 rounded-md bg-[#2b2d31] px-3 py-2 text-sm text-zinc-300">
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  Loading roles...
+                                </div>
+                              ) : visibleRoles.length === 0 ? (
+                                <p className="rounded-md bg-[#2b2d31] px-3 py-2 text-xs text-zinc-400">Role groups are hidden from the list (Bot/App roles stay visible).</p>
+                              ) : roles.length === 0 ? (
+                                <p className="rounded-md bg-[#2b2d31] px-3 py-2 text-xs text-zinc-400">No roles found.</p>
+                              ) : filteredRoles.length === 0 ? (
+                                <p className="rounded-md bg-[#2b2d31] px-3 py-2 text-xs text-zinc-400">No roles match your search.</p>
+                              ) : (
+                                filteredRoles.map((role) => (
+                                  <div
+                                    key={role.id}
+                                    role="button"
+                                    tabIndex={0}
+                                    onDragOver={(event) => onRoleDragOver(event, role.id)}
+                                    onDrop={(event) => void onRoleDrop(event, role.id)}
+                                    onClick={() => onSelectRole(role)}
+                                    onKeyDown={(event) => {
+                                      if (event.key === "Enter" || event.key === " ") {
+                                        event.preventDefault();
+                                        onSelectRole(role);
+                                      }
+                                    }}
+                                    className={cn(
+                                      "grid w-full cursor-pointer grid-cols-[1fr_88px_84px] items-center gap-2 rounded-md px-2 py-2 text-left transition",
+                                      draggedRoleId && dragOverRoleId === role.id ? "ring-1 ring-indigo-500/50" : "",
+                                      selectedRoleId === role.id
+                                        ? "bg-[#404249] text-white"
+                                        : "text-zinc-300 hover:bg-[#36393f]"
                                     )}
-                                    <span className="truncate">{role.name}</span>
-                                    {role.isManaged ? (
-                                      <span className="rounded bg-black/25 px-1.5 py-0.5 text-[11px] text-zinc-300">
-                                        System
-                                      </span>
-                                    ) : null}
-                                  </span>
-                                  <span className="text-center">
-                                    <span className="inline-flex w-12 items-center justify-center rounded bg-black/25 px-1.5 py-0.5 text-xs text-zinc-200">
-                                      {role.memberCount ?? 0}
+                                  >
+                                    <span className="flex min-w-0 items-center gap-2">
+                                      {role.iconUrl ? (
+                                        <span className="relative inline-flex h-4 w-4 overflow-hidden rounded-full border border-black/30">
+                                          <Image src={role.iconUrl} alt={`${role.name} icon`} fill className="object-cover" unoptimized />
+                                        </span>
+                                      ) : (
+                                        <span
+                                          className="inline-flex h-3 w-3 rounded-full border border-black/30"
+                                          style={{ backgroundColor: role.color || "#99aab5" }}
+                                        />
+                                      )}
+                                      <span className="truncate text-sm">{role.name}</span>
+                                      {role.isManaged ? (
+                                        <span className="rounded bg-black/25 px-1.5 py-0.5 text-[10px] text-zinc-300">System</span>
+                                      ) : null}
+                                      {!role.isMentionable ? (
+                                        <span className="rounded border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-200">
+                                          No @mention
+                                        </span>
+                                      ) : null}
                                     </span>
-                                  </span>
-                                  <span className="inline-flex items-center justify-end">
-                                    <Pencil className="h-4.5 w-4.5 shrink-0 text-zinc-300" aria-label="Edit role" />
-                                  </span>
-                                </button>
-                              ))
+                                    <span className="text-center text-xs text-zinc-300">
+                                      {(role.memberCount ?? 0) === 0 ? "N/N" : role.memberCount}
+                                    </span>
+                                    <span className="inline-flex items-center justify-end gap-1">
+                                      {canManageRoles ? (
+                                        <span
+                                          draggable={!isSavingRoleOrder}
+                                          onDragStart={(event) => onRoleDragStart(event, role.id)}
+                                          onDragEnd={onRoleDragEnd}
+                                          onClick={(event) => {
+                                            event.preventDefault();
+                                            event.stopPropagation();
+                                          }}
+                                          className="inline-flex h-6 w-6 cursor-grab items-center justify-center rounded border border-zinc-600/70 bg-[#1e1f22] text-zinc-300 transition hover:bg-[#2a2b30] active:cursor-grabbing"
+                                          title="Drag to reorder role"
+                                          aria-label="Drag to reorder role"
+                                        >
+                                          <GripVertical className="h-3.5 w-3.5" />
+                                        </span>
+                                      ) : null}
+                                      <Pencil className="h-4 w-4 shrink-0 text-zinc-300" aria-label="Edit role" />
+                                    </span>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="rounded-lg border border-zinc-700 bg-[#1e1f22] p-3">
+                            {selectedRole ? (
+                              <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <p className="text-sm font-semibold text-white">Role Settings — {selectedRole.name}</p>
+                                  <div className="flex items-center gap-2">
+                                    {!selectedRole.isManaged ? (
+                                      <Button
+                                        type="button"
+                                        onClick={() => void onDeleteRole(selectedRole)}
+                                        disabled={!canManageRoles || isDeletingRole || isSavingRole}
+                                        className="h-8 bg-rose-600/80 px-2.5 text-xs text-white hover:bg-rose-600 disabled:cursor-not-allowed disabled:opacity-60"
+                                      >
+                                        {isDeletingRole ? "Deleting..." : "Delete Role"}
+                                      </Button>
+                                    ) : null}
+                                    <Button
+                                      type="button"
+                                      onClick={onSaveRole}
+                                      disabled={!canManageRoles || isSavingRole || !hasRoleUnsavedChanges}
+                                      className="h-8 bg-[#5865f2] px-2.5 text-xs text-white hover:bg-[#4752c4]"
+                                    >
+                                      {isSavingRole ? "Saving..." : "Save Changes"}
+                                    </Button>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 border-b border-zinc-700 pb-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setRoleEditorTab("display")}
+                                    className={cn(
+                                      "rounded px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.08em] transition",
+                                      roleEditorTab === "display"
+                                        ? "bg-indigo-500/20 text-indigo-200"
+                                        : "text-zinc-400 hover:bg-white/10 hover:text-zinc-200"
+                                    )}
+                                  >
+                                    Display
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setRoleEditorTab("members")}
+                                    className={cn(
+                                      "rounded px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.08em] transition",
+                                      roleEditorTab === "members"
+                                        ? "bg-indigo-500/20 text-indigo-200"
+                                        : "text-zinc-400 hover:bg-white/10 hover:text-zinc-200"
+                                    )}
+                                  >
+                                    Members
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setRoleEditorTab("permissions")}
+                                    className={cn(
+                                      "rounded px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.08em] transition",
+                                      roleEditorTab === "permissions"
+                                        ? "bg-indigo-500/20 text-indigo-200"
+                                        : "text-zinc-400 hover:bg-white/10 hover:text-zinc-200"
+                                    )}
+                                  >
+                                    Permissions
+                                  </button>
+                                </div>
+
+                                {roleEditorTab === "display" ? (
+                                  <>
+                                    <div>
+                                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Display</p>
+                                      <input
+                                        value={editRoleName}
+                                        onChange={(event) => setEditRoleName(event.target.value)}
+                                        className="h-10 w-full rounded-md border border-zinc-700 bg-[#15161a] px-3 text-sm text-white outline-none focus:border-indigo-500"
+                                        disabled={!canManageRoles || isSavingRole}
+                                      />
+                                    </div>
+
+                                    <div>
+                                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Role Color</p>
+                                      <div className="flex items-center gap-2">
+                                        <input
+                                          value={editRoleColor}
+                                          onChange={(event) => setEditRoleColor(event.target.value)}
+                                          className="h-10 flex-1 rounded-md border border-zinc-700 bg-[#15161a] px-3 text-sm text-white outline-none focus:border-indigo-500"
+                                          disabled={!canManageRoles || isSavingRole || isUploadingEditRoleIcon}
+                                        />
+                                        <span
+                                          className="inline-flex h-8 w-8 rounded-full border border-zinc-700"
+                                          style={{ backgroundColor: editRoleColor || "#99aab5" }}
+                                        />
+                                      </div>
+                                      <div className="mt-2 flex flex-wrap gap-1.5">
+                                        {Other_ROLE_COLOR_SWATCHES.map((swatch) => (
+                                          <button
+                                            key={swatch}
+                                            type="button"
+                                            onClick={() => setEditRoleColor(swatch)}
+                                            disabled={!canManageRoles || isSavingRole || isUploadingEditRoleIcon}
+                                            className={cn(
+                                              "inline-flex h-6 w-6 rounded-full border transition",
+                                              editRoleColor.trim().toLowerCase() === swatch.toLowerCase()
+                                                ? "border-white"
+                                                : "border-black/40 hover:border-zinc-300"
+                                            )}
+                                            style={{ backgroundColor: swatch }}
+                                            title={`Set role color ${swatch}`}
+                                            aria-label={`Set role color ${swatch}`}
+                                          />
+                                        ))}
+                                      </div>
+                                    </div>
+
+                                    <div>
+                                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Role Icon</p>
+                                      <div className="flex items-center gap-2">
+                                        <input
+                                          value={editRoleIconUrl}
+                                          onChange={(event) => setEditRoleIconUrl(event.target.value)}
+                                          placeholder="https://..."
+                                          className="h-10 flex-1 rounded-md border border-zinc-700 bg-[#15161a] px-3 text-sm text-white outline-none focus:border-indigo-500"
+                                          disabled={!canManageRoles || isSavingRole || isUploadingEditRoleIcon}
+                                        />
+                                        <Button
+                                          type="button"
+                                          onClick={onPickEditRoleIcon}
+                                          disabled={!canManageRoles || isSavingRole || isUploadingEditRoleIcon}
+                                          className="h-10 bg-[#4e5058] px-3 text-xs text-white hover:bg-[#5d6069]"
+                                        >
+                                          {isUploadingEditRoleIcon ? "Uploading..." : "Pick Icon"}
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          onClick={() => setEditRoleIconUrl("")}
+                                          disabled={!canManageRoles || isSavingRole || isUploadingEditRoleIcon}
+                                          className="h-10 bg-transparent px-3 text-xs text-zinc-300 hover:bg-white/10"
+                                        >
+                                          Remove
+                                        </Button>
+                                      </div>
+
+                                      <input
+                                        ref={editRoleIconInputRef}
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={(event) => void onEditRoleIconChange(event.target.files?.[0])}
+                                      />
+
+                                      <div className="mt-2">
+                                        {editRoleIconUrl ? (
+                                          <span className="relative inline-flex h-10 w-10 overflow-hidden rounded-md border border-zinc-700">
+                                            <Image src={editRoleIconUrl} alt="Role icon preview" fill className="object-cover" unoptimized />
+                                          </span>
+                                        ) : (
+                                          <span className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-zinc-700 bg-[#1e1f22] text-lg font-semibold uppercase text-zinc-300">
+                                            {editRoleName.slice(0, 1) || "R"}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    <div>
+                                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Mention</p>
+                                      <label className="inline-flex items-center gap-2 rounded-md border border-zinc-700 bg-[#15161a] px-3 py-2 text-xs text-zinc-200">
+                                        <input
+                                          type="checkbox"
+                                          checked={editRoleIsMentionable}
+                                          onChange={(event) => setEditRoleIsMentionable(event.target.checked)}
+                                          disabled={!canManageRoles || isSavingRole}
+                                        />
+                                        Allow anyone to @mention this role
+                                      </label>
+                                      <p className="mt-1 text-[11px] text-zinc-500">
+                                        Turn this off to block role pings from @mention tokens (for example: @{editRoleName || "RoleName"}).
+                                      </p>
+                                    </div>
+                                  </>
+                                ) : null}
+
+                                {roleEditorTab === "members" ? (
+                                  <div className="grid gap-3 lg:grid-cols-2">
+                                  <div>
+                                    <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Members with this role</p>
+                                    <div className="max-h-55 space-y-1 overflow-y-auto overflow-x-hidden rounded-md border border-zinc-700 bg-[#15161a] p-2">
+                                      {isLoadingRoleMembers ? (
+                                        <div className="flex items-center gap-2 px-2 py-2 text-xs text-zinc-300">
+                                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                          Loading members...
+                                        </div>
+                                      ) : assignedRoleMembers.length === 0 ? (
+                                        <p className="px-2 py-2 text-xs text-zinc-400">No users currently have this role.</p>
+                                      ) : (
+                                        assignedRoleMembers.map((memberItem) => (
+                                          <div key={memberItem.memberId} className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-black/20">
+                                            <UserAvatar src={memberItem.imageUrl ?? undefined} className="h-7 w-7" />
+                                            <div className="min-w-0 flex-1">
+                                              <p className="truncate text-xs font-medium text-white">
+                                                <ProfileNameWithServerTag
+                                                  name={memberItem.displayName}
+                                                  profileId={memberItem.profileId}
+                                                  memberId={memberItem.memberId}
+                                                />
+                                              </p>
+                                            </div>
+                                            <Button
+                                              type="button"
+                                              onClick={() => void onToggleRoleMember(memberItem)}
+                                              disabled={!canManageRoleMembers || togglingMemberId === memberItem.memberId}
+                                              className="h-7 bg-rose-600/80 px-2 text-[11px] text-white hover:bg-rose-600"
+                                            >
+                                              {togglingMemberId === memberItem.memberId ? "..." : "Remove"}
+                                            </Button>
+                                          </div>
+                                        ))
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <div>
+                                    <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Add members</p>
+                                    <input
+                                      value={addMemberSearch}
+                                      onChange={(event) => setAddMemberSearch(event.target.value)}
+                                      placeholder="Search users by name, email, or ID"
+                                      className="h-9 w-full rounded-md border border-zinc-700 bg-[#15161a] px-3 text-xs text-white outline-none focus:border-indigo-500"
+                                      disabled={!canManageRoleMembers || isLoadingRoleMembers}
+                                    />
+
+                                    <div className="mt-2 max-h-45 space-y-1 overflow-y-auto overflow-x-hidden rounded-md border border-zinc-700 bg-[#15161a] p-2">
+                                      {isLoadingRoleMembers ? (
+                                        <div className="flex items-center gap-2 px-2 py-2 text-xs text-zinc-300">
+                                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                          Loading users...
+                                        </div>
+                                      ) : addableRoleMembers.length === 0 ? (
+                                        <p className="px-2 py-2 text-xs text-zinc-400">
+                                          {normalizedAddMemberSearch ? "No users match your search." : "Type in search to find users."}
+                                        </p>
+                                      ) : (
+                                        addableRoleMembers.map((memberItem) => (
+                                          <div key={`add-${memberItem.memberId}`} className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-black/20">
+                                            <UserAvatar src={memberItem.imageUrl ?? undefined} className="h-7 w-7" />
+                                            <div className="min-w-0 flex-1">
+                                              <p className="truncate text-xs font-medium text-white">
+                                                <ProfileNameWithServerTag
+                                                  name={memberItem.displayName}
+                                                  profileId={memberItem.profileId}
+                                                  memberId={memberItem.memberId}
+                                                />
+                                              </p>
+                                            </div>
+                                            <Button
+                                              type="button"
+                                              onClick={() => void onToggleRoleMember(memberItem)}
+                                              disabled={!canManageRoleMembers || togglingMemberId === memberItem.memberId}
+                                              className="h-7 bg-emerald-600/80 px-2 text-[11px] text-white hover:bg-emerald-600"
+                                            >
+                                              {togglingMemberId === memberItem.memberId ? "..." : "Add"}
+                                            </Button>
+                                          </div>
+                                        ))
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                                ) : null}
+
+                                {roleEditorTab === "permissions" ? (
+                                  <div className="space-y-3">
+                                    {isLoadingRolePermissions ? (
+                                      <div className="flex items-center gap-2 rounded-md border border-zinc-700 bg-[#15161a] px-3 py-2 text-xs text-zinc-300">
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        Loading role permissions...
+                                      </div>
+                                    ) : null}
+                                    {rolePermissions ? (
+                                      <div className="rounded-md border border-zinc-700 bg-[#15161a] p-3">
+                                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">General Server Permissions</p>
+                                      <div className="space-y-1.5 text-xs text-zinc-300">
+                                        <label className="flex items-center justify-between rounded border border-indigo-500/35 bg-indigo-500/10 px-2 py-1.5">
+                                          <span className="font-semibold text-indigo-200">Administrator</span>
+                                          <input
+                                            type="checkbox"
+                                            checked={isAdministratorPermissionsEnabled}
+                                            disabled={!canManageRolePermissions || isLoadingRolePermissions || isSavingRolePermissions}
+                                            onChange={(event) =>
+                                              setRolePermissions((previous) => {
+                                                if (!previous) {
+                                                  return previous;
+                                                }
+
+                                                const next = { ...previous };
+                                                for (const key of SERVER_ROLE_PERMISSION_KEYS) {
+                                                  next[key] = event.target.checked;
+                                                }
+
+                                                return next;
+                                              })
+                                            }
+                                          />
+                                        </label>
+                                        <div className="flex items-center justify-end gap-1 pt-1">
+                                          <button
+                                            type="button"
+                                            onClick={() => setCollapsedPermissionGroups(createPermissionGroupCollapseState(false))}
+                                            className="rounded border border-zinc-700/80 bg-black/20 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-400 transition hover:border-zinc-600 hover:bg-black/30"
+                                          >
+                                            Expand all
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setCollapsedPermissionGroups(createPermissionGroupCollapseState(true))}
+                                            className="rounded border border-zinc-700/80 bg-black/20 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-400 transition hover:border-zinc-600 hover:bg-black/30"
+                                          >
+                                            Collapse all
+                                          </button>
+                                        </div>
+                                        {ROLE_PERMISSION_GROUPS.map((group) => (
+                                          <div key={group.title} className="mt-3 space-y-1.5">
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                setCollapsedPermissionGroups((previous) => ({
+                                                  ...previous,
+                                                  [group.title]: !previous[group.title],
+                                                }))
+                                              }
+                                              className="flex w-full items-center justify-between rounded border border-zinc-700/80 bg-black/20 px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-400 transition hover:border-zinc-600 hover:bg-black/30"
+                                              aria-expanded={!collapsedPermissionGroups[group.title]}
+                                              aria-label={`${collapsedPermissionGroups[group.title] ? "Expand" : "Collapse"} ${group.title}`}
+                                            >
+                                              <span className="truncate">{group.title}</span>
+                                              <span className="ml-2 inline-flex items-center gap-1.5 text-zinc-500">
+                                                <span className="text-[9px] normal-case tracking-normal text-zinc-500">
+                                                  {group.items.length}
+                                                </span>
+                                                {collapsedPermissionGroups[group.title] ? (
+                                                  <ChevronRight className="h-3 w-3" />
+                                                ) : (
+                                                  <ChevronDown className="h-3 w-3" />
+                                                )}
+                                              </span>
+                                            </button>
+                                            {!collapsedPermissionGroups[group.title]
+                                              ? group.items.map((permissionItem) => (
+                                                  <label key={permissionItem.key} className="flex items-center justify-between rounded bg-black/20 px-2 py-1.5">
+                                                    <span>{permissionItem.label}</span>
+                                                    <input
+                                                      type="checkbox"
+                                                      checked={rolePermissions[permissionItem.key]}
+                                                      disabled={!canManageRolePermissions || isLoadingRolePermissions || isSavingRolePermissions}
+                                                      onChange={(event) =>
+                                                        setRolePermissions((previous) => {
+                                                          if (!previous) {
+                                                            return previous;
+                                                          }
+
+                                                          return {
+                                                            ...previous,
+                                                            [permissionItem.key]: event.target.checked,
+                                                          };
+                                                        })
+                                                      }
+                                                    />
+                                                  </label>
+                                                ))
+                                              : null}
+                                          </div>
+                                        ))}
+                                      </div>
+                                      </div>
+                                    ) : (
+                                      <p className="rounded-md border border-zinc-700 bg-[#15161a] px-3 py-2 text-xs text-zinc-400">
+                                        Role permissions are unavailable for this role right now.
+                                      </p>
+                                    )}
+
+                                    {rolePermissionsError ? (
+                                      <p className="text-[11px] text-rose-300">{rolePermissionsError}</p>
+                                    ) : null}
+
+                                    {hasRolePermissionsUnsavedChanges ? (
+                                      <div className="sticky bottom-0 z-10 flex items-center justify-between rounded-md border border-amber-500/40 bg-[#2d2514] px-3 py-2 text-xs text-amber-100">
+                                        <span>You have unsaved permission changes.</span>
+                                        <div className="flex items-center gap-2">
+                                          <Button
+                                            type="button"
+                                            onClick={() => {
+                                              if (savedRolePermissions) {
+                                                setRolePermissions(savedRolePermissions);
+                                              }
+                                            }}
+                                            disabled={isSavingRolePermissions}
+                                            className="h-7 bg-transparent px-2 text-[11px] text-zinc-200 hover:bg-white/10"
+                                          >
+                                            Reset
+                                          </Button>
+                                          <Button
+                                            type="button"
+                                            onClick={onSaveRolePermissions}
+                                            disabled={!canManageRolePermissions || isSavingRolePermissions}
+                                            className="h-7 bg-[#5865f2] px-2 text-[11px] text-white hover:bg-[#4752c4]"
+                                          >
+                                            {isSavingRolePermissions ? "Saving..." : "Save"}
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                ) : null}
+
+                                {hasRoleUnsavedChanges ? (
+                                  <div className="sticky bottom-0 z-10 flex items-center justify-between rounded-md border border-amber-500/40 bg-[#2d2514] px-3 py-2 text-xs text-amber-100">
+                                    <span>You have unsaved role changes.</span>
+                                    <div className="flex items-center gap-2">
+                                      <Button
+                                        type="button"
+                                        onClick={() => {
+                                          if (!selectedRole) {
+                                            return;
+                                          }
+                                          setEditRoleName(selectedRole.name);
+                                          setEditRoleColor(selectedRole.color);
+                                          setEditRoleIconUrl(selectedRole.iconUrl ?? "");
+                                          setEditRoleIsMentionable(Boolean(selectedRole.isMentionable));
+                                        }}
+                                        disabled={isSavingRole}
+                                        className="h-7 bg-transparent px-2 text-[11px] text-zinc-200 hover:bg-white/10"
+                                      >
+                                        Reset
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        onClick={onSaveRole}
+                                        disabled={!canManageRoles || isSavingRole}
+                                        className="h-7 bg-[#5865f2] px-2 text-[11px] text-white hover:bg-[#4752c4]"
+                                      >
+                                        {isSavingRole ? "Saving..." : "Save"}
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : (
+                              <p className="rounded-md border border-zinc-700 bg-[#15161a] px-3 py-2 text-xs text-zinc-400">
+                                Select a role from the left to edit it.
+                              </p>
                             )}
                           </div>
-
+                        </div>
 
                         {!canManageRoles ? (
                           <p className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
@@ -2354,17 +3773,31 @@ export const EditServerModal = () => {
                           </p>
                         ) : null}
 
+                        {!canManageRoleMembers && selectedRole ? (
+                          <p className="mt-3 text-[11px] text-amber-300">Only the server owner can change role members.</p>
+                        ) : null}
+
+                        {roleMembersError ? (
+                          <p className="mt-3 text-[11px] text-rose-300">{roleMembersError}</p>
+                        ) : null}
+
                         {rolesError ? (
                           <p className="mt-3 rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
                             {rolesError}
+                          </p>
+                        ) : null}
+
+                        {isSavingRoleOrder ? (
+                          <p className="mt-3 rounded-md border border-indigo-500/30 bg-indigo-500/10 px-3 py-2 text-xs text-indigo-200">
+                            Saving role order...
                           </p>
                         ) : null}
                       </div>
                     ) : null}
 
                     {activeSection === "roles" && isCreateRolePopupOpen ? (
-                      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-4">
-                        <div className="w-full max-w-[520px] rounded-xl border border-zinc-700 bg-[#2B2D31] p-4 shadow-2xl shadow-black/60">
+                      <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 px-4">
+                        <div className="w-full max-w-130 rounded-xl border border-zinc-700 bg-[#2B2D31] p-4 shadow-2xl shadow-black/60">
                           <div className="mb-3 flex items-center justify-between">
                             <p className="text-sm font-semibold text-white">Create Role</p>
                             <button
@@ -2440,6 +3873,12 @@ export const EditServerModal = () => {
                                 )}
                               </div>
                             </div>
+
+                            {rolesError ? (
+                              <p className="rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+                                {rolesError}
+                              </p>
+                            ) : null}
                           </div>
 
                           <div className="mt-4 flex items-center justify-end gap-2">
@@ -2463,215 +3902,7 @@ export const EditServerModal = () => {
                       </div>
                     ) : null}
 
-                    {activeSection === "roles" && isRoleEditorPopupOpen && selectedRole ? (
-                      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-4">
-                        <div className="w-full max-w-[560px] rounded-xl border border-zinc-700 bg-[#2B2D31] p-4 shadow-2xl shadow-black/60">
-                          <div className="mb-3 flex items-center justify-between">
-                            <p className="text-sm font-semibold text-white">Role Editor</p>
-                            <button
-                              type="button"
-                              onClick={() => setIsRoleEditorPopupOpen(false)}
-                              className="rounded p-1 text-zinc-300 transition hover:bg-white/10 hover:text-white"
-                              aria-label="Close role editor popup"
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                          </div>
 
-                          <div className="space-y-3">
-                            <div>
-                              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Role Name</p>
-                              <input
-                                value={editRoleName}
-                                onChange={(event) => setEditRoleName(event.target.value)}
-                                className="h-10 w-full rounded-md border border-zinc-700 bg-[#1e1f22] px-3 text-sm text-white outline-none focus:border-indigo-500"
-                                disabled={!canManageRoles || isSavingRole}
-                              />
-                            </div>
-
-                            <div>
-                              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Role Color</p>
-                              <div className="flex items-center gap-2">
-                                <input
-                                  value={editRoleColor}
-                                  onChange={(event) => setEditRoleColor(event.target.value)}
-                                  className="h-10 flex-1 rounded-md border border-zinc-700 bg-[#1e1f22] px-3 text-sm text-white outline-none focus:border-indigo-500"
-                                  disabled={!canManageRoles || isSavingRole || isUploadingEditRoleIcon}
-                                />
-                                <span
-                                  className="inline-flex h-8 w-8 rounded-full border border-zinc-700"
-                                  style={{ backgroundColor: editRoleColor || "#99aab5" }}
-                                />
-                              </div>
-                            </div>
-
-                            <div>
-                              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Role Icon</p>
-                              <p className="mb-2 text-[11px] text-zinc-500">Pick an icon file or paste an icon URL.</p>
-                              <div className="flex items-center gap-2">
-                                <input
-                                  value={editRoleIconUrl}
-                                  onChange={(event) => setEditRoleIconUrl(event.target.value)}
-                                  placeholder="https://..."
-                                  className="h-10 flex-1 rounded-md border border-zinc-700 bg-[#1e1f22] px-3 text-sm text-white outline-none focus:border-indigo-500"
-                                  disabled={!canManageRoles || isSavingRole || isUploadingEditRoleIcon}
-                                />
-                                <Button
-                                  type="button"
-                                  onClick={onPickEditRoleIcon}
-                                  disabled={!canManageRoles || isSavingRole || isUploadingEditRoleIcon}
-                                  className="h-10 bg-[#4e5058] px-3 text-xs text-white hover:bg-[#5d6069]"
-                                >
-                                  {isUploadingEditRoleIcon ? "Uploading..." : "Pick Icon"}
-                                </Button>
-                                <Button
-                                  type="button"
-                                  onClick={() => setEditRoleIconUrl("")}
-                                  disabled={!canManageRoles || isSavingRole || isUploadingEditRoleIcon}
-                                  className="h-10 bg-transparent px-3 text-xs text-zinc-300 hover:bg-white/10"
-                                >
-                                  Remove
-                                </Button>
-                              </div>
-
-                              <input
-                                ref={editRoleIconInputRef}
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                onChange={(event) => void onEditRoleIconChange(event.target.files?.[0])}
-                              />
-
-                              <div className="mt-2">
-                                {editRoleIconUrl ? (
-                                  <span className="relative inline-flex h-10 w-10 overflow-hidden rounded-md border border-zinc-700">
-                                    <Image src={editRoleIconUrl} alt="Role icon preview" fill className="object-cover" unoptimized />
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-zinc-700 bg-[#1e1f22] text-lg font-semibold uppercase text-zinc-300">
-                                    {editRoleName.slice(0, 1) || "R"}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-
-                            <div>
-                              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Members with this role</p>
-                              <div className="max-h-[220px] space-y-1 overflow-y-auto overflow-x-hidden rounded-md border border-zinc-700 bg-[#1e1f22] p-2">
-                                {isLoadingRoleMembers ? (
-                                  <div className="flex items-center gap-2 px-2 py-2 text-xs text-zinc-300">
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                    Loading members...
-                                  </div>
-                                ) : assignedRoleMembers.length === 0 ? (
-                                  <p className="px-2 py-2 text-xs text-zinc-400">No users currently have this role.</p>
-                                ) : (
-                                  assignedRoleMembers.map((memberItem) => (
-                                    <div key={memberItem.memberId} className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-black/20">
-                                      <UserAvatar src={memberItem.imageUrl ?? undefined} className="h-7 w-7" />
-                                      <div className="min-w-0 flex-1">
-                                        <p className="truncate text-xs font-medium text-white">
-                                          <ProfileNameWithServerTag
-                                            name={memberItem.displayName}
-                                            profileId={memberItem.profileId}
-                                            memberId={memberItem.memberId}
-                                          />
-                                        </p>
-                                        <p className="truncate text-[11px] text-zinc-400">{memberItem.email || memberItem.profileId}</p>
-                                      </div>
-                                      <Button
-                                        type="button"
-                                        onClick={() => void onToggleRoleMember(memberItem)}
-                                        disabled={!canManageRoleMembers || togglingMemberId === memberItem.memberId}
-                                        className="h-7 bg-rose-600/80 px-2 text-[11px] text-white hover:bg-rose-600"
-                                      >
-                                        {togglingMemberId === memberItem.memberId ? "..." : "Remove"}
-                                      </Button>
-                                    </div>
-                                  ))
-                                )}
-                              </div>
-
-                              {!canManageRoleMembers ? (
-                                <p className="mt-2 text-[11px] text-amber-300">Only the server owner can change role members.</p>
-                              ) : null}
-
-                              {roleMembersError ? (
-                                <p className="mt-2 text-[11px] text-rose-300">{roleMembersError}</p>
-                              ) : null}
-                            </div>
-
-                            <div>
-                              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Add members to this role</p>
-                              <input
-                                value={addMemberSearch}
-                                onChange={(event) => setAddMemberSearch(event.target.value)}
-                                placeholder="Search users by name, email, or ID"
-                                className="h-9 w-full rounded-md border border-zinc-700 bg-[#1e1f22] px-3 text-xs text-white outline-none focus:border-indigo-500"
-                                disabled={!canManageRoleMembers || isLoadingRoleMembers}
-                              />
-
-                              <div className="mt-2 max-h-[180px] space-y-1 overflow-y-auto overflow-x-hidden rounded-md border border-zinc-700 bg-[#1e1f22] p-2">
-                                {isLoadingRoleMembers ? (
-                                  <div className="flex items-center gap-2 px-2 py-2 text-xs text-zinc-300">
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                    Loading users...
-                                  </div>
-                                ) : addableRoleMembers.length === 0 ? (
-                                  <p className="px-2 py-2 text-xs text-zinc-400">
-                                    {normalizedAddMemberSearch
-                                      ? "No users match your search."
-                                      : "Type in search to find users."}
-                                  </p>
-                                ) : (
-                                  addableRoleMembers.map((memberItem) => (
-                                    <div key={`add-${memberItem.memberId}`} className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-black/20">
-                                      <UserAvatar src={memberItem.imageUrl ?? undefined} className="h-7 w-7" />
-                                      <div className="min-w-0 flex-1">
-                                        <p className="truncate text-xs font-medium text-white">
-                                          <ProfileNameWithServerTag
-                                            name={memberItem.displayName}
-                                            profileId={memberItem.profileId}
-                                            memberId={memberItem.memberId}
-                                          />
-                                        </p>
-                                        <p className="truncate text-[11px] text-zinc-400">{memberItem.email || memberItem.profileId}</p>
-                                      </div>
-                                      <Button
-                                        type="button"
-                                        onClick={() => void onToggleRoleMember(memberItem)}
-                                        disabled={!canManageRoleMembers || togglingMemberId === memberItem.memberId}
-                                        className="h-7 bg-emerald-600/80 px-2 text-[11px] text-white hover:bg-emerald-600"
-                                      >
-                                        {togglingMemberId === memberItem.memberId ? "..." : "Add"}
-                                      </Button>
-                                    </div>
-                                  ))
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="mt-4 flex items-center justify-end gap-2">
-                            <Button
-                              type="button"
-                              onClick={() => setIsRoleEditorPopupOpen(false)}
-                              className="bg-transparent text-zinc-300 hover:bg-white/10"
-                            >
-                              Cancel
-                            </Button>
-                            <Button
-                              type="button"
-                              onClick={onSaveRole}
-                              disabled={!canManageRoles || isSavingRole}
-                              className="bg-[#5865f2] text-white hover:bg-[#4752c4]"
-                            >
-                              {isSavingRole ? "Saving..." : "Save Role"}
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ) : null}
 
                     {activeSection === "members" ? (
                       <div className="space-y-4">
@@ -3340,6 +4571,151 @@ export const EditServerModal = () => {
                           </Button>
                         </div>
                       </div>
+                    ) : activeSection === "serverTemplate" ? (
+                      <div className="space-y-4">
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Roles in template</p>
+                            <p className="mt-1 text-2xl font-semibold text-zinc-100">{serverTemplateSummary?.totalRoles ?? 0}</p>
+                          </div>
+                          <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Channel groups</p>
+                            <p className="mt-1 text-2xl font-semibold text-zinc-100">{serverTemplateSummary?.totalChannelGroups ?? 0}</p>
+                          </div>
+                          <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Channels</p>
+                            <p className="mt-1 text-2xl font-semibold text-zinc-100">{serverTemplateSummary?.totalChannels ?? 0}</p>
+                          </div>
+                        </div>
+
+                        <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-4 space-y-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-300">Easy Import (Other)</p>
+                          <input
+                            value={OtherTemplateInput}
+                            onChange={(event) => setOtherTemplateInput(event.target.value)}
+                            placeholder="Paste Other template URL, invite URL/code, or server ID"
+                            disabled={isImportingOtherTemplate}
+                            className="h-10 w-full rounded-md border border-zinc-700 bg-[#15161a] px-3 text-sm text-white outline-none focus:border-indigo-500"
+                          />
+
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            <label className="flex items-center gap-2 rounded-md border border-zinc-700 bg-[#1e1f22] px-3 py-2 text-xs text-zinc-300">
+                              <input
+                                type="checkbox"
+                                checked={replaceChannelsOnImport}
+                                onChange={(event) => setReplaceChannelsOnImport(event.target.checked)}
+                                disabled={isImportingOtherTemplate}
+                              />
+                              Replace existing non-system channels/groups (recommended)
+                            </label>
+                            <label className="flex items-center gap-2 rounded-md border border-zinc-700 bg-[#1e1f22] px-3 py-2 text-xs text-zinc-300">
+                              <input
+                                type="checkbox"
+                                checked={replaceRolesOnImport}
+                                onChange={(event) => setReplaceRolesOnImport(event.target.checked)}
+                                disabled={isImportingOtherTemplate}
+                              />
+                              Replace existing custom roles
+                            </label>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              onClick={() => void onImportOtherTemplate()}
+                              disabled={isImportingOtherTemplate || isLoadingServerTemplate}
+                              className="bg-[#5865f2] text-white hover:bg-[#4752c4]"
+                            >
+                              {isImportingOtherTemplate ? "Importing..." : "Import Now"}
+                            </Button>
+
+                            <Button
+                              type="button"
+                              className="bg-transparent text-zinc-300 hover:bg-white/10"
+                              onClick={() => void loadServerTemplate()}
+                              disabled={isImportingOtherTemplate || isLoadingServerTemplate}
+                            >
+                              Refresh
+                            </Button>
+                          </div>
+
+                          <p className="text-xs text-zinc-400">
+                            Super easy: paste one thing and click Import. We auto-detect template, invite, or server ID.
+                          </p>
+                        </div>
+
+                        <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-4 space-y-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-300">Import by Other Server ID</p>
+                          <input
+                            value={OtherServerIdInput}
+                            onChange={(event) => setOtherServerIdInput(event.target.value)}
+                            placeholder="Paste Other server ID (e.g. 123456789012345678)"
+                            disabled={isImportingOtherTemplate}
+                            className="h-10 w-full rounded-md border border-zinc-700 bg-[#15161a] px-3 text-sm text-white outline-none focus:border-indigo-500"
+                          />
+
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              onClick={() => void onImportOtherServerId()}
+                              disabled={isImportingOtherTemplate || isLoadingServerTemplate}
+                              className="bg-[#5865f2] text-white hover:bg-[#4752c4]"
+                            >
+                              {isImportingOtherTemplate ? "Importing..." : "Import From Server ID"}
+                            </Button>
+                          </div>
+
+                          <p className="text-xs text-zinc-400">
+                            Advanced option. Usually you only need the Easy Import box above.
+                          </p>
+                        </div>
+
+                        <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-4 space-y-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-300">Export Current Server Template</p>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                type="button"
+                                onClick={() => void onCopyServerTemplateJson()}
+                                disabled={!serverTemplateExport || isLoadingServerTemplate}
+                                className="h-8 bg-[#4e5058] px-2.5 text-xs text-white hover:bg-[#5d6069]"
+                              >
+                                Copy JSON
+                              </Button>
+                              <Button
+                                type="button"
+                                onClick={onDownloadServerTemplateJson}
+                                disabled={!serverTemplateExport || isLoadingServerTemplate}
+                                className="h-8 bg-[#4e5058] px-2.5 text-xs text-white hover:bg-[#5d6069]"
+                              >
+                                Download JSON
+                              </Button>
+                            </div>
+                          </div>
+
+                          <div className="max-h-48 overflow-y-auto rounded-md border border-zinc-700 bg-[#15161a] p-3">
+                            <pre className="whitespace-pre-wrap break-words text-[11px] text-zinc-300">
+                              {serverTemplateExport
+                                ? JSON.stringify(serverTemplateExport, null, 2)
+                                : isLoadingServerTemplate
+                                  ? "Loading template..."
+                                  : "Template export is empty."}
+                            </pre>
+                          </div>
+                        </div>
+
+                        {serverTemplateError ? (
+                          <p className="rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+                            {serverTemplateError}
+                          </p>
+                        ) : null}
+
+                        {serverTemplateSuccess ? (
+                          <p className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+                            {serverTemplateSuccess}
+                          </p>
+                        ) : null}
+                      </div>
                     ) : activeSection === "serverGuide" ? (
                       <div className="space-y-4">
                         <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-4">
@@ -3420,19 +4796,22 @@ export const EditServerModal = () => {
                     ) : activeSection === "deleteServer" ? (
                       <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-4">
                         <p className="text-sm text-zinc-200">
-                          Deleting this server removes channels, groups, and messages associated with it.
+                          {isProtectedInAccordServer
+                            ? "In-Accord server is protected and cannot be deleted."
+                            : "Deleting this server removes channels, groups, and messages associated with it."}
                         </p>
                         <Button
                           type="button"
                           variant="destructive"
                           className="mt-4"
+                          disabled={isProtectedInAccordServer}
                           onClick={() => {
                             if (server) {
                               onOpen("deleteServer", { server });
                             }
                           }}
                         >
-                          Continue to Delete Server
+                          {isProtectedInAccordServer ? "Delete Disabled" : "Continue to Delete Server"}
                         </Button>
                       </div>
                     ) : activeSection === "soundboard" ? (
@@ -3970,10 +5349,10 @@ export const EditServerModal = () => {
                 <>
                 <div
                   key={activeSection}
-                  className="settings-scrollbar theme-settings-content-body min-h-0 flex-1 overflow-y-scroll overflow-x-hidden space-y-7 px-8 py-6"
+                  className="settings-scrollbar theme-settings-content-body min-h-0 flex-1 overflow-y-scroll overflow-x-hidden space-y-4 px-4 py-3"
                   style={{ scrollbarGutter: "stable" }}
                 >
-                  <div className="grid gap-6 md:grid-cols-[120px_1fr] md:items-start">
+                  <div className="mx-auto w-full max-w-3xl grid gap-3 md:grid-cols-[84px_1fr] md:items-start">
                     <FormField
                       control={form.control}
                       name="imageUrl"
@@ -3982,7 +5361,7 @@ export const EditServerModal = () => {
                           <FormControl>
                             <div className="flex flex-col items-start gap-3">
                               {imageUrl ? (
-                                <div className="group relative h-[96px] w-[96px]">
+                                <div className="group relative h-20 w-20">
                                   <Image
                                     fill
                                     src={imageUrl}
@@ -3996,7 +5375,7 @@ export const EditServerModal = () => {
                                     className="absolute inset-0 flex items-center justify-center rounded-full bg-black/45 text-white opacity-0 transition group-hover:opacity-100 disabled:cursor-not-allowed"
                                     aria-label="Change server icon"
                                   >
-                                    <Camera className="h-5 w-5" />
+                                    <Camera className="h-4 w-4" />
                                   </button>
                                   <button
                                     type="button"
@@ -4012,10 +5391,10 @@ export const EditServerModal = () => {
                                   type="button"
                                   onClick={onPickImage}
                                   disabled={isUploadingImage || isLoading}
-                                  className="group relative flex h-[96px] w-[96px] items-center justify-center rounded-full border-2 border-dashed border-zinc-500 bg-[#232428] transition hover:border-zinc-300 disabled:cursor-not-allowed disabled:opacity-60"
+                                  className="group relative flex h-20 w-20 items-center justify-center rounded-full border-2 border-dashed border-zinc-500 bg-[#232428] transition hover:border-zinc-300 disabled:cursor-not-allowed disabled:opacity-60"
                                   aria-label="Upload server icon"
                                 >
-                                  <Camera className="h-9 w-9 text-zinc-300" />
+                                  <Camera className="h-7 w-7 text-zinc-300" />
                                   <span className="absolute -bottom-1 -right-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-indigo-500 text-white shadow-sm">
                                     <Plus className="h-4 w-4" />
                                   </span>
@@ -4037,6 +5416,32 @@ export const EditServerModal = () => {
                     />
 
                     <div className="space-y-3">
+                      <FormField
+                        control={form.control}
+                        name="name"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs font-bold uppercase tracking-[0.08em] text-zinc-300">
+                              Server name
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                disabled={isLoading || isProtectedInAccordServer}
+                                className="h-9 border border-zinc-700 bg-[#1E1F22] text-sm text-zinc-100 placeholder:text-zinc-500 focus-visible:ring-1 focus-visible:ring-indigo-500 focus-visible:ring-offset-0"
+                                placeholder="Enter server name"
+                                {...field}
+                              />
+                            </FormControl>
+                            {isProtectedInAccordServer ? (
+                              <p className="mt-1 text-[11px] text-amber-300">
+                                In-Accord server name is protected and cannot be changed.
+                              </p>
+                            ) : null}
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
                       <p className="text-xs font-bold uppercase tracking-[0.08em] text-zinc-300">
                         Server icon
                       </p>
@@ -4060,27 +5465,7 @@ export const EditServerModal = () => {
                     <p className="text-sm font-medium text-rose-400">Save error: {submitError}</p>
                   ) : null}
 
-                  <FormField
-                    control={form.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs font-bold uppercase tracking-[0.08em] text-zinc-300">
-                          Server name
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            disabled={isLoading}
-                            className="h-11 border border-zinc-700 bg-[#1E1F22] text-sm text-zinc-100 placeholder:text-zinc-500 focus-visible:ring-1 focus-visible:ring-indigo-500 focus-visible:ring-offset-0"
-                            placeholder="Enter server name"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
+                  <div className="mx-auto w-full max-w-3xl">
                   <FormField
                     control={form.control}
                     name="bannerUrl"
@@ -4091,7 +5476,7 @@ export const EditServerModal = () => {
                         </FormLabel>
                         <FormControl>
                           <div className="space-y-3">
-                            <div className="relative h-24 w-full overflow-hidden rounded-md border border-zinc-700 bg-[#1E1F22]">
+                            <div className="relative h-[260px] w-full overflow-hidden rounded-md border border-zinc-700 bg-[#1E1F22]">
                               {bannerUrl ? (
                                 <Image
                                   fill
@@ -4111,7 +5496,7 @@ export const EditServerModal = () => {
                               )}
                             </div>
 
-                            <div className="grid gap-2 md:grid-cols-2">
+                            <div className="grid gap-2 md:grid-cols-[140px_minmax(0,1fr)]">
                               <div>
                                 <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">
                                   Fit mode
@@ -4181,6 +5566,48 @@ export const EditServerModal = () => {
                               ) : null}
                             </div>
 
+                            {uploadedServerBannerThumbnails.length > 0 ? (
+                              <div className="space-y-2">
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">
+                                  Uploaded Banners
+                                </p>
+                                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                                  {uploadedServerBannerThumbnails.map((thumbnailUrl) => {
+                                    const isSelected = bannerUrl === thumbnailUrl;
+
+                                    return (
+                                      <button
+                                        key={thumbnailUrl}
+                                        type="button"
+                                        onClick={() =>
+                                          form.setValue("bannerUrl", thumbnailUrl, {
+                                            shouldDirty: true,
+                                            shouldValidate: true,
+                                          })
+                                        }
+                                        className={cn(
+                                          "relative h-20 overflow-hidden rounded-md border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500",
+                                          isSelected
+                                            ? "border-indigo-500 ring-1 ring-indigo-500/70"
+                                            : "border-zinc-700 hover:border-zinc-500"
+                                        )}
+                                        title={isSelected ? "Current banner" : "Use this banner"}
+                                        aria-pressed={isSelected}
+                                        disabled={isUploadingBanner || isLoading}
+                                      >
+                                        <Image
+                                          fill
+                                          src={thumbnailUrl}
+                                          alt="Uploaded banner tile"
+                                          className="object-cover"
+                                        />
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ) : null}
+
                             <input
                               ref={bannerInputRef}
                               type="file"
@@ -4194,6 +5621,7 @@ export const EditServerModal = () => {
                       </FormItem>
                     )}
                   />
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-between border-t border-black/20 bg-[#2B2D31] px-8 py-4">
@@ -4216,19 +5644,34 @@ export const EditServerModal = () => {
 
               <aside data-testid="server-settings-right-rail" className="theme-settings-right-rail settings-scrollbar order-2 flex h-full min-h-0 min-w-0 flex-col overflow-y-scroll rounded-r-3xl border-l border-black/20 bg-[#232428] p-4 pt-2 shadow-2xl shadow-black/40" style={{ scrollbarGutter: "stable" }}>
                 <p className="truncate px-3 pb-3 text-[11px] font-bold uppercase tracking-[0.08em] text-zinc-400">
-                  RIGHT rail settings
+                  Server Settings
                 </p>
 
                 <nav data-testid="server-settings-right-rail-nav" className="theme-settings-right-rail-nav settings-scrollbar min-h-0 flex-1 overflow-y-scroll overflow-x-hidden pr-1" aria-label="Server settings RIGHT rail menu">
                   <div className="flex min-w-0 flex-col space-y-4 pb-3">
-                    {SETTINGS_SECTIONS.map((section) => (
-                      <div key={section.heading ?? "base"} className="flex min-w-0 flex-col space-y-1">
-                        {section.heading ? (
-                          <p className="truncate px-3 pb-1 pt-1 text-[10px] font-bold uppercase tracking-[0.08em] text-zinc-500">
-                            {section.heading}
-                          </p>
-                        ) : null}
-                        {section.items.map((item) => (
+                    {SETTINGS_SECTIONS.map((section, index) => {
+                      const groupKey = section.heading ?? `General-${index}`;
+                      const groupLabel = section.heading ?? "General";
+                      const isCollapsed = Boolean(collapsedSettingsGroups[groupKey]);
+
+                      return (
+                      <div key={groupKey} className="flex min-w-0 flex-col space-y-1">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCollapsedSettingsGroups((previous) => ({
+                              ...previous,
+                              [groupKey]: !previous[groupKey],
+                            }))
+                          }
+                          className="flex w-full items-center justify-between truncate rounded-md px-3 pb-1 pt-1 text-left text-[10px] font-bold uppercase tracking-[0.08em] text-zinc-500 transition hover:bg-[#2a2d32] hover:text-zinc-300"
+                          aria-expanded={!isCollapsed}
+                        >
+                          <span className="truncate">{groupLabel}</span>
+                          {isCollapsed ? <ChevronRight className="h-3.5 w-3.5 shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0" />}
+                        </button>
+
+                        {!isCollapsed && section.items.map((item) => (
                           <button
                             key={item.key}
                             type="button"
@@ -4246,7 +5689,7 @@ export const EditServerModal = () => {
                           </button>
                         ))}
                       </div>
-                    ))}
+                    )})}
                   </div>
                 </nav>
               </aside>

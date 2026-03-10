@@ -20,6 +20,7 @@ export type ActiveVoiceMember = {
   memberId: string;
   profileId: string;
   displayName: string;
+  profileImageUrl: string;
   presenceStatus: string;
   connectedAt: Date;
   updatedAt: Date;
@@ -30,6 +31,8 @@ export type ActiveVoiceMember = {
 };
 
 let voiceStateSchemaReady = false;
+let lastVoiceStatePruneAt = 0;
+const MIN_PRUNE_INTERVAL_MS = 15_000;
 
 export const ensureVoiceStateSchema = async () => {
   if (voiceStateSchemaReady) {
@@ -82,6 +85,11 @@ export const ensureVoiceStateSchema = async () => {
   `);
 
   await db.execute(sql`
+    create index if not exists "VoiceState_server_channel_updatedAt_idx"
+    on "VoiceState" ("serverId", "channelId", "updatedAt")
+  `);
+
+  await db.execute(sql`
     create index if not exists "VoiceState_updatedAt_idx"
     on "VoiceState" ("updatedAt")
   `);
@@ -95,6 +103,12 @@ export const pruneStaleVoiceStates = async ({
   maxAgeSeconds?: number;
 } = {}) => {
   await ensureVoiceStateSchema();
+
+  const now = Date.now();
+  if (now - lastVoiceStatePruneAt < MIN_PRUNE_INTERVAL_MS) {
+    return;
+  }
+  lastVoiceStatePruneAt = now;
 
   await db.execute(sql`
     delete from "VoiceState"
@@ -224,6 +238,7 @@ export const listActiveVoiceMembersForChannel = async ({
       m."id" as "memberId",
       m."profileId" as "profileId",
       coalesce(nullif(trim(u."name"), ''), nullif(trim(u."email"), ''), m."profileId") as "displayName",
+      coalesce(u."avatarUrl", u."avatar", u."icon", '/in-accord-steampunk-logo.png') as "profileImageUrl",
       coalesce(up."presenceStatus", 'OFFLINE') as "presenceStatus",
       vs."isMuted" as "isMuted",
       vs."isDeafened" as "isDeafened",

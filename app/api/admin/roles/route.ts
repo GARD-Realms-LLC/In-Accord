@@ -11,6 +11,7 @@ import {
   isSystemRoleKey,
   normalizeRoleKey,
 } from "@/lib/in-accord-roles";
+import { ADMINISTRATOR_ROLE_KEY } from "@/lib/account-security-constants";
 
 type RoleCountRow = {
   roleKey: string;
@@ -183,6 +184,10 @@ export async function DELETE(request: Request) {
 
     if (!roleKey) {
       return new NextResponse("roleKey is required.", { status: 400 });
+    }
+
+    if (roleKey === ADMINISTRATOR_ROLE_KEY) {
+      return new NextResponse("Administrator role cannot be removed.", { status: 403 });
     }
 
     if (isSystemRoleKey(roleKey)) {

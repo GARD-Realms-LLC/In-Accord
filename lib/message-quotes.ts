@@ -1,6 +1,7 @@
 export type QuotedMessageMeta = {
   messageId: string;
   authorName: string;
+  authorProfileId?: string;
   snippet: string;
 };
 
@@ -51,6 +52,7 @@ export const buildQuotedContent = (body: string, quote?: QuotedMessageMeta | nul
   const normalizedQuote: QuotedMessageMeta = {
     messageId: String(quote.messageId ?? "").trim(),
     authorName: String(quote.authorName ?? "Unknown User").trim() || "Unknown User",
+    authorProfileId: String(quote.authorProfileId ?? "").trim() || undefined,
     snippet: sanitizeSnippet(String(quote.snippet ?? "")),
   };
 
@@ -84,6 +86,7 @@ export const extractQuotedContent = (
     const quote: QuotedMessageMeta = {
       messageId: String(parsed.messageId ?? "").trim(),
       authorName: String(parsed.authorName ?? "Unknown User").trim() || "Unknown User",
+      authorProfileId: String(parsed.authorProfileId ?? "").trim() || undefined,
       snippet: sanitizeSnippet(String(parsed.snippet ?? "")),
     };
 

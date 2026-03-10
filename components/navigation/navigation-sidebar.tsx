@@ -67,7 +67,7 @@ export const NavigationSidebar = async () => {
   if (canSeeAdminTotalsButtons) {
     const totalsResult = await db.execute(sql`
       select
-        (select count(distinct "profileId")::int from "Member") as "totalMembers",
+        (select count(*)::int from "Users") as "totalMembers",
         (select count(*)::int from "Server") as "totalServers"
     `);
 

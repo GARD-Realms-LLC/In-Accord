@@ -199,7 +199,7 @@ export const SoundEfxPicker = ({ onSelect, serverId }: SoundEfxPickerProps) => {
           title="Send Sound EFX"
           aria-label="Send Sound EFX"
         >
-          <Volume2 className="h-4 w-4" />
+            <Volume2 className="h-4 w-4" suppressHydrationWarning />
         </button>
       </PopoverTrigger>
 
@@ -236,7 +236,7 @@ export const SoundEfxPicker = ({ onSelect, serverId }: SoundEfxPickerProps) => {
                         className="inline-flex h-7 w-7 items-center justify-center rounded bg-zinc-200 text-zinc-700 hover:bg-zinc-300 dark:bg-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-600"
                         title={isPlaying ? "Stop" : "Play"}
                       >
-                        {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                        {isPlaying ? <Pause className="h-3.5 w-3.5" suppressHydrationWarning /> : <Play className="h-3.5 w-3.5" suppressHydrationWarning />}
                       </button>
                       <button
                         type="button"

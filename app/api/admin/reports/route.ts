@@ -23,6 +23,18 @@ type ReportRow = {
   targetUserName: string | null;
   targetServerName: string | null;
   targetMessageContent: string | null;
+  assignedAdminName: string | null;
+  assignedAdminEmail: string | null;
+};
+
+type ReportSeverity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+
+const allowedReportSeverities = new Set<ReportSeverity>(["LOW", "MEDIUM", "HIGH", "CRITICAL"]);
+
+const applySeverityToReason = (reason: string | null | undefined, severity: ReportSeverity) => {
+  const source = String(reason ?? "").trim();
+  const withoutPrefix = source.replace(/^\[(LOW|MEDIUM|HIGH|CRITICAL)\]\s*/i, "").trim();
+  return withoutPrefix ? `[${severity}] ${withoutPrefix}` : `[${severity}]`;
 };
 
 export async function GET(req: Request) {
@@ -68,6 +80,8 @@ export async function GET(req: Request) {
         r."updatedAt" as "updatedAt",
         coalesce(nullif(trim(up."profileName"), ''), nullif(trim(u."name"), ''), u."email", r."reporterProfileId") as "reporterName",
         u."email" as "reporterEmail",
+        coalesce(nullif(trim(a_up."profileName"), ''), nullif(trim(a_u."name"), ''), a_u."email", r."assignedAdminProfileId") as "assignedAdminName",
+        a_u."email" as "assignedAdminEmail",
         coalesce(nullif(trim(tup."profileName"), ''), nullif(trim(tu."name"), ''), tu."email", null) as "targetUserName",
         s."name" as "targetServerName",
         coalesce(
@@ -78,6 +92,8 @@ export async function GET(req: Request) {
       from "Report" r
       left join "Users" u on u."userId" = r."reporterProfileId"
       left join "UserProfile" up on up."userId" = r."reporterProfileId"
+      left join "Users" a_u on a_u."userId" = r."assignedAdminProfileId"
+      left join "UserProfile" a_up on a_up."userId" = r."assignedAdminProfileId"
       left join "Users" tu on tu."userId" = r."targetId" and r."targetType" = 'USER'
       left join "UserProfile" tup on tup."userId" = tu."userId"
       left join "Server" s on s."id" = r."targetId" and r."targetType" = 'SERVER'
@@ -117,6 +133,8 @@ export async function GET(req: Request) {
       status: row.status,
       adminNote: row.adminNote ?? "",
       assignedAdminProfileId: row.assignedAdminProfileId,
+      assignedAdminName: row.assignedAdminName ?? row.assignedAdminProfileId ?? null,
+      assignedAdminEmail: row.assignedAdminEmail ?? null,
       createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : null,
       updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : null,
     }));
@@ -146,28 +164,67 @@ export async function PATCH(req: Request) {
       reportId?: string;
       status?: string;
       adminNote?: string;
+      assignAction?: "SELF" | "UNASSIGN";
+      severity?: string;
     };
 
     const reportId = String(body.reportId ?? "").trim();
-    const status = String(body.status ?? "").trim().toUpperCase();
-    const adminNote = String(body.adminNote ?? "").trim().slice(0, 4000);
+    const statusRaw = typeof body.status === "string" ? body.status : null;
+    const status = statusRaw ? statusRaw.trim().toUpperCase() : null;
+    const assignAction =
+      body.assignAction === "SELF" || body.assignAction === "UNASSIGN"
+        ? body.assignAction
+        : null;
+    const severityRaw = typeof body.severity === "string" ? body.severity : null;
+    const severity = severityRaw ? severityRaw.trim().toUpperCase() : null;
+    const hasAdminNote = Object.prototype.hasOwnProperty.call(body, "adminNote");
+    const adminNote = hasAdminNote ? String(body.adminNote ?? "").trim().slice(0, 4000) : null;
 
     if (!reportId) {
       return new NextResponse("reportId is required", { status: 400 });
     }
 
-    if (!allowedReportStatuses.has(status as ReportStatus)) {
+    if (status && !allowedReportStatuses.has(status as ReportStatus)) {
       return new NextResponse("Invalid status", { status: 400 });
     }
 
-    const updateClauses = [
-      sql`"status" = ${status}`,
-      sql`"assignedAdminProfileId" = ${profile.id}`,
-      sql`"updatedAt" = now()`,
-    ];
+    if (severity && !allowedReportSeverities.has(severity as ReportSeverity)) {
+      return new NextResponse("Invalid severity", { status: 400 });
+    }
 
-    if (adminNote) {
+    if (!status && !assignAction && !hasAdminNote && !severity) {
+      return new NextResponse("No updates supplied", { status: 400 });
+    }
+
+    const updateClauses = [sql`"updatedAt" = now()`];
+
+    if (status) {
+      updateClauses.push(sql`"status" = ${status}`);
+    }
+
+    if (assignAction === "SELF") {
+      updateClauses.push(sql`"assignedAdminProfileId" = ${profile.id}`);
+    }
+
+    if (assignAction === "UNASSIGN") {
+      updateClauses.push(sql`"assignedAdminProfileId" = null`);
+    }
+
+    if (hasAdminNote) {
       updateClauses.push(sql`"adminNote" = ${adminNote}`);
+    }
+
+    if (severity) {
+      const currentReportResult = await db.execute(sql`
+        select "reason"
+        from "Report"
+        where "id" = ${reportId}
+        limit 1
+      `);
+
+      const currentReason = (currentReportResult as unknown as { rows?: Array<{ reason?: string | null }> }).rows?.[0]?.reason ?? null;
+      const nextReason = applySeverityToReason(currentReason, severity as ReportSeverity);
+      updateClauses.push(sql`"reason" = ${nextReason}`);
     }
 
     await db.execute(sql`
@@ -176,7 +233,7 @@ export async function PATCH(req: Request) {
       where "id" = ${reportId}
     `);
 
-    return NextResponse.json({ ok: true, reportId, status });
+    return NextResponse.json({ ok: true, reportId, status: status ?? null, assignAction, severity: severity ?? null });
   } catch (error) {
     console.error("[ADMIN_REPORTS_PATCH]", error);
     return new NextResponse("Internal Error", { status: 500 });

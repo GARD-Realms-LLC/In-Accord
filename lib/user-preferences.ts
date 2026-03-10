@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
 
 import { db } from "@/lib/db";
 
@@ -27,6 +28,48 @@ export type DataPrivacyPreferences = {
   retentionMode: "standard" | "minimal";
 };
 
+export type NotificationPreferences = {
+  enableDesktopNotifications: boolean;
+  enableSoundEffects: boolean;
+  emailNotifications: boolean;
+  notifyOnDirectMessages: boolean;
+  notifyOnReplies: boolean;
+  notifyOnServerMessages: boolean;
+};
+
+export type TextImagesPreferences = {
+  showEmbeds: boolean;
+  showLinkPreviews: boolean;
+  showInlineMedia: boolean;
+  autoplayGifs: boolean;
+  autoplayStickers: boolean;
+  convertEmoticons: boolean;
+};
+
+export type AccessibilityPreferences = {
+  preferReducedMotion: boolean;
+  highContrastMode: boolean;
+  largerChatFont: boolean;
+  enableScreenReaderAnnouncements: boolean;
+  messageSpacing: "compact" | "comfortable";
+};
+
+export type EmojiPreferences = {
+  showComposerEmojiButton: boolean;
+  compactReactionButtons: boolean;
+  defaultComposerEmoji: string;
+  favoriteEmojis: string[];
+  uploadedEmojiUrls: string[];
+};
+
+export type BotGhostIntegrationConfig = {
+  enabled: boolean;
+  webhookUrl: string;
+  apiKeyHint: string;
+  lastHealthStatus: "unknown" | "healthy" | "unhealthy";
+  lastHealthCheckedAt: string;
+};
+
 export type FamilyCenterPreferences = {
   requireContentFilterForFamilyMembers: boolean;
   shareWeeklySafetySummary: boolean;
@@ -37,6 +80,19 @@ export type FamilyCenterPreferences = {
   familyApplicationSubmittedAt: string;
   familyApplicationFiles: FamilyCenterApplicationFile[];
   familyMembers: FamilyCenterMemberAccount[];
+};
+
+export type BusinessCenterPreferences = {
+  requireContentFilterForFamilyMembers: boolean;
+  shareWeeklySafetySummary: boolean;
+  allowDirectMessagesFromNonFriends: boolean;
+  alertOnMatureContentInteractions: boolean;
+  businessDesignation: string;
+  businessSection: string;
+  businessApplicationStatus: string;
+  businessApplicationSubmittedAt: string;
+  businessApplicationFiles: BusinessCenterApplicationFile[];
+  businessMembers: BusinessCenterMemberAccount[];
 };
 
 export type FamilyCenterApplicationFile = {
@@ -52,6 +108,7 @@ export type FamilyCenterMemberAccount = {
   childName: string;
   accountIdentifier: string;
   childRelation: string;
+  childSection?: string;
   childEmail: string;
   childPassword: string;
   childPhone: string;
@@ -64,6 +121,10 @@ export type FamilyCenterMemberAccount = {
   allowDirectMessagesFromNonFriends: boolean;
   alertOnMatureContentInteractions: boolean;
 };
+
+export type BusinessCenterApplicationFile = FamilyCenterApplicationFile;
+
+export type BusinessCenterMemberAccount = FamilyCenterMemberAccount;
 
 const defaultContentSocialPreferences: ContentSocialPreferences = {
   allowDirectMessagesFromServerMembers: true,
@@ -79,6 +140,48 @@ const defaultDataPrivacyPreferences: DataPrivacyPreferences = {
   retentionMode: "standard",
 };
 
+const defaultNotificationPreferences: NotificationPreferences = {
+  enableDesktopNotifications: true,
+  enableSoundEffects: true,
+  emailNotifications: false,
+  notifyOnDirectMessages: true,
+  notifyOnReplies: true,
+  notifyOnServerMessages: true,
+};
+
+const defaultTextImagesPreferences: TextImagesPreferences = {
+  showEmbeds: true,
+  showLinkPreviews: true,
+  showInlineMedia: true,
+  autoplayGifs: true,
+  autoplayStickers: true,
+  convertEmoticons: true,
+};
+
+const defaultAccessibilityPreferences: AccessibilityPreferences = {
+  preferReducedMotion: false,
+  highContrastMode: false,
+  largerChatFont: false,
+  enableScreenReaderAnnouncements: true,
+  messageSpacing: "comfortable",
+};
+
+const defaultEmojiPreferences: EmojiPreferences = {
+  showComposerEmojiButton: true,
+  compactReactionButtons: false,
+  defaultComposerEmoji: "😊",
+  favoriteEmojis: ["😀", "😂", "😍", "🔥", "👏", "🎉", "👍", "👀"],
+  uploadedEmojiUrls: [],
+};
+
+const defaultBotGhostIntegration: BotGhostIntegrationConfig = {
+  enabled: false,
+  webhookUrl: "",
+  apiKeyHint: "",
+  lastHealthStatus: "unknown",
+  lastHealthCheckedAt: "",
+};
+
 const defaultFamilyCenterPreferences: FamilyCenterPreferences = {
   requireContentFilterForFamilyMembers: true,
   shareWeeklySafetySummary: true,
@@ -91,14 +194,34 @@ const defaultFamilyCenterPreferences: FamilyCenterPreferences = {
   familyMembers: [],
 };
 
+const defaultBusinessCenterPreferences: BusinessCenterPreferences = {
+  requireContentFilterForFamilyMembers: true,
+  shareWeeklySafetySummary: true,
+  allowDirectMessagesFromNonFriends: false,
+  alertOnMatureContentInteractions: true,
+  businessDesignation: "",
+  businessSection: "",
+  businessApplicationStatus: "",
+  businessApplicationSubmittedAt: "",
+  businessApplicationFiles: [],
+  businessMembers: [],
+};
+
 export type UserPreferences = {
   mentionsEnabled: boolean;
+  notifications: NotificationPreferences;
+  textImages: TextImagesPreferences;
+  accessibility: AccessibilityPreferences;
+  emoji: EmojiPreferences;
+  botGhost: BotGhostIntegrationConfig;
   customCss: string;
   languagePreference: string;
   connectedAccounts: string[];
   contentSocial: ContentSocialPreferences;
   dataPrivacy: DataPrivacyPreferences;
   familyCenter: FamilyCenterPreferences;
+  businessCenter: BusinessCenterPreferences;
+  schoolCenter: FamilyCenterPreferences;
   serverTags: string[];
   selectedServerTagServerId: string | null;
   customThemeColors: CustomThemeColors | null;
@@ -109,11 +232,12 @@ export type UserPreferences = {
     selectedBackground: string | null;
     uploadedBackgrounds: string[];
   };
-  discordApps: DiscordAppConfig[];
-  discordBots: DiscordBotConfig[];
+  OtherApps: OtherAppConfig[];
+  OtherBots: OtherBotConfig[];
+  OtherBotAutoImportOnSave: boolean;
 };
 
-export type DiscordAppConfig = {
+export type OtherAppConfig = {
   id: string;
   name: string;
   applicationId: string;
@@ -124,12 +248,13 @@ export type DiscordAppConfig = {
   createdAt: string;
 };
 
-export type DiscordBotConfig = {
+export type OtherBotConfig = {
   id: string;
   name: string;
   applicationId: string;
   botUserId: string;
   tokenHint: string;
+  commands: string[];
   permissions: string[];
   enabled: boolean;
   createdAt: string;
@@ -320,6 +445,180 @@ const normalizeDataPrivacyPreferences = (value: unknown): DataPrivacyPreferences
   };
 };
 
+const normalizeNotificationPreferences = (value: unknown): NotificationPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultNotificationPreferences };
+  }
+
+  const source = value as Partial<Record<keyof NotificationPreferences, unknown>>;
+
+  return {
+    enableDesktopNotifications:
+      typeof source.enableDesktopNotifications === "boolean"
+        ? source.enableDesktopNotifications
+        : defaultNotificationPreferences.enableDesktopNotifications,
+    enableSoundEffects:
+      typeof source.enableSoundEffects === "boolean"
+        ? source.enableSoundEffects
+        : defaultNotificationPreferences.enableSoundEffects,
+    emailNotifications:
+      typeof source.emailNotifications === "boolean"
+        ? source.emailNotifications
+        : defaultNotificationPreferences.emailNotifications,
+    notifyOnDirectMessages:
+      typeof source.notifyOnDirectMessages === "boolean"
+        ? source.notifyOnDirectMessages
+        : defaultNotificationPreferences.notifyOnDirectMessages,
+    notifyOnReplies:
+      typeof source.notifyOnReplies === "boolean"
+        ? source.notifyOnReplies
+        : defaultNotificationPreferences.notifyOnReplies,
+    notifyOnServerMessages:
+      typeof source.notifyOnServerMessages === "boolean"
+        ? source.notifyOnServerMessages
+        : defaultNotificationPreferences.notifyOnServerMessages,
+  };
+};
+
+const normalizeTextImagesPreferences = (value: unknown): TextImagesPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultTextImagesPreferences };
+  }
+
+  const source = value as Partial<Record<keyof TextImagesPreferences, unknown>>;
+
+  return {
+    showEmbeds:
+      typeof source.showEmbeds === "boolean"
+        ? source.showEmbeds
+        : defaultTextImagesPreferences.showEmbeds,
+    showLinkPreviews:
+      typeof source.showLinkPreviews === "boolean"
+        ? source.showLinkPreviews
+        : defaultTextImagesPreferences.showLinkPreviews,
+    showInlineMedia:
+      typeof source.showInlineMedia === "boolean"
+        ? source.showInlineMedia
+        : defaultTextImagesPreferences.showInlineMedia,
+    autoplayGifs:
+      typeof source.autoplayGifs === "boolean"
+        ? source.autoplayGifs
+        : defaultTextImagesPreferences.autoplayGifs,
+    autoplayStickers:
+      typeof source.autoplayStickers === "boolean"
+        ? source.autoplayStickers
+        : defaultTextImagesPreferences.autoplayStickers,
+    convertEmoticons:
+      typeof source.convertEmoticons === "boolean"
+        ? source.convertEmoticons
+        : defaultTextImagesPreferences.convertEmoticons,
+  };
+};
+
+const normalizeAccessibilityPreferences = (value: unknown): AccessibilityPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultAccessibilityPreferences };
+  }
+
+  const source = value as Partial<Record<keyof AccessibilityPreferences, unknown>>;
+  const messageSpacing =
+    source.messageSpacing === "compact" || source.messageSpacing === "comfortable"
+      ? source.messageSpacing
+      : defaultAccessibilityPreferences.messageSpacing;
+
+  return {
+    preferReducedMotion:
+      typeof source.preferReducedMotion === "boolean"
+        ? source.preferReducedMotion
+        : defaultAccessibilityPreferences.preferReducedMotion,
+    highContrastMode:
+      typeof source.highContrastMode === "boolean"
+        ? source.highContrastMode
+        : defaultAccessibilityPreferences.highContrastMode,
+    largerChatFont:
+      typeof source.largerChatFont === "boolean"
+        ? source.largerChatFont
+        : defaultAccessibilityPreferences.largerChatFont,
+    enableScreenReaderAnnouncements:
+      typeof source.enableScreenReaderAnnouncements === "boolean"
+        ? source.enableScreenReaderAnnouncements
+        : defaultAccessibilityPreferences.enableScreenReaderAnnouncements,
+    messageSpacing,
+  };
+};
+
+const normalizeEmojiPreferences = (value: unknown): EmojiPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultEmojiPreferences };
+  }
+
+  const source = value as Partial<Record<keyof EmojiPreferences, unknown>>;
+  const defaultComposerEmoji =
+    typeof source.defaultComposerEmoji === "string" && source.defaultComposerEmoji.trim().length > 0
+      ? source.defaultComposerEmoji.trim().slice(0, 16)
+      : defaultEmojiPreferences.defaultComposerEmoji;
+
+  const favoriteEmojis = Array.isArray(source.favoriteEmojis)
+    ? Array.from(
+        new Set(
+          source.favoriteEmojis
+            .filter((item): item is string => typeof item === "string")
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0)
+            .slice(0, 32)
+        )
+      )
+    : [...defaultEmojiPreferences.favoriteEmojis];
+
+  const uploadedEmojiUrls = Array.isArray(source.uploadedEmojiUrls)
+    ? Array.from(
+        new Set(
+          source.uploadedEmojiUrls
+            .filter((item): item is string => typeof item === "string")
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0)
+            .slice(0, 120)
+        )
+      )
+    : [];
+
+  return {
+    showComposerEmojiButton:
+      typeof source.showComposerEmojiButton === "boolean"
+        ? source.showComposerEmojiButton
+        : defaultEmojiPreferences.showComposerEmojiButton,
+    compactReactionButtons:
+      typeof source.compactReactionButtons === "boolean"
+        ? source.compactReactionButtons
+        : defaultEmojiPreferences.compactReactionButtons,
+    defaultComposerEmoji,
+    favoriteEmojis,
+    uploadedEmojiUrls,
+  };
+};
+
+const normalizeBotGhostIntegration = (value: unknown): BotGhostIntegrationConfig => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultBotGhostIntegration };
+  }
+
+  const source = value as Partial<Record<keyof BotGhostIntegrationConfig, unknown>>;
+  const lastHealthStatus =
+    source.lastHealthStatus === "healthy" ||
+    source.lastHealthStatus === "unhealthy" ||
+    source.lastHealthStatus === "unknown"
+      ? source.lastHealthStatus
+      : defaultBotGhostIntegration.lastHealthStatus;
+
+  return {
+    enabled: typeof source.enabled === "boolean" ? source.enabled : defaultBotGhostIntegration.enabled,
+    webhookUrl: normalizeMediaUrlLike(source.webhookUrl, 2048),
+    apiKeyHint: normalizeTokenHint(source.apiKeyHint),
+    lastHealthStatus,
+    lastHealthCheckedAt: normalizeIsoDate(source.lastHealthCheckedAt),
+  };
+};
+
 const normalizeFamilyCenterPreferences = (value: unknown): FamilyCenterPreferences => {
   if (!value || typeof value !== "object") {
     return { ...defaultFamilyCenterPreferences };
@@ -375,6 +674,65 @@ const normalizeFamilyCenterPreferences = (value: unknown): FamilyCenterPreferenc
         : "",
     familyApplicationFiles,
     familyMembers: normalizeFamilyCenterMembers(source.familyMembers),
+  };
+};
+
+const normalizeBusinessCenterPreferences = (value: unknown): BusinessCenterPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultBusinessCenterPreferences };
+  }
+
+  const source = value as Partial<Record<keyof BusinessCenterPreferences, unknown>>;
+  const businessApplicationFiles = Array.isArray(source.businessApplicationFiles)
+    ? source.businessApplicationFiles
+        .filter((entry): entry is BusinessCenterApplicationFile => {
+          if (!entry || typeof entry !== "object") {
+            return false;
+          }
+
+          const candidate = entry as Partial<BusinessCenterApplicationFile>;
+          return typeof candidate.name === "string" && typeof candidate.url === "string";
+        })
+        .map((entry) => ({
+          name: normalizeLabel(entry.name, 200),
+          url: normalizeMediaUrlLike(entry.url, 2048),
+          mimeType: normalizeLabel(entry.mimeType, 120).toLowerCase() || "application/octet-stream",
+          size:
+            typeof entry.size === "number" && Number.isFinite(entry.size) && entry.size > 0
+              ? Math.min(Math.floor(entry.size), 100 * 1024 * 1024)
+              : 0,
+          uploadedAt: normalizeIsoDate(entry.uploadedAt),
+        }))
+        .filter((entry) => entry.name.length > 0 && entry.url.length > 0)
+        .slice(0, 20)
+    : [];
+
+  return {
+    requireContentFilterForFamilyMembers:
+      typeof source.requireContentFilterForFamilyMembers === "boolean"
+        ? source.requireContentFilterForFamilyMembers
+        : defaultBusinessCenterPreferences.requireContentFilterForFamilyMembers,
+    shareWeeklySafetySummary:
+      typeof source.shareWeeklySafetySummary === "boolean"
+        ? source.shareWeeklySafetySummary
+        : defaultBusinessCenterPreferences.shareWeeklySafetySummary,
+    allowDirectMessagesFromNonFriends:
+      typeof source.allowDirectMessagesFromNonFriends === "boolean"
+        ? source.allowDirectMessagesFromNonFriends
+        : defaultBusinessCenterPreferences.allowDirectMessagesFromNonFriends,
+    alertOnMatureContentInteractions:
+      typeof source.alertOnMatureContentInteractions === "boolean"
+        ? source.alertOnMatureContentInteractions
+        : defaultBusinessCenterPreferences.alertOnMatureContentInteractions,
+    businessDesignation: normalizeLabel(source.businessDesignation, 80),
+    businessSection: normalizeLabel(source.businessSection, 80),
+    businessApplicationStatus: normalizeLabel(source.businessApplicationStatus, 80),
+    businessApplicationSubmittedAt:
+      typeof source.businessApplicationSubmittedAt === "string" && !Number.isNaN(new Date(source.businessApplicationSubmittedAt).getTime())
+        ? new Date(source.businessApplicationSubmittedAt).toISOString()
+        : "",
+    businessApplicationFiles,
+    businessMembers: normalizeFamilyCenterMembers(source.businessMembers),
   };
 };
 
@@ -448,6 +806,38 @@ const normalizeScopesOrPermissions = (value: unknown): string[] => {
 
     unique.add(normalized);
     if (unique.size >= 24) {
+      break;
+    }
+  }
+
+  return Array.from(unique);
+};
+
+const normalizeSlashCommandNames = (value: unknown): string[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const unique = new Set<string>();
+  for (const item of value) {
+    if (typeof item !== "string") {
+      continue;
+    }
+
+    const normalized = item
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, "")
+      .replace(/[_\s]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+
+    if (!normalized || normalized.length > 32) {
+      continue;
+    }
+
+    unique.add(normalized);
+    if (unique.size >= 500) {
       break;
     }
   }
@@ -541,6 +931,7 @@ const normalizeFamilyCenterMembers = (value: unknown): FamilyCenterMemberAccount
       childName: normalizeLabel(source.childName, 60),
       accountIdentifier,
       childRelation: allowedRelations.has(childRelation) ? childRelation : "",
+      childSection: normalizeLabel(source.childSection, 80),
       childEmail: normalizeLabel(source.childEmail, 160),
       childPassword: normalizeLabel(source.childPassword, 128),
       childPhone: normalizeLabel(source.childPhone, 32),
@@ -600,12 +991,106 @@ const normalizeTokenHint = (value: unknown): string => {
   return `••••••••${suffix}`;
 };
 
-const normalizeDiscordApps = (value: unknown): DiscordAppConfig[] => {
+const normalizeBotTokenInputMap = (value: unknown): Record<string, string> => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  const source = value as Record<string, unknown>;
+  const next: Record<string, string> = {};
+
+  for (const [rawBotId, rawToken] of Object.entries(source)) {
+    const botId = normalizeIdLike(rawBotId, 80);
+    if (!botId || typeof rawToken !== "string") {
+      continue;
+    }
+
+    const token = rawToken.trim();
+    if (!token) {
+      continue;
+    }
+
+    next[botId] = token;
+  }
+
+  return next;
+};
+
+const normalizeBotTokenCipherMap = (value: unknown): Record<string, string> => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  const source = value as Record<string, unknown>;
+  const next: Record<string, string> = {};
+
+  for (const [rawBotId, rawCipher] of Object.entries(source)) {
+    const botId = normalizeIdLike(rawBotId, 80);
+    if (!botId || typeof rawCipher !== "string") {
+      continue;
+    }
+
+    const cipher = rawCipher.trim();
+    if (!cipher) {
+      continue;
+    }
+
+    next[botId] = cipher;
+  }
+
+  return next;
+};
+
+const getBotTokenEncryptionKey = () => {
+  const configured = String(process.env.BOT_TOKEN_ENCRYPTION_KEY ?? process.env.SESSION_SECRET ?? "").trim();
+  if (!configured) {
+    return null;
+  }
+
+  return createHash("sha256").update(configured).digest();
+};
+
+const encryptBotToken = (token: string) => {
+  const key = getBotTokenEncryptionKey();
+  if (!key) {
+    throw new Error("Missing BOT_TOKEN_ENCRYPTION_KEY or SESSION_SECRET for bot token encryption.");
+  }
+
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const encrypted = Buffer.concat([cipher.update(token, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+
+  return `${iv.toString("base64")}.${tag.toString("base64")}.${encrypted.toString("base64")}`;
+};
+
+const decryptBotToken = (cipherText: string) => {
+  const key = getBotTokenEncryptionKey();
+  if (!key) {
+    throw new Error("Missing BOT_TOKEN_ENCRYPTION_KEY or SESSION_SECRET for bot token encryption.");
+  }
+
+  const [ivRaw, tagRaw, encryptedRaw] = cipherText.split(".");
+  if (!ivRaw || !tagRaw || !encryptedRaw) {
+    throw new Error("Invalid encrypted bot token payload.");
+  }
+
+  const iv = Buffer.from(ivRaw, "base64");
+  const tag = Buffer.from(tagRaw, "base64");
+  const encrypted = Buffer.from(encryptedRaw, "base64");
+
+  const decipher = createDecipheriv("aes-256-gcm", key, iv);
+  decipher.setAuthTag(tag);
+
+  return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8");
+};
+
+const normalizeOtherApps = (value: unknown): OtherAppConfig[] => {
   if (!Array.isArray(value)) {
     return [];
   }
 
-  const normalized: DiscordAppConfig[] = [];
+  const normalized: OtherAppConfig[] = [];
 
   for (const item of value) {
     if (!item || typeof item !== "object") {
@@ -641,12 +1126,12 @@ const normalizeDiscordApps = (value: unknown): DiscordAppConfig[] => {
   return normalized;
 };
 
-const normalizeDiscordBots = (value: unknown): DiscordBotConfig[] => {
+const normalizeOtherBots = (value: unknown): OtherBotConfig[] => {
   if (!Array.isArray(value)) {
     return [];
   }
 
-  const normalized: DiscordBotConfig[] = [];
+  const normalized: OtherBotConfig[] = [];
 
   for (const item of value) {
     if (!item || typeof item !== "object") {
@@ -668,6 +1153,19 @@ const normalizeDiscordBots = (value: unknown): DiscordBotConfig[] => {
       applicationId,
       botUserId: normalizeIdLike(source.botUserId, 64),
       tokenHint: normalizeTokenHint(source.tokenHint),
+      commands: (() => {
+        const fromCommands = normalizeSlashCommandNames(source.commands);
+        if (fromCommands.length > 0) {
+          return fromCommands;
+        }
+
+        const fromPermissions = normalizeSlashCommandNames(source.permissions);
+        if (fromPermissions.length > 0) {
+          return fromPermissions;
+        }
+
+        return ["help", "ping", "echo"];
+      })(),
       permissions: normalizeScopesOrPermissions(source.permissions),
       enabled: source.enabled !== false,
       createdAt: normalizeIsoDate(source.createdAt),
@@ -690,20 +1188,29 @@ export const ensureUserPreferencesSchema = async () => {
     create table if not exists "UserPreference" (
       "userId" varchar(191) primary key,
       "mentionsEnabled" boolean not null default true,
+      "notificationsJson" text not null default '{}',
+      "textImagesJson" text not null default '{}',
+      "accessibilityJson" text not null default '{}',
+      "emojiJson" text not null default '{}',
+      "botGhostJson" text not null default '{}',
       "customCss" text not null default '',
       "languagePreference" text not null default 'system',
       "connectedAccountsJson" text not null default '[]',
       "contentSocialJson" text not null default '{}',
       "dataPrivacyJson" text not null default '{}',
       "familyCenterJson" text not null default '{}',
+      "businessCenterJson" text not null default '{}',
+      "schoolCenterJson" text not null default '{}',
       "serverTagsJson" text not null default '[]',
       "selectedServerTagServerId" text,
       "customThemeColorsJson" text,
       "downloadedPluginsJson" text not null default '[]',
       "bannerUploadsJson" text not null default '[]',
       "avatarUploadsJson" text not null default '[]',
-      "discordAppsJson" text not null default '[]',
-      "discordBotsJson" text not null default '[]',
+      "OtherAppsJson" text not null default '[]',
+      "OtherBotsJson" text not null default '[]',
+      "OtherBotTokenSecretsJson" text not null default '{}',
+      "OtherBotAutoImportOnSave" boolean not null default true,
       "transparentBackgroundSelected" text,
       "transparentBackgroundUploadsJson" text not null default '[]',
       "createdAt" timestamp not null,
@@ -714,6 +1221,31 @@ export const ensureUserPreferencesSchema = async () => {
   await db.execute(sql`
     create index if not exists "UserPreference_updatedAt_idx"
     on "UserPreference" ("updatedAt")
+  `);
+
+  await db.execute(sql`
+    alter table "UserPreference"
+    add column if not exists "notificationsJson" text not null default '{}'
+  `);
+
+  await db.execute(sql`
+    alter table "UserPreference"
+    add column if not exists "textImagesJson" text not null default '{}'
+  `);
+
+  await db.execute(sql`
+    alter table "UserPreference"
+    add column if not exists "accessibilityJson" text not null default '{}'
+  `);
+
+  await db.execute(sql`
+    alter table "UserPreference"
+    add column if not exists "emojiJson" text not null default '{}'
+  `);
+
+  await db.execute(sql`
+    alter table "UserPreference"
+    add column if not exists "botGhostJson" text not null default '{}'
   `);
 
   await db.execute(sql`
@@ -743,6 +1275,16 @@ export const ensureUserPreferencesSchema = async () => {
 
   await db.execute(sql`
     alter table "UserPreference"
+    add column if not exists "businessCenterJson" text not null default '{}'
+  `);
+
+  await db.execute(sql`
+    alter table "UserPreference"
+    add column if not exists "schoolCenterJson" text not null default '{}'
+  `);
+
+  await db.execute(sql`
+    alter table "UserPreference"
     add column if not exists "serverTagsJson" text not null default '[]'
   `);
 
@@ -763,12 +1305,22 @@ export const ensureUserPreferencesSchema = async () => {
 
   await db.execute(sql`
     alter table "UserPreference"
-    add column if not exists "discordAppsJson" text not null default '[]'
+    add column if not exists "OtherAppsJson" text not null default '[]'
   `);
 
   await db.execute(sql`
     alter table "UserPreference"
-    add column if not exists "discordBotsJson" text not null default '[]'
+    add column if not exists "OtherBotsJson" text not null default '[]'
+  `);
+
+  await db.execute(sql`
+    alter table "UserPreference"
+    add column if not exists "OtherBotTokenSecretsJson" text not null default '{}'
+  `);
+
+  await db.execute(sql`
+    alter table "UserPreference"
+    add column if not exists "OtherBotAutoImportOnSave" boolean not null default true
   `);
 
   const now = new Date();
@@ -788,20 +1340,29 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
   const result = await db.execute(sql`
     select
       "mentionsEnabled",
+      "notificationsJson",
+      "textImagesJson",
+      "accessibilityJson",
+      "emojiJson",
+      "botGhostJson",
       "customCss",
       "languagePreference",
       "connectedAccountsJson",
       "contentSocialJson",
       "dataPrivacyJson",
       "familyCenterJson",
+      "businessCenterJson",
+      "schoolCenterJson",
       "serverTagsJson",
       "selectedServerTagServerId",
       "customThemeColorsJson",
       "downloadedPluginsJson",
       "bannerUploadsJson",
       "avatarUploadsJson",
-      "discordAppsJson",
-      "discordBotsJson",
+      "OtherAppsJson",
+      "OtherBotsJson",
+      "OtherBotTokenSecretsJson",
+      "OtherBotAutoImportOnSave",
       "transparentBackgroundSelected",
       "transparentBackgroundUploadsJson"
     from "UserPreference"
@@ -812,36 +1373,52 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
   const row = (result as unknown as {
     rows: Array<{
       mentionsEnabled: boolean | null;
+      notificationsJson: string | null;
+      textImagesJson: string | null;
+      accessibilityJson: string | null;
+      emojiJson: string | null;
+      botGhostJson: string | null;
       customCss: string | null;
       languagePreference: string | null;
       connectedAccountsJson: string | null;
       contentSocialJson: string | null;
       dataPrivacyJson: string | null;
       familyCenterJson: string | null;
+      businessCenterJson: string | null;
+      schoolCenterJson: string | null;
       serverTagsJson: string | null;
       selectedServerTagServerId: string | null;
       customThemeColorsJson: string | null;
       downloadedPluginsJson: string | null;
       bannerUploadsJson: string | null;
       avatarUploadsJson: string | null;
-      discordAppsJson: string | null;
-      discordBotsJson: string | null;
+      OtherAppsJson: string | null;
+      OtherBotsJson: string | null;
+      OtherBotTokenSecretsJson: string | null;
+      OtherBotAutoImportOnSave: boolean | null;
       transparentBackgroundSelected: string | null;
       transparentBackgroundUploadsJson: string | null;
     }>;
   }).rows?.[0];
 
   const customThemeColors = normalizeCustomThemeColors(parseJsonSafely(row?.customThemeColorsJson ?? null));
+  const notifications = normalizeNotificationPreferences(parseJsonSafely(row?.notificationsJson ?? null));
+  const textImages = normalizeTextImagesPreferences(parseJsonSafely(row?.textImagesJson ?? null));
+  const accessibility = normalizeAccessibilityPreferences(parseJsonSafely(row?.accessibilityJson ?? null));
+  const emoji = normalizeEmojiPreferences(parseJsonSafely(row?.emojiJson ?? null));
+  const botGhost = normalizeBotGhostIntegration(parseJsonSafely(row?.botGhostJson ?? null));
   const connectedAccounts = normalizeConnectedAccounts(parseJsonSafely(row?.connectedAccountsJson ?? null));
   const contentSocial = normalizeContentSocialPreferences(parseJsonSafely(row?.contentSocialJson ?? null));
   const dataPrivacy = normalizeDataPrivacyPreferences(parseJsonSafely(row?.dataPrivacyJson ?? null));
   const familyCenter = normalizeFamilyCenterPreferences(parseJsonSafely(row?.familyCenterJson ?? null));
+  const businessCenter = normalizeBusinessCenterPreferences(parseJsonSafely(row?.businessCenterJson ?? null));
+  const schoolCenter = normalizeFamilyCenterPreferences(parseJsonSafely(row?.schoolCenterJson ?? null));
   const serverTags = normalizeServerTags(parseJsonSafely(row?.serverTagsJson ?? null));
   const downloadedPlugins = normalizeStringArray(parseJsonSafely(row?.downloadedPluginsJson ?? null), 200);
   const bannerUploads = normalizeStringArray(parseJsonSafely(row?.bannerUploadsJson ?? null), 60);
   const avatarUploads = normalizeStringArray(parseJsonSafely(row?.avatarUploadsJson ?? null), 60);
-  const discordApps = normalizeDiscordApps(parseJsonSafely(row?.discordAppsJson ?? null));
-  const discordBots = normalizeDiscordBots(parseJsonSafely(row?.discordBotsJson ?? null));
+  const OtherApps = normalizeOtherApps(parseJsonSafely(row?.OtherAppsJson ?? null));
+  const OtherBots = normalizeOtherBots(parseJsonSafely(row?.OtherBotsJson ?? null));
   const transparentUploads = normalizeStringArray(
     parseJsonSafely(row?.transparentBackgroundUploadsJson ?? null),
     40
@@ -849,12 +1426,19 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
 
   return {
     mentionsEnabled: row?.mentionsEnabled !== false,
+    notifications,
+    textImages,
+    accessibility,
+    emoji,
+    botGhost,
     customCss: typeof row?.customCss === "string" ? row.customCss : "",
     languagePreference: normalizeLanguagePreference(row?.languagePreference),
     connectedAccounts,
     contentSocial,
     dataPrivacy,
     familyCenter,
+    businessCenter,
+    schoolCenter,
     serverTags,
     selectedServerTagServerId:
       typeof row?.selectedServerTagServerId === "string" && row.selectedServerTagServerId.trim().length > 0
@@ -864,8 +1448,9 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
     downloadedPlugins,
     bannerUploads,
     avatarUploads,
-    discordApps,
-    discordBots,
+    OtherApps,
+    OtherBots,
+    OtherBotAutoImportOnSave: row?.OtherBotAutoImportOnSave !== false,
     transparentBackground: {
       selectedBackground:
         typeof row?.transparentBackgroundSelected === "string" && row.transparentBackgroundSelected.trim().length > 0
@@ -880,20 +1465,29 @@ export const updateUserPreferences = async (
   userId: string,
   updates: Partial<{
     mentionsEnabled: boolean;
+    notifications: NotificationPreferences;
+    textImages: TextImagesPreferences;
+    accessibility: AccessibilityPreferences;
+    emoji: EmojiPreferences;
+    botGhost: BotGhostIntegrationConfig;
     customCss: string;
     languagePreference: string;
     connectedAccounts: string[];
     contentSocial: ContentSocialPreferences;
     dataPrivacy: DataPrivacyPreferences;
     familyCenter: FamilyCenterPreferences;
+    businessCenter: BusinessCenterPreferences;
+    schoolCenter: FamilyCenterPreferences;
     serverTags: string[];
     selectedServerTagServerId: string | null;
     customThemeColors: CustomThemeColors | null;
     downloadedPlugins: string[];
     bannerUploads: string[];
     avatarUploads: string[];
-    discordApps: DiscordAppConfig[];
-    discordBots: DiscordBotConfig[];
+    OtherApps: OtherAppConfig[];
+    OtherBots: OtherBotConfig[];
+    OtherBotTokens: Record<string, string>;
+    OtherBotAutoImportOnSave: boolean;
     transparentBackgroundSelected: string | null;
     transparentBackgroundUploads: string[];
   }>
@@ -904,6 +1498,36 @@ export const updateUserPreferences = async (
 
   if (typeof updates.mentionsEnabled === "boolean") {
     values.push(sql`"mentionsEnabled" = ${updates.mentionsEnabled}`);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(updates, "notifications")) {
+    values.push(
+      sql`"notificationsJson" = ${JSON.stringify(normalizeNotificationPreferences(updates.notifications))}`
+    );
+  }
+
+  if (Object.prototype.hasOwnProperty.call(updates, "textImages")) {
+    values.push(
+      sql`"textImagesJson" = ${JSON.stringify(normalizeTextImagesPreferences(updates.textImages))}`
+    );
+  }
+
+  if (Object.prototype.hasOwnProperty.call(updates, "accessibility")) {
+    values.push(
+      sql`"accessibilityJson" = ${JSON.stringify(normalizeAccessibilityPreferences(updates.accessibility))}`
+    );
+  }
+
+  if (Object.prototype.hasOwnProperty.call(updates, "emoji")) {
+    values.push(
+      sql`"emojiJson" = ${JSON.stringify(normalizeEmojiPreferences(updates.emoji))}`
+    );
+  }
+
+  if (Object.prototype.hasOwnProperty.call(updates, "botGhost")) {
+    values.push(
+      sql`"botGhostJson" = ${JSON.stringify(normalizeBotGhostIntegration(updates.botGhost))}`
+    );
   }
 
   if (typeof updates.customCss === "string") {
@@ -936,6 +1560,18 @@ export const updateUserPreferences = async (
     );
   }
 
+  if (Object.prototype.hasOwnProperty.call(updates, "businessCenter")) {
+    values.push(
+      sql`"businessCenterJson" = ${JSON.stringify(normalizeBusinessCenterPreferences(updates.businessCenter))}`
+    );
+  }
+
+  if (Object.prototype.hasOwnProperty.call(updates, "schoolCenter")) {
+    values.push(
+      sql`"schoolCenterJson" = ${JSON.stringify(normalizeFamilyCenterPreferences(updates.schoolCenter))}`
+    );
+  }
+
   if (Array.isArray(updates.serverTags)) {
     values.push(sql`"serverTagsJson" = ${JSON.stringify(normalizeServerTags(updates.serverTags))}`);
   }
@@ -965,12 +1601,61 @@ export const updateUserPreferences = async (
     values.push(sql`"avatarUploadsJson" = ${JSON.stringify(normalizeStringArray(updates.avatarUploads, 60))}`);
   }
 
-  if (Array.isArray(updates.discordApps)) {
-    values.push(sql`"discordAppsJson" = ${JSON.stringify(normalizeDiscordApps(updates.discordApps))}`);
+  if (Array.isArray(updates.OtherApps)) {
+    values.push(sql`"OtherAppsJson" = ${JSON.stringify(normalizeOtherApps(updates.OtherApps))}`);
   }
 
-  if (Array.isArray(updates.discordBots)) {
-    values.push(sql`"discordBotsJson" = ${JSON.stringify(normalizeDiscordBots(updates.discordBots))}`);
+  if (Array.isArray(updates.OtherBots)) {
+    values.push(sql`"OtherBotsJson" = ${JSON.stringify(normalizeOtherBots(updates.OtherBots))}`);
+  }
+
+  if (typeof updates.OtherBotAutoImportOnSave === "boolean") {
+    values.push(sql`"OtherBotAutoImportOnSave" = ${updates.OtherBotAutoImportOnSave}`);
+  }
+
+  if (
+    Array.isArray(updates.OtherBots) ||
+    Object.prototype.hasOwnProperty.call(updates, "OtherBotTokens")
+  ) {
+    const existing = await db.execute(sql`
+      select
+        "OtherBotsJson",
+        "OtherBotTokenSecretsJson"
+      from "UserPreference"
+      where "userId" = ${userId}
+      limit 1
+    `);
+
+    const existingRow = (existing as unknown as {
+      rows?: Array<{ OtherBotsJson: string | null; OtherBotTokenSecretsJson: string | null }>;
+    }).rows?.[0];
+
+    const nextBots = Array.isArray(updates.OtherBots)
+      ? normalizeOtherBots(updates.OtherBots)
+      : normalizeOtherBots(parseJsonSafely(existingRow?.OtherBotsJson ?? null));
+
+    const existingSecrets = normalizeBotTokenCipherMap(
+      parseJsonSafely(existingRow?.OtherBotTokenSecretsJson ?? null)
+    );
+    const nextSecrets: Record<string, string> = { ...existingSecrets };
+
+    const tokenUpdates = normalizeBotTokenInputMap(updates.OtherBotTokens);
+    for (const [botId, token] of Object.entries(tokenUpdates)) {
+      if (!nextBots.some((item) => item.id === botId)) {
+        continue;
+      }
+
+      nextSecrets[botId] = encryptBotToken(token);
+    }
+
+    const validIds = new Set(nextBots.map((item) => item.id));
+    for (const botId of Object.keys(nextSecrets)) {
+      if (!validIds.has(botId)) {
+        delete nextSecrets[botId];
+      }
+    }
+
+    values.push(sql`"OtherBotTokenSecretsJson" = ${JSON.stringify(nextSecrets)}`);
   }
 
   if (Object.prototype.hasOwnProperty.call(updates, "transparentBackgroundSelected")) {
@@ -1003,4 +1688,75 @@ export const updateUserPreferences = async (
   `);
 
   return getUserPreferences(userId);
+};
+
+export const getDecryptedOtherBotToken = async (userId: string, botId: string): Promise<string | null> => {
+  await ensureUserPreferencesSchema();
+
+  const normalizedBotId = normalizeIdLike(botId, 80);
+  if (!normalizedBotId) {
+    return null;
+  }
+
+  const preferences = await getUserPreferences(userId);
+  if (!preferences.OtherBots.some((bot) => bot.id === normalizedBotId)) {
+    return null;
+  }
+
+  const result = await db.execute(sql`
+    select "OtherBotTokenSecretsJson"
+    from "UserPreference"
+    where "userId" = ${userId}
+    limit 1
+  `);
+
+  const row = (result as unknown as {
+    rows?: Array<{
+      OtherBotTokenSecretsJson: string | null;
+    }>;
+  }).rows?.[0];
+
+  const secretMap = normalizeBotTokenCipherMap(parseJsonSafely(row?.OtherBotTokenSecretsJson ?? null));
+  const cipher = secretMap[normalizedBotId];
+  if (!cipher) {
+    return null;
+  }
+
+  try {
+    const token = decryptBotToken(cipher).trim();
+    return token.length > 0 ? token : null;
+  } catch {
+    return null;
+  }
+};
+
+export const updateOtherBotCommands = async (
+  userId: string,
+  botId: string,
+  commands: string[]
+): Promise<OtherBotConfig | null> => {
+  const normalizedBotId = normalizeIdLike(botId, 80);
+  if (!normalizedBotId) {
+    return null;
+  }
+
+  const normalizedCommands = normalizeSlashCommandNames(commands);
+  if (normalizedCommands.length === 0) {
+    return null;
+  }
+
+  const preferences = await getUserPreferences(userId);
+  const botIndex = preferences.OtherBots.findIndex((bot) => bot.id === normalizedBotId);
+  if (botIndex < 0) {
+    return null;
+  }
+
+  const nextBots = [...preferences.OtherBots];
+  nextBots[botIndex] = {
+    ...nextBots[botIndex],
+    commands: normalizedCommands,
+  };
+
+  const updated = await updateUserPreferences(userId, { OtherBots: nextBots });
+  return updated.OtherBots.find((bot) => bot.id === normalizedBotId) ?? null;
 };

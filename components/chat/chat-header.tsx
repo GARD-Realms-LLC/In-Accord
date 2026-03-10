@@ -11,7 +11,9 @@ import { ChatVideoButton } from "./chat-video-button";
 
 interface ChatHeaderProps {
   serverId: string;
+  serverPath?: string;
   channelId?: string;
+  channelPath?: string;
   channelIcon?: string | null;
   name: string;
   topic?: string | null;
@@ -21,11 +23,15 @@ interface ChatHeaderProps {
   memberId?: string;
   isBot?: boolean;
   profileCreatedAt?: Date | string | null;
+  videoCallHref?: string;
+  isVideoCallActive?: boolean;
 }
 
 export const ChatHeader = ({
   serverId,
+  serverPath,
   channelId,
+  channelPath,
   channelIcon,
   name,
   topic,
@@ -35,9 +41,19 @@ export const ChatHeader = ({
   memberId,
   isBot,
   profileCreatedAt,
+  videoCallHref,
+  isVideoCallActive = false,
 }: ChatHeaderProps) => {
   const normalizedTopic = typeof topic === "string" ? topic.trim() : "";
   const normalizedChannelIcon = typeof channelIcon === "string" ? channelIcon.trim() : "";
+  const resolvedChannelPath =
+    typeof channelPath === "string" && channelPath.trim().length > 0
+      ? channelPath.trim()
+      : channelId
+        ? `/servers/${serverId}/channels/${channelId}`
+        : typeof serverPath === "string" && serverPath.trim().length > 0
+          ? serverPath.trim()
+          : `/servers/${serverId}`;
 
   return (
     <div className="pl-0 pr-3 border-neutral-200 dark:border-neutral-800 border-b-2">
@@ -49,7 +65,7 @@ export const ChatHeader = ({
               {normalizedChannelIcon}
             </span>
           ) : (
-            <Hash className="w-5 h-5 text-zinc-500 dark:text-zinc-400 mr-2" />
+            <Hash className="w-5 h-5 text-zinc-500 dark:text-zinc-400 mr-2" suppressHydrationWarning />
           )
         )}
         {type === "conversation" && (
@@ -74,14 +90,14 @@ export const ChatHeader = ({
           {type === "channel" && channelId ? (
             <>
               <Link
-                href={`/servers/${serverId}/channels/${channelId}/threads`}
+                href={`${resolvedChannelPath}/threads`}
                 className="mr-2 inline-flex items-center rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
               >
                 Threads
               </Link>
             </>
           ) : null}
-          {type === "conversation" && <ChatVideoButton />}
+          {type === "conversation" ? <ChatVideoButton href={videoCallHref} isActive={isVideoCallActive} /> : null}
         </div>
       </div>
       {type === "channel" && normalizedTopic ? (

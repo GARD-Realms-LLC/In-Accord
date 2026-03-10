@@ -9,6 +9,8 @@ import { ServerRouteShell } from "@/components/server/server-route-shell";
 import { ChannelType, MemberRole } from "@/lib/db/types";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 import { ensureChannelGroupSchema, ensureDefaultMediaChannelGroups } from "@/lib/channel-groups";
+import { resolveServerRouteContext } from "@/lib/route-slug-resolver";
+import { buildRouteSegment } from "@/lib/route-slugs";
 
 type ChannelRow = {
   id: string;
@@ -33,12 +35,23 @@ const ServerIdLayout = async ({
   children: React.ReactNode;
   params: Promise<{ serverId: string }>;
 }) => {
-  const { serverId } = await params;
+  const { serverId: serverParam } = await params;
 
   const profile = await currentProfile();
   if (!profile) {
     return redirect("/sign-in");
   }
+
+  const resolvedServer = await resolveServerRouteContext({
+    profileId: profile.id,
+    serverParam,
+  });
+
+  if (!resolvedServer) {
+    return redirect("/");
+  }
+
+  const serverId = resolvedServer.id;
 
   const hasAccess = await db
     .select({ id: server.id, name: server.name })
@@ -118,9 +131,10 @@ const ServerIdLayout = async ({
     <ServerRouteShell
       serverName={currentServerName}
       serverId={serverId}
-      textChannels={textChannels.map((channel) => ({ id: channel.id, name: channel.name }))}
-      voiceChannels={voiceChannels.map((channel) => ({ id: channel.id, name: channel.name }))}
-      videoChannels={videoChannels.map((channel) => ({ id: channel.id, name: channel.name }))}
+      serverRouteSegment={resolvedServer.segment}
+      textChannels={textChannels.map((channel) => ({ id: channel.id, name: channel.name, routeSegment: buildRouteSegment(channel.name, channel.id) }))}
+      voiceChannels={voiceChannels.map((channel) => ({ id: channel.id, name: channel.name, routeSegment: buildRouteSegment(channel.name, channel.id) }))}
+      videoChannels={videoChannels.map((channel) => ({ id: channel.id, name: channel.name, routeSegment: buildRouteSegment(channel.name, channel.id) }))}
       onlineUsers={onlineUsers.map((member) => ({
         id: member.id,
         name: member.displayName,

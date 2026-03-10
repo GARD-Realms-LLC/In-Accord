@@ -26,6 +26,23 @@ interface ChannelGroupsListProps {
   connectedVoiceCountsByChannelId?: Record<string, number>;
 }
 
+interface GroupEventDetail {
+  serverId: string;
+  group: {
+    id: string;
+    name: string;
+    icon?: string | null;
+  };
+}
+
+interface ApiChannelGroup {
+  id: string;
+  name: string;
+  icon?: string | null;
+}
+
+const CHANNEL_GROUP_CREATED_EVENT = "inaccord:channel-group-created";
+
 const reorderGroups = (groups: GroupWithChannels[], draggedId: string, targetId: string) => {
   if (!draggedId || !targetId || draggedId === targetId) {
     return groups;
@@ -57,9 +74,99 @@ export const ChannelGroupsList = ({
   const [dragOverGroupId, setDragOverGroupId] = useState<string | null>(null);
   const [isSavingOrder, setIsSavingOrder] = useState(false);
 
+  const upsertGroups = (previous: GroupWithChannels[], incomingGroups: ApiChannelGroup[]) => {
+    const previousById = new Map(previous.map((group) => [group.id, group]));
+
+    const merged = incomingGroups.map((incoming) => {
+      const existing = previousById.get(incoming.id);
+      return {
+        id: incoming.id,
+        name: incoming.name,
+        icon: incoming.icon ?? null,
+        channels: existing?.channels ?? [],
+      } satisfies GroupWithChannels;
+    });
+
+    return merged;
+  };
+
   useEffect(() => {
-    setOrderedGroups(groups);
+    setOrderedGroups((current) => {
+      if (current.length === 0) {
+        return groups;
+      }
+
+      return current;
+    });
   }, [groups]);
+
+  useEffect(() => {
+    const onCreated = (event: Event) => {
+      const customEvent = event as CustomEvent<GroupEventDetail>;
+      const detail = customEvent.detail;
+
+      if (!detail || detail.serverId !== serverId || !detail.group?.id) {
+        return;
+      }
+
+      setOrderedGroups((current) => {
+        if (current.some((group) => group.id === detail.group.id)) {
+          return current.map((group) =>
+            group.id === detail.group.id
+              ? { ...group, name: detail.group.name || group.name, icon: detail.group.icon ?? group.icon ?? null }
+              : group,
+          );
+        }
+
+        return [
+          ...current,
+          {
+            id: detail.group.id,
+            name: detail.group.name,
+            icon: detail.group.icon ?? null,
+            channels: [],
+          },
+        ];
+      });
+    };
+
+    window.addEventListener(CHANNEL_GROUP_CREATED_EVENT, onCreated as EventListener);
+    return () => {
+      window.removeEventListener(CHANNEL_GROUP_CREATED_EVENT, onCreated as EventListener);
+    };
+  }, [serverId]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const syncGroups = async () => {
+      try {
+        const response = await axios.get("/api/channel-groups", {
+          params: { serverId, _t: Date.now() },
+          headers: {
+            "Cache-Control": "no-cache",
+            Pragma: "no-cache",
+          },
+        });
+        const payload = response.data as { channelGroups?: ApiChannelGroup[]; groups?: ApiChannelGroup[] };
+        const apiGroups = (payload.channelGroups ?? payload.groups ?? []).filter(
+          (group) => typeof group?.id === "string" && typeof group?.name === "string",
+        );
+
+        if (!isCancelled) {
+          setOrderedGroups((current) => upsertGroups(current, apiGroups));
+        }
+      } catch (error) {
+        console.warn("[CHANNEL_GROUPS_SYNC]", error);
+      }
+    };
+
+    void syncGroups();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [serverId]);
 
   const canManageGroups = role !== MemberRole.GUEST;
   const onGroupDragStart = (event: React.DragEvent<HTMLElement>, groupId: string) => {

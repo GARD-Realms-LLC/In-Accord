@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db, server } from "@/lib/db";
-import { ensureServerRolesSchema, seedDefaultServerRoles } from "@/lib/server-roles";
+import { ensureServerRolesSchema } from "@/lib/server-roles";
 
 type Params = { params: Promise<{ serverId: string; roleId: string }> };
 
@@ -34,12 +34,12 @@ export async function PATCH(req: Request, { params }: Params) {
 		}
 
 		await ensureServerRolesSchema();
-		await seedDefaultServerRoles(serverId);
 
 		const body = (await req.json().catch(() => ({}))) as {
 			name?: string;
 			color?: string;
 			iconUrl?: string | null;
+			isMentionable?: boolean;
 			position?: number;
 		};
 
@@ -65,15 +65,22 @@ export async function PATCH(req: Request, { params }: Params) {
 					? (body.iconUrl.trim() || null)
 					: undefined;
 
+		const nextIsMentionable =
+			typeof body.isMentionable === "boolean"
+				? body.isMentionable
+				: undefined;
+
 		const shouldKeepName = nextName === undefined;
 		const shouldKeepColor = nextColor === undefined;
 		const shouldKeepPosition = nextPosition === undefined;
 		const shouldKeepIcon = nextIconUrl === undefined;
+		const shouldKeepIsMentionable = nextIsMentionable === undefined;
 
 		const nextNameParam = nextName ?? "";
 		const nextColorParam = nextColor ?? "#99aab5";
 		const nextPositionParam = nextPosition ?? 0;
 		const nextIconParam = nextIconUrl ?? null;
+		const nextIsMentionableParam = nextIsMentionable ?? true;
 
 		if (nextName !== undefined && !nextName) {
 			return new NextResponse("Role name cannot be empty", { status: 400 });
@@ -102,6 +109,10 @@ export async function PATCH(req: Request, { params }: Params) {
 					when ${shouldKeepIcon} then "iconUrl"
 					else ${nextIconParam}
 				end,
+				"isMentionable" = case
+					when ${shouldKeepIsMentionable} then "isMentionable"
+					else ${nextIsMentionableParam}
+				end,
 				"position" = case
 					when ${shouldKeepPosition} then "position"
 					else ${nextPositionParam}
@@ -109,7 +120,7 @@ export async function PATCH(req: Request, { params }: Params) {
 				"updatedAt" = now()
 			where "id" = ${roleId}
 				and "serverId" = ${serverId}
-			returning "id", "name", "color", "iconUrl", "position", "isManaged"
+			returning "id", "name", "color", "iconUrl", "isMentionable", "position", "isManaged"
 		`);
 
 		const role = (updateResult as unknown as {
@@ -118,6 +129,7 @@ export async function PATCH(req: Request, { params }: Params) {
 				name: string;
 				color: string;
 				iconUrl: string | null;
+				isMentionable: boolean;
 				position: number;
 				isManaged: boolean;
 			}>;
@@ -139,6 +151,77 @@ export async function PATCH(req: Request, { params }: Params) {
 			return new NextResponse("Invalid role update payload", { status: 400 });
 		}
 
+		return new NextResponse("Internal Error", { status: 500 });
+	}
+}
+
+export async function DELETE(_req: Request, { params }: Params) {
+	try {
+		const resolvedParams = await params;
+
+		const profile = await currentProfile();
+		if (!profile) {
+			return new NextResponse("Unauthorized", { status: 401 });
+		}
+
+		const serverId = String(resolvedParams.serverId ?? "").trim();
+		const roleId = String(resolvedParams.roleId ?? "").trim();
+
+		if (!serverId || !roleId) {
+			return new NextResponse("Server ID and Role ID are required", { status: 400 });
+		}
+
+		const targetServer = await db.query.server.findFirst({
+			where: and(eq(server.id, serverId), eq(server.profileId, profile.id)),
+		});
+
+		if (!targetServer) {
+			return new NextResponse("Only the server owner can delete roles", { status: 403 });
+		}
+
+		await ensureServerRolesSchema();
+
+		const roleResult = await db.execute(sql`
+			select "id", "isManaged"
+			from "ServerRole"
+			where "id" = ${roleId}
+				and "serverId" = ${serverId}
+			limit 1
+		`);
+
+		const role = (roleResult as unknown as {
+			rows?: Array<{ id: string; isManaged: boolean }>;
+		}).rows?.[0];
+
+		if (!role) {
+			return new NextResponse("Role not found", { status: 404 });
+		}
+
+		if (role.isManaged) {
+			return new NextResponse("System roles cannot be deleted", { status: 400 });
+		}
+
+		await db.execute(sql`
+			delete from "ServerRoleAssignment"
+			where "roleId" = ${roleId}
+				and "serverId" = ${serverId}
+		`);
+
+		await db.execute(sql`
+			delete from "ServerRolePermission"
+			where "roleId" = ${roleId}
+				and "serverId" = ${serverId}
+		`);
+
+		await db.execute(sql`
+			delete from "ServerRole"
+			where "id" = ${roleId}
+				and "serverId" = ${serverId}
+		`);
+
+		return NextResponse.json({ deletedRoleId: roleId });
+	} catch (error) {
+		console.error("[SERVER_ROLE_DELETE]", error);
 		return new NextResponse("Internal Error", { status: 500 });
 	}
 }

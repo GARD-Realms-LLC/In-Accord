@@ -43,6 +43,10 @@ type ChannelGroupRow = {
   sortOrder: number | string | null;
 };
 
+type ServerRoleNameRow = {
+  name: string | null;
+};
+
 const iconMap = {
   [ChannelType.TEXT]: <Hash className="mr-2 h-4 w-4" />,
   [ChannelType.AUDIO]: <Mic className="mr-2 h-4 w-4" />,
@@ -114,6 +118,18 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
   `);
 
   const channelGroups = (channelGroupsResult as unknown as { rows: ChannelGroupRow[] }).rows ?? [];
+
+  const serverRoleNamesResult = await db.execute(sql`
+    select r."name" as "name"
+    from "ServerRole" r
+    where r."serverId" = ${serverId}
+  `);
+
+  const serverRoleNames = new Set(
+    (((serverRoleNamesResult as unknown as { rows?: ServerRoleNameRow[] }).rows ?? [])
+      .map((row) => String(row.name ?? "").trim().toLowerCase())
+      .filter(Boolean))
+  );
 
   const membersResult = await db.execute(sql`
     select
@@ -208,7 +224,14 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
     name: group.name,
     icon: group.icon,
     channels: visibleChannels.filter((item) => item.channelGroupId === group.id),
-  }));
+  })).filter((group) => {
+    const isLegacyRoleGroupArtifact =
+      group.channels.length === 0 &&
+      group.icon === "🛡️" &&
+      serverRoleNames.has(group.name.trim().toLowerCase());
+
+    return !isLegacyRoleGroupArtifact;
+  });
   const groupedChannelIds = new Set(
     groupedChannels.flatMap((group) => group.channels.map((item) => item.id))
   );
@@ -232,8 +255,10 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
 
   return (
     <div className="theme-channels-rail flex h-full w-full flex-col overflow-hidden rounded-2xl border border-border bg-card text-primary">
-      <ServerHeader server={serverWithBanner} role={role} isServerOwner={isServerOwner} />
-      <ScrollArea className="settings-scrollbar min-h-0 flex-1 px-3">
+      <div className="px-3 pt-2 pb-2">
+        <ServerHeader server={serverWithBanner} role={role} isServerOwner={isServerOwner} />
+      </div>
+      <ScrollArea className="settings-scrollbar min-h-0 flex-1 px-3 pt-3">
         {!!textChannelsUngrouped?.length && (
           <ChannelDropZone serverId={serverId} targetGroupId={null} className="mb-2">
             <ServerSection
@@ -304,14 +329,14 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
           </ChannelDropZone>
         )}
 
-        {!!channelGroups.length && (
+        {!!groupedChannels.length && (
           <div className="mb-2">
-            <div className="my-2 h-px w-full bg-zinc-500 dark:bg-zinc-300" />
+            <div className="my-4 h-px w-full bg-zinc-500 dark:bg-zinc-300" />
             <ServerSection
               sectionType="channels"
               channelType={ChannelType.TEXT}
               role={role}
-              label={`Channel Groups - ${channelGroups.length}`}
+              label={`Channel Groups - ${groupedChannels.length}`}
               server={serverWithMembers}
             />
             <ChannelGroupsList

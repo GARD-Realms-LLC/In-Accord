@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { buildServerPath } from "@/lib/route-slugs";
 
 type SearchServer = {
   id: string;
@@ -118,7 +119,12 @@ export const JoinServerModal = () => {
       }
 
       onClose();
-      router.push(`/servers/${serverId}`);
+      const targetServer = servers.find((item) => item.id === serverId);
+      router.push(
+        targetServer
+          ? buildServerPath({ id: targetServer.id, name: targetServer.name })
+          : `/servers/${serverId}`
+      );
       router.refresh();
     } catch (joinError) {
       console.error("[JOIN_SERVER_MODAL_JOIN]", joinError);

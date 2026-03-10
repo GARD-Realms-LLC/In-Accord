@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 type VoiceStateSessionProps = {
@@ -8,20 +7,21 @@ type VoiceStateSessionProps = {
   channelId: string;
   active: boolean;
   isVideoChannel: boolean;
+  showUi?: boolean;
 };
 
 const HEARTBEAT_MS = 20_000;
-const REFRESH_MS = 15_000;
 const VOICE_TOGGLE_MUTE_EVENT = "inaccord:voice-toggle-mute";
 const VOICE_TOGGLE_DEAFEN_EVENT = "inaccord:voice-toggle-deafen";
+const VOICE_TOGGLE_CAMERA_EVENT = "inaccord:voice-toggle-camera";
 
 export const VoiceStateSession = ({
   serverId,
   channelId,
   active,
   isVideoChannel,
+  showUi = true,
 }: VoiceStateSessionProps) => {
-  const router = useRouter();
   const [isMuted, setIsMuted] = useState(false);
   const [isDeafened, setIsDeafened] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(isVideoChannel);
@@ -57,12 +57,21 @@ export const VoiceStateSession = ({
       }
     };
 
+    const onCameraToggle = (event: Event) => {
+      const customEvent = event as CustomEvent<{ isCameraOn?: boolean }>;
+      if (typeof customEvent.detail?.isCameraOn === "boolean") {
+        setIsCameraOn(customEvent.detail.isCameraOn);
+      }
+    };
+
     window.addEventListener(VOICE_TOGGLE_MUTE_EVENT, onMuteToggle as EventListener);
     window.addEventListener(VOICE_TOGGLE_DEAFEN_EVENT, onDeafenToggle as EventListener);
+    window.addEventListener(VOICE_TOGGLE_CAMERA_EVENT, onCameraToggle as EventListener);
 
     return () => {
       window.removeEventListener(VOICE_TOGGLE_MUTE_EVENT, onMuteToggle as EventListener);
       window.removeEventListener(VOICE_TOGGLE_DEAFEN_EVENT, onDeafenToggle as EventListener);
+      window.removeEventListener(VOICE_TOGGLE_CAMERA_EVENT, onCameraToggle as EventListener);
     };
   }, []);
 
@@ -72,10 +81,13 @@ export const VoiceStateSession = ({
         detail: {
           isMuted,
           isDeafened,
+          isCameraOn: isVideoChannel ? isCameraOn : false,
+          isVideoChannel,
+          active,
         },
       })
     );
-  }, [isDeafened, isMuted]);
+  }, [active, isCameraOn, isDeafened, isMuted, isVideoChannel]);
 
   useEffect(() => {
     if (!active || isMuted || isDeafened) {
@@ -190,30 +202,18 @@ export const VoiceStateSession = ({
     };
 
     if (!active) {
-      void leave(false).finally(() => {
-        if (!cancelled) {
-          router.refresh();
-        }
-      });
+      void leave(false);
 
       return () => {
         cancelled = true;
       };
     }
 
-    void join().finally(() => {
-      if (!cancelled) {
-        router.refresh();
-      }
-    });
+    void join();
 
     const heartbeatTimer = window.setInterval(() => {
       void join();
     }, HEARTBEAT_MS);
-
-    const refreshTimer = window.setInterval(() => {
-      router.refresh();
-    }, REFRESH_MS);
 
     const onPageHide = () => {
       void leave(true);
@@ -224,11 +224,10 @@ export const VoiceStateSession = ({
     return () => {
       cancelled = true;
       window.clearInterval(heartbeatTimer);
-      window.clearInterval(refreshTimer);
       window.removeEventListener("pagehide", onPageHide);
       void leave(true);
     };
-  }, [active, channelId, router, serverId]);
+  }, [active, channelId, serverId]);
 
   useEffect(() => {
     if (!active) {
@@ -249,7 +248,7 @@ export const VoiceStateSession = ({
     });
   }, [active, channelId, payload, serverId]);
 
-  if (!active) {
+  if (!active || !showUi) {
     return null;
   }
 

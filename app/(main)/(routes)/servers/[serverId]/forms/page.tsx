@@ -263,7 +263,7 @@ const FormsPage = () => {
           <div>
             <p className="text-sm font-semibold text-black dark:text-white">Server Forms</p>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Discord-style onboarding form for member preferences and screening.
+              Other-style onboarding form for member preferences and screening.
             </p>
           </div>
           {serverId ? (

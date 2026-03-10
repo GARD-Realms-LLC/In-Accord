@@ -3,6 +3,7 @@ import { and, eq, inArray } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db, member, profile, server } from "@/lib/db";
+import { resolveServerRouteContext } from "@/lib/route-slug-resolver";
 import {
   getServerOnboardingConfig,
   getServerOnboardingResponseByMember,
@@ -81,22 +82,33 @@ export async function GET(
       return new NextResponse("Server ID missing", { status: 400 });
     }
 
+    const resolvedServer = await resolveServerRouteContext({
+      profileId: currentUser.id,
+      serverParam: serverId,
+    });
+
+    if (!resolvedServer) {
+      return new NextResponse("Forbidden", { status: 403 });
+    }
+
+    const resolvedServerId = resolvedServer.id;
+
     const membership = await db.query.member.findFirst({
-      where: and(eq(member.serverId, serverId), eq(member.profileId, currentUser.id)),
+      where: and(eq(member.serverId, resolvedServerId), eq(member.profileId, currentUser.id)),
     });
 
     if (!membership) {
       return new NextResponse("Forbidden", { status: 403 });
     }
 
-    const config = await getServerOnboardingConfig(serverId);
-    const existingSubmission = await getServerOnboardingResponseByMember(serverId, membership.id);
+    const config = await getServerOnboardingConfig(resolvedServerId);
+    const existingSubmission = await getServerOnboardingResponseByMember(resolvedServerId, membership.id);
 
     const { searchParams } = new URL(request.url);
     const scope = searchParams.get("scope");
 
     const ownerServer = await db.query.server.findFirst({
-      where: and(eq(server.id, serverId), eq(server.profileId, currentUser.id)),
+      where: and(eq(server.id, resolvedServerId), eq(server.profileId, currentUser.id)),
     });
 
     if (scope === "owner") {
@@ -104,7 +116,7 @@ export async function GET(
         return new NextResponse("Only the server owner can view all submissions.", { status: 403 });
       }
 
-      const responses = await getServerOnboardingResponses(serverId);
+      const responses = await getServerOnboardingResponses(resolvedServerId);
       const profileIds = Array.from(new Set(responses.map((item) => item.profileId).filter(Boolean)));
 
       const memberProfiles = profileIds.length
@@ -116,7 +128,7 @@ export async function GET(
       const profileById = new Map(memberProfiles.map((item) => [item.id, item]));
 
       return NextResponse.json({
-        serverId,
+        serverId: resolvedServerId,
         config,
         submissions: responses.map((item) => ({
           ...item,
@@ -130,7 +142,7 @@ export async function GET(
     }
 
     return NextResponse.json({
-      serverId,
+      serverId: resolvedServerId,
       config,
       canManageForms: Boolean(ownerServer),
       submission: existingSubmission,
@@ -157,15 +169,26 @@ export async function POST(
       return new NextResponse("Server ID missing", { status: 400 });
     }
 
+    const resolvedServer = await resolveServerRouteContext({
+      profileId: currentUser.id,
+      serverParam: serverId,
+    });
+
+    if (!resolvedServer) {
+      return new NextResponse("Forbidden", { status: 403 });
+    }
+
+    const resolvedServerId = resolvedServer.id;
+
     const membership = await db.query.member.findFirst({
-      where: and(eq(member.serverId, serverId), eq(member.profileId, currentUser.id)),
+      where: and(eq(member.serverId, resolvedServerId), eq(member.profileId, currentUser.id)),
     });
 
     if (!membership) {
       return new NextResponse("Forbidden", { status: 403 });
     }
 
-    const config = await getServerOnboardingConfig(serverId);
+    const config = await getServerOnboardingConfig(resolvedServerId);
     if (!config.enabled) {
       return new NextResponse("Forms are disabled for this server.", { status: 400 });
     }
@@ -197,7 +220,7 @@ export async function POST(
     }
 
     const saved = await upsertServerOnboardingResponse({
-      serverId,
+      serverId: resolvedServerId,
       memberId: membership.id,
       profileId: currentUser.id,
       answers,
@@ -205,7 +228,7 @@ export async function POST(
 
     return NextResponse.json({
       ok: true,
-      serverId,
+      serverId: resolvedServerId,
       submission: saved,
     });
   } catch (error) {
@@ -230,8 +253,19 @@ export async function PATCH(
       return new NextResponse("Server ID missing", { status: 400 });
     }
 
+    const resolvedServer = await resolveServerRouteContext({
+      profileId: currentUser.id,
+      serverParam: serverId,
+    });
+
+    if (!resolvedServer) {
+      return new NextResponse("Forbidden", { status: 403 });
+    }
+
+    const resolvedServerId = resolvedServer.id;
+
     const ownerServer = await db.query.server.findFirst({
-      where: and(eq(server.id, serverId), eq(server.profileId, currentUser.id)),
+      where: and(eq(server.id, resolvedServerId), eq(server.profileId, currentUser.id)),
     });
 
     if (!ownerServer) {
@@ -251,7 +285,7 @@ export async function PATCH(
     }
 
     const updated = await setServerOnboardingResponseReview({
-      serverId,
+      serverId: resolvedServerId,
       responseId,
       reviewStatus,
       reviewNote: body.reviewNote,
@@ -264,7 +298,7 @@ export async function PATCH(
 
     return NextResponse.json({
       ok: true,
-      serverId,
+      serverId: resolvedServerId,
       submission: updated,
     });
   } catch (error) {

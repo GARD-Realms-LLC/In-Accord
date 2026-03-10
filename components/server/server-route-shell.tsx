@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowUpCircle,
   Bell,
@@ -35,6 +35,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { buildServerPath, matchesRouteParam } from "@/lib/route-slugs";
 
 type SearchItem = {
   id: string;
@@ -95,6 +96,7 @@ type CustomTabBarPreset = {
 interface ServerRouteShellProps {
   serverName: string;
   serverId: string;
+  serverRouteSegment: string;
   textChannels: SearchItem[];
   voiceChannels: SearchItem[];
   videoChannels: SearchItem[];
@@ -108,6 +110,7 @@ interface ServerRouteShellProps {
 export const ServerRouteShell = ({
   serverName,
   serverId,
+  serverRouteSegment,
   textChannels,
   voiceChannels,
   videoChannels,
@@ -119,7 +122,11 @@ export const ServerRouteShell = ({
 }: ServerRouteShellProps) => {
   const SERVER_TAB_DRAG_MIME = "application/x-inaccord-server-tab";
   const router = useRouter();
-  const pathname = usePathname();
+  const params = useParams();
+  const searchParams = useSearchParams();
+  const isMeetingPopoutMode = ["true", "1", "yes"].includes(
+    String(searchParams?.get("meetingPopout") ?? "").toLowerCase()
+  );
   const [isMembersCollapsed, setIsMembersCollapsed] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
   const [hasLoadedTabsFromStorage, setHasLoadedTabsFromStorage] = useState(false);
@@ -234,11 +241,12 @@ export const ServerRouteShell = ({
   }, [textChannels, videoChannels, voiceChannels]);
 
   const navigateToServerTab = (tab: ServerTabItem) => {
-    const target = tab.defaultChannelId
-      ? `/servers/${tab.serverId}/channels/${tab.defaultChannelId}`
-      : `/servers/${tab.serverId}`;
-
-    router.push(target);
+    router.push(
+      buildServerPath({
+        id: tab.serverId,
+        name: tab.serverName,
+      })
+    );
   };
 
   const reorderTabs = (tabs: ServerTabItem[], sourceId: string, targetId: string) => {
@@ -288,7 +296,12 @@ export const ServerRouteShell = ({
       ];
     });
 
-    router.push(`/servers/${droppedServerId}`);
+    router.push(
+      buildServerPath({
+        id: droppedServerId,
+        name: droppedServerName,
+      })
+    );
   };
 
   const readServerTabDragPayload = (event: { dataTransfer?: DataTransfer | null }) => {
@@ -663,6 +676,14 @@ export const ServerRouteShell = ({
     return <div className="h-full overflow-hidden" suppressHydrationWarning />;
   }
 
+  if (isMeetingPopoutMode) {
+    return (
+      <div className="h-full w-full overflow-hidden bg-[#0f1013]" suppressHydrationWarning>
+        {children}
+      </div>
+    );
+  }
+
   return (
     <div className="h-full overflow-hidden" suppressHydrationWarning>
       <header
@@ -843,7 +864,10 @@ export const ServerRouteShell = ({
           }}
         >
           {serverTabs.map((tab) => {
-            const isActive = pathname?.includes(`/servers/${tab.serverId}/`) ?? false;
+            const isActive = matchesRouteParam(String(params?.serverId ?? ""), {
+              id: tab.serverId,
+              name: tab.serverName,
+            });
             const canCloseTab = serverTabs.length > 1;
             const tabHeightClass = tabBarPreferences.compactMode ? "h-7" : "h-8";
             const tabTextClass = tabBarPreferences.compactMode ? "text-[11px]" : "text-xs";

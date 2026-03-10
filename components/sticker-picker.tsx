@@ -117,7 +117,7 @@ export const StickerPicker = ({ onSelect, serverId }: StickerPickerProps) => {
           title="Send sticker"
           aria-label="Send sticker"
         >
-          <Sticker className="h-4 w-4" />
+            <Sticker className="h-4 w-4" suppressHydrationWarning />
         </button>
       </PopoverTrigger>
 

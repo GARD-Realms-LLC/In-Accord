@@ -7,12 +7,17 @@ import {
   Activity,
   Ban,
   Baby,
+  Headphones,
+  Briefcase,
   Bell,
   CreditCard,
   Camera,
+  ChevronDown,
+  ChevronRight,
   Crown,
   Gamepad2,
   Gift,
+  Heart,
   Flag,
   IdCard,
   ImageIcon,
@@ -22,12 +27,14 @@ import {
   Link2,
   LogOut,
   Mic,
+  MicOff,
   Monitor,
   Palette,
   Puzzle,
   Radio,
   Receipt,
   Smile,
+  School,
   Sticker,
   Tags,
   Shield,
@@ -35,8 +42,11 @@ import {
   SlidersHorizontal,
   Smartphone,
   Sparkles,
+  Video,
+  VideoOff,
   User,
   UserPlus,
+  VolumeX,
   Wrench,
   LockKeyhole,
   Eye,
@@ -45,10 +55,14 @@ import {
 import axios from "axios";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
+import { loadStripe, type StripeElementsOptions } from "@stripe/stripe-js";
 
 import { ModeToggle } from "@/components/mode-toggle";
 import { ModeratorLineIcon } from "@/components/moderator-line-icon";
-import { DiscordDeveloperPanel } from "@/components/settings/discord-developer-panel";
+import { BusinessMemberIcon } from "@/components/business-member-icon";
+import { OtherDeveloperPanel } from "@/components/settings/discord-developer-panel";
+import { FileUpload } from "@/components/file-upload";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { NameplatePill } from "@/components/nameplate-pill";
@@ -82,24 +96,93 @@ import {
 import { normalizePresenceStatus, presenceStatusLabelMap } from "@/lib/presence-status";
 import { resolveProfileIcons } from "@/lib/profile-icons";
 import type {
+  AccessibilityPreferences,
+  BotGhostIntegrationConfig,
   ContentSocialPreferences,
   DataPrivacyPreferences,
+  EmojiPreferences,
+  NotificationPreferences,
+  TextImagesPreferences,
   FamilyCenterApplicationFile,
   FamilyCenterMemberAccount,
   FamilyCenterPreferences,
-  DiscordAppConfig,
-  DiscordBotConfig,
+  OtherAppConfig,
+  OtherBotConfig,
 } from "@/lib/user-preferences";
+
+type PatronageEmbeddedPaymentFormProps = {
+  onSuccess: (paymentIntentId: string) => Promise<void>;
+  onErrorMessage: (message: string) => void;
+};
+
+const PatronageEmbeddedPaymentForm = ({ onSuccess, onErrorMessage }: PatronageEmbeddedPaymentFormProps) => {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const onPayNow = async () => {
+    if (!stripe || !elements) {
+      onErrorMessage("Payment form is still loading.");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      onErrorMessage("");
+
+      const result = await stripe.confirmPayment({
+        elements,
+        redirect: "if_required",
+      });
+
+      if (result.error) {
+        onErrorMessage(result.error.message ?? "Payment confirmation failed.");
+        return;
+      }
+
+      const paymentIntentId = String(result.paymentIntent?.id ?? "").trim();
+      if (!paymentIntentId) {
+        onErrorMessage("Payment completed, but no payment reference was returned.");
+        return;
+      }
+
+      await onSuccess(paymentIntentId);
+    } catch {
+      onErrorMessage("Could not complete payment. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <PaymentElement />
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          onClick={() => void onPayNow()}
+          disabled={isSubmitting || !stripe || !elements}
+          className="bg-emerald-600 text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isSubmitting ? "Processing..." : "Pay Now"}
+        </Button>
+      </div>
+    </div>
+  );
+};
 
 type SettingsSection =
   | "myAccount"
   | "profiles"
   | "bugReporting"
+  | "becomePatron"
   | "contentSocial"
   | "dataPrivacy"
   | "familyCenter"
+  | "businessCenter"
+  | "schoolCenter"
   | "authorizedApps"
-  | "discordDeveloper"
+  | "OtherDeveloper"
   | "devices"
   | "connections"
   | "friendRequests"
@@ -137,13 +220,13 @@ const sectionGroups: SectionGroup[] = [
       "contentSocial",
       "dataPrivacy",
       "authorizedApps",
-      "discordDeveloper",
       "devices",
       "connections",
       "friendRequests",
       "serverBoost",
-      "familyCenter",
+      "OtherDeveloper",
       "bugReporting",
+      "becomePatron",
     ],
   },
   {
@@ -166,17 +249,28 @@ const sectionGroups: SectionGroup[] = [
     label: "Activity Settings",
     sections: ["activityPrivacy", "registeredGames", "gameOverlay"],
   },
+  {
+    label: "Account Centers",
+    sections: [
+      "familyCenter",
+      "businessCenter",
+      "schoolCenter",
+    ],
+  },
 ];
 
 const sectionLabelMap: Record<SettingsSection, string> = {
   myAccount: "My Account",
   profiles: "Profiles",
   bugReporting: "Bug Reporting",
+  becomePatron: "Become a Patron",
   contentSocial: "Content & Social",
   dataPrivacy: "Data & Privacy",
   familyCenter: "Family Center",
+  businessCenter: "Business Center",
+  schoolCenter: "School Center",
   authorizedApps: "Authorized Apps",
-  discordDeveloper: "Bot/App Developer",
+  OtherDeveloper: "Bot/App Developer",
   devices: "Devices",
   connections: "Connections",
   friendRequests: "Blocked Users",
@@ -205,11 +299,14 @@ const sectionDescriptionMap: Record<SettingsSection, string> = {
   myAccount: "Manage your account details and security settings.",
   profiles: "Set profile customization per identity and server context.",
   bugReporting: "Report app issues and bugs directly to In-Accord staff.",
+  becomePatron: "Support In-Accord with one-time or monthly patronage.",
   contentSocial: "Control social and content visibility preferences.",
   dataPrivacy: "Review data, privacy, and safety controls.",
   familyCenter: "Configure family center and family controls.",
+  businessCenter: "Configure business center controls and managed business accounts.",
+  schoolCenter: "Configure school center controls and managed school accounts.",
   authorizedApps: "Review third-party authorized app access.",
-  discordDeveloper: "Manage bots and apps connected to your In-Accord profile.",
+  OtherDeveloper: "Manage bots and apps connected to your In-Accord profile.",
   devices: "Manage signed-in devices and sessions.",
   connections: "Connect and manage linked external accounts.",
   friendRequests: "Manage blocked users and request interactions.",
@@ -238,11 +335,14 @@ const sectionIconMap: Record<SettingsSection, React.ComponentType<{ className?: 
   myAccount: User,
   profiles: IdCard,
   bugReporting: Flag,
+  becomePatron: Heart,
   contentSocial: Smile,
   dataPrivacy: LockKeyhole,
   familyCenter: Baby,
+  businessCenter: Briefcase,
+  schoolCenter: School,
   authorizedApps: ShieldCheck,
-  discordDeveloper: Puzzle,
+  OtherDeveloper: Puzzle,
   devices: Smartphone,
   connections: Link2,
   friendRequests: UserPlus,
@@ -271,11 +371,14 @@ const settingsSections = [
   "myAccount",
   "profiles",
   "bugReporting",
+  "becomePatron",
   "contentSocial",
   "dataPrivacy",
   "familyCenter",
+  "businessCenter",
+  "schoolCenter",
   "authorizedApps",
-  "discordDeveloper",
+  "OtherDeveloper",
   "devices",
   "connections",
   "friendRequests",
@@ -300,7 +403,27 @@ const settingsSections = [
   "gameOverlay",
 ] as const;
 
+const VOICE_TOGGLE_MUTE_EVENT = "inaccord:voice-toggle-mute";
+const VOICE_TOGGLE_DEAFEN_EVENT = "inaccord:voice-toggle-deafen";
+const VOICE_TOGGLE_CAMERA_EVENT = "inaccord:voice-toggle-camera";
+const VOICE_STATE_SYNC_EVENT = "inaccord:voice-state-sync";
+const PM_TOGGLE_CAMERA_EVENT = "inaccord:pm-toggle-camera";
+const PM_CAMERA_STATE_SYNC_EVENT = "inaccord:pm-camera-state-sync";
+
 const settingsSectionSet = new Set<SettingsSection>(settingsSections);
+
+const applyAccessibilityPreferencesToDocument = (preferences: AccessibilityPreferences) => {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  const root = document.documentElement;
+
+  root.classList.toggle("inaccord-accessibility-reduced-motion", preferences.preferReducedMotion);
+  root.classList.toggle("inaccord-accessibility-high-contrast", preferences.highContrastMode);
+  root.classList.toggle("inaccord-accessibility-large-chat-font", preferences.largerChatFont);
+  root.setAttribute("data-inaccord-message-spacing", preferences.messageSpacing);
+};
 
 const normalizeSettingsSection = (value: unknown): SettingsSection | null => {
   const normalized = String(value ?? "").trim();
@@ -350,6 +473,225 @@ const defaultDataPrivacyPreferences: DataPrivacyPreferences = {
   retentionMode: "standard",
 };
 
+const defaultNotificationPreferences: NotificationPreferences = {
+  enableDesktopNotifications: true,
+  enableSoundEffects: true,
+  emailNotifications: false,
+  notifyOnDirectMessages: true,
+  notifyOnReplies: true,
+  notifyOnServerMessages: true,
+};
+
+const defaultTextImagesPreferences: TextImagesPreferences = {
+  showEmbeds: true,
+  showLinkPreviews: true,
+  showInlineMedia: true,
+  autoplayGifs: true,
+  autoplayStickers: true,
+  convertEmoticons: true,
+};
+
+const defaultAccessibilityPreferences: AccessibilityPreferences = {
+  preferReducedMotion: false,
+  highContrastMode: false,
+  largerChatFont: false,
+  enableScreenReaderAnnouncements: true,
+  messageSpacing: "comfortable",
+};
+
+const defaultEmojiPreferences: EmojiPreferences = {
+  showComposerEmojiButton: true,
+  compactReactionButtons: false,
+  defaultComposerEmoji: "😊",
+  favoriteEmojis: ["😀", "😂", "😍", "🔥", "👏", "🎉", "👍", "👀"],
+  uploadedEmojiUrls: [],
+};
+
+const defaultBotGhostIntegration: BotGhostIntegrationConfig = {
+  enabled: false,
+  webhookUrl: "",
+  apiKeyHint: "",
+  lastHealthStatus: "unknown",
+  lastHealthCheckedAt: "",
+};
+
+const normalizeBotGhostIntegration = (value: unknown): BotGhostIntegrationConfig => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultBotGhostIntegration };
+  }
+
+  const source = value as Partial<Record<keyof BotGhostIntegrationConfig, unknown>>;
+  const lastHealthStatus =
+    source.lastHealthStatus === "healthy" ||
+    source.lastHealthStatus === "unhealthy" ||
+    source.lastHealthStatus === "unknown"
+      ? source.lastHealthStatus
+      : defaultBotGhostIntegration.lastHealthStatus;
+
+  return {
+    enabled: typeof source.enabled === "boolean" ? source.enabled : defaultBotGhostIntegration.enabled,
+    webhookUrl: typeof source.webhookUrl === "string" ? source.webhookUrl.trim().slice(0, 2048) : "",
+    apiKeyHint: typeof source.apiKeyHint === "string" ? source.apiKeyHint.trim().slice(0, 64) : "",
+    lastHealthStatus,
+    lastHealthCheckedAt:
+      typeof source.lastHealthCheckedAt === "string" && !Number.isNaN(new Date(source.lastHealthCheckedAt).getTime())
+        ? new Date(source.lastHealthCheckedAt).toISOString()
+        : "",
+  };
+};
+
+const normalizeNotificationPreferences = (value: unknown): NotificationPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultNotificationPreferences };
+  }
+
+  const source = value as Partial<Record<keyof NotificationPreferences, unknown>>;
+
+  return {
+    enableDesktopNotifications:
+      typeof source.enableDesktopNotifications === "boolean"
+        ? source.enableDesktopNotifications
+        : defaultNotificationPreferences.enableDesktopNotifications,
+    enableSoundEffects:
+      typeof source.enableSoundEffects === "boolean"
+        ? source.enableSoundEffects
+        : defaultNotificationPreferences.enableSoundEffects,
+    emailNotifications:
+      typeof source.emailNotifications === "boolean"
+        ? source.emailNotifications
+        : defaultNotificationPreferences.emailNotifications,
+    notifyOnDirectMessages:
+      typeof source.notifyOnDirectMessages === "boolean"
+        ? source.notifyOnDirectMessages
+        : defaultNotificationPreferences.notifyOnDirectMessages,
+    notifyOnReplies:
+      typeof source.notifyOnReplies === "boolean"
+        ? source.notifyOnReplies
+        : defaultNotificationPreferences.notifyOnReplies,
+    notifyOnServerMessages:
+      typeof source.notifyOnServerMessages === "boolean"
+        ? source.notifyOnServerMessages
+        : defaultNotificationPreferences.notifyOnServerMessages,
+  };
+};
+
+const normalizeTextImagesPreferences = (value: unknown): TextImagesPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultTextImagesPreferences };
+  }
+
+  const source = value as Partial<Record<keyof TextImagesPreferences, unknown>>;
+
+  return {
+    showEmbeds:
+      typeof source.showEmbeds === "boolean"
+        ? source.showEmbeds
+        : defaultTextImagesPreferences.showEmbeds,
+    showLinkPreviews:
+      typeof source.showLinkPreviews === "boolean"
+        ? source.showLinkPreviews
+        : defaultTextImagesPreferences.showLinkPreviews,
+    showInlineMedia:
+      typeof source.showInlineMedia === "boolean"
+        ? source.showInlineMedia
+        : defaultTextImagesPreferences.showInlineMedia,
+    autoplayGifs:
+      typeof source.autoplayGifs === "boolean"
+        ? source.autoplayGifs
+        : defaultTextImagesPreferences.autoplayGifs,
+    autoplayStickers:
+      typeof source.autoplayStickers === "boolean"
+        ? source.autoplayStickers
+        : defaultTextImagesPreferences.autoplayStickers,
+    convertEmoticons:
+      typeof source.convertEmoticons === "boolean"
+        ? source.convertEmoticons
+        : defaultTextImagesPreferences.convertEmoticons,
+  };
+};
+
+const normalizeAccessibilityPreferences = (value: unknown): AccessibilityPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultAccessibilityPreferences };
+  }
+
+  const source = value as Partial<Record<keyof AccessibilityPreferences, unknown>>;
+  const messageSpacing =
+    source.messageSpacing === "compact" || source.messageSpacing === "comfortable"
+      ? source.messageSpacing
+      : defaultAccessibilityPreferences.messageSpacing;
+
+  return {
+    preferReducedMotion:
+      typeof source.preferReducedMotion === "boolean"
+        ? source.preferReducedMotion
+        : defaultAccessibilityPreferences.preferReducedMotion,
+    highContrastMode:
+      typeof source.highContrastMode === "boolean"
+        ? source.highContrastMode
+        : defaultAccessibilityPreferences.highContrastMode,
+    largerChatFont:
+      typeof source.largerChatFont === "boolean"
+        ? source.largerChatFont
+        : defaultAccessibilityPreferences.largerChatFont,
+    enableScreenReaderAnnouncements:
+      typeof source.enableScreenReaderAnnouncements === "boolean"
+        ? source.enableScreenReaderAnnouncements
+        : defaultAccessibilityPreferences.enableScreenReaderAnnouncements,
+    messageSpacing,
+  };
+};
+
+const normalizeEmojiPreferences = (value: unknown): EmojiPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultEmojiPreferences };
+  }
+
+  const source = value as Partial<Record<keyof EmojiPreferences, unknown>>;
+  const defaultComposerEmoji =
+    typeof source.defaultComposerEmoji === "string" && source.defaultComposerEmoji.trim().length > 0
+      ? source.defaultComposerEmoji.trim().slice(0, 16)
+      : defaultEmojiPreferences.defaultComposerEmoji;
+
+  const favoriteEmojis = Array.isArray(source.favoriteEmojis)
+    ? Array.from(
+        new Set(
+          source.favoriteEmojis
+            .filter((item): item is string => typeof item === "string")
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0)
+            .slice(0, 32)
+        )
+      )
+    : [...defaultEmojiPreferences.favoriteEmojis];
+
+  const uploadedEmojiUrls = Array.isArray(source.uploadedEmojiUrls)
+    ? Array.from(
+        new Set(
+          source.uploadedEmojiUrls
+            .filter((item): item is string => typeof item === "string")
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0)
+            .slice(0, 120)
+        )
+      )
+    : [];
+
+  return {
+    showComposerEmojiButton:
+      typeof source.showComposerEmojiButton === "boolean"
+        ? source.showComposerEmojiButton
+        : defaultEmojiPreferences.showComposerEmojiButton,
+    compactReactionButtons:
+      typeof source.compactReactionButtons === "boolean"
+        ? source.compactReactionButtons
+        : defaultEmojiPreferences.compactReactionButtons,
+    defaultComposerEmoji,
+    favoriteEmojis,
+    uploadedEmojiUrls,
+  };
+};
+
 const defaultFamilyCenterPreferences: FamilyCenterPreferences = {
   requireContentFilterForFamilyMembers: true,
   shareWeeklySafetySummary: true,
@@ -373,6 +715,108 @@ const familyMemberRelationOptions = [
   "Husband",
   "Niece",
   "Nephew",
+] as const;
+
+const businessRoleGroups = [
+  {
+    label: "C-Suite & Executive Leadership",
+    options: [
+      "Chief Executive Officer (CEO)",
+      "Chief Operating Officer (COO)",
+      "Chief Financial Officer (CFO)",
+      "Chief Marketing Officer (CMO)",
+      "Chief Technology Officer (CTO)",
+      "Chief Information Officer (CIO)",
+      "Chief Human Resources Officer (CHRO)",
+      "Chief Commercial Officer (CCO)",
+      "Chief Information Security Officer (CISO)",
+      "Chief Sustainability Officer (CSO)",
+      "Chief Growth Officer (CGO)",
+      "Chief Diversity Officer (CDO)",
+      "Chief Experience Officer (CXO)",
+      "Managing Partner",
+    ],
+  },
+  {
+    label: "Vice Presidents & Directors",
+    options: [
+      "Vice Presidents & Directors",
+      "Vice President (VP) of Operations",
+      "VP of Engineering",
+      "Director of Marketing",
+      "Director of Finance",
+      "Creative Director",
+      "Regional Director",
+    ],
+  },
+  {
+    label: "Management & Departmental Leads",
+    options: [
+      "Management & Departmental Leads",
+      "Product Manager",
+      "Human Resources Manager",
+      "Information Technology (IT) Manager",
+      "Sales Manager",
+      "Marketing Manager",
+      "Operations Manager",
+      "Account Manager",
+      "Customer Service Manager",
+      "Plant Manager",
+      "Team Lead",
+    ],
+  },
+  {
+    label: "Administrative Support",
+    options: [
+      "Executive Assistant (EA)",
+      "Administrative Assistant",
+      "Office Manager",
+      "Receptionist",
+      "Virtual Assistant",
+    ],
+  },
+  {
+    label: "Technical & Specialist Roles",
+    options: [
+      "Software Developer",
+      "Data Analyst",
+      "Business Systems Analyst",
+      "Systems Administrator",
+      "SEO Specialist",
+      "Copywriter",
+      "HR Coordinator",
+      "Accountant",
+    ],
+  },
+] as const;
+
+const businessRoleOptions = businessRoleGroups.flatMap((group) => group.options);
+
+const businessSectionOptions = [
+  "Finance",
+  "Operations",
+  "Human Resources (HR)",
+  "Information Technology (IT)",
+  "Research and Development (R&D)",
+  "Sales",
+  "Legal",
+  "Customer Service",
+  "Accounting",
+  "Procurement",
+  "Quality Assurance",
+  "Engineering",
+  "Production",
+  "Corporate Communications",
+  "Logistics",
+  "Product Management",
+  "Strategy",
+  "Administration",
+  "Compliance",
+  "Risk Management",
+  "Internal Audit",
+  "Diversity and Inclusion",
+  "Business Development",
+  "Security",
 ] as const;
 
 const familyDesignationOptions = [
@@ -509,6 +953,7 @@ const normalizeFamilyCenterPreferences = (value: unknown): FamilyCenterPreferenc
             )
               ? (entry.childRelation as (typeof familyMemberRelationOptions)[number])
               : "",
+            childSection: String(entry.childSection ?? "").trim().slice(0, 80),
             childEmail: String(entry.childEmail ?? "").trim().slice(0, 160),
             childPassword: String(entry.childPassword ?? "").trim().slice(0, 128),
             childPhone: String(entry.childPhone ?? "").trim().slice(0, 32),
@@ -571,6 +1016,111 @@ const normalizeFamilyCenterPreferences = (value: unknown): FamilyCenterPreferenc
         : "",
     familyApplicationFiles,
     familyMembers,
+  };
+};
+
+const normalizeBusinessCenterPreferences = (value: unknown): FamilyCenterPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultFamilyCenterPreferences };
+  }
+
+  const source = value as Record<string, unknown>;
+
+  const normalized = normalizeFamilyCenterPreferences({
+    requireContentFilterForFamilyMembers: source.requireContentFilterForFamilyMembers,
+    shareWeeklySafetySummary: source.shareWeeklySafetySummary,
+    allowDirectMessagesFromNonFriends: source.allowDirectMessagesFromNonFriends,
+    alertOnMatureContentInteractions: source.alertOnMatureContentInteractions,
+    familyDesignation: source.businessDesignation,
+    familyApplicationStatus: source.businessApplicationStatus,
+    familyApplicationSubmittedAt: source.businessApplicationSubmittedAt,
+    familyApplicationFiles: source.businessApplicationFiles,
+    familyMembers: source.businessMembers,
+  });
+
+  const businessMembers = Array.isArray(source.businessMembers)
+    ? source.businessMembers
+        .filter((entry): entry is FamilyCenterMemberAccount => {
+          if (!entry || typeof entry !== "object") {
+            return false;
+          }
+
+          const candidate = entry as Partial<FamilyCenterMemberAccount>;
+          return typeof candidate.accountIdentifier === "string";
+        })
+        .map((entry, index) => {
+          const accountIdentifier = String(entry.accountIdentifier ?? "").trim().slice(0, 160);
+          const childName = String(entry.childName ?? "").trim().slice(0, 60);
+          const id = String(entry.id ?? "").trim().slice(0, 80) || `business-member-${index + 1}`;
+          const createdAt = String(entry.createdAt ?? "").trim() || new Date().toISOString();
+
+          return {
+            id,
+            childName,
+            accountIdentifier,
+            childRelation: businessRoleOptions.includes(
+              (entry.childRelation ?? "") as (typeof businessRoleOptions)[number]
+            )
+              ? (entry.childRelation as (typeof businessRoleOptions)[number])
+              : "",
+            childSection: businessSectionOptions.includes(
+              (entry.childSection ?? "") as (typeof businessSectionOptions)[number]
+            )
+              ? (entry.childSection as (typeof businessSectionOptions)[number])
+              : "",
+            childEmail: String(entry.childEmail ?? "").trim().slice(0, 160),
+            childPassword: String(entry.childPassword ?? "").trim().slice(0, 128),
+            childPhone: String(entry.childPhone ?? "").trim().slice(0, 32),
+            childDateOfBirth:
+              typeof entry.childDateOfBirth === "string" && /^\d{4}-\d{2}-\d{2}$/.test(entry.childDateOfBirth)
+                ? entry.childDateOfBirth
+                : "",
+            linkedUserId: String(entry.linkedUserId ?? "").trim().slice(0, 191),
+            familyLinkState:
+              entry.familyLinkState === "managed-under-16" ||
+              entry.familyLinkState === "eligible-16-plus" ||
+              entry.familyLinkState === "normal"
+                ? entry.familyLinkState
+                : "normal",
+            createdAt,
+            requireContentFilterForFamilyMembers:
+              typeof entry.requireContentFilterForFamilyMembers === "boolean"
+                ? entry.requireContentFilterForFamilyMembers
+                : defaultFamilyCenterPreferences.requireContentFilterForFamilyMembers,
+            shareWeeklySafetySummary:
+              typeof entry.shareWeeklySafetySummary === "boolean"
+                ? entry.shareWeeklySafetySummary
+                : defaultFamilyCenterPreferences.shareWeeklySafetySummary,
+            allowDirectMessagesFromNonFriends:
+              typeof entry.allowDirectMessagesFromNonFriends === "boolean"
+                ? entry.allowDirectMessagesFromNonFriends
+                : defaultFamilyCenterPreferences.allowDirectMessagesFromNonFriends,
+            alertOnMatureContentInteractions:
+              typeof entry.alertOnMatureContentInteractions === "boolean"
+                ? entry.alertOnMatureContentInteractions
+                : defaultFamilyCenterPreferences.alertOnMatureContentInteractions,
+          } satisfies FamilyCenterMemberAccount;
+        })
+        .filter((entry) => entry.accountIdentifier.length > 0)
+    : [];
+
+  return {
+    ...normalized,
+    familyMembers: businessMembers,
+  };
+};
+
+const mapFamilyCenterToBusinessCenterPayload = (value: FamilyCenterPreferences) => {
+  return {
+    requireContentFilterForFamilyMembers: value.requireContentFilterForFamilyMembers,
+    shareWeeklySafetySummary: value.shareWeeklySafetySummary,
+    allowDirectMessagesFromNonFriends: value.allowDirectMessagesFromNonFriends,
+    alertOnMatureContentInteractions: value.alertOnMatureContentInteractions,
+    businessDesignation: value.familyDesignation,
+    businessApplicationStatus: value.familyApplicationStatus,
+    businessApplicationSubmittedAt: value.familyApplicationSubmittedAt,
+    businessApplicationFiles: value.familyApplicationFiles,
+    businessMembers: value.familyMembers,
   };
 };
 
@@ -765,6 +1315,16 @@ type BlockedProfileSummary = {
   blockedAt: string | null;
 };
 
+type PatronageHistoryEntry = {
+  id: string;
+  donationType: "ONE_TIME" | "MONTHLY";
+  status: "PENDING" | "SUCCEEDED" | "FAILED" | "CANCELED" | "REFUNDED";
+  amountCents: number;
+  currency: string;
+  note: string | null;
+  createdAt: string | null;
+};
+
 type ConnectionProvider = {
   key: string;
   label: string;
@@ -862,6 +1422,7 @@ export const SettingsModal = () => {
   const [activeSection, setActiveSection] = useState<SettingsSection>("myAccount");
   const [displaySection, setDisplaySection] = useState<SettingsSection>("myAccount");
   const [isSectionVisible, setIsSectionVisible] = useState(true);
+  const [collapsedSectionGroups, setCollapsedSectionGroups] = useState<Record<string, boolean>>({});
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isUploadingBanner, setIsUploadingBanner] = useState(false);
   const [isUploadingServerBanner, setIsUploadingServerBanner] = useState(false);
@@ -872,10 +1433,14 @@ export const SettingsModal = () => {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showCredentialPin, setShowCredentialPin] = useState(false);
   const [isSavingProfileName, setIsSavingProfileName] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [credentialPin, setCredentialPin] = useState("");
+  const [credentialPinConfirmOne, setCredentialPinConfirmOne] = useState("");
+  const [credentialPinConfirmTwo, setCredentialPinConfirmTwo] = useState("");
   const [realName, setRealName] = useState(data.profileRealName ?? "");
   const [profileName, setProfileName] = useState("");
   const [pronouns, setPronouns] = useState("");
@@ -941,23 +1506,118 @@ export const SettingsModal = () => {
   });
   const [isSavingDataPrivacyPreferences, setIsSavingDataPrivacyPreferences] = useState(false);
   const [dataPrivacyStatus, setDataPrivacyStatus] = useState<string | null>(null);
+  const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferences>({
+    ...defaultNotificationPreferences,
+  });
+  const [isSavingNotificationPreferences, setIsSavingNotificationPreferences] = useState(false);
+  const [notificationStatus, setNotificationStatus] = useState<string | null>(null);
+  const [textImagesPreferences, setTextImagesPreferences] = useState<TextImagesPreferences>({
+    ...defaultTextImagesPreferences,
+  });
+  const [isSavingTextImagesPreferences, setIsSavingTextImagesPreferences] = useState(false);
+  const [textImagesStatus, setTextImagesStatus] = useState<string | null>(null);
+  const [accessibilityPreferences, setAccessibilityPreferences] = useState<AccessibilityPreferences>({
+    ...defaultAccessibilityPreferences,
+  });
+  const [isSavingAccessibilityPreferences, setIsSavingAccessibilityPreferences] = useState(false);
+  const [accessibilityStatus, setAccessibilityStatus] = useState<string | null>(null);
+  const [emojiPreferences, setEmojiPreferences] = useState<EmojiPreferences>({
+    ...defaultEmojiPreferences,
+  });
+  const [emojiUploadDraftUrl, setEmojiUploadDraftUrl] = useState("");
+  const [emojiFavoritesInput, setEmojiFavoritesInput] = useState(defaultEmojiPreferences.favoriteEmojis.join(" "));
+  const [isSavingEmojiPreferences, setIsSavingEmojiPreferences] = useState(false);
+  const [emojiStatus, setEmojiStatus] = useState<string | null>(null);
+  const [isVoiceMuted, setIsVoiceMuted] = useState(false);
+  const [isVoiceDeafened, setIsVoiceDeafened] = useState(false);
+  const [isVoiceSessionActive, setIsVoiceSessionActive] = useState(false);
+  const [isVoiceVideoSession, setIsVoiceVideoSession] = useState(false);
+  const [isVoiceCameraOn, setIsVoiceCameraOn] = useState(false);
+  const [isPmVideoSessionActive, setIsPmVideoSessionActive] = useState(false);
+  const [isPmCameraOn, setIsPmCameraOn] = useState(false);
   const [familyCenterPreferences, setFamilyCenterPreferences] = useState<FamilyCenterPreferences>({
+    ...defaultFamilyCenterPreferences,
+  });
+  const [familyCenterSnapshot, setFamilyCenterSnapshot] = useState<FamilyCenterPreferences>({
+    ...defaultFamilyCenterPreferences,
+  });
+  const [businessCenterSnapshot, setBusinessCenterSnapshot] = useState<FamilyCenterPreferences>({
+    ...defaultFamilyCenterPreferences,
+  });
+  const [schoolCenterSnapshot, setSchoolCenterSnapshot] = useState<FamilyCenterPreferences>({
     ...defaultFamilyCenterPreferences,
   });
   const [isSavingFamilyCenterPreferences, setIsSavingFamilyCenterPreferences] = useState(false);
   const [familyCenterStatus, setFamilyCenterStatus] = useState<string | null>(null);
   const [familyMemberNameInput, setFamilyMemberNameInput] = useState("");
   const [familyMemberAccountInput, setFamilyMemberAccountInput] = useState("");
-  const [familyMemberRelationInput, setFamilyMemberRelationInput] = useState<(typeof familyMemberRelationOptions)[number] | "">("");
+  const [familyMemberRelationInput, setFamilyMemberRelationInput] = useState<string>("");
+  const [familyMemberSectionInput, setFamilyMemberSectionInput] = useState<string>("");
   const [familyMemberEmailInput, setFamilyMemberEmailInput] = useState("");
   const [familyMemberPasswordInput, setFamilyMemberPasswordInput] = useState("");
   const [familyMemberRepeatPasswordInput, setFamilyMemberRepeatPasswordInput] = useState("");
+
+  useEffect(() => {
+    const onVoiceStateSync = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        active?: boolean;
+        isMuted?: boolean;
+        isDeafened?: boolean;
+        isVideoChannel?: boolean;
+        isCameraOn?: boolean;
+      }>;
+
+      if (typeof customEvent.detail?.active === "boolean") {
+        setIsVoiceSessionActive(customEvent.detail.active);
+      }
+
+      if (typeof customEvent.detail?.isMuted === "boolean") {
+        setIsVoiceMuted(customEvent.detail.isMuted);
+      }
+
+      if (typeof customEvent.detail?.isDeafened === "boolean") {
+        setIsVoiceDeafened(customEvent.detail.isDeafened);
+      }
+
+      if (typeof customEvent.detail?.isVideoChannel === "boolean") {
+        setIsVoiceVideoSession(customEvent.detail.isVideoChannel);
+      }
+
+      if (typeof customEvent.detail?.isCameraOn === "boolean") {
+        setIsVoiceCameraOn(customEvent.detail.isCameraOn);
+      }
+    };
+
+    const onPmCameraStateSync = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        active?: boolean;
+        isCameraOn?: boolean;
+      }>;
+
+      if (typeof customEvent.detail?.active === "boolean") {
+        setIsPmVideoSessionActive(customEvent.detail.active);
+      }
+
+      if (typeof customEvent.detail?.isCameraOn === "boolean") {
+        setIsPmCameraOn(customEvent.detail.isCameraOn);
+      }
+    };
+
+    window.addEventListener(VOICE_STATE_SYNC_EVENT, onVoiceStateSync as EventListener);
+    window.addEventListener(PM_CAMERA_STATE_SYNC_EVENT, onPmCameraStateSync as EventListener);
+
+    return () => {
+      window.removeEventListener(VOICE_STATE_SYNC_EVENT, onVoiceStateSync as EventListener);
+      window.removeEventListener(PM_CAMERA_STATE_SYNC_EVENT, onPmCameraStateSync as EventListener);
+    };
+  }, []);
   const [familyMemberPhoneInput, setFamilyMemberPhoneInput] = useState("");
   const [familyMemberDateOfBirthInput, setFamilyMemberDateOfBirthInput] = useState("");
+  const [familyApplicationSectionInput, setFamilyApplicationSectionInput] = useState<string>("");
   const [isCreatingFamilyMemberAccount, setIsCreatingFamilyMemberAccount] = useState(false);
   const [isConvertingFamilyMemberUserId, setIsConvertingFamilyMemberUserId] = useState<string | null>(null);
   const [familyMemberLifecycleByUserId, setFamilyMemberLifecycleByUserId] = useState<Record<string, FamilyMemberLifecycle>>({});
-  const [familyDesignationInput, setFamilyDesignationInput] = useState<(typeof familyDesignationOptions)[number] | "">("");
+  const [familyDesignationInput, setFamilyDesignationInput] = useState<string>("");
   const [selectedFamilyMemberId, setSelectedFamilyMemberId] = useState("");
   const [languagePreference, setLanguagePreference] = useState<string>("system");
   const [isSavingLanguagePreference, setIsSavingLanguagePreference] = useState(false);
@@ -973,10 +1633,38 @@ export const SettingsModal = () => {
   const [bugActual, setBugActual] = useState("");
   const [isSubmittingBugReport, setIsSubmittingBugReport] = useState(false);
   const [bugReportStatus, setBugReportStatus] = useState<string | null>(null);
-  const [discordApps, setDiscordApps] = useState<DiscordAppConfig[]>([]);
-  const [discordBots, setDiscordBots] = useState<DiscordBotConfig[]>([]);
-  const [isSavingDiscordConfigs, setIsSavingDiscordConfigs] = useState(false);
-  const [discordConfigsStatus, setDiscordConfigsStatus] = useState<string | null>(null);
+  const [patronageType, setPatronageType] = useState<"ONE_TIME" | "MONTHLY">("ONE_TIME");
+  const [patronageAmount, setPatronageAmount] = useState("");
+  const [patronageNote, setPatronageNote] = useState("");
+  const [patronagePayerName, setPatronagePayerName] = useState("");
+  const [patronagePayerEmail, setPatronagePayerEmail] = useState("");
+  const [isSubmittingPatronage, setIsSubmittingPatronage] = useState(false);
+  const [isCancellingPatronage, setIsCancellingPatronage] = useState(false);
+  const [isLoadingPatronageHistory, setIsLoadingPatronageHistory] = useState(false);
+  const [patronageStatus, setPatronageStatus] = useState<string | null>(null);
+  const [patronageHistory, setPatronageHistory] = useState<PatronageHistoryEntry[]>([]);
+  const [pendingPatronageCheckoutUrl, setPendingPatronageCheckoutUrl] = useState<string | null>(null);
+  const [isPatronagePaymentPanelOpen, setIsPatronagePaymentPanelOpen] = useState(false);
+  const [isPreparingPatronageIntent, setIsPreparingPatronageIntent] = useState(false);
+  const [patronageIntentClientSecret, setPatronageIntentClientSecret] = useState<string | null>(null);
+  const [patronageStripePublishableKey, setPatronageStripePublishableKey] = useState<string | null>(null);
+  const [patronagePaymentPanelStatus, setPatronagePaymentPanelStatus] = useState<string | null>(null);
+  const [pendingPatronageRequest, setPendingPatronageRequest] = useState<{
+    donationType: "ONE_TIME" | "MONTHLY";
+    amountCents: number;
+    currency: string;
+    payerName: string;
+    payerEmail: string;
+    note: string | null;
+  } | null>(null);
+  const [OtherApps, setOtherApps] = useState<OtherAppConfig[]>([]);
+  const [OtherBots, setOtherBots] = useState<OtherBotConfig[]>([]);
+  const [OtherBotAutoImportOnSave, setOtherBotAutoImportOnSave] = useState(true);
+  const [botGhostIntegration, setBotGhostIntegration] = useState<BotGhostIntegrationConfig>({
+    ...defaultBotGhostIntegration,
+  });
+  const [isSavingOtherConfigs, setIsSavingOtherConfigs] = useState(false);
+  const [OtherConfigsStatus, setOtherConfigsStatus] = useState<string | null>(null);
   const [ownedServerTags, setOwnedServerTags] = useState<OwnedServerTag[]>([]);
   const [memberServerTags, setMemberServerTags] = useState<MemberServerTag[]>([]);
   const [memberProfileServers, setMemberProfileServers] = useState<MemberServerProfileOption[]>([]);
@@ -1037,6 +1725,22 @@ export const SettingsModal = () => {
   const familyVerificationFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const isModalOpen = isOpen && type === "settings";
+  const patronageStripePromise = useMemo(
+    () => (patronageStripePublishableKey ? loadStripe(patronageStripePublishableKey) : null),
+    [patronageStripePublishableKey]
+  );
+  const patronageElementsOptions = useMemo<StripeElementsOptions | undefined>(() => {
+    if (!patronageIntentClientSecret) {
+      return undefined;
+    }
+
+    return {
+      clientSecret: patronageIntentClientSecret,
+      appearance: {
+        theme: "night",
+      },
+    };
+  }, [patronageIntentClientSecret]);
 
   const familyMemberPasswordStrength = useMemo(
     () => getPasswordStrength(familyMemberPasswordInput),
@@ -1059,10 +1763,32 @@ export const SettingsModal = () => {
     const role = profileRole ?? data.profileRole;
     return isInAccordAdministrator(role) || isInAccordParent(role);
   }, [data.profileRole, profileRole]);
+  const isSchoolCenterSection = displaySection === "schoolCenter";
+  const isBusinessCenterSection = displaySection === "businessCenter";
+  const centerLabel = isBusinessCenterSection ? "Business" : isSchoolCenterSection ? "School" : "Family";
+  const centerLabelLower = centerLabel.toLowerCase();
   const isFamilyCenterEditable = hasFamilyCenterAccess;
   const isFamilyApplicationApproved = useMemo(
     () => /approved|aproved/i.test(String(familyApplicationStatus ?? "")),
     [familyApplicationStatus]
+  );
+  const formattedFamilyApplicationStatus = useMemo(() => {
+    const source = String(familyApplicationStatus ?? "").trim();
+    if (!source) {
+      return "";
+    }
+
+    return source
+      .replace(/\bAproved\b/gi, "Approved")
+      .replace(/\bDenid\b/gi, "Denied");
+  }, [familyApplicationStatus]);
+
+  const normalizeCenterDesignationInput = useCallback(
+    (value: string, isBusinessCenter: boolean) => {
+      const options = isBusinessCenter ? businessRoleOptions : familyDesignationOptions;
+      return options.some((option) => option === value) ? value : "";
+    },
+    []
   );
 
   const visibleSectionGroups = useMemo<SectionGroup[]>(() => {
@@ -1070,6 +1796,28 @@ export const SettingsModal = () => {
   }, []);
 
   const sections = useMemo<SettingsSection[]>(() => sectionGroups.flatMap((group) => group.sections), []);
+
+  useEffect(() => {
+    if (displaySection === "businessCenter") {
+      setFamilyCenterPreferences(businessCenterSnapshot);
+      setFamilyApplicationStatus(businessCenterSnapshot.familyApplicationStatus || null);
+      setFamilyDesignationInput(normalizeCenterDesignationInput(businessCenterSnapshot.familyDesignation, true));
+      return;
+    }
+
+    if (displaySection === "schoolCenter") {
+      setFamilyCenterPreferences(schoolCenterSnapshot);
+      setFamilyApplicationStatus(schoolCenterSnapshot.familyApplicationStatus || null);
+      setFamilyDesignationInput(normalizeCenterDesignationInput(schoolCenterSnapshot.familyDesignation, false));
+      return;
+    }
+
+    if (displaySection === "familyCenter") {
+      setFamilyCenterPreferences(familyCenterSnapshot);
+      setFamilyApplicationStatus(familyCenterSnapshot.familyApplicationStatus || null);
+      setFamilyDesignationInput(normalizeCenterDesignationInput(familyCenterSnapshot.familyDesignation, false));
+    }
+  }, [businessCenterSnapshot, displaySection, familyCenterSnapshot, normalizeCenterDesignationInput, schoolCenterSnapshot]);
 
   const bannerHistoryStorageKey = useMemo(() => {
     const scopeId = String(data.profileId ?? resolvedProfileId ?? "anonymous").trim() || "anonymous";
@@ -1296,13 +2044,21 @@ export const SettingsModal = () => {
       try {
         const response = await axios.get<{
           mentionsEnabled?: boolean;
+          notifications?: unknown;
+          textImages?: unknown;
+          accessibility?: unknown;
+          emoji?: unknown;
           contentSocial?: unknown;
           dataPrivacy?: unknown;
           familyCenter?: unknown;
+          businessCenter?: unknown;
+          schoolCenter?: unknown;
           languagePreference?: string;
           connectedAccounts?: unknown;
-          discordApps?: unknown;
-          discordBots?: unknown;
+          OtherApps?: unknown;
+          OtherBots?: unknown;
+          OtherBotAutoImportOnSave?: boolean;
+          botGhost?: unknown;
           customCss?: string;
           customThemeColors?: Partial<CustomThemeColors> | null;
           downloadedPlugins?: unknown;
@@ -1317,7 +2073,14 @@ export const SettingsModal = () => {
         const mentions = response.data?.mentionsEnabled !== false;
         const hydratedContentSocial = normalizeContentSocialPreferences(response.data?.contentSocial);
         const hydratedDataPrivacy = normalizeDataPrivacyPreferences(response.data?.dataPrivacy);
+        const hydratedNotifications = normalizeNotificationPreferences(response.data?.notifications);
+        const hydratedTextImages = normalizeTextImagesPreferences(response.data?.textImages);
+        const hydratedAccessibility = normalizeAccessibilityPreferences(response.data?.accessibility);
+        const hydratedEmoji = normalizeEmojiPreferences(response.data?.emoji);
+        const hydratedBotGhost = normalizeBotGhostIntegration(response.data?.botGhost);
         const hydratedFamilyCenter = normalizeFamilyCenterPreferences(response.data?.familyCenter);
+        const hydratedBusinessCenter = normalizeBusinessCenterPreferences(response.data?.businessCenter);
+        const hydratedSchoolCenter = normalizeFamilyCenterPreferences(response.data?.schoolCenter);
         const language =
           typeof response.data?.languagePreference === "string" &&
           languageOptions.some((option) => option.value === response.data.languagePreference)
@@ -1355,29 +2118,41 @@ export const SettingsModal = () => {
         setContentSocialStatus(null);
         setDataPrivacyPreferences(hydratedDataPrivacy);
         setDataPrivacyStatus(null);
+        setNotificationPreferences(hydratedNotifications);
+        setNotificationStatus(null);
+        setTextImagesPreferences(hydratedTextImages);
+        setTextImagesStatus(null);
+        setAccessibilityPreferences(hydratedAccessibility);
+        setAccessibilityStatus(null);
+        setEmojiPreferences(hydratedEmoji);
+        setEmojiUploadDraftUrl("");
+        setEmojiFavoritesInput(hydratedEmoji.favoriteEmojis.join(" "));
+        setEmojiStatus(null);
+        applyAccessibilityPreferencesToDocument(hydratedAccessibility);
         setFamilyCenterPreferences(hydratedFamilyCenter);
-        setFamilyDesignationInput(
-          familyDesignationOptions.includes(hydratedFamilyCenter.familyDesignation as (typeof familyDesignationOptions)[number])
-            ? (hydratedFamilyCenter.familyDesignation as (typeof familyDesignationOptions)[number])
-            : ""
-        );
+        setFamilyCenterSnapshot(hydratedFamilyCenter);
+        setBusinessCenterSnapshot(hydratedBusinessCenter);
+        setSchoolCenterSnapshot(hydratedSchoolCenter);
+        setFamilyDesignationInput(normalizeCenterDesignationInput(hydratedFamilyCenter.familyDesignation, false));
         setFamilyApplicationStatus(hydratedFamilyCenter.familyApplicationStatus || null);
         setFamilyCenterStatus(null);
         setLanguagePreference(language);
         setLanguagePreferenceStatus(null);
         setConnectedAccounts(Array.from(new Set(linked)));
         setConnectionsStatus(null);
-        setDiscordApps(
-          Array.isArray(response.data?.discordApps)
-            ? (response.data.discordApps as DiscordAppConfig[])
+        setOtherApps(
+          Array.isArray(response.data?.OtherApps)
+            ? (response.data.OtherApps as OtherAppConfig[])
             : []
         );
-        setDiscordBots(
-          Array.isArray(response.data?.discordBots)
-            ? (response.data.discordBots as DiscordBotConfig[])
+        setOtherBots(
+          Array.isArray(response.data?.OtherBots)
+            ? (response.data.OtherBots as OtherBotConfig[])
             : []
         );
-        setDiscordConfigsStatus(null);
+        setOtherBotAutoImportOnSave(response.data?.OtherBotAutoImportOnSave !== false);
+        setBotGhostIntegration(hydratedBotGhost);
+        setOtherConfigsStatus(null);
         setCustomCss(css);
         setDownloadedPlugins(plugins);
         setUploadedBannerThumbnails((prev) => {
@@ -1404,15 +2179,31 @@ export const SettingsModal = () => {
         setContentSocialStatus(null);
         setDataPrivacyPreferences({ ...defaultDataPrivacyPreferences });
         setDataPrivacyStatus(null);
+        setNotificationPreferences({ ...defaultNotificationPreferences });
+        setNotificationStatus(null);
+        setTextImagesPreferences({ ...defaultTextImagesPreferences });
+        setTextImagesStatus(null);
+        setAccessibilityPreferences({ ...defaultAccessibilityPreferences });
+        setAccessibilityStatus(null);
+        setEmojiPreferences({ ...defaultEmojiPreferences });
+        setEmojiUploadDraftUrl("");
+        setEmojiFavoritesInput(defaultEmojiPreferences.favoriteEmojis.join(" "));
+        setEmojiStatus(null);
+        applyAccessibilityPreferencesToDocument(defaultAccessibilityPreferences);
         setFamilyCenterPreferences({ ...defaultFamilyCenterPreferences });
+        setFamilyCenterSnapshot({ ...defaultFamilyCenterPreferences });
+        setBusinessCenterSnapshot({ ...defaultFamilyCenterPreferences });
+        setSchoolCenterSnapshot({ ...defaultFamilyCenterPreferences });
         setFamilyCenterStatus(null);
         setLanguagePreference("system");
         setLanguagePreferenceStatus(null);
         setConnectedAccounts([]);
         setConnectionsStatus(null);
-        setDiscordApps([]);
-        setDiscordBots([]);
-        setDiscordConfigsStatus(null);
+        setOtherApps([]);
+        setOtherBots([]);
+        setOtherBotAutoImportOnSave(true);
+        setBotGhostIntegration({ ...defaultBotGhostIntegration });
+        setOtherConfigsStatus(null);
         setCustomCss("");
         setDownloadedPlugins([]);
         applyCustomCss("");
@@ -1520,9 +2311,130 @@ export const SettingsModal = () => {
     }
   };
 
+  const onSaveNotificationPreferences = async () => {
+    try {
+      setIsSavingNotificationPreferences(true);
+      setNotificationStatus(null);
+
+      await axios.patch("/api/profile/preferences", {
+        notifications: notificationPreferences,
+      });
+
+      window.dispatchEvent(
+        new CustomEvent("inaccord:notification-preferences-updated", {
+          detail: {
+            notifications: notificationPreferences,
+          },
+        })
+      );
+
+      setNotificationStatus("Notification preferences saved.");
+    } catch {
+      setNotificationStatus("Could not save notification preferences.");
+    } finally {
+      setIsSavingNotificationPreferences(false);
+    }
+  };
+
+  const onSaveTextImagesPreferences = async () => {
+    try {
+      setIsSavingTextImagesPreferences(true);
+      setTextImagesStatus(null);
+
+      await axios.patch("/api/profile/preferences", {
+        textImages: textImagesPreferences,
+      });
+
+      window.dispatchEvent(
+        new CustomEvent("inaccord:text-images-preferences-updated", {
+          detail: {
+            textImages: textImagesPreferences,
+          },
+        })
+      );
+
+      setTextImagesStatus("Text & Images preferences saved.");
+    } catch {
+      setTextImagesStatus("Could not save Text & Images preferences.");
+    } finally {
+      setIsSavingTextImagesPreferences(false);
+    }
+  };
+
+  const onSaveAccessibilityPreferences = async () => {
+    try {
+      setIsSavingAccessibilityPreferences(true);
+      setAccessibilityStatus(null);
+
+      await axios.patch("/api/profile/preferences", {
+        accessibility: accessibilityPreferences,
+      });
+
+      window.dispatchEvent(
+        new CustomEvent("inaccord:accessibility-preferences-updated", {
+          detail: {
+            accessibility: accessibilityPreferences,
+          },
+        })
+      );
+
+      setAccessibilityStatus("Accessibility preferences saved.");
+    } catch {
+      setAccessibilityStatus("Could not save Accessibility preferences.");
+    } finally {
+      setIsSavingAccessibilityPreferences(false);
+    }
+  };
+
+  const onSaveEmojiPreferences = async () => {
+    try {
+      setIsSavingEmojiPreferences(true);
+      setEmojiStatus(null);
+
+      const parsedFavorites = Array.from(
+        new Set(
+          emojiFavoritesInput
+            .split(/\s+/)
+            .map((value) => value.trim())
+            .filter((value) => value.length > 0)
+            .slice(0, 32)
+        )
+      );
+
+      const nextPreferences: EmojiPreferences = {
+        ...emojiPreferences,
+        favoriteEmojis: parsedFavorites.length ? parsedFavorites : [...defaultEmojiPreferences.favoriteEmojis],
+      };
+
+      await axios.patch("/api/profile/preferences", {
+        emoji: nextPreferences,
+      });
+
+      setEmojiPreferences(nextPreferences);
+      setEmojiUploadDraftUrl("");
+      setEmojiFavoritesInput(nextPreferences.favoriteEmojis.join(" "));
+
+      window.dispatchEvent(
+        new CustomEvent("inaccord:emoji-preferences-updated", {
+          detail: {
+            emoji: nextPreferences,
+          },
+        })
+      );
+
+      setEmojiStatus("Emoji preferences saved.");
+    } catch {
+      setEmojiStatus("Could not save Emoji preferences.");
+    } finally {
+      setIsSavingEmojiPreferences(false);
+    }
+  };
+
   const onSaveFamilyCenterPreferences = async () => {
     if (!isFamilyCenterEditable) {
-      setFamilyCenterStatus("Only Family or Administrator roles can edit Family Center settings.");
+      setFamilyCenterStatus(
+        `Only ${centerLabel} or Administrator roles can edit ${centerLabel} Center settings.`
+      );
       return;
     }
 
@@ -1530,13 +2442,30 @@ export const SettingsModal = () => {
       setIsSavingFamilyCenterPreferences(true);
       setFamilyCenterStatus(null);
 
-      await axios.patch("/api/profile/preferences", {
-        familyCenter: familyCenterPreferences,
-      });
+      await axios.patch("/api/profile/preferences", isBusinessCenterSection
+        ? { businessCenter: mapFamilyCenterToBusinessCenterPayload(familyCenterPreferences) }
+        : isSchoolCenterSection
+          ? { schoolCenter: familyCenterPreferences }
+          : { familyCenter: familyCenterPreferences });
 
-      setFamilyCenterStatus("Family Center preferences saved.");
+      if (isBusinessCenterSection) {
+        setBusinessCenterSnapshot(familyCenterPreferences);
+        setFamilyCenterStatus("Business Center preferences saved.");
+      } else if (isSchoolCenterSection) {
+        setSchoolCenterSnapshot(familyCenterPreferences);
+        setFamilyCenterStatus("School Center preferences saved.");
+      } else {
+        setFamilyCenterSnapshot(familyCenterPreferences);
+        setFamilyCenterStatus("Family Center preferences saved.");
+      }
     } catch {
-      setFamilyCenterStatus("Could not save Family Center preferences.");
+      setFamilyCenterStatus(
+        isBusinessCenterSection
+          ? "Could not save Business Center preferences."
+          : isSchoolCenterSection
+            ? "Could not save School Center preferences."
+            : "Could not save Family Center preferences."
+      );
     } finally {
       setIsSavingFamilyCenterPreferences(false);
     }
@@ -1544,19 +2473,27 @@ export const SettingsModal = () => {
 
   const onAddFamilyMember = async () => {
     if (!isFamilyCenterEditable) {
-      setFamilyCenterStatus("Only Family or Administrator roles can edit Family Center settings.");
+      setFamilyCenterStatus(
+        `Only ${centerLabel} or Administrator roles can edit ${centerLabel} Center settings.`
+      );
       return;
     }
 
     const childName = familyMemberNameInput.trim();
     const accountIdentifier = familyMemberAccountInput.trim();
     const childRelation = familyMemberRelationInput;
+    const childSection = familyMemberSectionInput.trim();
     const childEmail = familyMemberEmailInput.trim();
     const childPassword = familyMemberPasswordInput.trim();
     const childRepeatPassword = familyMemberRepeatPasswordInput.trim();
     const childPhone = familyMemberPhoneInput.trim();
+    const requiresDateOfBirth = !isBusinessCenterSection;
     const childDateOfBirthRaw = familyMemberDateOfBirthInput.trim();
     const normalizedChildDateOfBirth = (() => {
+      if (!requiresDateOfBirth) {
+        return null;
+      }
+
       const candidate = childDateOfBirthRaw.replace(/\//g, "-");
       if (!/^\d{4}-\d{2}-\d{2}$/.test(candidate)) {
         return null;
@@ -1580,8 +2517,10 @@ export const SettingsModal = () => {
       return candidate;
     })();
 
-    if (!childName || !accountIdentifier || !childRelation || !childEmail || !childPassword || !childRepeatPassword || !childPhone || !childDateOfBirthRaw) {
-      setFamilyCenterStatus("Family Name, Profile Name, Family Relation, Email, Password, Repeat Password, Phone, and Date of Birth are required.");
+    if (!childName || !accountIdentifier || !childRelation || (isBusinessCenterSection && !childSection) || !childEmail || !childPassword || !childRepeatPassword || !childPhone || (requiresDateOfBirth && !childDateOfBirthRaw)) {
+      setFamilyCenterStatus(
+        `${centerLabel} Name, Profile Name, ${isBusinessCenterSection ? "Business Role and Business Section" : `${centerLabel} Relation`}, Email, Password, Repeat Password, Phone${isBusinessCenterSection ? "" : ", and Date of Birth"} are required.`
+      );
       return;
     }
 
@@ -1590,7 +2529,7 @@ export const SettingsModal = () => {
       return;
     }
 
-    if (!normalizedChildDateOfBirth) {
+    if (requiresDateOfBirth && !normalizedChildDateOfBirth) {
       setFamilyCenterStatus("Select a valid Date of Birth.");
       return;
     }
@@ -1612,7 +2551,9 @@ export const SettingsModal = () => {
     );
 
     if (alreadyExists) {
-      setFamilyCenterStatus("That account or email is already listed in Family Members.");
+      setFamilyCenterStatus(
+        `That account or email is already listed in ${centerLabel} Members.`
+      );
       return;
     }
 
@@ -1623,8 +2564,10 @@ export const SettingsModal = () => {
         ok: boolean;
         memberUserId: string;
         lifecycle: FamilyMemberLifecycle;
-      }>("/api/family-center/members", {
+      }>(isBusinessCenterSection ? "/api/business-center/members" : isSchoolCenterSection ? "/api/school-center/members" : "/api/family-center/members", {
         childName,
+        childRelation,
+        childSection: isBusinessCenterSection ? childSection : "",
         accountIdentifier,
         childEmail,
         childPassword,
@@ -1637,10 +2580,11 @@ export const SettingsModal = () => {
       childName: childName.slice(0, 60),
       accountIdentifier: accountIdentifier.slice(0, 160),
       childRelation,
+      childSection: isBusinessCenterSection ? childSection : "",
       childEmail: childEmail.slice(0, 160),
       childPassword: childPassword.slice(0, 128),
       childPhone: childPhone.slice(0, 32),
-      childDateOfBirth: normalizedChildDateOfBirth,
+      childDateOfBirth: normalizedChildDateOfBirth ?? "",
       linkedUserId: response.data.memberUserId,
       familyLinkState: response.data.lifecycle.state,
       createdAt: new Date().toISOString(),
@@ -1662,18 +2606,25 @@ export const SettingsModal = () => {
     setFamilyMemberNameInput("");
     setFamilyMemberAccountInput("");
     setFamilyMemberRelationInput("");
+    setFamilyMemberSectionInput("");
     setFamilyMemberEmailInput("");
     setFamilyMemberPasswordInput("");
     setFamilyMemberRepeatPasswordInput("");
     setFamilyMemberPhoneInput("");
     setFamilyMemberDateOfBirthInput("");
-      setFamilyCenterStatus("Family account added and real user account created. Click Save Changes to persist.");
+      setFamilyCenterStatus(
+        `${centerLabel} account added and real user account created. Click Save Changes to persist.`
+      );
     } catch (error) {
       const message = axios.isAxiosError(error)
         ? (error.response?.data as { error?: string } | undefined)?.error || error.response?.data || error.message
-        : "Could not create the family member account.";
+        : `Could not create the ${centerLabelLower} member account.`;
 
-      setFamilyCenterStatus(typeof message === "string" ? message : "Could not create the family member account.");
+      setFamilyCenterStatus(
+        typeof message === "string"
+          ? message
+          : `Could not create the ${centerLabelLower} member account.`
+      );
     } finally {
       setIsCreatingFamilyMemberAccount(false);
     }
@@ -1681,7 +2632,9 @@ export const SettingsModal = () => {
 
   const onRemoveFamilyMember = (memberId: string) => {
     if (!isFamilyCenterEditable) {
-      setFamilyCenterStatus("Only Family or Administrator roles can edit Family Center settings.");
+      setFamilyCenterStatus(
+        `Only ${centerLabel} or Administrator roles can edit ${centerLabel} Center settings.`
+      );
       return;
     }
 
@@ -1704,7 +2657,66 @@ export const SettingsModal = () => {
         familyMembers: current.familyMembers.filter((entry) => entry.id !== memberId),
       };
     });
-    setFamilyCenterStatus("Family account removed. Click Save Changes to persist.");
+    setFamilyCenterStatus(
+      `${centerLabel} account removed. Click Save Changes to persist.`
+    );
+  };
+
+  const onSeedApprovedBusinessMember = () => {
+    if (!isBusinessCenterSection || !isFamilyApplicationApproved) {
+      return;
+    }
+
+    if (!isFamilyCenterEditable) {
+      setFamilyCenterStatus("Only Business or Administrator roles can edit Business Center settings.");
+      return;
+    }
+
+    const linkedUserId = String(resolvedProfileId ?? data.profileId ?? "").trim();
+    const fallbackProfileName =
+      String(profileName || "").trim() ||
+      String(realName || "").trim() ||
+      String(data.profileEmail || "").trim().split("@")[0] ||
+      linkedUserId ||
+      "Business Member";
+
+    const alreadyExists = familyCenterPreferences.familyMembers.some((entry) => {
+      const sameLinked = linkedUserId && String(entry.linkedUserId ?? "").trim() === linkedUserId;
+      const sameIdentifier =
+        String(entry.accountIdentifier ?? "").trim().toLowerCase() === fallbackProfileName.toLowerCase();
+      return sameLinked || sameIdentifier;
+    });
+
+    if (alreadyExists) {
+      setFamilyCenterStatus("Your business member profile is already listed.");
+      return;
+    }
+
+    const nextMember: FamilyCenterMemberAccount = {
+      id: `business-member-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      childName: fallbackProfileName.slice(0, 60),
+      accountIdentifier: fallbackProfileName.slice(0, 160),
+      childRelation: String(familyDesignationInput ?? "").trim().slice(0, 80),
+      childSection: String(familyApplicationSectionInput ?? "").trim().slice(0, 80),
+      childEmail: String(data.profileEmail ?? "").trim().slice(0, 160),
+      childPassword: "",
+      childPhone: String(phoneNumber ?? "").trim().slice(0, 32),
+      childDateOfBirth: String(dateOfBirth ?? "").trim().slice(0, 10),
+      linkedUserId,
+      familyLinkState: "normal",
+      createdAt: new Date().toISOString(),
+      requireContentFilterForFamilyMembers: familyCenterPreferences.requireContentFilterForFamilyMembers,
+      shareWeeklySafetySummary: familyCenterPreferences.shareWeeklySafetySummary,
+      allowDirectMessagesFromNonFriends: familyCenterPreferences.allowDirectMessagesFromNonFriends,
+      alertOnMatureContentInteractions: familyCenterPreferences.alertOnMatureContentInteractions,
+    };
+
+    setFamilyCenterPreferences((current) => ({
+      ...current,
+      familyMembers: [...current.familyMembers, nextMember],
+    }));
+    setSelectedFamilyMemberId(nextMember.id);
+    setFamilyCenterStatus("Business member added. Click Save Changes to persist.");
   };
 
   const onConvertFamilyMemberToNormal = async (member: FamilyCenterMemberAccount) => {
@@ -1726,7 +2738,7 @@ export const SettingsModal = () => {
         ok: boolean;
         memberUserId: string;
         lifecycle: FamilyMemberLifecycle;
-      }>("/api/family-center/members", {
+      }>(isBusinessCenterSection ? "/api/business-center/members" : isSchoolCenterSection ? "/api/school-center/members" : "/api/family-center/members", {
         action: "convert-to-normal",
         memberUserId: member.linkedUserId,
       });
@@ -1748,12 +2760,16 @@ export const SettingsModal = () => {
         ),
       }));
 
-      setFamilyCenterStatus("Family account converted to normal account.");
+      setFamilyCenterStatus(`${centerLabel} account converted to normal account.`);
     } catch (error) {
       const message = axios.isAxiosError(error)
         ? (error.response?.data as { error?: string } | undefined)?.error || error.response?.data || error.message
-        : "Could not convert the family account.";
-      setFamilyCenterStatus(typeof message === "string" ? message : "Could not convert the family account.");
+        : `Could not convert the ${centerLabelLower} account.`;
+      setFamilyCenterStatus(
+        typeof message === "string"
+          ? message
+          : `Could not convert the ${centerLabelLower} account.`
+      );
     } finally {
       setIsConvertingFamilyMemberUserId(null);
     }
@@ -1786,7 +2802,7 @@ export const SettingsModal = () => {
 
     const hydrateLifecycle = async () => {
       try {
-        const response = await axios.get<{ members?: FamilyMemberLifecycle[] }>("/api/family-center/members", {
+        const response = await axios.get<{ members?: FamilyMemberLifecycle[] }>(isBusinessCenterSection ? "/api/business-center/members" : isSchoolCenterSection ? "/api/school-center/members" : "/api/family-center/members", {
           params: {
             ids: linkedUserIds.join(","),
           },
@@ -1847,7 +2863,7 @@ export const SettingsModal = () => {
     return () => {
       cancelled = true;
     };
-  }, [isModalOpen, linkedFamilyMemberUserIds]);
+  }, [isBusinessCenterSection, isModalOpen, isSchoolCenterSection, linkedFamilyMemberUserIds]);
 
   useEffect(() => {
     const members = familyCenterPreferences.familyMembers;
@@ -1879,7 +2895,9 @@ export const SettingsModal = () => {
       | "alertOnMatureContentInteractions"
   ) => {
     if (!isFamilyCenterEditable) {
-      setFamilyCenterStatus("Only Family or Administrator roles can edit Family Center settings.");
+      setFamilyCenterStatus(
+        `Only ${centerLabel} or Administrator roles can edit ${centerLabel} Center settings.`
+      );
       return;
     }
 
@@ -1906,7 +2924,9 @@ export const SettingsModal = () => {
 
   const onCopyDefaultsToSelectedChild = () => {
     if (!isFamilyCenterEditable) {
-      setFamilyCenterStatus("Only Family or Administrator roles can edit Family Center settings.");
+      setFamilyCenterStatus(
+        `Only ${centerLabel} or Administrator roles can edit ${centerLabel} Center settings.`
+      );
       return;
     }
 
@@ -1932,12 +2952,16 @@ export const SettingsModal = () => {
       }),
     }));
 
-    setFamilyCenterStatus("Default Family Center controls copied to selected family account. Click Save Changes to persist.");
+    setFamilyCenterStatus(
+      `Default ${centerLabel} Center controls copied to selected ${centerLabelLower} account. Click Save Changes to persist.`
+    );
   };
 
   const onResetSelectedChildToAppDefaults = () => {
     if (!isFamilyCenterEditable) {
-      setFamilyCenterStatus("Only Family or Administrator roles can edit Family Center settings.");
+      setFamilyCenterStatus(
+        `Only ${centerLabel} or Administrator roles can edit ${centerLabel} Center settings.`
+      );
       return;
     }
 
@@ -1967,7 +2991,9 @@ export const SettingsModal = () => {
       }),
     }));
 
-    setFamilyCenterStatus("Selected family account controls reset to app defaults. Click Save Changes to persist.");
+    setFamilyCenterStatus(
+      `Selected ${centerLabelLower} account controls reset to app defaults. Click Save Changes to persist.`
+    );
   };
 
   const formatFileSize = (bytes: number) => {
@@ -2048,12 +3074,23 @@ export const SettingsModal = () => {
 
   const onSubmitFamilyApplication = async () => {
     if (isFamilyApplicationApproved) {
-      setFamilyVerificationUploadStatus("Family account is already approved. Remove Family Account to apply again.");
+      setFamilyVerificationUploadStatus(
+        `${centerLabel} account is already approved. Remove ${centerLabel} Account to apply again.`
+      );
       return;
     }
 
     if (!familyDesignationInput) {
-      setFamilyVerificationUploadStatus("Select a family designation before submitting.");
+      setFamilyVerificationUploadStatus(
+        isBusinessCenterSection
+          ? "Select a business role before submitting."
+          : "Select a family designation before submitting."
+      );
+      return;
+    }
+
+    if (isBusinessCenterSection && !familyApplicationSectionInput) {
+      setFamilyVerificationUploadStatus("Select a business section before submitting.");
       return;
     }
 
@@ -2066,21 +3103,35 @@ export const SettingsModal = () => {
       setFamilyVerificationUploadStatus("Preparing application PDF and uploading...");
 
       const submitFormData = new FormData();
-      submitFormData.append("familyDesignation", familyDesignationInput);
+      submitFormData.append(
+        isBusinessCenterSection ? "businessDesignation" : "familyDesignation",
+        familyDesignationInput
+      );
       submitFormData.append("legalName", realName || "");
       submitFormData.append("profileName", profileName || "");
       submitFormData.append("email", data.profileEmail || "");
       submitFormData.append("phone", phoneNumber || "");
-      submitFormData.append("dateOfBirth", dateOfBirth || "");
+      if (isBusinessCenterSection) {
+        submitFormData.append("businessSection", familyApplicationSectionInput);
+      } else {
+        submitFormData.append("dateOfBirth", dateOfBirth || "");
+      }
 
       familyVerificationFiles.forEach((file) => {
         submitFormData.append("files", file);
       });
 
-      const response = await fetch("/api/family-application/submit", {
+      const response = await fetch(
+        isBusinessCenterSection
+          ? "/api/business-application/submit"
+          : isSchoolCenterSection
+            ? "/api/school-application/submit"
+            : "/api/family-application/submit",
+        {
         method: "POST",
         body: submitFormData,
-      });
+        }
+      );
 
       if (!response.ok) {
         let errorMessage = `Submit failed (${response.status})`;
@@ -2098,14 +3149,30 @@ export const SettingsModal = () => {
 
       const payload = (await response.json()) as {
         familyCenter?: FamilyCenterPreferences;
+        businessCenter?: unknown;
+        schoolCenter?: unknown;
       };
 
-      const nextFamilyCenter = normalizeFamilyCenterPreferences(payload.familyCenter);
-      setFamilyCenterPreferences(nextFamilyCenter);
-      setFamilyApplicationStatus(nextFamilyCenter.familyApplicationStatus || null);
-      setFamilyCenterStatus("Family application submitted. Status has been added to the top bar.");
+      const nextCenter = isBusinessCenterSection
+        ? normalizeBusinessCenterPreferences(payload.businessCenter)
+        : isSchoolCenterSection
+          ? normalizeFamilyCenterPreferences(payload.schoolCenter)
+          : normalizeFamilyCenterPreferences(payload.familyCenter);
+      setFamilyCenterPreferences(nextCenter);
+      if (isBusinessCenterSection) {
+        setBusinessCenterSnapshot(nextCenter);
+      } else if (isSchoolCenterSection) {
+        setSchoolCenterSnapshot(nextCenter);
+      } else {
+        setFamilyCenterSnapshot(nextCenter);
+      }
+      setFamilyApplicationStatus(nextCenter.familyApplicationStatus || null);
+      setFamilyCenterStatus(`${centerLabel} application submitted. Status has been added to the top bar.`);
       setFamilyVerificationUploadStatus("Application submitted successfully.");
       setFamilyVerificationFiles([]);
+      if (isBusinessCenterSection) {
+        setFamilyApplicationSectionInput("");
+      }
       setIsFamilyAccountVerificationPanelOpen(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not submit application. Please try again.";
@@ -2122,28 +3189,41 @@ export const SettingsModal = () => {
         ok: boolean;
         role?: string | null;
         familyCenter?: FamilyCenterPreferences;
-      }>("/api/family-application/remove");
+        businessCenter?: unknown;
+        schoolCenter?: unknown;
+      }>(isBusinessCenterSection ? "/api/business-application/remove" : isSchoolCenterSection ? "/api/school-application/remove" : "/api/family-application/remove");
 
-      const nextFamilyCenter = normalizeFamilyCenterPreferences(response.data?.familyCenter);
-      setFamilyCenterPreferences(nextFamilyCenter);
-      setFamilyApplicationStatus(nextFamilyCenter.familyApplicationStatus || null);
-      setFamilyDesignationInput(
-        familyDesignationOptions.includes(nextFamilyCenter.familyDesignation as (typeof familyDesignationOptions)[number])
-          ? (nextFamilyCenter.familyDesignation as (typeof familyDesignationOptions)[number])
-          : ""
-      );
+      const nextCenter = isBusinessCenterSection
+        ? normalizeBusinessCenterPreferences(response.data?.businessCenter)
+        : isSchoolCenterSection
+          ? normalizeFamilyCenterPreferences(response.data?.schoolCenter)
+          : normalizeFamilyCenterPreferences(response.data?.familyCenter);
+      setFamilyCenterPreferences(nextCenter);
+      if (isBusinessCenterSection) {
+        setBusinessCenterSnapshot(nextCenter);
+      } else if (isSchoolCenterSection) {
+        setSchoolCenterSnapshot(nextCenter);
+      } else {
+        setFamilyCenterSnapshot(nextCenter);
+      }
+      setFamilyApplicationStatus(nextCenter.familyApplicationStatus || null);
+      setFamilyDesignationInput(normalizeCenterDesignationInput(nextCenter.familyDesignation, isBusinessCenterSection));
       setProfileRole(response.data?.role ?? null);
       setIsFamilyAccountApplyPanelOpen(false);
       setIsFamilyAccountVerificationPanelOpen(false);
       setFamilyVerificationFiles([]);
       setFamilyVerificationUploadStatus(null);
-      setFamilyCenterStatus("Family account removed. Apply for Family Account is available again.");
+      setFamilyCenterStatus(`${centerLabel} account removed. Apply is available again.`);
     } catch (error) {
       const message = axios.isAxiosError(error)
         ? (error.response?.data as { error?: string } | undefined)?.error || error.response?.data || error.message
-        : "Could not remove family account.";
+        : `Could not remove ${centerLabelLower} account.`;
 
-      setFamilyCenterStatus(typeof message === "string" ? message : "Could not remove family account.");
+      setFamilyCenterStatus(
+        typeof message === "string"
+          ? message
+          : `Could not remove ${centerLabelLower} account.`
+      );
     } finally {
       setIsRemovingFamilyAccount(false);
     }
@@ -2238,6 +3318,320 @@ export const SettingsModal = () => {
       setIsSubmittingBugReport(false);
     }
   };
+
+  const loadPatronageHistory = useCallback(async () => {
+    try {
+      setIsLoadingPatronageHistory(true);
+      setPatronageStatus(null);
+
+      const response = await axios.get<{
+        entries?: PatronageHistoryEntry[];
+      }>("/api/patronage");
+
+      setPatronageHistory(
+        Array.isArray(response.data?.entries)
+          ? response.data.entries.filter(
+              (entry): entry is PatronageHistoryEntry =>
+                typeof entry?.id === "string" &&
+                (entry.donationType === "ONE_TIME" || entry.donationType === "MONTHLY")
+            )
+          : []
+      );
+    } catch {
+      setPatronageHistory([]);
+      setPatronageStatus("Could not load patronage history.");
+    } finally {
+      setIsLoadingPatronageHistory(false);
+    }
+  }, []);
+
+  const onSubmitPatronage = async () => {
+    const amount = Number(patronageAmount);
+    const payerName = patronagePayerName.trim();
+    const payerEmail = patronagePayerEmail.trim();
+
+    if (!payerName) {
+      setPatronageStatus("Please enter the payer name.");
+      return;
+    }
+
+    if (!payerEmail || !/^\S+@\S+\.\S+$/.test(payerEmail)) {
+      setPatronageStatus("Please enter a valid payer email.");
+      return;
+    }
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setPatronageStatus("Please enter a valid amount greater than 0.");
+      return;
+    }
+
+    const amountCents = Math.round(amount * 100);
+    if (amountCents <= 0) {
+      setPatronageStatus("Amount is too small.");
+      return;
+    }
+
+    try {
+      setIsSubmittingPatronage(true);
+      setPatronageStatus(null);
+
+      const response = await axios.post<{
+        checkoutUrl?: string | null;
+        requiresRedirect?: boolean;
+      }>("/api/patronage", {
+        donationType: patronageType,
+        amountCents,
+        currency: "USD",
+        note: patronageNote,
+        payerName,
+        payerEmail,
+      });
+
+      const checkoutUrl = String(response.data?.checkoutUrl ?? "").trim();
+      if (checkoutUrl) {
+        setIsPatronagePaymentPanelOpen(false);
+        setPendingPatronageCheckoutUrl(checkoutUrl);
+        setPendingPatronageRequest({
+          donationType: patronageType,
+          amountCents,
+          currency: "USD",
+          payerName,
+          payerEmail,
+          note: patronageNote.trim() ? patronageNote.trim() : null,
+        });
+        setPatronageStatus("Payment request created. Continue in Billing → Payment Request Panel.");
+        setActiveSection("billing");
+        setDisplaySection("billing");
+        setIsSectionVisible(true);
+        return;
+      }
+
+      setPatronageStatus(
+        patronageType === "MONTHLY"
+          ? "Monthly patronage request submitted. Thank you for supporting In-Accord."
+          : "One-time patronage request submitted. Thank you for supporting In-Accord."
+      );
+      setPatronageAmount("");
+      setPatronageNote("");
+      setPatronagePayerName("");
+      setPatronagePayerEmail("");
+      setIsPatronagePaymentPanelOpen(false);
+      setPendingPatronageCheckoutUrl(null);
+      setPendingPatronageRequest(null);
+      await loadPatronageHistory();
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Could not submit patronage request."
+        : "Could not submit patronage request.";
+      setPatronageStatus(message);
+    } finally {
+      setIsSubmittingPatronage(false);
+    }
+  };
+
+  const onCreatePatronageIntent = async () => {
+    const amount = Number(patronageAmount);
+    const payerName = patronagePayerName.trim();
+    const payerEmail = patronagePayerEmail.trim();
+
+    if (!payerName) {
+      setPatronagePaymentPanelStatus("Please enter the payer name.");
+      return;
+    }
+
+    if (!payerEmail || !/^\S+@\S+\.\S+$/.test(payerEmail)) {
+      setPatronagePaymentPanelStatus("Please enter a valid payer email.");
+      return;
+    }
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setPatronagePaymentPanelStatus("Please enter a valid amount greater than 0.");
+      return;
+    }
+
+    const amountCents = Math.round(amount * 100);
+    if (amountCents <= 0) {
+      setPatronagePaymentPanelStatus("Amount is too small.");
+      return;
+    }
+
+    try {
+      setIsPreparingPatronageIntent(true);
+      setPatronagePaymentPanelStatus(null);
+
+      const response = await axios.post<{
+        clientSecret?: string;
+        publishableKey?: string;
+      }>("/api/patronage/intent", {
+        donationType: patronageType,
+        amountCents,
+        currency: "USD",
+        note: patronageNote,
+        payerName,
+        payerEmail,
+      });
+
+      const clientSecret = String(response.data?.clientSecret ?? "").trim();
+      const publishableKey = String(response.data?.publishableKey ?? "").trim();
+
+      if (!clientSecret || !publishableKey) {
+        setPatronagePaymentPanelStatus("Could not initialize payment form.");
+        return;
+      }
+
+      setPatronageIntentClientSecret(clientSecret);
+      setPatronageStripePublishableKey(publishableKey);
+      setPatronagePaymentPanelStatus("Payment form ready. Enter card/bank details or choose PayPal if available.");
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Could not initialize payment form."
+        : "Could not initialize payment form.";
+      setPatronagePaymentPanelStatus(message);
+    } finally {
+      setIsPreparingPatronageIntent(false);
+    }
+  };
+
+  const onConfirmPatronageIntent = async (paymentIntentId: string) => {
+    try {
+      const response = await axios.post<{ status?: string }>("/api/patronage/intent-confirm", {
+        paymentIntentId,
+      });
+
+      if (String(response.data?.status ?? "").toUpperCase() !== "SUCCEEDED") {
+        setPatronagePaymentPanelStatus("Payment is still processing. Please wait a moment and refresh history.");
+        return;
+      }
+
+      setPatronageStatus("Payment confirmed. Thank you for supporting In-Accord.");
+      setPatronagePaymentPanelStatus("Payment completed successfully.");
+      setPatronageIntentClientSecret(null);
+      setPatronageStripePublishableKey(null);
+      setPendingPatronageCheckoutUrl(null);
+      setPendingPatronageRequest(null);
+      setPatronageAmount("");
+      setPatronageNote("");
+      setPatronagePayerName("");
+      setPatronagePayerEmail("");
+      setIsPatronagePaymentPanelOpen(false);
+      await loadPatronageHistory();
+    } catch {
+      setPatronagePaymentPanelStatus("Payment finished, but confirmation failed. Please refresh history.");
+      await loadPatronageHistory();
+    }
+  };
+
+  const onCancelLatestPendingPatronage = async () => {
+    const latestPending = patronageHistory.find((entry) => entry.status === "PENDING");
+    if (!latestPending) {
+      setPatronageStatus("No pending patronage request found.");
+      return;
+    }
+
+    try {
+      setIsCancellingPatronage(true);
+      setPatronageStatus(null);
+
+      await axios.patch("/api/patronage", {
+        id: latestPending.id,
+      });
+
+      setPatronageStatus("Pending patronage request canceled.");
+      await loadPatronageHistory();
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Could not cancel patronage request."
+        : "Could not cancel patronage request.";
+      setPatronageStatus(message);
+    } finally {
+      setIsCancellingPatronage(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isModalOpen || activeSection !== "becomePatron") {
+      return;
+    }
+
+    void loadPatronageHistory();
+  }, [activeSection, isModalOpen, loadPatronageHistory]);
+
+  useEffect(() => {
+    if (!isModalOpen || activeSection !== "becomePatron" || typeof window === "undefined") {
+      return;
+    }
+
+    const currentUrl = new URL(window.location.href);
+    const patronageState = String(currentUrl.searchParams.get("patronage") ?? "").trim().toLowerCase();
+    const patronageSessionId = String(currentUrl.searchParams.get("patronageSessionId") ?? "").trim();
+    const hasPatronageParams = currentUrl.searchParams.has("patronage") || currentUrl.searchParams.has("patronageSessionId");
+
+    if (patronageState === "success") {
+      setPendingPatronageCheckoutUrl(null);
+      setPendingPatronageRequest(null);
+      if (patronageSessionId) {
+        setPatronageStatus("Checkout completed. Verifying payment status...");
+
+        void axios
+          .get<{
+            status?: "PENDING" | "SUCCEEDED" | "FAILED" | "CANCELED" | "REFUNDED";
+          }>("/api/patronage/verify", {
+            params: {
+              sessionId: patronageSessionId,
+            },
+          })
+          .then((response) => {
+            const status = response.data?.status;
+            if (status === "SUCCEEDED") {
+              setPatronageStatus("Payment confirmed. Thank you for supporting In-Accord.");
+              return;
+            }
+
+            if (status === "PENDING") {
+              setPatronageStatus("Payment is still processing. Check back in a moment.");
+              return;
+            }
+
+            if (status === "FAILED") {
+              setPatronageStatus("Payment failed. You can try again whenever you’re ready.");
+              return;
+            }
+
+            if (status === "CANCELED") {
+              setPatronageStatus("Checkout expired or was canceled. You can try again whenever you’re ready.");
+              return;
+            }
+
+            if (status === "REFUNDED") {
+              setPatronageStatus("This patronage payment was refunded.");
+              return;
+            }
+
+            setPatronageStatus("Checkout completed. Thank you for supporting In-Accord.");
+          })
+          .catch(() => {
+            setPatronageStatus("Checkout completed. We couldn't verify payment yet, but it may still process shortly.");
+          })
+          .finally(() => {
+            void loadPatronageHistory();
+          });
+      } else {
+        setPatronageStatus("Checkout completed. Thank you for supporting In-Accord.");
+        void loadPatronageHistory();
+      }
+    } else if (patronageState === "cancel") {
+      setPendingPatronageCheckoutUrl(null);
+      setPendingPatronageRequest(null);
+      setPatronageStatus("Checkout canceled. You can try again whenever you’re ready.");
+    }
+
+    if (hasPatronageParams) {
+      currentUrl.searchParams.delete("patronage");
+      currentUrl.searchParams.delete("patronageSessionId");
+      const nextPath = `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`;
+      window.history.replaceState({}, "", nextPath);
+    }
+  }, [activeSection, isModalOpen, loadPatronageHistory]);
 
   const hydrateServerTags = useCallback(async () => {
     try {
@@ -2747,6 +4141,10 @@ export const SettingsModal = () => {
     applyCustomCss(customCss);
   }, [customCss]);
 
+  useEffect(() => {
+    applyAccessibilityPreferencesToDocument(accessibilityPreferences);
+  }, [accessibilityPreferences]);
+
   const loadBlockedProfiles = async () => {
     try {
       setIsLoadingBlockedProfiles(true);
@@ -2900,8 +4298,8 @@ export const SettingsModal = () => {
   const onSavePronouns = async (pronounsOverride?: string) => {
     const trimmedPronouns = (pronounsOverride ?? pronouns).trim();
 
-    if (trimmedPronouns.length > 40) {
-      setPronounsStatus("Pronouns must be 40 characters or fewer.");
+    if (trimmedPronouns.length > 80) {
+      setPronounsStatus("Pronouns must be 80 characters or fewer.");
       return false;
     }
 
@@ -3644,6 +5042,9 @@ export const SettingsModal = () => {
     const trimmedCurrent = currentPassword.trim();
     const trimmedNext = newPassword.trim();
     const trimmedConfirm = confirmPassword.trim();
+    const trimmedCredentialPin = credentialPin.trim();
+    const trimmedCredentialPinConfirmOne = credentialPinConfirmOne.trim();
+    const trimmedCredentialPinConfirmTwo = credentialPinConfirmTwo.trim();
 
     setPasswordError(null);
     setPasswordSuccess(null);
@@ -3668,17 +5069,36 @@ export const SettingsModal = () => {
       return;
     }
 
+    if (!trimmedCredentialPin || !trimmedCredentialPinConfirmOne || !trimmedCredentialPinConfirmTwo) {
+      setPasswordError("Security PIN and both confirmations are required.");
+      return;
+    }
+
+    if (
+      trimmedCredentialPin !== trimmedCredentialPinConfirmOne ||
+      trimmedCredentialPin !== trimmedCredentialPinConfirmTwo
+    ) {
+      setPasswordError("Security PIN confirmations must all match.");
+      return;
+    }
+
     try {
       setIsChangingPassword(true);
 
       await axios.patch("/api/profile/password", {
         currentPassword: trimmedCurrent,
         newPassword: trimmedNext,
+        credentialPin: trimmedCredentialPin,
+        credentialPinConfirmOne: trimmedCredentialPinConfirmOne,
+        credentialPinConfirmTwo: trimmedCredentialPinConfirmTwo,
       });
 
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
+      setCredentialPin("");
+      setCredentialPinConfirmOne("");
+      setCredentialPinConfirmTwo("");
       setPasswordSuccess("Password updated successfully.");
     } catch (error) {
       if (axios.isAxiosError(error)) {
@@ -3830,6 +5250,41 @@ export const SettingsModal = () => {
                 </button>
               </div>
 
+              <div className="relative">
+                <input
+                  type={showCredentialPin ? "text" : "password"}
+                  value={credentialPin}
+                  onChange={(event) => setCredentialPin(event.target.value)}
+                  placeholder="Security PIN"
+                  className="w-full rounded-xl border border-black/25 bg-[#1a1b1e] px-3 py-2 pr-10 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCredentialPin((current) => !current)}
+                  className="absolute inset-y-0 right-0 inline-flex w-10 items-center justify-center text-[#a4aab4] transition hover:text-white"
+                  aria-label={showCredentialPin ? "Hide security PIN" : "Show security PIN"}
+                  title={showCredentialPin ? "Hide security PIN" : "Show security PIN"}
+                >
+                  {showCredentialPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+
+              <input
+                type={showCredentialPin ? "text" : "password"}
+                value={credentialPinConfirmOne}
+                onChange={(event) => setCredentialPinConfirmOne(event.target.value)}
+                placeholder="Confirm security PIN (1/2)"
+                className="w-full rounded-xl border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+              />
+
+              <input
+                type={showCredentialPin ? "text" : "password"}
+                value={credentialPinConfirmTwo}
+                onChange={(event) => setCredentialPinConfirmTwo(event.target.value)}
+                placeholder="Confirm security PIN (2/2)"
+                className="w-full rounded-xl border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+              />
+
               {passwordError ? (
                 <p className="rounded-xl border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
                   {passwordError}
@@ -3856,6 +5311,26 @@ export const SettingsModal = () => {
                 ) : (
                   "Update Password"
                 )}
+              </Button>
+            </div>
+
+            <div className="mx-auto mt-6 w-full max-w-[28rem] rounded-3xl border border-yellow-500/25 bg-yellow-500/10 p-4">
+              <p className="text-center text-xs font-semibold uppercase tracking-[0.08em] text-yellow-200">
+                Patronage
+              </p>
+              <p className="mt-2 text-center text-xs text-yellow-100/90">
+                Open your patron area to submit support or cancel any pending payment.
+              </p>
+              <Button
+                type="button"
+                onClick={() => {
+                  setActiveSection("becomePatron");
+                  setDisplaySection("becomePatron");
+                  setIsSectionVisible(true);
+                }}
+                className="mt-3 w-full border border-yellow-500/35 bg-yellow-500/20 text-yellow-100 hover:bg-yellow-500/30"
+              >
+                Open Patron Area
               </Button>
             </div>
 
@@ -5178,8 +6653,8 @@ export const SettingsModal = () => {
             <div className="mt-4 space-y-2">
               <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-white">Allow direct messages from server members</p>
-                  <p className="text-xs text-[#949ba4]">If disabled, only friends can DM you directly.</p>
+                  <p className="text-sm font-semibold text-white">Allow private messages from server members</p>
+                  <p className="text-xs text-[#949ba4]">If disabled, only friends can PM you directly.</p>
                 </div>
 
                 <button
@@ -5197,7 +6672,7 @@ export const SettingsModal = () => {
                       : "border-zinc-600 bg-zinc-700"
                   }`}
                   aria-pressed={contentSocialPreferences.allowDirectMessagesFromServerMembers}
-                  aria-label="Toggle direct messages from server members"
+                  aria-label="Toggle private messages from server members"
                 >
                   <span
                     className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
@@ -5446,7 +6921,341 @@ export const SettingsModal = () => {
       );
     }
 
+    if (displaySection === "becomePatron") {
+      return (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
+            <p className="text-sm font-medium text-white">Become a Patron</p>
+            <p className="mt-1 text-xs text-[#949ba4]">
+              Support In-Accord with a one-time donation or monthly patronage.
+            </p>
+
+            <div className="mt-3 grid gap-3 rounded-xl border border-white/10 bg-black/20 p-3">
+              <div className="rounded-lg border border-white/10 bg-[#15161a] p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#b5bac1]">Payment Information Panel</p>
+                <p className="mt-1 text-xs text-[#949ba4]">
+                  Press <span className="font-semibold text-white">Create Payment Request</span> to open a dedicated payment information popup panel.
+                </p>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-[160px_1fr]">
+                <select
+                  value={patronageType}
+                  onChange={(event) => {
+                    setPatronageType(event.target.value as "ONE_TIME" | "MONTHLY");
+                    setPatronageStatus(null);
+                    setPendingPatronageCheckoutUrl(null);
+                    setPendingPatronageRequest(null);
+                  }}
+                  className="h-9 rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                >
+                  <option value="ONE_TIME">One-Time</option>
+                  <option value="MONTHLY">Monthly</option>
+                </select>
+
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={patronageAmount}
+                  onChange={(event) => {
+                    setPatronageAmount(event.target.value);
+                    setPatronageStatus(null);
+                    setPendingPatronageCheckoutUrl(null);
+                    setPendingPatronageRequest(null);
+                  }}
+                  placeholder="Amount in USD"
+                  className="h-9 rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                />
+              </div>
+
+              <textarea
+                value={patronageNote}
+                onChange={(event) => {
+                  setPatronageNote(event.target.value);
+                  setPatronageStatus(null);
+                  setPendingPatronageCheckoutUrl(null);
+                  setPendingPatronageRequest(null);
+                }}
+                rows={3}
+                maxLength={500}
+                placeholder="Optional note"
+                className="w-full resize-y rounded-md border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+              />
+
+              {pendingPatronageCheckoutUrl ? (
+                <p className="rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
+                  Payment request is ready. Open the <span className="font-semibold">Billing</span> panel to continue payment.
+                </p>
+              ) : null}
+
+              {patronageStatus ? (
+                <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-[#b5bac1]">
+                  {patronageStatus}
+                </p>
+              ) : null}
+
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void onCancelLatestPendingPatronage()}
+                  disabled={isCancellingPatronage || !patronageHistory.some((entry) => entry.status === "PENDING")}
+                  className="border-rose-500/35 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isCancellingPatronage ? "Canceling..." : "Cancel Pending"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void loadPatronageHistory()}
+                  disabled={isLoadingPatronageHistory}
+                  className="border-white/20 bg-transparent text-white hover:bg-white/10"
+                >
+                  {isLoadingPatronageHistory ? "Refreshing..." : "Refresh History"}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setIsPatronagePaymentPanelOpen(true);
+                    setPatronageIntentClientSecret(null);
+                    setPatronageStripePublishableKey(null);
+                    setPatronagePaymentPanelStatus(null);
+                  }}
+                  disabled={isSubmittingPatronage}
+                  className="bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSubmittingPatronage ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Opening Panel...
+                    </span>
+                  ) : (
+                    "Create Payment Request"
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <Dialog open={isPatronagePaymentPanelOpen} onOpenChange={setIsPatronagePaymentPanelOpen}>
+            <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Payment Information</DialogTitle>
+                <DialogDescription>
+                  Fill in payer details, then load the in-app secure payment form. Card/bank details are entered directly below. PayPal appears if enabled in Stripe.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-3">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <input
+                    type="text"
+                    value={patronagePayerName}
+                    onChange={(event) => {
+                      setPatronagePayerName(event.target.value);
+                      setPatronageStatus(null);
+                      setPendingPatronageCheckoutUrl(null);
+                      setPendingPatronageRequest(null);
+                    }}
+                    placeholder="Payer full name"
+                    className="h-9 rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                  />
+                  <input
+                    type="email"
+                    value={patronagePayerEmail}
+                    onChange={(event) => {
+                      setPatronagePayerEmail(event.target.value);
+                      setPatronageStatus(null);
+                      setPendingPatronageCheckoutUrl(null);
+                      setPendingPatronageRequest(null);
+                    }}
+                    placeholder="Payer email"
+                    className="h-9 rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                  />
+                </div>
+
+                <div className="rounded-md border border-white/10 bg-black/20 px-3 py-2 text-xs text-[#b5bac1]">
+                  <p>Type: {patronageType === "MONTHLY" ? "Monthly" : "One-Time"}</p>
+                  <p>Amount: {patronageAmount || "0"} USD</p>
+                </div>
+
+                {patronageStripePromise && patronageElementsOptions ? (
+                  <Elements stripe={patronageStripePromise} options={patronageElementsOptions}>
+                    <PatronageEmbeddedPaymentForm
+                      onSuccess={onConfirmPatronageIntent}
+                      onErrorMessage={(message) => setPatronagePaymentPanelStatus(message || null)}
+                    />
+                  </Elements>
+                ) : null}
+
+                {patronagePaymentPanelStatus ? (
+                  <p className="rounded-md border border-white/10 bg-black/20 px-3 py-2 text-xs text-[#b5bac1]">
+                    {patronagePaymentPanelStatus}
+                  </p>
+                ) : null}
+              </div>
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsPatronagePaymentPanelOpen(false)}
+                  className="border-white/20 bg-transparent text-white hover:bg-white/10"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => void onCreatePatronageIntent()}
+                  disabled={isPreparingPatronageIntent}
+                  className="bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isPreparingPatronageIntent ? "Loading Form..." : "Load Card/Bank + PayPal Form"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
+            <p className="text-sm font-medium text-white">Your Patronage History</p>
+            <p className="mt-1 text-xs text-[#949ba4]">Recent donations and patronage requests tied to your account.</p>
+
+            <div className="mt-3 overflow-hidden rounded-xl border border-white/10 bg-black/20">
+              <div className="grid grid-cols-[0.8fr_0.8fr_0.9fr_1fr] gap-2 border-b border-white/10 bg-[#1a1b1e] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                <p>Type</p>
+                <p>Status</p>
+                <p>Amount</p>
+                <p>Created</p>
+              </div>
+
+              <div>
+                {isLoadingPatronageHistory ? (
+                  <p className="px-3 py-3 text-xs text-[#b5bac1]">Loading history...</p>
+                ) : patronageHistory.length === 0 ? (
+                  <p className="px-3 py-3 text-xs text-[#949ba4]">No patronage records yet.</p>
+                ) : (
+                  patronageHistory.map((entry, index) => (
+                    <div
+                      key={entry.id}
+                      className={`grid grid-cols-[0.8fr_0.8fr_0.9fr_1fr] gap-2 px-3 py-2 text-xs text-[#dbdee1] ${
+                        index % 2 === 0 ? "bg-[#17181b]" : "bg-[#1d1f24]"
+                      }`}
+                    >
+                      <p>{entry.donationType === "ONE_TIME" ? "One-Time" : "Monthly"}</p>
+                      <p>{entry.status}</p>
+                      <p>{(entry.amountCents / 100).toFixed(2)} {entry.currency}</p>
+                      <p>{entry.createdAt ? new Date(entry.createdAt).toLocaleString() : "N/A"}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (displaySection === "billing") {
+      const hasPendingPatronage = patronageHistory.some((entry) => entry.status === "PENDING");
+      const latestSucceeded = patronageHistory.find((entry) => entry.status === "SUCCEEDED");
+
+      return (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
+            <p className="text-sm font-medium text-white">Payment Information</p>
+            <p className="mt-1 text-xs text-[#949ba4]">
+              Patron payments are handled through secure Stripe Checkout. This app does not collect raw card/bank numbers. Enter card/bank details on the Stripe page.
+            </p>
+
+            <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-[#b5bac1]">
+              <p>• Checkout provider: Stripe</p>
+              <p>• Supported at checkout: cards and Stripe-supported methods for your region</p>
+              <p>• Stored on In-Accord: no raw card numbers</p>
+              <p>
+                • Latest successful payment: {latestSucceeded ? `${(latestSucceeded.amountCents / 100).toFixed(2)} ${latestSucceeded.currency}` : "None yet"}
+              </p>
+              <p>
+                • Pending payment request: {hasPendingPatronage ? "Yes" : "No"}
+              </p>
+            </div>
+
+            {pendingPatronageCheckoutUrl ? (
+              <div className="mt-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-xs text-emerald-100">
+                <p className="font-semibold">Pending Stripe Checkout</p>
+                <p className="mt-1 break-all text-emerald-200/90">{pendingPatronageCheckoutUrl}</p>
+
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      if (typeof window !== "undefined") {
+                        window.open(pendingPatronageCheckoutUrl, "_blank", "noopener,noreferrer");
+                      }
+                    }}
+                    className="h-8 bg-emerald-600 px-3 text-xs text-white hover:bg-emerald-500"
+                  >
+                    Open Stripe Checkout
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => setPendingPatronageCheckoutUrl(null)}
+                    className="h-8 border border-white/20 bg-transparent px-3 text-xs text-white hover:bg-white/10"
+                  >
+                    Clear
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            {patronageStatus ? (
+              <p className="mt-3 rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
+                {patronageStatus}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      );
+    }
+
     if (displaySection === "notifications") {
+      const notificationRows: Array<{
+        key: keyof NotificationPreferences;
+        title: string;
+        description: string;
+      }> = [
+        {
+          key: "enableDesktopNotifications",
+          title: "Desktop Notifications",
+          description: "Show system notifications when In-Accord is open.",
+        },
+        {
+          key: "enableSoundEffects",
+          title: "Sound Effects",
+          description: "Play sounds for message and app events.",
+        },
+        {
+          key: "emailNotifications",
+          title: "Email Notifications",
+          description: "Send summary notifications to your account email.",
+        },
+        {
+          key: "notifyOnDirectMessages",
+          title: "Direct Message Alerts",
+          description: "Notify when someone sends you a direct message.",
+        },
+        {
+          key: "notifyOnReplies",
+          title: "Reply Alerts",
+          description: "Notify when someone replies to one of your messages.",
+        },
+        {
+          key: "notifyOnServerMessages",
+          title: "Server Message Alerts",
+          description: "Notify for server channel activity based on your subscriptions.",
+        },
+      ];
+
       return (
         <div className="space-y-4">
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
@@ -5457,52 +7266,407 @@ export const SettingsModal = () => {
           </div>
 
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-medium text-white">Enable @Mentions</p>
-                <p className="mt-1 text-xs text-[#949ba4]">
-                  When enabled, typing <span className="font-semibold text-[#c9cdfb]">@</span> in chat suggests users and server roles.
-                </p>
-              </div>
+            <div className="space-y-2">
+              {notificationRows.map((item) => (
+                <div key={`notification-setting-${item.key}`} className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                  <div>
+                    <p className="text-sm font-medium text-white">{item.title}</p>
+                    <p className="mt-1 text-xs text-[#949ba4]">{item.description}</p>
+                  </div>
 
-              <button
-                type="button"
-                onClick={onToggleMentions}
-                className={`inline-flex h-7 w-12 items-center rounded-full border transition ${
-                  mentionsEnabled
-                    ? "border-emerald-400/50 bg-emerald-500/40"
-                    : "border-zinc-600 bg-zinc-700"
-                }`}
-                aria-pressed={mentionsEnabled}
-                aria-label="Toggle @Mentions"
-              >
-                <span
-                  className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
-                    mentionsEnabled ? "translate-x-6" : "translate-x-1"
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNotificationPreferences((current) => ({
+                        ...current,
+                        [item.key]: !current[item.key],
+                      }));
+                      setNotificationStatus(null);
+                    }}
+                    className={`inline-flex h-7 w-12 items-center rounded-full border transition ${
+                      notificationPreferences[item.key]
+                        ? "border-emerald-400/50 bg-emerald-500/40"
+                        : "border-zinc-600 bg-zinc-700"
+                    }`}
+                    aria-pressed={notificationPreferences[item.key]}
+                    aria-label={`Toggle ${item.title}`}
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
+                        notificationPreferences[item.key] ? "translate-x-6" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
+                </div>
+              ))}
+
+              <div className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                <div>
+                  <p className="text-sm font-medium text-white">Enable @Mentions</p>
+                  <p className="mt-1 text-xs text-[#949ba4]">
+                    When enabled, typing <span className="font-semibold text-[#c9cdfb]">@</span> in chat suggests users and server roles.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={onToggleMentions}
+                  className={`inline-flex h-7 w-12 items-center rounded-full border transition ${
+                    mentionsEnabled
+                      ? "border-emerald-400/50 bg-emerald-500/40"
+                      : "border-zinc-600 bg-zinc-700"
                   }`}
-                />
-              </button>
+                  aria-pressed={mentionsEnabled}
+                  aria-label="Toggle @Mentions"
+                >
+                  <span
+                    className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
+                      mentionsEnabled ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
             </div>
 
-            <p className="mt-3 rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
-              Current status: <span className="font-semibold text-white">{mentionsEnabled ? "On" : "Off"}</span>
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <p className="rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
+                @Mentions: <span className="font-semibold text-white">{mentionsEnabled ? "On" : "Off"}</span>
+              </p>
+              <Button
+                type="button"
+                onClick={() => void onSaveNotificationPreferences()}
+                disabled={isSavingNotificationPreferences}
+                className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSavingNotificationPreferences ? "Saving..." : "Save Notifications"}
+              </Button>
+            </div>
+
+            {notificationStatus ? (
+              <p className="mt-3 rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
+                {notificationStatus}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      );
+    }
+
+    if (displaySection === "textImages") {
+      const textImageRows: Array<{
+        key: keyof TextImagesPreferences;
+        title: string;
+        description: string;
+      }> = [
+        {
+          key: "showEmbeds",
+          title: "Show Embeds",
+          description: "Render rich embeds for supported links in chat.",
+        },
+        {
+          key: "showLinkPreviews",
+          title: "Show Link Previews",
+          description: "Display preview cards for links shared in messages.",
+        },
+        {
+          key: "showInlineMedia",
+          title: "Show Inline Media",
+          description: "Show images and media inline instead of as plain attachments.",
+        },
+        {
+          key: "autoplayGifs",
+          title: "Autoplay GIFs",
+          description: "Automatically animate GIF media in chat.",
+        },
+        {
+          key: "autoplayStickers",
+          title: "Autoplay Stickers",
+          description: "Automatically animate sticker content where available.",
+        },
+        {
+          key: "convertEmoticons",
+          title: "Convert Emoticons to Emoji",
+          description: "Turn text emoticons like :) into emoji when possible.",
+        },
+      ];
+
+      return (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
+            <p className="text-sm font-medium text-white">Text &amp; Images Preferences</p>
+            <p className="mt-1 text-xs text-[#949ba4]">
+              Control how text, links, and media are displayed throughout chat.
             </p>
+          </div>
+
+          <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
+            <div className="space-y-2">
+              {textImageRows.map((item) => (
+                <div key={`text-images-setting-${item.key}`} className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                  <div>
+                    <p className="text-sm font-medium text-white">{item.title}</p>
+                    <p className="mt-1 text-xs text-[#949ba4]">{item.description}</p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTextImagesPreferences((current) => ({
+                        ...current,
+                        [item.key]: !current[item.key],
+                      }));
+                      setTextImagesStatus(null);
+                    }}
+                    className={`inline-flex h-7 w-12 items-center rounded-full border transition ${
+                      textImagesPreferences[item.key]
+                        ? "border-emerald-400/50 bg-emerald-500/40"
+                        : "border-zinc-600 bg-zinc-700"
+                    }`}
+                    aria-pressed={textImagesPreferences[item.key]}
+                    aria-label={`Toggle ${item.title}`}
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
+                        textImagesPreferences[item.key] ? "translate-x-6" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <p className="rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
+                Inline media: <span className="font-semibold text-white">{textImagesPreferences.showInlineMedia ? "On" : "Off"}</span>
+              </p>
+              <Button
+                type="button"
+                onClick={() => void onSaveTextImagesPreferences()}
+                disabled={isSavingTextImagesPreferences}
+                className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSavingTextImagesPreferences ? "Saving..." : "Save Text & Images"}
+              </Button>
+            </div>
+
+            {textImagesStatus ? (
+              <p className="mt-3 rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
+                {textImagesStatus}
+              </p>
+            ) : null}
           </div>
         </div>
       );
     }
 
     if (displaySection === "emoji") {
+      const uploadedEmojiUrls = emojiPreferences.uploadedEmojiUrls;
+
       return (
         <div className="space-y-4">
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
             <p className="text-sm font-medium text-white">Emoji Settings</p>
             <p className="mt-1 text-xs text-[#949ba4]">
-              Emoji menu is now available in the settings rail.
+              Configure emoji picker behavior and quick reactions.
             </p>
-            <div className="mt-4 rounded-xl border border-[#5865f2]/25 bg-[#5865f2]/10 px-3 py-2 text-xs text-[#cdd2ff]">
-              Next step: wire favorite emoji sets, default reaction style, and per-device emoji input preferences.
+
+            <div className="mt-3 space-y-2">
+              {([
+                {
+                  key: "showComposerEmojiButton",
+                  title: "Show Composer Emoji Button",
+                  description: "Display a quick emoji button next to chat input tools.",
+                },
+                {
+                  key: "compactReactionButtons",
+                  title: "Compact Reaction Buttons",
+                  description: "Use tighter spacing for message reaction chips.",
+                },
+              ] as const).map((item) => (
+                <div key={`emoji-setting-${item.key}`} className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                  <div>
+                    <p className="text-sm font-medium text-white">{item.title}</p>
+                    <p className="mt-1 text-xs text-[#949ba4]">{item.description}</p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmojiPreferences((current) => ({
+                        ...current,
+                        [item.key]: !current[item.key],
+                      }));
+                      setEmojiStatus(null);
+                    }}
+                    className={`inline-flex h-7 w-12 items-center rounded-full border transition ${
+                      emojiPreferences[item.key]
+                        ? "border-emerald-400/50 bg-emerald-500/40"
+                        : "border-zinc-600 bg-zinc-700"
+                    }`}
+                    aria-pressed={emojiPreferences[item.key]}
+                    aria-label={`Toggle ${item.title}`}
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
+                        emojiPreferences[item.key] ? "translate-x-6" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
+                </div>
+              ))}
             </div>
+
+            <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                Default Composer Emoji
+              </label>
+              <input
+                value={emojiPreferences.defaultComposerEmoji}
+                onChange={(event) => {
+                  setEmojiPreferences((current) => ({
+                    ...current,
+                    defaultComposerEmoji: event.target.value,
+                  }));
+                  setEmojiStatus(null);
+                }}
+                placeholder="😊"
+                className="mt-1 h-9 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+              />
+              <p className="mt-1 text-[11px] text-[#949ba4]">
+                Used by the quick emoji button in chat input.
+              </p>
+            </div>
+
+            <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                Favorite Emojis (space separated)
+              </label>
+              <textarea
+                value={emojiFavoritesInput}
+                onChange={(event) => {
+                  setEmojiFavoritesInput(event.target.value);
+                  setEmojiStatus(null);
+                }}
+                placeholder="😀 😂 😍 🔥 👏 🎉 👍 👀"
+                className="mt-1 min-h-18 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+              />
+              <p className="mt-1 text-[11px] text-[#949ba4]">
+                Controls quick reaction options in message emoji picker.
+              </p>
+            </div>
+
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                  Preview ({uploadedEmojiUrls.length})
+                </p>
+                <p className="mt-1 text-[11px] text-[#949ba4]">
+                  Uploaded emojis appear here immediately.
+                </p>
+
+                {uploadedEmojiUrls.length === 0 ? (
+                  <p className="mt-2 text-[11px] text-[#949ba4]">No uploaded emojis yet.</p>
+                ) : (
+                  <div className="mt-2 grid grid-cols-5 gap-2 sm:grid-cols-6">
+                    {uploadedEmojiUrls.map((url) => (
+                      <div key={`uploaded-emoji-${url}`} className="group relative">
+                        <div className="relative h-10 w-10 overflow-hidden rounded-md border border-white/10 bg-[#15161a]">
+                          <Image
+                            src={url}
+                            alt="Uploaded emoji"
+                            fill
+                            className="object-contain"
+                            unoptimized
+                          />
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEmojiPreferences((current) => ({
+                              ...current,
+                              uploadedEmojiUrls: current.uploadedEmojiUrls.filter((item) => item !== url),
+                            }));
+                            setEmojiStatus("Emoji removed from library. Click Save Emoji to persist.");
+                          }}
+                          className="absolute -right-1 -top-1 hidden h-4 w-4 items-center justify-center rounded-full border border-rose-500/50 bg-rose-500/70 text-[10px] text-white group-hover:inline-flex"
+                          aria-label="Remove uploaded emoji"
+                          title="Remove"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                  Upload Emoji
+                </p>
+                <p className="mt-1 text-[11px] text-[#949ba4]">
+                  Upload multiple emoji images at once (PNG, JPG, GIF, WEBP, SVG).
+                </p>
+
+                <div className="mt-2 rounded-md border border-white/10 bg-[#1a1b1e] p-2">
+                  <FileUpload
+                    endpoint="emojiImage"
+                    value={emojiUploadDraftUrl}
+                    multiple
+                    onChange={(value) => {
+                      const uploadedUrl = String(value ?? "").trim();
+                      setEmojiUploadDraftUrl(uploadedUrl);
+                    }}
+                    onUploadComplete={(urls) => {
+                      const uploadedUrls = urls
+                        .map((item) => String(item ?? "").trim())
+                        .filter((item) => item.length > 0);
+
+                      if (uploadedUrls.length === 0) {
+                        setEmojiStatus("Upload finished, but no emoji URL was returned.");
+                        return;
+                      }
+
+                      setEmojiPreferences((current) => ({
+                        ...current,
+                        uploadedEmojiUrls: [...uploadedUrls, ...current.uploadedEmojiUrls]
+                          .filter((item, index, arr) => arr.indexOf(item) === index)
+                          .slice(0, 120),
+                      }));
+                      setEmojiStatus(
+                        uploadedUrls.length === 1
+                          ? "1 emoji uploaded. Click Save Emoji to persist."
+                          : `${uploadedUrls.length} emojis uploaded. Click Save Emoji to persist.`
+                      );
+                    }}
+                    onUploadError={(message) => {
+                      setEmojiStatus(`Upload failed: ${message}`);
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <p className="rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
+                Composer button: <span className="font-semibold text-white">{emojiPreferences.showComposerEmojiButton ? "On" : "Off"}</span>
+              </p>
+              <Button
+                type="button"
+                onClick={() => void onSaveEmojiPreferences()}
+                disabled={isSavingEmojiPreferences}
+                className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSavingEmojiPreferences ? "Saving..." : "Save Emoji"}
+              </Button>
+            </div>
+
+            {emojiStatus ? (
+              <p className="mt-3 rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
+                {emojiStatus}
+              </p>
+            ) : null}
           </div>
         </div>
       );
@@ -5664,17 +7828,21 @@ export const SettingsModal = () => {
       );
     }
 
-    if (displaySection === "discordDeveloper") {
+    if (displaySection === "OtherDeveloper") {
       return (
-        <DiscordDeveloperPanel
-          apps={discordApps}
-          bots={discordBots}
-          isSaving={isSavingDiscordConfigs}
-          status={discordConfigsStatus}
-          onStatusChange={setDiscordConfigsStatus}
-          onSavingChange={setIsSavingDiscordConfigs}
-          onAppsChange={setDiscordApps}
-          onBotsChange={setDiscordBots}
+        <OtherDeveloperPanel
+          apps={OtherApps}
+          bots={OtherBots}
+          botGhost={botGhostIntegration}
+          botAutoImportOnSave={OtherBotAutoImportOnSave}
+          isSaving={isSavingOtherConfigs}
+          status={OtherConfigsStatus}
+          onStatusChange={setOtherConfigsStatus}
+          onSavingChange={setIsSavingOtherConfigs}
+          onAppsChange={setOtherApps}
+          onBotsChange={setOtherBots}
+          onBotGhostChange={setBotGhostIntegration}
+          onBotAutoImportOnSaveChange={setOtherBotAutoImportOnSave}
         />
       );
     }
@@ -6098,22 +8266,22 @@ export const SettingsModal = () => {
       );
     }
 
-    if (displaySection === "familyCenter") {
+    if (displaySection === "familyCenter" || displaySection === "businessCenter" || displaySection === "schoolCenter") {
       return (
         <div className="space-y-4">
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-medium text-white">Family Center Controls</p>
+                <p className="text-sm font-medium text-white">{centerLabel} Center Controls</p>
                 <p className="mt-1 text-xs text-[#949ba4]">
-                  Select a family account to configure family oversight controls.
+                  Select a {centerLabel.toLowerCase()} account to configure {centerLabel.toLowerCase()} oversight controls.
                 </p>
               </div>
 
               <div className="flex flex-wrap items-center justify-end gap-2">
                 {familyApplicationStatus ? (
                   <span className="inline-flex h-8 items-center rounded-md border border-emerald-500/35 bg-emerald-500/15 px-3 text-xs font-semibold text-emerald-200">
-                    Status: {familyApplicationStatus}
+                    Status: {formattedFamilyApplicationStatus}
                   </span>
                 ) : null}
 
@@ -6127,7 +8295,7 @@ export const SettingsModal = () => {
                       : "bg-[#5865f2] hover:bg-[#4752c4]"
                   }`}
                 >
-                  Apply for Family Account
+                  Apply for {centerLabel} Account
                 </Button>
 
                 {isFamilyApplicationApproved ? (
@@ -6137,7 +8305,7 @@ export const SettingsModal = () => {
                     disabled={isRemovingFamilyAccount}
                     className="h-8 border border-rose-500/35 bg-rose-500/15 px-3 text-xs text-rose-200 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {isRemovingFamilyAccount ? "Removing..." : "Remove Family Account"}
+                    {isRemovingFamilyAccount ? "Removing..." : `Remove ${centerLabel} Account`}
                   </Button>
                 ) : null}
               </div>
@@ -6145,16 +8313,16 @@ export const SettingsModal = () => {
 
             {!isFamilyCenterEditable ? (
               <p className="mt-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
-                Family Center fields are view-only. Only Family or Administrator roles can edit settings.
+                {centerLabel} Center fields are view-only. Only {centerLabel} or Administrator roles can edit settings.
               </p>
             ) : null}
 
             <Dialog open={isFamilyAccountApplyPanelOpen} onOpenChange={setIsFamilyAccountApplyPanelOpen}>
               <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-2xl">
                 <DialogHeader>
-                  <DialogTitle>Apply for Family Account</DialogTitle>
+                  <DialogTitle>Apply for {centerLabel} Account</DialogTitle>
                   <DialogDescription className="text-[#949ba4]">
-                    Start a Family Account request for your household profile setup.
+                    Start a {centerLabel} Account request for your profile setup.
                   </DialogDescription>
                 </DialogHeader>
 
@@ -6162,16 +8330,12 @@ export const SettingsModal = () => {
                   <div className="rounded-lg border border-white/10 bg-black/20 p-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">What happens next</p>
                     <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-[#b5bac1]">
-                      <li>Submit your household account details for review.</li>
-                      <li>Upload your ID for verification.</li>
+                      <li>Submit your Business account details for review.</li>
+                      <li>Upload your ID and A.O.I. for verification.</li>
                       <li>In-Accord staff validates account eligibility.</li>
-                      <li>Family Center permissions are enabled after approval.</li>
+                      <li>{centerLabel} Center permissions are enabled after approval.</li>
                     </ul>
                   </div>
-
-                  <p className="text-xs text-[#949ba4]">
-                    This panel is ready for backend request wiring.
-                  </p>
                 </div>
 
                 <DialogFooter className="gap-2 sm:justify-end">
@@ -6200,7 +8364,7 @@ export const SettingsModal = () => {
                 <DialogHeader>
                   <DialogTitle>ID Verification Upload</DialogTitle>
                   <DialogDescription className="text-[#949ba4]">
-                    Upload a valid government-issued ID to continue your Family Account application.
+                    Upload a valid government-issued ID to continue your {centerLabel} Account application.
                   </DialogDescription>
                 </DialogHeader>
 
@@ -6218,7 +8382,11 @@ export const SettingsModal = () => {
                     <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">Verification checklist</p>
                     <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-[#b5bac1]">
                       <li>Upload front and back images when required.</li>
-                      <li>Ensure your legal name and date of birth are readable.</li>
+                      <li>
+                        {isBusinessCenterSection
+                          ? "Ensure your legal name and business role details are accurate."
+                          : "Ensure your legal name and date of birth are readable."}
+                      </li>
                       <li>Supported formats: JPG, PNG, PDF.</li>
                     </ul>
                   </div>
@@ -6327,28 +8495,57 @@ export const SettingsModal = () => {
                       </div>
 
                       <div>
-                        <label className="mb-1 block text-[11px] font-semibold text-[#c6cad1]">Date of Birth</label>
-                        <input
-                          type="text"
-                          value={dateOfBirth || "Not set"}
-                          readOnly
-                          className="h-8 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-2.5 text-xs text-[#b5bac1] outline-none"
-                        />
+                        <label className="mb-1 block text-[11px] font-semibold text-[#c6cad1]">
+                          {isBusinessCenterSection ? "Business Section" : "Date of Birth"}
+                        </label>
+                        {isBusinessCenterSection ? (
+                          <select
+                            value={familyApplicationSectionInput}
+                            onChange={(event) => setFamilyApplicationSectionInput(event.target.value)}
+                            className="h-8 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-2.5 text-xs text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                          >
+                            <option value="">Select business section</option>
+                            {businessSectionOptions.map((option) => (
+                              <option key={`business-application-section-${option}`} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type="text"
+                            value={dateOfBirth || "Not set"}
+                            readOnly
+                            className="h-8 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-2.5 text-xs text-[#b5bac1] outline-none"
+                          />
+                        )}
                       </div>
 
                       <div>
-                        <label className="mb-1 block text-[11px] font-semibold text-[#c6cad1]">Family Designation</label>
+                        <label className="mb-1 block text-[11px] font-semibold text-[#c6cad1]">
+                          {isBusinessCenterSection ? "Business Role" : "Family Designation"}
+                        </label>
                         <select
                           value={familyDesignationInput}
-                          onChange={(event) => setFamilyDesignationInput(event.target.value as (typeof familyDesignationOptions)[number] | "")}
+                          onChange={(event) => setFamilyDesignationInput(event.target.value)}
                           className="h-8 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-2.5 text-xs text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
                         >
-                          <option value="">Select designation</option>
-                          {familyDesignationOptions.map((option) => (
-                            <option key={`family-designation-${option}`} value={option}>
-                              {option}
-                            </option>
-                          ))}
+                          <option value="">{isBusinessCenterSection ? "Select business role" : "Select designation"}</option>
+                          {isBusinessCenterSection
+                            ? businessRoleGroups.map((group) => (
+                                <optgroup key={`business-verification-role-group-${group.label}`} label={group.label}>
+                                  {group.options.map((option) => (
+                                    <option key={`business-verification-role-${option}`} value={option}>
+                                      {option}
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              ))
+                            : familyDesignationOptions.map((option) => (
+                                <option key={`family-designation-${option}`} value={option}>
+                                  {option}
+                                </option>
+                              ))}
                         </select>
                       </div>
                     </div>
@@ -6366,7 +8563,11 @@ export const SettingsModal = () => {
                   <Button
                     type="button"
                     onClick={onSubmitFamilyApplication}
-                    disabled={!familyDesignationInput || familyVerificationFiles.length === 0}
+                    disabled={
+                      !familyDesignationInput ||
+                      familyVerificationFiles.length === 0 ||
+                      (isBusinessCenterSection && !familyApplicationSectionInput)
+                    }
                     className="bg-[#5865f2] text-white hover:bg-[#4752c4]"
                   >
                     Submit Application
@@ -6389,7 +8590,7 @@ export const SettingsModal = () => {
                 className="h-9 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {familyCenterPreferences.familyMembers.length === 0 ? (
-                  <option value="">No family accounts available</option>
+                  <option value="">No {centerLabel.toLowerCase()} accounts available</option>
                 ) : null}
                 {familyCenterPreferences.familyMembers.map((member) => (
                   <option key={`family-member-select-${member.id}`} value={member.id}>
@@ -6423,14 +8624,14 @@ export const SettingsModal = () => {
                   </div>
                 </div>
               ) : (
-                <p className="mt-2 text-[11px] text-[#949ba4]">Add and select a family account to edit oversight controls.</p>
+                <p className="mt-2 text-[11px] text-[#949ba4]">Add and select a {centerLabel.toLowerCase()} account to edit oversight controls.</p>
               )}
             </div>
 
             <div className="mt-3 space-y-2 rounded-xl border border-white/10 bg-black/20 p-3">
               <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-white">Require content filter for family members</p>
+                  <p className="text-sm font-semibold text-white">Require content filter for {centerLabel.toLowerCase()} members</p>
                   <p className="text-xs text-[#949ba4]">Enforces stricter filtering for supervised household profiles.</p>
                 </div>
 
@@ -6482,8 +8683,8 @@ export const SettingsModal = () => {
 
               <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-white">Allow direct messages from non-friends</p>
-                  <p className="text-xs text-[#949ba4]">When off, family-managed accounts can only receive DMs from friends.</p>
+                  <p className="text-sm font-semibold text-white">Allow private messages from non-friends</p>
+                  <p className="text-xs text-[#949ba4]">When off, {centerLabel.toLowerCase()}-managed accounts can only receive PMs from friends.</p>
                 </div>
 
                 <button
@@ -6496,7 +8697,7 @@ export const SettingsModal = () => {
                       : "border-zinc-600 bg-zinc-700"
                   } disabled:cursor-not-allowed disabled:opacity-60`}
                   aria-pressed={selectedFamilyMember?.allowDirectMessagesFromNonFriends ?? false}
-                  aria-label="Toggle direct messages from non-friends"
+                  aria-label="Toggle private messages from non-friends"
                 >
                   <span
                     className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
@@ -6509,7 +8710,7 @@ export const SettingsModal = () => {
               <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-white">Alert on mature content interactions</p>
-                  <p className="text-xs text-[#949ba4]">Flags interactions with mature content for review in family oversight workflows.</p>
+                  <p className="text-xs text-[#949ba4]">Flags interactions with mature content for review in {centerLabel.toLowerCase()} oversight workflows.</p>
                 </div>
 
                 <button
@@ -6536,9 +8737,9 @@ export const SettingsModal = () => {
             <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <p className="text-sm font-semibold text-white">Family Members</p>
+                  <p className="text-sm font-semibold text-white">{centerLabel} Members</p>
                   <p className="text-[11px] text-[#949ba4]">
-                    Add and manage linked family accounts for Family Center oversight.
+                    Add and manage linked {centerLabel.toLowerCase()} accounts for {centerLabel} Center oversight.
                   </p>
                 </div>
                 <span className="inline-flex h-6 items-center rounded-md border border-white/15 bg-white/5 px-2 text-[10px] font-semibold text-[#d7dcff]">
@@ -6549,7 +8750,7 @@ export const SettingsModal = () => {
               <div className="mt-3 space-y-3">
                 <div className="rounded-lg border border-white/10 bg-[#1a1b1e] p-2.5">
                   <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
-                    Add Family Account
+                    Add {centerLabel} Account
                   </p>
 
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -6561,29 +8762,45 @@ export const SettingsModal = () => {
                         setFamilyCenterStatus(null);
                       }}
                       maxLength={60}
-                      placeholder="Family Name"
+                      placeholder={isBusinessCenterSection ? "Company Name" : "Family Name"}
                       required
                       disabled={!isFamilyCenterEditable}
                       className="h-8 rounded-md border border-black/25 bg-[#131417] px-2.5 text-xs text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
                     />
 
-                    <select
-                      value={familyMemberRelationInput}
-                      onChange={(event) => {
-                        setFamilyMemberRelationInput(event.target.value as (typeof familyMemberRelationOptions)[number] | "");
-                        setFamilyCenterStatus(null);
-                      }}
-                      required
-                      disabled={!isFamilyCenterEditable}
-                      className="h-8 rounded-md border border-black/25 bg-[#131417] px-2.5 text-xs text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
-                    >
-                      <option value="">Family Relation</option>
-                      {familyMemberRelationOptions.map((option) => (
-                        <option key={`family-member-relation-${option}`} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
+                    {isBusinessCenterSection ? (
+                      <input
+                        type="email"
+                        value={familyMemberEmailInput}
+                        onChange={(event) => {
+                          setFamilyMemberEmailInput(event.target.value);
+                          setFamilyCenterStatus(null);
+                        }}
+                        maxLength={160}
+                        placeholder="Email"
+                        required
+                        disabled={!isFamilyCenterEditable}
+                        className="h-8 rounded-md border border-black/25 bg-[#131417] px-2.5 text-xs text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                      />
+                    ) : (
+                      <select
+                        value={familyMemberRelationInput}
+                        onChange={(event) => {
+                          setFamilyMemberRelationInput(event.target.value);
+                          setFamilyCenterStatus(null);
+                        }}
+                        required
+                        disabled={!isFamilyCenterEditable}
+                        className="h-8 rounded-md border border-black/25 bg-[#131417] px-2.5 text-xs text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                      >
+                        <option value="">Family Relation</option>
+                        {familyMemberRelationOptions.map((option) => (
+                          <option key={`family-member-relation-${option}`} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    )}
 
                     <input
                       type="text"
@@ -6599,36 +8816,82 @@ export const SettingsModal = () => {
                       className="h-8 rounded-md border border-black/25 bg-[#131417] px-2.5 text-xs text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
                     />
 
-                    <input
-                      type="text"
-                      value={familyMemberDateOfBirthInput}
-                      onChange={(event) => {
-                        setFamilyMemberDateOfBirthInput(event.target.value);
-                        setFamilyCenterStatus(null);
-                      }}
-                      inputMode="numeric"
-                      pattern="\\d{4}[-/]\\d{2}[-/]\\d{2}"
-                      maxLength={10}
-                      placeholder="YYYY-MM-DD or YYYY/MM/DD"
-                      title="Use format YYYY-MM-DD or YYYY/MM/DD"
-                      required
-                      disabled={!isFamilyCenterEditable}
-                      className="h-8 rounded-md border border-black/25 bg-[#131417] px-2.5 text-xs text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
-                    />
+                    {isBusinessCenterSection ? (
+                      <select
+                        value={familyMemberSectionInput}
+                        onChange={(event) => {
+                          setFamilyMemberSectionInput(event.target.value);
+                          setFamilyCenterStatus(null);
+                        }}
+                        required
+                        disabled={!isFamilyCenterEditable}
+                        className="h-8 rounded-md border border-black/25 bg-[#131417] px-2.5 text-xs text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                      >
+                        <option value="">Business Section</option>
+                        {businessSectionOptions.map((option) => (
+                          <option key={`business-section-option-${option}`} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    ) : null}
 
-                    <input
-                      type="email"
-                      value={familyMemberEmailInput}
-                      onChange={(event) => {
-                        setFamilyMemberEmailInput(event.target.value);
-                        setFamilyCenterStatus(null);
-                      }}
-                      maxLength={160}
-                      placeholder="Email"
-                      required
-                      disabled={!isFamilyCenterEditable}
-                      className="h-8 rounded-md border border-black/25 bg-[#131417] px-2.5 text-xs text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
-                    />
+                    {isBusinessCenterSection ? null : (
+                      <input
+                        type="text"
+                        value={familyMemberDateOfBirthInput}
+                        onChange={(event) => {
+                          setFamilyMemberDateOfBirthInput(event.target.value);
+                          setFamilyCenterStatus(null);
+                        }}
+                        inputMode="numeric"
+                        pattern="\\d{4}[-/]\\d{2}[-/]\\d{2}"
+                        maxLength={10}
+                        placeholder="YYYY-MM-DD or YYYY/MM/DD"
+                        title="Use format YYYY-MM-DD or YYYY/MM/DD"
+                        required
+                        disabled={!isFamilyCenterEditable}
+                        className="h-8 rounded-md border border-black/25 bg-[#131417] px-2.5 text-xs text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                      />
+                    )}
+
+                    {isBusinessCenterSection ? (
+                      <select
+                        value={familyMemberRelationInput}
+                        onChange={(event) => {
+                          setFamilyMemberRelationInput(event.target.value);
+                          setFamilyCenterStatus(null);
+                        }}
+                        required
+                        disabled={!isFamilyCenterEditable}
+                        className="h-8 rounded-md border border-black/25 bg-[#131417] px-2.5 text-xs text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                      >
+                        <option value="">Business Role</option>
+                        {businessRoleGroups.map((group) => (
+                          <optgroup key={`business-role-group-${group.label}`} label={group.label}>
+                            {group.options.map((option) => (
+                              <option key={`business-role-option-${option}`} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="email"
+                        value={familyMemberEmailInput}
+                        onChange={(event) => {
+                          setFamilyMemberEmailInput(event.target.value);
+                          setFamilyCenterStatus(null);
+                        }}
+                        maxLength={160}
+                        placeholder="Email"
+                        required
+                        disabled={!isFamilyCenterEditable}
+                        className="h-8 rounded-md border border-black/25 bg-[#131417] px-2.5 text-xs text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                      />
+                    )}
 
                     <input
                       type="tel"
@@ -6719,9 +8982,26 @@ export const SettingsModal = () => {
 
                   <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
                     {familyCenterPreferences.familyMembers.length === 0 ? (
-                      <p className="rounded-lg border border-white/10 bg-[#131417] px-3 py-2 text-xs text-[#949ba4]">
-                        No family accounts added yet.
-                      </p>
+                      <div className="rounded-lg border border-white/10 bg-[#131417] px-3 py-2 text-xs text-[#949ba4]">
+                        <p>
+                          {isBusinessCenterSection && isFamilyApplicationApproved
+                            ? "Business account approved. Add your first business member above to get started."
+                            : `No ${centerLabel.toLowerCase()} accounts added yet.`}
+                        </p>
+
+                        {isBusinessCenterSection && isFamilyApplicationApproved ? (
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <Button
+                              type="button"
+                              onClick={onSeedApprovedBusinessMember}
+                              disabled={!isFamilyCenterEditable}
+                              className="h-7 border border-indigo-400/35 bg-indigo-500/15 px-2 text-[11px] text-indigo-200 hover:bg-indigo-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Add My Business Profile
+                            </Button>
+                          </div>
+                        ) : null}
+                      </div>
                     ) : (
                       familyCenterPreferences.familyMembers.map((member) => {
                         const lifecycle = member.linkedUserId
@@ -6748,12 +9028,18 @@ export const SettingsModal = () => {
                               <p className="truncate text-xs font-semibold text-white">
                                 {member.childName || "Profile Name"}
                               </p>
+                              {isBusinessCenterSection ? <BusinessMemberIcon /> : null}
                               <span className="inline-flex h-5 items-center rounded-md border border-white/15 bg-white/5 px-1.5 text-[10px] font-semibold text-[#d7dcff]">
                                 {stateLabel}
                               </span>
                               {member.childRelation ? (
                                 <span className="inline-flex h-5 items-center rounded-md border border-white/10 bg-black/20 px-1.5 text-[10px] text-[#b5bac1]">
-                                  {member.childRelation}
+                                  {isBusinessCenterSection ? `Pronouns: ${member.childRelation}` : member.childRelation}
+                                </span>
+                              ) : null}
+                              {isBusinessCenterSection && member.childSection ? (
+                                <span className="inline-flex h-5 items-center rounded-md border border-indigo-400/30 bg-indigo-500/10 px-1.5 text-[10px] text-indigo-200">
+                                  Section: {member.childSection}
                                 </span>
                               ) : null}
                             </div>
@@ -6769,7 +9055,7 @@ export const SettingsModal = () => {
                             {member.linkedUserId ? (
                               <p className="truncate text-[11px] text-[#949ba4]">Linked: {member.linkedUserId}</p>
                             ) : (
-                              <p className="truncate text-[11px] text-amber-300">Linked account: not created</p>
+                              <p className="truncate text-[11px] text-amber-300">Linked {centerLabel.toLowerCase()} account: not created</p>
                             )}
 
                             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -6842,6 +9128,259 @@ export const SettingsModal = () => {
       );
     }
 
+    if (displaySection === "voiceVideo") {
+      const canControlVoiceCamera = isVoiceSessionActive && isVoiceVideoSession;
+      const canControlAnyCamera = canControlVoiceCamera || isPmVideoSessionActive;
+      const isCameraOn = canControlVoiceCamera ? isVoiceCameraOn : isPmCameraOn;
+
+      const onToggleMute = () => {
+        const next = !isVoiceMuted;
+        setIsVoiceMuted(next);
+        window.dispatchEvent(new CustomEvent(VOICE_TOGGLE_MUTE_EVENT, { detail: { isMuted: next } }));
+      };
+
+      const onToggleDeafen = () => {
+        const next = !isVoiceDeafened;
+        setIsVoiceDeafened(next);
+        window.dispatchEvent(new CustomEvent(VOICE_TOGGLE_DEAFEN_EVENT, { detail: { isDeafened: next } }));
+      };
+
+      const onToggleCamera = () => {
+        if (!canControlAnyCamera) {
+          return;
+        }
+
+        const next = !isCameraOn;
+
+        if (canControlVoiceCamera) {
+          setIsVoiceCameraOn(next);
+          window.dispatchEvent(new CustomEvent(VOICE_TOGGLE_CAMERA_EVENT, { detail: { isCameraOn: next } }));
+        }
+
+        if (isPmVideoSessionActive) {
+          setIsPmCameraOn(next);
+          window.dispatchEvent(new CustomEvent(PM_TOGGLE_CAMERA_EVENT, { detail: { isCameraOn: next } }));
+        }
+      };
+
+      return (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
+            <p className="text-sm font-medium text-white">Voice &amp; Video Controls</p>
+            <p className="mt-1 text-xs text-[#949ba4]">
+              Live controls are wired to your active voice channel and PM video sessions.
+            </p>
+
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">Voice Session</p>
+                <p className="mt-1 text-xs text-[#dbdee1]">
+                  {isVoiceSessionActive ? "Connected" : "Not connected"}
+                  {isVoiceSessionActive ? (isVoiceVideoSession ? " • Video channel" : " • Audio channel") : ""}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">PM Video</p>
+                <p className="mt-1 text-xs text-[#dbdee1]">{isPmVideoSessionActive ? "Active" : "Not active"}</p>
+              </div>
+            </div>
+
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <Button
+                type="button"
+                onClick={onToggleMute}
+                className={`justify-start gap-2 border ${
+                  isVoiceMuted
+                    ? "border-amber-400/35 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25"
+                    : "border-emerald-500/35 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
+                }`}
+              >
+                {isVoiceMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                {isVoiceMuted ? "Unmute" : "Mute"}
+              </Button>
+
+              <Button
+                type="button"
+                onClick={onToggleDeafen}
+                className={`justify-start gap-2 border ${
+                  isVoiceDeafened
+                    ? "border-amber-400/35 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25"
+                    : "border-emerald-500/35 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
+                }`}
+              >
+                {isVoiceDeafened ? <VolumeX className="h-4 w-4" /> : <Headphones className="h-4 w-4" />}
+                {isVoiceDeafened ? "Undeafen" : "Deafen"}
+              </Button>
+
+              <Button
+                type="button"
+                onClick={onToggleCamera}
+                disabled={!canControlAnyCamera}
+                className={`justify-start gap-2 border ${
+                  !canControlAnyCamera
+                    ? "border-white/15 bg-black/20 text-[#949ba4] hover:bg-black/20 disabled:cursor-not-allowed disabled:opacity-70"
+                    : isCameraOn
+                    ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
+                    : "border-amber-400/35 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25"
+                }`}
+              >
+                {isCameraOn ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
+                {isCameraOn ? "Turn Camera Off" : "Turn Camera On"}
+              </Button>
+            </div>
+
+            <p className="mt-3 rounded-md border border-white/10 bg-black/20 px-3 py-2 text-xs text-[#b5bac1]">
+              {canControlAnyCamera
+                ? isPmVideoSessionActive && canControlVoiceCamera
+                  ? "Camera control is currently wired to both voice video and PM video sessions."
+                  : canControlVoiceCamera
+                  ? "Camera control is currently wired to your active voice video channel."
+                  : "Camera control is currently wired to your active PM video session."
+                : "Join a voice video channel or start a PM video call to enable camera controls."}
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    if (displaySection === "accessibility") {
+      const accessibilityRows: Array<{
+        key: Exclude<keyof AccessibilityPreferences, "messageSpacing">;
+        title: string;
+        description: string;
+      }> = [
+        {
+          key: "preferReducedMotion",
+          title: "Reduced Motion",
+          description: "Limit animations and motion-heavy UI transitions where possible.",
+        },
+        {
+          key: "highContrastMode",
+          title: "High Contrast Mode",
+          description: "Increase contrast for text and controls to improve readability.",
+        },
+        {
+          key: "largerChatFont",
+          title: "Larger Chat Font",
+          description: "Use a larger default chat font size in message views.",
+        },
+        {
+          key: "enableScreenReaderAnnouncements",
+          title: "Screen Reader Announcements",
+          description: "Announce new message updates for assistive technology.",
+        },
+      ];
+
+      return (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
+            <p className="text-sm font-medium text-white">Accessibility Preferences</p>
+            <p className="mt-1 text-xs text-[#949ba4]">
+              Tune readability and interaction comfort for your chat experience.
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
+            <div className="space-y-2">
+              {accessibilityRows.map((item) => (
+                <div key={`accessibility-setting-${item.key}`} className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                  <div>
+                    <p className="text-sm font-medium text-white">{item.title}</p>
+                    <p className="mt-1 text-xs text-[#949ba4]">{item.description}</p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAccessibilityPreferences((current) => ({
+                        ...current,
+                        [item.key]: !current[item.key],
+                      }));
+                      setAccessibilityStatus(null);
+                    }}
+                    className={`inline-flex h-7 w-12 items-center rounded-full border transition ${
+                      accessibilityPreferences[item.key]
+                        ? "border-emerald-400/50 bg-emerald-500/40"
+                        : "border-zinc-600 bg-zinc-700"
+                    }`}
+                    aria-pressed={accessibilityPreferences[item.key]}
+                    aria-label={`Toggle ${item.title}`}
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
+                        accessibilityPreferences[item.key] ? "translate-x-6" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                Message Spacing
+              </p>
+
+              <div className="mt-2 inline-flex rounded-md border border-white/10 bg-[#1a1b1e] p-1">
+                {([
+                  { value: "compact", label: "Compact" },
+                  { value: "comfortable", label: "Comfortable" },
+                ] as const).map((option) => {
+                  const selected = accessibilityPreferences.messageSpacing === option.value;
+
+                  return (
+                    <button
+                      key={`accessibility-message-spacing-${option.value}`}
+                      type="button"
+                      onClick={() => {
+                        setAccessibilityPreferences((current) => ({
+                          ...current,
+                          messageSpacing: option.value,
+                        }));
+                        setAccessibilityStatus(null);
+                      }}
+                      className={`h-8 rounded px-3 text-xs font-medium transition ${
+                        selected
+                          ? "bg-[#5865f2] text-white"
+                          : "text-[#b5bac1] hover:bg-white/10 hover:text-white"
+                      }`}
+                      aria-pressed={selected}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <p className="rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
+                Contrast: <span className="font-semibold text-white">{accessibilityPreferences.highContrastMode ? "High" : "Default"}</span>
+              </p>
+
+              <Button
+                type="button"
+                onClick={() => void onSaveAccessibilityPreferences()}
+                disabled={isSavingAccessibilityPreferences}
+                className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSavingAccessibilityPreferences ? "Saving..." : "Save Accessibility"}
+              </Button>
+            </div>
+
+            {accessibilityStatus ? (
+              <p className="mt-3 rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
+                {accessibilityStatus}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      );
+    }
+
+
+
     return renderComingSoonSection(sectionLabelMap[displaySection], sectionDescriptionMap[displaySection]);
   };
 
@@ -6858,11 +9397,33 @@ export const SettingsModal = () => {
             <nav className="settings-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
               {visibleSectionGroups.map((group) => (
                 <div key={group.label} className="space-y-1">
-                  <p className="px-3 text-[11px] font-bold uppercase tracking-[0.08em] text-[#949ba4]">
-                    {group.label}
-                  </p>
+                  {(() => {
+                    const isCollapsed = Boolean(collapsedSectionGroups[group.label]);
 
-                  {group.sections.map((section) => {
+                    return (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCollapsedSectionGroups((current) => ({
+                            ...current,
+                            [group.label]: !current[group.label],
+                          }))
+                        }
+                        className="flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left text-[11px] font-bold uppercase tracking-[0.08em] text-[#949ba4] transition hover:bg-[#2a2b30] hover:text-[#c8ccd1]"
+                        aria-expanded={!isCollapsed}
+                        aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${group.label}`}
+                      >
+                        <span>{group.label}</span>
+                        {isCollapsed ? (
+                          <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                        ) : (
+                          <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                        )}
+                      </button>
+                    );
+                  })()}
+
+                  {!collapsedSectionGroups[group.label] && group.sections.map((section) => {
                     const isActive = activeSection === section;
                     const SectionIcon = sectionIconMap[section];
 
@@ -7282,7 +9843,7 @@ export const SettingsModal = () => {
                               setPronounsDraft(event.target.value);
                               setPronounsStatus(null);
                             }}
-                            maxLength={40}
+                            maxLength={80}
                             placeholder="e.g. she/her"
                             disabled={isSavingPronouns}
                             className="w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35 disabled:cursor-not-allowed disabled:opacity-60"

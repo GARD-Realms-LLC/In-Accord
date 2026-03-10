@@ -6,6 +6,7 @@ import { useMemo, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { buildServerPath, matchesRouteParam } from "@/lib/route-slugs";
 
 interface NavigationItemProps {
   id: string;
@@ -93,9 +94,10 @@ export const NavigationItem = ({
 
   const initials = (name?.trim()?.[0] ?? "S").toUpperCase();
   const showImage = !!resolvedImageSrc && !imageFailed;
+  const isActiveServer = matchesRouteParam(String(params?.serverId ?? ""), { id, name });
 
   const onClick = () => {
-    router.push(`/servers/${id}`);
+    router.push(buildServerPath({ id, name }));
   };
 
   const clearCloseTimer = () => {
@@ -184,14 +186,14 @@ export const NavigationItem = ({
           <div
             className={cn(
               "absolute left-0 bg-primary rounded-r-full transition-all w-[4px]",
-              params?.serverId !== id && "group-hover:h-[20px]",
-              params?.serverId === id ? "h-[36px]" : "h-[8px]"
+              !isActiveServer && "group-hover:h-[20px]",
+              isActiveServer ? "h-[36px]" : "h-[8px]"
             )}
           />
           <div
             className={cn(
               "relative group flex mx-3 h-[48px] w-[48px] rounded-[24px] group-hover:rounded-[16px] transition-all overflow-hidden",
-              params?.serverId === id && "bg-primary/10 text-primary rounded-[16px]"
+              isActiveServer && "bg-primary/10 text-primary rounded-[16px]"
             )}
           >
             {showImage ? (

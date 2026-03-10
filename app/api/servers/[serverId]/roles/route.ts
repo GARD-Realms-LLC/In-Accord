@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db, member, server } from "@/lib/db";
-import { ensureServerRolesSchema, seedDefaultServerRoles } from "@/lib/server-roles";
+import { ensureServerRolesSchema } from "@/lib/server-roles";
 
 type Params = { params: Promise<{ serverId: string }> };
 
@@ -33,7 +33,6 @@ export async function GET(_req: Request, { params }: Params) {
     }
 
     await ensureServerRolesSchema();
-    await seedDefaultServerRoles(serverId);
 
     const ownerServer = await db.query.server.findFirst({
       where: and(eq(server.id, serverId), eq(server.profileId, profile.id)),
@@ -48,6 +47,7 @@ export async function GET(_req: Request, { params }: Params) {
         r."name",
         r."color",
         r."iconUrl",
+         r."isMentionable",
         r."position",
         r."isManaged",
         count(a."memberId")::int as "memberCount"
@@ -55,7 +55,7 @@ export async function GET(_req: Request, { params }: Params) {
       left join "ServerRoleAssignment" a
         on a."roleId" = r."id"
       where r."serverId" = ${serverId}
-      group by r."id", r."name", r."color", r."iconUrl", r."position", r."isManaged"
+        group by r."id", r."name", r."color", r."iconUrl", r."isMentionable", r."position", r."isManaged"
       order by r."position" asc, r."name" asc
     `);
 
@@ -71,6 +71,7 @@ export async function GET(_req: Request, { params }: Params) {
         name: string;
         color: string;
         iconUrl: string | null;
+        isMentionable: boolean;
         position: number;
         isManaged: boolean;
         memberCount: number;
@@ -84,7 +85,16 @@ export async function GET(_req: Request, { params }: Params) {
       (totalMembersResult as unknown as { rows?: Array<{ totalMembers: number }> }).rows?.[0]?.totalMembers ?? 0
     );
 
-    return NextResponse.json({ roles, totalMembers, canManageRoles });
+    return NextResponse.json(
+      { roles, totalMembers, canManageRoles },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      }
+    );
   } catch (error) {
     console.error("[SERVER_ROLES_GET]", error);
     return new NextResponse("Internal Error", { status: 500 });
@@ -115,17 +125,18 @@ export async function POST(req: Request, { params }: Params) {
     }
 
     await ensureServerRolesSchema();
-    await seedDefaultServerRoles(serverId);
 
     const body = (await req.json().catch(() => ({}))) as {
       name?: string;
       color?: string;
       iconUrl?: string | null;
+       isMentionable?: boolean;
     };
 
     const name = String(body.name ?? "").trim();
     const color = String(body.color ?? "#99aab5").trim();
     const iconUrl = body.iconUrl === null ? null : String(body.iconUrl ?? "").trim() || null;
+      const isMentionable = typeof body.isMentionable === "boolean" ? body.isMentionable : true;
 
     if (!name) {
       return new NextResponse("Role name is required", { status: 400 });
@@ -156,6 +167,7 @@ export async function POST(req: Request, { params }: Params) {
         "name",
         "color",
         "iconUrl",
+        "isMentionable",
         "position",
         "isManaged",
         "createdAt",
@@ -167,24 +179,143 @@ export async function POST(req: Request, { params }: Params) {
         ${name},
         ${color},
         ${iconUrl},
+         ${isMentionable},
         ${nextPosition},
         false,
         now(),
         now()
       )
-      returning "id", "name", "color", "iconUrl", "position", "isManaged"
+        returning "id", "name", "color", "iconUrl", "isMentionable", "position", "isManaged"
     `);
 
-    const role = (insertResult as unknown as {
+    let role = (insertResult as unknown as {
       rows?: Array<{
         id: string;
         name: string;
         color: string;
         iconUrl: string | null;
+         isMentionable: boolean;
         position: number;
         isManaged: boolean;
       }>;
     }).rows?.[0];
+
+    if (!role) {
+      const roleResult = await db.execute(sql`
+        select "id", "name", "color", "iconUrl", "isMentionable", "position", "isManaged"
+        from "ServerRole"
+        where "id" = ${roleId}
+          and "serverId" = ${serverId}
+        limit 1
+      `);
+
+      role = (roleResult as unknown as {
+        rows?: Array<{
+          id: string;
+          name: string;
+          color: string;
+          iconUrl: string | null;
+           isMentionable: boolean;
+          position: number;
+          isManaged: boolean;
+        }>;
+      }).rows?.[0];
+    }
+
+    if (!role) {
+      return new NextResponse("Role was created but could not be loaded", { status: 500 });
+    }
+
+    await db.execute(sql`
+      insert into "ServerRolePermission" (
+        "roleId",
+        "serverId",
+        "allowView",
+        "allowSend",
+        "allowConnect",
+        "manageChannels",
+        "manageRoles",
+        "manageMembers",
+        "moderateMembers",
+        "viewAuditLog",
+        "manageServer",
+        "createInstantInvite",
+        "changeNickname",
+        "manageNicknames",
+        "kickMembers",
+        "banMembers",
+        "manageEmojisAndStickers",
+        "manageWebhooks",
+        "manageEvents",
+        "viewServerInsights",
+        "useApplicationCommands",
+        "sendMessagesInThreads",
+        "createPublicThreads",
+        "createPrivateThreads",
+        "embedLinks",
+        "attachFiles",
+        "addReactions",
+        "useExternalEmojis",
+        "mentionEveryone",
+        "manageMessages",
+        "readMessageHistory",
+        "sendTtsMessages",
+        "speak",
+        "stream",
+        "useVoiceActivity",
+        "prioritySpeaker",
+        "muteMembers",
+        "deafenMembers",
+        "moveMembers",
+        "requestToSpeak",
+        "updatedAt"
+      )
+      values (
+        ${role.id},
+        ${serverId},
+        true,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        now()
+      )
+      on conflict ("roleId")
+      do nothing
+    `);
 
     return NextResponse.json({ role }, { status: 201 });
   } catch (error) {

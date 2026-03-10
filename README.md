@@ -49,19 +49,28 @@ For more SDK details, see `INSTRUCTIONS.md`.
 
 ## Environment setup
 
-Create or update `.env` in the project root with at least:
+Copy `.env.example` to `.env`, then fill values for your environment.
+
+Required in `.env`:
 
 - `DATABASE_URL`
 - `NEXT_PUBLIC_SITE_URL`
 - `SESSION_SECRET`
+- `UPLOADTHING_TOKEN`
 - `UPLOADTHING_SECRET`
 - `UPLOADTHING_APP_ID`
+
+For `UPLOADTHING_TOKEN`, copy the token value directly from your UploadThing dashboard/project settings.
+It must be the full base64 token string (JSON payload), with no surrounding quotes.
 
 Optional:
 
 - `ELECTRON_START_URL` (override Electron target URL)
 - `INACCORD_UPDATE_MANIFEST_URL` (remote JSON manifest URL for desktop auto-updates)
 - `INACCORD_UPDATE_CHECK_INTERVAL_MS` (optional check interval in milliseconds)
+- `BOT_TOKEN_ENCRYPTION_KEY` (recommended; if not set, falls back to `SESSION_SECRET`)
+- `SLASH_COMMAND_LIMIT_NON_IN_ACCORD` (default `100`)
+- `SLASH_COMMAND_LIMIT_IN_ACCORD` (default `200`)
 
 ## Install
 

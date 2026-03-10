@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { channel, db, member } from "@/lib/db";
 import { MemberRole } from "@/lib/db/types";
 import {
-  channelRolePermissionMatrix,
+  ensureChannelPermissionSchema,
   resolveMemberContext,
-  upsertChannelRolePermissions,
 } from "@/lib/channel-permissions";
 
 type Params = {
@@ -51,8 +50,80 @@ export async function GET(req: Request, { params }: Params) {
       return new NextResponse("Channel not found", { status: 404 });
     }
 
-    const permissions = await channelRolePermissionMatrix({ serverId, channelId });
-    return NextResponse.json({ permissions });
+    await ensureChannelPermissionSchema();
+
+    const roleRowsResult = await db.execute(sql`
+      select "id", "name"
+      from "ServerRole"
+      where "serverId" = ${serverId}
+        and coalesce("isManaged", false) = false
+      order by "position" asc, "name" asc
+    `);
+
+    const roleRows = (roleRowsResult as unknown as {
+      rows?: Array<{ id: string; name: string }>;
+    }).rows ?? [];
+
+    const overwriteRowsResult = await db.execute(sql`
+      select "targetType", "targetId", "allowView", "allowSend", "allowConnect"
+      from "ChannelPermission"
+      where "serverId" = ${serverId}
+        and "channelId" = ${channelId}
+        and "targetType" in ('EVERYONE','ROLE')
+    `);
+
+    const overwriteRows = (overwriteRowsResult as unknown as {
+      rows?: Array<{
+        targetType: "EVERYONE" | "ROLE";
+        targetId: string;
+        allowView: boolean | null;
+        allowSend: boolean | null;
+        allowConnect: boolean | null;
+      }>;
+    }).rows ?? [];
+
+    const overwriteMap = new Map<string, { allowView: boolean | null; allowSend: boolean | null; allowConnect: boolean | null }>();
+    for (const row of overwriteRows) {
+      overwriteMap.set(`${row.targetType}:${row.targetId}`, {
+        allowView: row.allowView,
+        allowSend: row.allowSend,
+        allowConnect: row.allowConnect,
+      });
+    }
+
+    const everyoneKey = "EVERYONE:EVERYONE";
+    const everyone = overwriteMap.get(everyoneKey) ?? {
+      allowView: null,
+      allowSend: null,
+      allowConnect: null,
+    };
+
+    const overwrites = [
+      {
+        targetType: "EVERYONE" as const,
+        targetId: "EVERYONE",
+        label: "@everyone",
+        permissions: everyone,
+      },
+      ...roleRows.map((role) => {
+        const key = `ROLE:${role.id}`;
+        const fallbackLegacy = overwriteMap.get(`ROLE:${role.name.toUpperCase()}`);
+        const value = overwriteMap.get(key) ?? fallbackLegacy ?? {
+          allowView: null,
+          allowSend: null,
+          allowConnect: null,
+        };
+
+        return {
+          targetType: "ROLE" as const,
+          targetId: role.id,
+          label: role.name,
+          permissions: value,
+        };
+      }),
+    ];
+
+    return NextResponse.json({ overwrites });
   } catch (error) {
     console.error("[CHANNEL_PERMISSIONS_GET]", error);
     return new NextResponse("Internal Error", { status: 500 });
@@ -71,12 +142,15 @@ export async function PATCH(req: Request, { params }: Params) {
     const body = (await req.json().catch(() => null)) as
       | {
           serverId?: string;
-          permissions?: Partial<
-            Record<
-              MemberRole,
-              Partial<{ allowView: boolean; allowSend: boolean; allowConnect: boolean }>
-            >
-          >;
+          overwrites?: Array<{
+            targetType?: "EVERYONE" | "ROLE";
+            targetId?: string;
+            permissions?: Partial<{
+              allowView: boolean | null;
+              allowSend: boolean | null;
+              allowConnect: boolean | null;
+            }>;
+          }>;
         }
       | null;
 
@@ -105,31 +179,74 @@ export async function PATCH(req: Request, { params }: Params) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const normalized: Record<MemberRole, { allowView: boolean; allowSend: boolean; allowConnect: boolean }> = {
-      [MemberRole.ADMIN]: {
-        allowView: body?.permissions?.ADMIN?.allowView ?? true,
-        allowSend: body?.permissions?.ADMIN?.allowSend ?? true,
-        allowConnect: body?.permissions?.ADMIN?.allowConnect ?? true,
-      },
-      [MemberRole.MODERATOR]: {
-        allowView: body?.permissions?.MODERATOR?.allowView ?? true,
-        allowSend: body?.permissions?.MODERATOR?.allowSend ?? true,
-        allowConnect: body?.permissions?.MODERATOR?.allowConnect ?? true,
-      },
-      [MemberRole.GUEST]: {
-        allowView: body?.permissions?.GUEST?.allowView ?? true,
-        allowSend: body?.permissions?.GUEST?.allowSend ?? true,
-        allowConnect: body?.permissions?.GUEST?.allowConnect ?? true,
-      },
-    };
+    await ensureChannelPermissionSchema();
 
-    await upsertChannelRolePermissions({
-      serverId,
-      channelId,
-      permissions: normalized,
+    const overwriteCandidates = body?.overwrites;
+    const incoming = Array.isArray(overwriteCandidates) ? overwriteCandidates : [];
+
+    const normalized = incoming
+      .map((item) => {
+        const targetType = item.targetType === "EVERYONE" ? "EVERYONE" : "ROLE";
+        const rawTargetId = String(item.targetId ?? "").trim();
+        const targetId = targetType === "EVERYONE" ? "EVERYONE" : rawTargetId;
+
+        if (!targetId) {
+          return null;
+        }
+
+        const valueOf = (value: unknown) => {
+          if (value === null) {
+            return null;
+          }
+
+          return typeof value === "boolean" ? value : null;
+        };
+
+        return {
+          targetType,
+          targetId,
+          allowView: valueOf(item.permissions?.allowView),
+          allowSend: valueOf(item.permissions?.allowSend),
+          allowConnect: valueOf(item.permissions?.allowConnect),
+        };
+      })
+      .filter((item): item is {
+        targetType: "EVERYONE" | "ROLE";
+        targetId: string;
+        allowView: boolean | null;
+        allowSend: boolean | null;
+        allowConnect: boolean | null;
+      } => Boolean(item));
+
+    await db.transaction(async (tx) => {
+      for (const item of normalized) {
+        await tx.execute(sql`
+          insert into "ChannelPermission" (
+            "id", "serverId", "channelId", "targetType", "targetId", "allowView", "allowSend", "allowConnect", "createdAt", "updatedAt"
+          )
+          values (
+            ${crypto.randomUUID()},
+            ${serverId},
+            ${channelId},
+            ${item.targetType},
+            ${item.targetId},
+            ${item.allowView},
+            ${item.allowSend},
+            ${item.allowConnect},
+            now(),
+            now()
+          )
+          on conflict ("channelId", "targetType", "targetId")
+          do update set
+            "allowView" = excluded."allowView",
+            "allowSend" = excluded."allowSend",
+            "allowConnect" = excluded."allowConnect",
+            "updatedAt" = excluded."updatedAt"
+        `);
+      }
     });
 
-    return NextResponse.json({ ok: true, permissions: normalized });
+    return NextResponse.json({ ok: true, overwrites: normalized });
   } catch (error) {
     console.error("[CHANNEL_PERMISSIONS_PATCH]", error);
     return new NextResponse("Internal Error", { status: 500 });

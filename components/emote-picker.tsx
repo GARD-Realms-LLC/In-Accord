@@ -108,7 +108,7 @@ export const EmotePicker = ({ onSelect, serverId }: EmotePickerProps) => {
           title="Send emote"
           aria-label="Send emote"
         >
-          <Smile className="h-4 w-4" />
+            <Smile className="h-4 w-4" suppressHydrationWarning />
         </button>
       </PopoverTrigger>
 

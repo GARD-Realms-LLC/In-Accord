@@ -8,6 +8,10 @@ import {
   ensureFamilyAccountSchema,
   normalizeFamilyLinkStateLabel,
 } from "@/lib/family-accounts";
+import {
+  autoConvertBusinessAccountIfNeeded,
+  ensureBusinessAccountSchema,
+} from "@/lib/business-accounts";
 import { normalizePresenceStatus } from "@/lib/presence-status";
 import { ensureServerTagSchema, serverTagIconOptions } from "@/lib/server-tags";
 import { getUserServerProfile } from "@/lib/user-server-profile";
@@ -18,6 +22,7 @@ import {
   isProfileNameStyleValue,
   normalizeProfileNameStyleValue,
 } from "@/lib/profile-name-styles";
+import { hasSucceededPatronage } from "@/lib/patronage";
 import { resolveProfileIcons } from "@/lib/profile-icons";
 import { ensureUserProfileSchema } from "@/lib/user-profile";
 
@@ -75,6 +80,7 @@ export async function GET(
 
     await ensureUserProfileSchema();
     await ensureFamilyAccountSchema();
+    await ensureBusinessAccountSchema();
     await ensureServerTagSchema();
 
     const result = await db.execute(sql`
@@ -87,12 +93,15 @@ export async function GET(
         up."nameplateColor" as "nameplateColor",
         up."nameplateImageUrl" as "nameplateImageUrl",
         up."pronouns" as "pronouns",
+        up."businessRole" as "businessRole",
+        up."businessSection" as "businessSection",
         up."comment" as "comment",
         up."avatarDecorationUrl" as "avatarDecorationUrl",
         up."bannerUrl" as "bannerUrl",
         up."presenceStatus" as "presenceStatus",
         nullif(trim(to_jsonb(u)->>'dob'), '') as "dateOfBirth",
         nullif(trim(to_jsonb(u)->>'familyParentUserId'), '') as "familyParentUserId",
+        nullif(trim(to_jsonb(u)->>'businessParentUserId'), '') as "businessParentUserId",
         u."role" as "role",
         u."email" as "email",
         coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
@@ -114,12 +123,15 @@ export async function GET(
         nameplateColor: string | null;
         nameplateImageUrl: string | null;
         pronouns: string | null;
+        businessRole: string | null;
+        businessSection: string | null;
         comment: string | null;
         avatarDecorationUrl: string | null;
         bannerUrl: string | null;
         presenceStatus: string | null;
         dateOfBirth: string | null;
         familyParentUserId: string | null;
+        businessParentUserId: string | null;
         role: string | null;
         email: string | null;
         imageUrl: string | null;
@@ -138,7 +150,14 @@ export async function GET(
       row.dateOfBirth,
       row.familyParentUserId
     );
+    const normalizedBusiness = await autoConvertBusinessAccountIfNeeded(
+      row.id,
+      row.dateOfBirth,
+      row.businessParentUserId
+    );
     const lifecycle = normalizedFamily.lifecycle;
+    const businessLifecycle = normalizedBusiness.lifecycle;
+    const isPatron = await hasSucceededPatronage(row.id);
     const serverProfile = memberServerId
       ? await getUserServerProfile(profileId, memberServerId)
       : null;
@@ -198,6 +217,7 @@ export async function GET(
         createdAt: row.createdAt,
         dateOfBirth: row.dateOfBirth,
         familyParentUserId: normalizedFamily.familyParentUserId,
+        isPatron,
       }),
       familyLifecycle: {
         isFamilyLinked: lifecycle.isFamilyLinked,
@@ -206,6 +226,13 @@ export async function GET(
         age: lifecycle.age,
         state: normalizeFamilyLinkStateLabel(lifecycle),
       },
+      businessLifecycle: {
+        isBusinessLinked: businessLifecycle.isFamilyLinked,
+        showBusinessIcon: businessLifecycle.showFamilyIcon,
+        canConvertToNormal: businessLifecycle.canConvertToNormal,
+        age: businessLifecycle.age,
+        state: normalizeFamilyLinkStateLabel(businessLifecycle),
+      },
       nameplateLabel: row.nameplateLabel,
       nameplateColor: row.nameplateColor,
       nameplateImageUrl: row.nameplateImageUrl,
@@ -213,6 +240,8 @@ export async function GET(
       effectiveNameplateColor: serverProfile?.nameplateColor ?? row.nameplateColor,
       effectiveNameplateImageUrl: serverProfile?.nameplateImageUrl ?? row.nameplateImageUrl,
       pronouns: row.pronouns,
+      businessRole: row.businessRole,
+      businessSection: row.businessSection,
       comment: serverProfile?.comment ?? row.comment,
       avatarDecorationUrl: row.avatarDecorationUrl,
       effectiveAvatarDecorationUrl: serverProfile?.avatarDecorationUrl ?? row.avatarDecorationUrl,

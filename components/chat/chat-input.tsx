@@ -11,13 +11,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useModal } from "@/hooks/use-modal-store";
+import { EmojiPicker } from "@/components/emoji-picker";
 import { GifPicker } from "@/components/gif-picker";
 import { EmotePicker } from "@/components/emote-picker";
 import { StickerPicker } from "@/components/sticker-picker";
 import { SoundEfxPicker } from "@/components/sound-efx-picker";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
-  buildMentionToken,
   type MentionOption,
   readMentionsEnabled,
   writeMentionsEnabled,
@@ -42,6 +42,64 @@ const formSchema = z.object({
 
 const POST_CREATED_EVENT = "inaccord:post-created";
 
+type RuntimeEmojiPreferences = {
+  showComposerEmojiButton: boolean;
+  compactReactionButtons: boolean;
+  defaultComposerEmoji: string;
+  favoriteEmojis: string[];
+};
+
+type SlashCommandOption = {
+  name: string;
+  description: string;
+  sourceType: "BOT" | "APP" | "SYSTEM";
+  sourceName: string;
+};
+
+const defaultRuntimeEmojiPreferences: RuntimeEmojiPreferences = {
+  showComposerEmojiButton: true,
+  compactReactionButtons: false,
+  defaultComposerEmoji: "😊",
+  favoriteEmojis: ["😀", "😂", "😍", "🔥", "👏", "🎉", "👍", "👀"],
+};
+
+const normalizeRuntimeEmojiPreferences = (value: unknown): RuntimeEmojiPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultRuntimeEmojiPreferences };
+  }
+
+  const source = value as Partial<Record<keyof RuntimeEmojiPreferences, unknown>>;
+  const defaultComposerEmoji =
+    typeof source.defaultComposerEmoji === "string" && source.defaultComposerEmoji.trim().length > 0
+      ? source.defaultComposerEmoji.trim().slice(0, 16)
+      : defaultRuntimeEmojiPreferences.defaultComposerEmoji;
+
+  const favoriteEmojis = Array.isArray(source.favoriteEmojis)
+    ? Array.from(
+        new Set(
+          source.favoriteEmojis
+            .filter((item): item is string => typeof item === "string")
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0)
+            .slice(0, 32)
+        )
+      )
+    : [...defaultRuntimeEmojiPreferences.favoriteEmojis];
+
+  return {
+    showComposerEmojiButton:
+      typeof source.showComposerEmojiButton === "boolean"
+        ? source.showComposerEmojiButton
+        : defaultRuntimeEmojiPreferences.showComposerEmojiButton,
+    compactReactionButtons:
+      typeof source.compactReactionButtons === "boolean"
+        ? source.compactReactionButtons
+        : defaultRuntimeEmojiPreferences.compactReactionButtons,
+    defaultComposerEmoji,
+    favoriteEmojis,
+  };
+};
+
 export const ChatInput = ({
   apiUrl,
   query,
@@ -60,6 +118,16 @@ export const ChatInput = ({
   const [activeMentionEnd, setActiveMentionEnd] = useState<number | null>(null);
   const [mentionQuery, setMentionQuery] = useState("");
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
+  const [slashCommands, setSlashCommands] = useState<SlashCommandOption[]>([]);
+  const [isLoadingSlashCommands, setIsLoadingSlashCommands] = useState(false);
+  const [lastSlashCommandsLoadedAt, setLastSlashCommandsLoadedAt] = useState(0);
+  const [activeSlashStart, setActiveSlashStart] = useState<number | null>(null);
+  const [activeSlashEnd, setActiveSlashEnd] = useState<number | null>(null);
+  const [slashQuery, setSlashQuery] = useState("");
+  const [activeSlashIndex, setActiveSlashIndex] = useState(0);
+  const [runtimeEmojiPreferences, setRuntimeEmojiPreferences] = useState<RuntimeEmojiPreferences>({
+    ...defaultRuntimeEmojiPreferences,
+  });
   const [activeQuote, setActiveQuote] = useState<QuotedMessageMeta | null>(null);
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -103,6 +171,25 @@ export const ChatInput = ({
 
   const isMentionMenuOpen = filteredMentionOptions.length > 0;
 
+  const filteredSlashCommands = useMemo(() => {
+    if (type !== "channel" || activeSlashStart === null || activeSlashEnd === null) {
+      return [] as SlashCommandOption[];
+    }
+
+    const normalizedQuery = slashQuery.trim().toLowerCase();
+    const visible = slashCommands.filter((item) => {
+      if (!normalizedQuery) {
+        return true;
+      }
+
+      return item.name.toLowerCase().includes(normalizedQuery);
+    });
+
+    return visible.slice(0, 100);
+  }, [activeSlashEnd, activeSlashStart, slashCommands, slashQuery, type]);
+
+  const isSlashMenuOpen = filteredSlashCommands.length > 0;
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -124,6 +211,81 @@ export const ChatInput = ({
 
     return null;
   }, [query]);
+
+  useEffect(() => {
+    if (type !== "channel" || !stickerServerId) {
+      setSlashCommands([]);
+      setLastSlashCommandsLoadedAt(0);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadSlashCommands = async () => {
+      try {
+        if (!cancelled) {
+          setIsLoadingSlashCommands(true);
+        }
+
+        const response = await fetch(`/api/servers/${encodeURIComponent(stickerServerId)}/slash-commands`, {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          if (!cancelled) {
+            setSlashCommands([]);
+          }
+          return;
+        }
+
+        const payload = (await response.json()) as { commands?: unknown };
+        const commands = Array.isArray(payload.commands)
+          ? payload.commands
+              .map((item) => {
+                if (!item || typeof item !== "object") {
+                  return null;
+                }
+
+                const source = item as Partial<SlashCommandOption>;
+                const name = String(source.name ?? "").trim();
+                const description = String(source.description ?? "").trim();
+                const sourceName = String(source.sourceName ?? "Integration").trim() || "Integration";
+                const sourceType =
+                  source.sourceType === "BOT" || source.sourceType === "APP" || source.sourceType === "SYSTEM"
+                    ? source.sourceType
+                    : "SYSTEM";
+
+                if (!name) {
+                  return null;
+                }
+
+                return { name, description, sourceType, sourceName } satisfies SlashCommandOption;
+              })
+              .filter((item): item is SlashCommandOption => Boolean(item))
+          : [];
+
+        if (!cancelled) {
+          setSlashCommands(commands);
+          setLastSlashCommandsLoadedAt(Date.now());
+        }
+      } catch {
+        if (!cancelled) {
+          setSlashCommands([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingSlashCommands(false);
+        }
+      }
+    };
+
+    void loadSlashCommands();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [stickerServerId, type]);
 
   useEffect(() => {
     let cancelled = false;
@@ -180,6 +342,78 @@ export const ChatInput = ({
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const syncEmojiPreferences = async () => {
+      try {
+        const response = await fetch("/api/profile/preferences", {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          if (!cancelled) {
+            setRuntimeEmojiPreferences({ ...defaultRuntimeEmojiPreferences });
+          }
+          return;
+        }
+
+        const payload = (await response.json()) as { emoji?: unknown };
+        const next = normalizeRuntimeEmojiPreferences(payload.emoji);
+
+        if (!cancelled) {
+          setRuntimeEmojiPreferences(next);
+        }
+      } catch {
+        if (!cancelled) {
+          setRuntimeEmojiPreferences({ ...defaultRuntimeEmojiPreferences });
+        }
+      }
+    };
+
+    void syncEmojiPreferences();
+
+    const onEmojiPreferencesChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<{ emoji?: unknown }>;
+
+      if (customEvent.detail?.emoji) {
+        setRuntimeEmojiPreferences(normalizeRuntimeEmojiPreferences(customEvent.detail.emoji));
+        return;
+      }
+
+      void syncEmojiPreferences();
+    };
+
+    window.addEventListener("inaccord:emoji-preferences-updated", onEmojiPreferencesChanged);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("inaccord:emoji-preferences-updated", onEmojiPreferencesChanged);
+    };
+  }, []);
+
+  const onInsertEmoji = (value: string) => {
+    const normalized = String(value ?? "").trim();
+    if (!normalized) {
+      return;
+    }
+
+    const current = String(form.getValues("content") ?? "");
+    const nextValue = current.length ? `${current} ${normalized}` : normalized;
+
+    form.setValue("content", nextValue, {
+      shouldDirty: true,
+      shouldTouch: true,
+      shouldValidate: true,
+    });
+
+    onTypingHeartbeat(nextValue);
+    window.requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
+  };
+
+  useEffect(() => {
     const onQuoteMessage = (event: Event) => {
       const customEvent = event as CustomEvent<QuotedMessageMeta>;
       const messageId = String(customEvent.detail?.messageId ?? "").trim();
@@ -191,6 +425,7 @@ export const ChatInput = ({
       setActiveQuote({
         messageId,
         authorName: String(customEvent.detail?.authorName ?? "Unknown User").trim() || "Unknown User",
+        authorProfileId: String(customEvent.detail?.authorProfileId ?? "").trim() || undefined,
         snippet: String(customEvent.detail?.snippet ?? "").trim(),
       });
 
@@ -213,11 +448,27 @@ export const ChatInput = ({
     setActiveMentionIndex((prev) => Math.min(prev, filteredMentionOptions.length - 1));
   }, [filteredMentionOptions.length, isMentionMenuOpen]);
 
+  useEffect(() => {
+    if (!isSlashMenuOpen) {
+      setActiveSlashIndex(0);
+      return;
+    }
+
+    setActiveSlashIndex((prev) => Math.min(prev, filteredSlashCommands.length - 1));
+  }, [filteredSlashCommands.length, isSlashMenuOpen]);
+
   const clearMentionState = () => {
     setActiveMentionStart(null);
     setActiveMentionEnd(null);
     setMentionQuery("");
     setActiveMentionIndex(0);
+  };
+
+  const clearSlashState = () => {
+    setActiveSlashStart(null);
+    setActiveSlashEnd(null);
+    setSlashQuery("");
+    setActiveSlashIndex(0);
   };
 
   const notifyPostCreated = () => {
@@ -256,6 +507,114 @@ export const ChatInput = ({
     setMentionQuery(draft);
   };
 
+  const detectSlashState = (value: string, caret: number | null | undefined) => {
+    if (type !== "channel" || typeof caret !== "number") {
+      clearSlashState();
+      return;
+    }
+
+    const textBeforeCaret = value.slice(0, caret);
+    const slashIndex = textBeforeCaret.lastIndexOf("/");
+
+    if (slashIndex < 0) {
+      clearSlashState();
+      return;
+    }
+
+    const beforeSlash = textBeforeCaret.slice(0, slashIndex);
+    if (beforeSlash.trim().length > 0) {
+      clearSlashState();
+      return;
+    }
+
+    const draft = textBeforeCaret.slice(slashIndex + 1);
+    if (/\s/.test(draft)) {
+      clearSlashState();
+      return;
+    }
+
+    setActiveSlashStart(slashIndex);
+    setActiveSlashEnd(caret);
+    setSlashQuery(draft);
+
+    if (stickerServerId && Date.now() - lastSlashCommandsLoadedAt > 5000 && !isLoadingSlashCommands) {
+      setIsLoadingSlashCommands(true);
+      void fetch(`/api/servers/${encodeURIComponent(stickerServerId)}/slash-commands`, {
+        method: "GET",
+        cache: "no-store",
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            return;
+          }
+
+          const payload = (await response.json()) as { commands?: unknown };
+          const commands = Array.isArray(payload.commands)
+            ? payload.commands
+                .map((item) => {
+                  if (!item || typeof item !== "object") {
+                    return null;
+                  }
+
+                  const source = item as Partial<SlashCommandOption>;
+                  const name = String(source.name ?? "").trim();
+                  const description = String(source.description ?? "").trim();
+                  const sourceName = String(source.sourceName ?? "Integration").trim() || "Integration";
+                  const sourceType =
+                    source.sourceType === "BOT" || source.sourceType === "APP" || source.sourceType === "SYSTEM"
+                      ? source.sourceType
+                      : "SYSTEM";
+
+                  if (!name) {
+                    return null;
+                  }
+
+                  return { name, description, sourceType, sourceName } satisfies SlashCommandOption;
+                })
+                .filter((item): item is SlashCommandOption => Boolean(item))
+            : [];
+
+          setSlashCommands(commands);
+          setLastSlashCommandsLoadedAt(Date.now());
+        })
+        .catch(() => {
+          // keep existing slash command cache if refresh fails
+        })
+        .finally(() => {
+          setIsLoadingSlashCommands(false);
+        });
+    }
+  };
+
+  const insertSlashCommand = (option: SlashCommandOption) => {
+    const currentContent = String(form.getValues("content") ?? "");
+    const slashStart = activeSlashStart;
+    const slashEnd = activeSlashEnd;
+
+    if (slashStart === null || slashEnd === null) {
+      return;
+    }
+
+    const before = currentContent.slice(0, slashStart);
+    const after = currentContent.slice(slashEnd);
+    const token = `/${option.name} `;
+    const nextValue = `${before}${token}${after}`;
+    const nextCaretPosition = before.length + token.length;
+
+    form.setValue("content", nextValue, {
+      shouldDirty: true,
+      shouldTouch: true,
+      shouldValidate: true,
+    });
+
+    clearSlashState();
+
+    window.requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(nextCaretPosition, nextCaretPosition);
+    });
+  };
+
   const insertMention = (option: MentionOption) => {
     const currentContent = String(form.getValues("content") ?? "");
     const mentionStart = activeMentionStart;
@@ -267,7 +626,7 @@ export const ChatInput = ({
 
     const before = currentContent.slice(0, mentionStart);
     const after = currentContent.slice(mentionEnd);
-    const token = `${buildMentionToken(option)} `;
+    const token = `@${option.label} `;
     const nextValue = `${before}${token}${after}`;
     const nextCaretPosition = before.length + token.length;
 
@@ -285,6 +644,34 @@ export const ChatInput = ({
     });
   };
 
+  const encodeMentionLabelsForSubmit = (rawContent: string) => {
+    if (!rawContent.trim() || !mentionOptions.length) {
+      return rawContent;
+    }
+
+    const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    const sortedMentionOptions = [...mentionOptions].sort((a, b) => b.label.length - a.label.length);
+    let nextContent = rawContent;
+
+    for (const option of sortedMentionOptions) {
+      const label = String(option.label ?? "").trim();
+      if (!label) {
+        continue;
+      }
+
+      const escapedLabel = escapeRegExp(label);
+      const mentionRegex = new RegExp(`(^|\\s)@${escapedLabel}(?=\\s|$|[.,!?;:])`, "g");
+      const mentionToken = `@[${label}](${option.type}:${option.id})`;
+
+      nextContent = nextContent.replace(mentionRegex, (_match, leadingWhitespace: string) => {
+        return `${leadingWhitespace}${mentionToken}`;
+      });
+    }
+
+    return nextContent;
+  };
+
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
       setSendError(null);
@@ -294,9 +681,11 @@ export const ChatInput = ({
         query,
       });
 
+      const encodedContent = encodeMentionLabelsForSubmit(values.content);
+
       await axios.post(url, {
         ...values,
-        content: buildQuotedContent(values.content, activeQuote),
+        content: buildQuotedContent(encodedContent, activeQuote),
       });
 
       if (type === "conversation" && conversationId) {
@@ -308,16 +697,25 @@ export const ChatInput = ({
 
       form.reset();
       clearMentionState();
+      clearSlashState();
       setActiveQuote(null);
       notifyPostCreated();
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
+        const statusCode = error.response?.status;
         const dataMessage =
           typeof error.response?.data === "string"
             ? error.response.data
             : error.response?.data?.message;
+        const normalizedMessage = String(dataMessage ?? "").trim();
+        const isHtmlFallback = normalizedMessage.startsWith("<!DOCTYPE html") || normalizedMessage.startsWith("<html");
+        const statusSuffix = statusCode ? ` (status ${statusCode})` : "";
 
-        setSendError(dataMessage || "Failed to send message.");
+        setSendError(
+          isHtmlFallback
+            ? `Failed to send message. Received an unexpected HTML response${statusSuffix}. Please refresh and try again.`
+            : normalizedMessage || `Failed to send message${statusSuffix}.`
+        );
       } else {
         setSendError("Failed to send message.");
       }
@@ -516,7 +914,7 @@ export const ChatInput = ({
                     <div className="mb-2 ml-14 mr-14 flex items-start justify-between rounded-md border border-indigo-500/35 bg-indigo-500/10 px-3 py-2 text-xs text-indigo-100">
                       <div className="min-w-0">
                         <p className="inline-flex items-center gap-1 font-semibold text-indigo-200">
-                          <Reply className="h-3.5 w-3.5" /> Replying to {activeQuote.authorName}
+                          <Reply className="h-3.5 w-3.5" suppressHydrationWarning /> Replying to {activeQuote.authorName}
                         </p>
                         <p className="mt-1 truncate text-indigo-100/90">{activeQuote.snippet || "Quoted message"}</p>
                       </div>
@@ -527,7 +925,7 @@ export const ChatInput = ({
                         aria-label="Cancel quote"
                         title="Cancel quote"
                       >
-                        <X className="h-3.5 w-3.5" />
+                        <X className="h-3.5 w-3.5" suppressHydrationWarning />
                       </button>
                     </div>
                   ) : null}
@@ -540,7 +938,7 @@ export const ChatInput = ({
                         aria-label="Open add menu"
                         title="Add"
                       >
-                        <Plus className="text-white dark:text-[#313338]" />
+                        <Plus className="text-white dark:text-[#313338]" suppressHydrationWarning />
                       </button>
                     </PopoverTrigger>
                     <PopoverContent
@@ -574,7 +972,7 @@ export const ChatInput = ({
                       aria-label="Bulk delete posts"
                       title="Bulk delete newest posts"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-4 w-4" suppressHydrationWarning />
                     </button>
                   ) : null}
                   <Input
@@ -597,38 +995,70 @@ export const ChatInput = ({
                       field.onChange(nextValue);
                       onTypingHeartbeat(nextValue);
                       detectMentionState(nextValue, event.target.selectionStart);
+                        detectSlashState(nextValue, event.target.selectionStart);
                     }}
                     onKeyDown={(event) => {
-                      if (!isMentionMenuOpen) {
+                      if (isMentionMenuOpen) {
+                        if (event.key === "ArrowDown") {
+                          event.preventDefault();
+                          setActiveMentionIndex((prev) => (prev + 1) % filteredMentionOptions.length);
+                          return;
+                        }
+
+                        if (event.key === "ArrowUp") {
+                          event.preventDefault();
+                          setActiveMentionIndex((prev) =>
+                            prev <= 0 ? filteredMentionOptions.length - 1 : prev - 1
+                          );
+                          return;
+                        }
+
+                        if (event.key === "Enter" || event.key === "Tab") {
+                          event.preventDefault();
+                          const selected = filteredMentionOptions[activeMentionIndex] ?? filteredMentionOptions[0];
+                          if (selected) {
+                            insertMention(selected);
+                          }
+                          return;
+                        }
+
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          clearMentionState();
+                          return;
+                        }
+                      }
+
+                      if (!isSlashMenuOpen) {
                         return;
                       }
 
                       if (event.key === "ArrowDown") {
                         event.preventDefault();
-                        setActiveMentionIndex((prev) => (prev + 1) % filteredMentionOptions.length);
+                        setActiveSlashIndex((prev) => (prev + 1) % filteredSlashCommands.length);
                         return;
                       }
 
                       if (event.key === "ArrowUp") {
                         event.preventDefault();
-                        setActiveMentionIndex((prev) =>
-                          prev <= 0 ? filteredMentionOptions.length - 1 : prev - 1
+                        setActiveSlashIndex((prev) =>
+                          prev <= 0 ? filteredSlashCommands.length - 1 : prev - 1
                         );
                         return;
                       }
 
                       if (event.key === "Enter" || event.key === "Tab") {
                         event.preventDefault();
-                        const selected = filteredMentionOptions[activeMentionIndex] ?? filteredMentionOptions[0];
+                        const selected = filteredSlashCommands[activeSlashIndex] ?? filteredSlashCommands[0];
                         if (selected) {
-                          insertMention(selected);
+                          insertSlashCommand(selected);
                         }
                         return;
                       }
 
                       if (event.key === "Escape") {
                         event.preventDefault();
-                        clearMentionState();
+                        clearSlashState();
                       }
                     }}
                   />
@@ -659,7 +1089,44 @@ export const ChatInput = ({
                       })}
                     </div>
                   ) : null}
+                  {isSlashMenuOpen ? (
+                    <div className="absolute bottom-16 left-14 right-16 z-20 max-h-56 overflow-auto rounded-lg border border-black/30 bg-[#1e1f22] p-1 shadow-2xl shadow-black/45">
+                      {filteredSlashCommands.map((option, index) => {
+                        const isActive = index === activeSlashIndex;
+                        return (
+                          <button
+                            key={`slash:${option.name}`}
+                            type="button"
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              insertSlashCommand(option);
+                            }}
+                            className={`flex w-full items-start justify-between gap-2 rounded-md px-2.5 py-2 text-left text-xs transition ${
+                              isActive
+                                ? "bg-[#5865f2]/35 text-white"
+                                : "text-[#dbdee1] hover:bg-[#2f3136]"
+                            }`}
+                          >
+                            <span className="min-w-0">
+                              <span className="block truncate font-semibold">/{option.name}</span>
+                              <span className="mt-0.5 block truncate text-[10px] text-[#a8adb5]">{option.description || "Integration command"}</span>
+                            </span>
+                            <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.06em] text-[#949ba4]">
+                              {option.sourceType.toLowerCase()}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
                   <div className={`absolute top-6.5 flex items-center gap-2 ${canBulkDeleteMessages ? "right-16" : "right-8"}`}>
+                    {runtimeEmojiPreferences.showComposerEmojiButton ? (
+                      <EmojiPicker
+                        onChange={onInsertEmoji}
+                        defaultEmoji={runtimeEmojiPreferences.defaultComposerEmoji}
+                        favorites={runtimeEmojiPreferences.favoriteEmojis}
+                      />
+                    ) : null}
                     <EmotePicker onSelect={onEmoteSelect} serverId={stickerServerId} />
                     <StickerPicker onSelect={onStickerSelect} serverId={stickerServerId} />
                     <SoundEfxPicker onSelect={onSoundEfxSelect} serverId={stickerServerId} />

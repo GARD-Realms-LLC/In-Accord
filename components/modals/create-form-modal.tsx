@@ -33,6 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { buildChannelPath } from "@/lib/route-slugs";
 
 type ChannelGroupItem = {
   id: string;
@@ -148,7 +149,12 @@ export const CreateFormModal = () => {
       onClose();
 
       if (createdChannelId) {
-        router.push(`/servers/${targetServerId}/channels/${createdChannelId}`);
+        router.push(
+          buildChannelPath({
+            server: { id: targetServerId, name: data.server?.name ?? "server" },
+            channel: { id: createdChannelId, name: values.name.trim() || "channel" },
+          })
+        );
       } else {
         router.refresh();
       }

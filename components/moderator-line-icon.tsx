@@ -3,6 +3,7 @@ import type { SVGProps } from "react";
 export const ModeratorLineIcon = ({ className, ...props }: SVGProps<SVGSVGElement>) => {
   return (
     <svg
+      suppressHydrationWarning
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"

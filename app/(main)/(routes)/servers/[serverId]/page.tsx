@@ -5,6 +5,8 @@ import { v4 as uuidv4 } from "uuid";
 import { currentProfile } from "@/lib/current-profile";
 import { channel, ChannelType, db, member, server } from "@/lib/db";
 import { visibleChannelIdsForRole } from "@/lib/channel-permissions";
+import { resolveServerRouteContext } from "@/lib/route-slug-resolver";
+import { buildChannelPath } from "@/lib/route-slugs";
 
 interface ServerIdPageProps {
   params: Promise<{
@@ -13,13 +15,24 @@ interface ServerIdPageProps {
 }
 
 const ServerIdPage = async ({ params }: ServerIdPageProps) => {
-  const { serverId } = await params;
+  const { serverId: serverParam } = await params;
 
   const profile = await currentProfile();
 
   if (!profile) {
     return redirect("/sign-in");
   }
+
+  const resolvedServer = await resolveServerRouteContext({
+    profileId: profile.id,
+    serverParam,
+  });
+
+  if (!resolvedServer) {
+    return redirect("/");
+  }
+
+  const serverId = resolvedServer.id;
 
   const access = await db
     .select({ id: server.id })
@@ -98,7 +111,12 @@ const ServerIdPage = async ({ params }: ServerIdPageProps) => {
     return redirect("/");
   }
 
-  return redirect(`/servers/${serverId}/channels/${initialChannel.id}`);
+  return redirect(
+    buildChannelPath({
+      server: { id: serverId, name: resolvedServer.name },
+      channel: { id: initialChannel.id, name: initialChannel.name },
+    })
+  );
 }
  
 export default ServerIdPage;

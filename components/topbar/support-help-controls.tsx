@@ -42,7 +42,7 @@ export const SupportHelpControls = ({
           title="Open In-Accord support server"
           aria-label="Open In-Accord support server"
         >
-          <LifeBuoy className="h-3.5 w-3.5" />
+          <LifeBuoy className="h-3.5 w-3.5" suppressHydrationWarning />
           Support
         </button>
 
@@ -53,7 +53,7 @@ export const SupportHelpControls = ({
           title="Open help panel"
           aria-label="Open help panel"
         >
-          <CircleHelp className="h-4 w-4" />
+          <CircleHelp className="h-4 w-4" suppressHydrationWarning />
         </button>
       </div>
 
@@ -70,7 +70,7 @@ export const SupportHelpControls = ({
               className="inline-flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 transition hover:bg-black/20 hover:text-white"
               aria-label="Close help panel"
             >
-              <X className="h-4 w-4" />
+              <X className="h-4 w-4" suppressHydrationWarning />
             </button>
           </div>
 
@@ -84,7 +84,7 @@ export const SupportHelpControls = ({
                 className="mt-2 inline-flex items-center gap-1 rounded-md border border-border/70 bg-background/70 px-2 py-1.5 text-[11px] font-semibold text-zinc-200 transition hover:bg-background/95"
               >
                 Open Support Server
-                <ExternalLink className="h-3 w-3" />
+                <ExternalLink className="h-3 w-3" suppressHydrationWarning />
               </button>
             </div>
 

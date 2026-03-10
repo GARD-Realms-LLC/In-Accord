@@ -6,6 +6,7 @@ import { db, member, MemberRole, server } from "@/lib/db";
 import { currentProfile } from "@/lib/current-profile";
 import { recordServerInviteUse } from "@/lib/server-invite-store";
 import { isServerIntegrationBotBanned } from "@/lib/server-integration-bot-store";
+import { buildServerPath } from "@/lib/route-slugs";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,7 @@ const InviteCodePage = async ({ params }: InviteCodeProps) => {
   }
 
   const existingServer = await db
-    .select({ id: server.id })
+    .select({ id: server.id, name: server.name })
     .from(server)
     .innerJoin(
       member,
@@ -38,7 +39,7 @@ const InviteCodePage = async ({ params }: InviteCodeProps) => {
     .limit(1);
 
   if (existingServer[0]) {
-    return redirect(`/servers/${existingServer[0].id}`);
+    return redirect(buildServerPath(existingServer[0]));
   }
 
   const inviteServer = await db.query.server.findFirst({
@@ -65,7 +66,7 @@ const InviteCodePage = async ({ params }: InviteCodeProps) => {
   }
 
   if (inviteServer) {
-    return redirect(`/servers/${inviteServer.id}`);
+    return redirect(buildServerPath({ id: inviteServer.id, name: inviteServer.name }));
   }
 
   return redirect("/");

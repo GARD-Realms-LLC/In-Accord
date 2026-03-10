@@ -6,6 +6,7 @@ import { Readable } from "node:stream";
 import { currentProfile } from "@/lib/current-profile";
 import { db } from "@/lib/db";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
+import { getEffectiveSiteUrl } from "@/lib/runtime-site-url-config";
 import {
   ensureUserPreferencesSchema,
   getUserPreferences,
@@ -82,14 +83,14 @@ const streamToBuffer = async (stream: Readable): Promise<Uint8Array> => {
   return merged;
 };
 
-const extractR2ObjectKey = (url: string): string | null => {
+const extractR2ObjectKey = async (url: string): Promise<string | null> => {
   const trimmed = String(url ?? "").trim();
   if (!trimmed) {
     return null;
   }
 
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+    const baseUrl = await getEffectiveSiteUrl();
     const parsed = new URL(trimmed, baseUrl);
     const key = parsed.searchParams.get("key");
     return key && key.trim().length > 0 ? key.trim() : null;
@@ -350,7 +351,7 @@ export async function PATCH(req: Request) {
 
     if (r2Client && nextApplicationFiles.length > 0) {
       const primaryFile = nextApplicationFiles[0];
-      const sourceKey = extractR2ObjectKey(primaryFile.url);
+      const sourceKey = await extractR2ObjectKey(primaryFile.url);
 
       if (sourceKey) {
         const suffix = isApproveDecision ? "Aproved" : "Denid";
@@ -385,7 +386,7 @@ export async function PATCH(req: Request) {
             );
           }
 
-          const appUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+          const appUrl = await getEffectiveSiteUrl();
           const targetUrl = `${appUrl}/api/r2/object?key=${encodeURIComponent(targetKey)}`;
 
           nextApplicationFiles = [

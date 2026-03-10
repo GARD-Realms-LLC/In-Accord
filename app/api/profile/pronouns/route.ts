@@ -16,9 +16,9 @@ export async function PATCH(req: Request) {
     const body = (await req.json()) as { pronouns?: string | null };
     const pronounsInput = typeof body.pronouns === "string" ? body.pronouns.trim() : "";
 
-    if (pronounsInput.length > 40) {
+    if (pronounsInput.length > 80) {
       return NextResponse.json(
-        { error: "Pronouns must be 40 characters or fewer." },
+        { error: "Pronouns must be 80 characters or fewer." },
         { status: 400 }
       );
     }

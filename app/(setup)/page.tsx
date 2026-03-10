@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 
 import { initialProfile } from "@/lib/initial-profile";
 import { db, member, server } from "@/lib/db";
+import { buildServerPath } from "@/lib/route-slugs";
 
 const SetupPage = async () => {
   const profile = await initialProfile();
@@ -12,7 +13,7 @@ const SetupPage = async () => {
   }
 
   const firstServer = await db
-    .select({ id: server.id })
+    .select({ id: server.id, name: server.name })
     .from(server)
     .innerJoin(
       member,
@@ -21,7 +22,7 @@ const SetupPage = async () => {
     .limit(1);
 
   if (firstServer[0]) {
-    return redirect(`/servers/${firstServer[0].id}`);
+    return redirect(buildServerPath(firstServer[0]));
   }
 
   return redirect("/users");

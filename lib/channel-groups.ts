@@ -3,13 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 
 import { db } from "@/lib/db";
 
-let channelGroupSchemaReady = false;
-
 export const ensureChannelGroupSchema = async () => {
-  if (channelGroupSchemaReady) {
-    return;
-  }
-
   await db.execute(sql`
     create table if not exists "ChannelGroup" (
       "id" varchar(191) primary key,
@@ -166,8 +160,6 @@ export const ensureChannelGroupSchema = async () => {
       lower(trim(coalesce("name", '')))
     )
   `);
-
-  channelGroupSchemaReady = true;
 };
 
 export const ensureDefaultMediaChannelGroups = async ({

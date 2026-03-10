@@ -9,6 +9,8 @@ import {
   canAccessChannelAsProfile,
   ensureChannelThreadSchema,
 } from "@/lib/channel-threads";
+import { resolveChannelRouteContext, resolveServerRouteContext } from "@/lib/route-slug-resolver";
+import { buildChannelPath, buildThreadPath } from "@/lib/route-slugs";
 
 type ThreadRow = {
   id: string;
@@ -31,13 +33,35 @@ interface ChannelThreadsPageProps {
 }
 
 const ChannelThreadsPage = async ({ params }: ChannelThreadsPageProps) => {
-  const { serverId, channelId } = await params;
+  const { serverId: serverParam, channelId: channelParam } = await params;
 
   const profile = await currentProfile();
 
   if (!profile) {
     return redirect("/sign-in");
   }
+
+  const resolvedServer = await resolveServerRouteContext({
+    profileId: profile.id,
+    serverParam,
+  });
+
+  if (!resolvedServer) {
+    return redirect("/");
+  }
+
+  const serverId = resolvedServer.id;
+
+  const resolvedChannel = await resolveChannelRouteContext({
+    serverId,
+    channelParam,
+  });
+
+  if (!resolvedChannel) {
+    return redirect(`/servers/${resolvedServer.segment}`);
+  }
+
+  const channelId = resolvedChannel.id;
 
   await ensureChannelThreadSchema();
 
@@ -46,7 +70,7 @@ const ChannelThreadsPage = async ({ params }: ChannelThreadsPageProps) => {
   });
 
   if (!currentChannel) {
-    return redirect(`/servers/${serverId}`);
+    return redirect(`/servers/${resolvedServer.segment}`);
   }
 
   const access = await canAccessChannelAsProfile({
@@ -56,8 +80,13 @@ const ChannelThreadsPage = async ({ params }: ChannelThreadsPageProps) => {
   });
 
   if (!access.allowed) {
-    return redirect(`/servers/${serverId}`);
+    return redirect(`/servers/${resolvedServer.segment}`);
   }
+
+  const channelPath = buildChannelPath({
+    server: { id: serverId, name: resolvedServer.name },
+    channel: { id: currentChannel.id, name: currentChannel.name },
+  });
 
   await autoArchiveStaleThreadsForChannel({
     serverId,
@@ -148,7 +177,7 @@ const ChannelThreadsPage = async ({ params }: ChannelThreadsPageProps) => {
             </p>
           </div>
           <Link
-            href={`/servers/${serverId}/channels/${channelId}`}
+            href={channelPath}
             className="inline-flex items-center rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
           >
             Back to channel
@@ -172,7 +201,11 @@ const ChannelThreadsPage = async ({ params }: ChannelThreadsPageProps) => {
                   activeThreads.map((thread) => (
                     <Link
                       key={thread.id}
-                      href={`/servers/${serverId}/channels/${channelId}/threads/${thread.id}`}
+                      href={buildThreadPath({
+                        server: { id: serverId, name: resolvedServer.name },
+                        channel: { id: currentChannel.id, name: currentChannel.name },
+                        threadId: thread.id,
+                      })}
                       className="block rounded-lg border border-zinc-300 bg-white/70 p-3 transition hover:bg-zinc-100/90 dark:border-zinc-700 dark:bg-zinc-900/45 dark:hover:bg-zinc-800/75"
                     >
                       <div className="flex items-center justify-between gap-2">
@@ -203,7 +236,11 @@ const ChannelThreadsPage = async ({ params }: ChannelThreadsPageProps) => {
                   archivedThreads.map((thread) => (
                     <Link
                       key={thread.id}
-                      href={`/servers/${serverId}/channels/${channelId}/threads/${thread.id}`}
+                      href={buildThreadPath({
+                        server: { id: serverId, name: resolvedServer.name },
+                        channel: { id: currentChannel.id, name: currentChannel.name },
+                        threadId: thread.id,
+                      })}
                       className="block rounded-lg border border-zinc-300 bg-white/60 p-3 transition hover:bg-zinc-100/80 dark:border-zinc-700 dark:bg-zinc-900/35 dark:hover:bg-zinc-800/65"
                     >
                       <div className="flex items-center justify-between gap-2">

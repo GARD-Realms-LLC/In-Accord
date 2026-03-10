@@ -1,6 +1,7 @@
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { NextResponse } from "next/server";
 import { currentProfile } from "@/lib/current-profile";
+import { getEffectiveSiteUrl } from "@/lib/runtime-site-url-config";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -118,7 +119,7 @@ export async function POST(req: Request) {
       })
     );
 
-    const appUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+    const appUrl = await getEffectiveSiteUrl();
     const objectUrl = `${appUrl}/api/r2/object?key=${encodeURIComponent(key)}`;
 
     return NextResponse.json({ url: objectUrl, key });

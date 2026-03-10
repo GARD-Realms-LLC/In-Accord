@@ -1,5 +1,28 @@
 {
     "window.title": "e:\\In-Accord",
+    "files.watcherExclude": {
+        "**/.git/**": true,
+        "**/node_modules/**": true,
+        "**/.next/**": true,
+        "**/.next-dev/**": true,
+        "**/.electron-cache/**": true,
+        "**/Win-64/**": true
+    },
+    "search.exclude": {
+        "**/.git": true,
+        "**/node_modules": true,
+        "**/.next": true,
+        "**/.next-dev": true,
+        "**/.electron-cache": true,
+        "**/Win-64": true
+    },
+    "files.exclude": {
+        "**/.next": true,
+        "**/.next-dev": true,
+        "**/.electron-cache": true,
+        "**/Win-64": true
+    },
+    "typescript.tsserver.maxTsServerMemory": 4096,
     "workbench.colorCustomizations": {
         "statusBarItem.warningBackground": "#4fcb1a",
         "statusBarItem.warningForeground": "#000000",

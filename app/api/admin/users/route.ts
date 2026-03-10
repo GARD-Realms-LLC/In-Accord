@@ -11,6 +11,10 @@ import { getNextIncrementalUserId } from "@/lib/user-id";
 import { ensureUserProfileSchema } from "@/lib/user-profile";
 import { isInAccordAdministrator } from "@/lib/in-accord-admin";
 import { getInAccordRoles, normalizeRoleKey } from "@/lib/in-accord-roles";
+import { isImmutableAccountUserId } from "@/lib/account-security";
+import { ADMINISTRATOR_ROLE_KEY } from "@/lib/account-security-constants";
+import { isBotUser } from "@/lib/is-bot-user";
+import { ensureInAccordRoleSchema } from "@/lib/in-accord-roles";
 
 type UserRow = {
   userId: string;
@@ -303,7 +307,64 @@ export async function PATCH(request: Request) {
       role?: string;
       phoneNumber?: string | null;
       dateOfBirth?: string | null;
+      action?: string;
     } | null;
+
+    const action = String(body?.action ?? "").trim().toLowerCase();
+
+    if (action === "assignbotsrole") {
+      await ensureInAccordRoleSchema();
+
+      await db.execute(sql`
+        insert into "InAccordRole" ("roleKey", "roleLabel", "isSystem")
+        values (${"BOTS"}, ${"Bots"}, false)
+        on conflict ("roleKey") do update
+        set "roleLabel" = excluded."roleLabel",
+            "updatedAt" = now()
+      `);
+
+      const usersResult = await db.execute(sql`
+        select "userId", "role", "name", "email"
+        from "Users"
+      `);
+
+      const allUsers = (usersResult as unknown as {
+        rows?: Array<{
+          userId: string;
+          role: string | null;
+          name: string | null;
+          email: string | null;
+        }>;
+      }).rows ?? [];
+
+      let updatedCount = 0;
+
+      for (const row of allUsers) {
+        const isBotAccount = isBotUser({
+          role: row.role,
+          name: row.name,
+          email: row.email,
+        });
+
+        if (!isBotAccount) {
+          continue;
+        }
+
+        const currentRole = normalizeManagedUserRole(row.role) ?? "USER";
+        if (currentRole === "BOTS") {
+          continue;
+        }
+
+        await db.execute(sql`
+          update "Users"
+          set "role" = ${"BOTS"}
+          where "userId" = ${row.userId}
+        `);
+        updatedCount += 1;
+      }
+
+      return NextResponse.json({ ok: true, updatedCount, role: "BOTS" });
+    }
 
     const userId = String(body?.userId ?? "").trim();
     const roleProvided = Boolean(body && Object.prototype.hasOwnProperty.call(body, "role"));
@@ -354,18 +415,33 @@ export async function PATCH(request: Request) {
     }
 
     const existingResult = await db.execute(sql`
-      select "userId", "email"
+      select "userId", "email", "role"
       from "Users"
       where "userId" = ${userId}
       limit 1
     `);
 
     const existingRow = (existingResult as unknown as {
-      rows?: Array<{ userId: string; email: string | null }>;
+      rows?: Array<{ userId: string; email: string | null; role: string | null }>;
     }).rows?.[0];
 
     if (!existingRow) {
       return new NextResponse("User not found", { status: 404 });
+    }
+
+    const existingRole = normalizeManagedUserRole(existingRow.role) ?? "USER";
+
+    if (roleProvided && role) {
+      if (isImmutableAccountUserId(userId) && role !== ADMINISTRATOR_ROLE_KEY) {
+        return new NextResponse(
+          `Protected account ${userId} must always keep ${ADMINISTRATOR_ROLE_KEY} role.`,
+          { status: 403 }
+        );
+      }
+
+      if (existingRole === ADMINISTRATOR_ROLE_KEY && role !== ADMINISTRATOR_ROLE_KEY) {
+        return new NextResponse("Administrator role cannot be removed from a user account.", { status: 403 });
+      }
     }
 
     if (phoneNumberProvided || dateOfBirthProvided) {
@@ -451,9 +527,15 @@ export async function DELETE(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const userId = String(searchParams.get("userId") ?? "").trim();
+    const forceCleanup =
+      String(searchParams.get("forceCleanup") ?? "").trim().toLowerCase() === "true";
 
     if (!userId) {
       return new NextResponse("userId is required", { status: 400 });
+    }
+
+    if (isImmutableAccountUserId(userId)) {
+      return new NextResponse("This core account is protected and cannot be deleted.", { status: 403 });
     }
 
     if (userId === profile.id) {
@@ -464,15 +546,29 @@ export async function DELETE(request: Request) {
     await ensureUserProfileSchema();
 
     const userCheckResult = await db.execute(sql`
-      select "userId"
+      select "userId", "role", "name", "email"
       from "Users"
       where "userId" = ${userId}
       limit 1
     `);
-    const userRows = (userCheckResult as unknown as { rows: Array<{ userId: string }> }).rows;
-    if (!userRows?.[0]) {
+    const userRows = (userCheckResult as unknown as {
+      rows: Array<{
+        userId: string;
+        role: string | null;
+        name: string | null;
+        email: string | null;
+      }>;
+    }).rows;
+    const userRow = userRows?.[0];
+    if (!userRow) {
       return new NextResponse("User not found", { status: 404 });
     }
+
+    const isTargetBotAccount = isBotUser({
+      role: userRow.role,
+      name: userRow.name,
+      email: userRow.email,
+    });
 
     const usageResult = await db.execute(sql`
       select
@@ -498,11 +594,31 @@ export async function DELETE(request: Request) {
     const ownedServerCount = Number(usageRow?.ownedServerCount ?? 0);
     const memberCount = Number(usageRow?.memberCount ?? 0);
 
-    if (ownedServerCount > 0 || memberCount > 0) {
+    if (ownedServerCount > 0) {
+      return new NextResponse(
+        "User cannot be deleted because they own one or more servers.",
+        { status: 409 }
+      );
+    }
+
+    if (memberCount > 0 && !(forceCleanup && isTargetBotAccount)) {
       return new NextResponse(
         "User cannot be deleted because they are linked to servers or memberships.",
         { status: 409 }
       );
+    }
+
+    if (forceCleanup && !isTargetBotAccount) {
+      return new NextResponse("Force cleanup delete is only allowed for bot/app accounts.", {
+        status: 403,
+      });
+    }
+
+    if (forceCleanup && memberCount > 0) {
+      await db.execute(sql`
+        delete from "Member"
+        where "profileId" = ${userId}
+      `);
     }
 
     await db.execute(sql`

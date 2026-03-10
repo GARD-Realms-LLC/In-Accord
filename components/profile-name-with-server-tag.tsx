@@ -4,8 +4,10 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 
 import { getProfileNameStyleClass, normalizeProfileNameStyleValue } from "@/lib/profile-name-styles";
+import type { ProfileIcon } from "@/lib/profile-icons";
 import { cn } from "@/lib/utils";
 import { NameplatePill } from "@/components/nameplate-pill";
+import { BusinessMemberIcon } from "@/components/business-member-icon";
 
 type SelectedServerTag = {
   serverId: string;
@@ -26,9 +28,17 @@ type ProfileCardPayload = {
   effectiveNameplateColor?: string | null;
   effectiveNameplateImageUrl?: string | null;
   selectedServerTag?: SelectedServerTag | null;
+  profileIcons?: ProfileIcon[];
   familyLifecycle?: {
     isFamilyLinked?: boolean;
     showFamilyIcon?: boolean;
+    canConvertToNormal?: boolean;
+    age?: number | null;
+    state?: "managed-under-16" | "eligible-16-plus" | "normal";
+  } | null;
+  businessLifecycle?: {
+    isBusinessLinked?: boolean;
+    showBusinessIcon?: boolean;
     canConvertToNormal?: boolean;
     age?: number | null;
     state?: "managed-under-16" | "eligible-16-plus" | "normal";
@@ -46,7 +56,9 @@ type ProfileCardState = {
   effectiveNameplateColor: string | null;
   effectiveNameplateImageUrl: string | null;
   selectedServerTag: SelectedServerTag | null;
+  showPatronIcon: boolean;
   showFamilyIcon: boolean;
+  showBusinessIcon: boolean;
 };
 
 type ProfileNameWithServerTagProps = {
@@ -66,6 +78,20 @@ type ProfileNameWithServerTagProps = {
 
 const cardCache = new Map<string, ProfileCardState>();
 const inflightRequests = new Map<string, Promise<ProfileCardState>>();
+const PROFILE_CARD_COMPONENT_CACHE_LIMIT = 1_000;
+
+const setBoundedCardCacheEntry = (cacheKey: string, value: ProfileCardState) => {
+  cardCache.set(cacheKey, value);
+
+  while (cardCache.size > PROFILE_CARD_COMPONENT_CACHE_LIMIT) {
+    const oldest = cardCache.keys().next().value;
+    if (typeof oldest !== "string") {
+      break;
+    }
+
+    cardCache.delete(oldest);
+  }
+};
 
 const getCacheKey = (profileId: string, memberId?: string | null) => `${profileId}::${memberId ?? ""}`;
 
@@ -84,7 +110,9 @@ const readCardState = async (profileId: string, memberId?: string | null) => {
       effectiveNameplateColor: null,
       effectiveNameplateImageUrl: null,
       selectedServerTag: null,
+      showPatronIcon: false,
       showFamilyIcon: false,
+      showBusinessIcon: false,
     };
   }
 
@@ -133,7 +161,11 @@ const readCardState = async (profileId: string, memberId?: string | null) => {
           : null;
       const tag = response.data?.selectedServerTag;
       const normalized = tag && typeof tag.tagCode === "string" ? tag : null;
+      const showPatronIcon = Array.isArray(response.data?.profileIcons)
+        ? response.data.profileIcons.some((icon) => String(icon?.key ?? "").trim().toLowerCase() === "patron")
+        : false;
       const showFamilyIcon = Boolean(response.data?.familyLifecycle?.showFamilyIcon);
+      const showBusinessIcon = Boolean(response.data?.businessLifecycle?.showBusinessIcon);
       const nextState: ProfileCardState = {
         effectiveProfileName,
         effectiveProfileNameStyle,
@@ -145,10 +177,12 @@ const readCardState = async (profileId: string, memberId?: string | null) => {
         effectiveNameplateColor,
         effectiveNameplateImageUrl,
         selectedServerTag: normalized,
+        showPatronIcon,
         showFamilyIcon,
+        showBusinessIcon,
       };
 
-      cardCache.set(cacheKey, nextState);
+      setBoundedCardCacheEntry(cacheKey, nextState);
       return nextState;
     })
     .catch(() => {
@@ -163,9 +197,11 @@ const readCardState = async (profileId: string, memberId?: string | null) => {
         effectiveNameplateColor: null,
         effectiveNameplateImageUrl: null,
         selectedServerTag: null,
+        showPatronIcon: false,
         showFamilyIcon: false,
+        showBusinessIcon: false,
       };
-      cardCache.set(cacheKey, fallbackState);
+      setBoundedCardCacheEntry(cacheKey, fallbackState);
       return fallbackState;
     })
     .finally(() => {
@@ -200,7 +236,9 @@ export const ProfileNameWithServerTag = ({
   const [effectiveNameplateColor, setEffectiveNameplateColor] = useState<string | null>(null);
   const [effectiveNameplateImageUrl, setEffectiveNameplateImageUrl] = useState<string | null>(null);
   const [selectedServerTag, setSelectedServerTag] = useState<SelectedServerTag | null>(null);
+  const [showPatronIcon, setShowPatronIcon] = useState(false);
   const [showFamilyIcon, setShowFamilyIcon] = useState(false);
+  const [showBusinessIcon, setShowBusinessIcon] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
 
   const trimmedProfileId = useMemo(() => String(profileId ?? "").trim(), [profileId]);
@@ -218,7 +256,9 @@ export const ProfileNameWithServerTag = ({
       setEffectiveNameplateColor(null);
       setEffectiveNameplateImageUrl(null);
       setSelectedServerTag(null);
+      setShowPatronIcon(false);
       setShowFamilyIcon(false);
+      setShowBusinessIcon(false);
       return;
     }
 
@@ -237,7 +277,9 @@ export const ProfileNameWithServerTag = ({
         setEffectiveNameplateColor(state.effectiveNameplateColor);
         setEffectiveNameplateImageUrl(state.effectiveNameplateImageUrl);
         setSelectedServerTag(state.selectedServerTag);
+        setShowPatronIcon(state.showPatronIcon);
         setShowFamilyIcon(state.showFamilyIcon);
+        setShowBusinessIcon(state.showBusinessIcon);
       }
     };
 
@@ -321,6 +363,22 @@ export const ProfileNameWithServerTag = ({
       <span>FAMILY</span>
     </span>
   ) : null;
+  const businessBadge = showBusinessIcon ? (
+    <BusinessMemberIcon className={cn("rounded-full", badgeClassName)} />
+  ) : null;
+  const patronBadge = showPatronIcon ? (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border border-emerald-400/35 bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-emerald-100",
+        badgeClassName
+      )}
+      title="Patron supporter"
+      aria-label="Patron supporter"
+    >
+      <span>💵</span>
+      <span>$</span>
+    </span>
+  ) : null;
 
   if (shouldHideName) {
     return (
@@ -352,7 +410,9 @@ export const ProfileNameWithServerTag = ({
             <span>{selectedServerTag.tagCode}</span>
           </span>
         ) : null}
+        {patronBadge}
         {familyBadge}
+        {businessBadge}
       </span>
     );
   }
@@ -383,7 +443,9 @@ export const ProfileNameWithServerTag = ({
             <span>{selectedServerTag.tagCode}</span>
           </span>
         ) : null}
+        {patronBadge}
         {familyBadge}
+        {businessBadge}
       </span>
 
       {showNameplate && hasAnyNameplateValue ? (

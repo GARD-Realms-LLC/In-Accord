@@ -5,8 +5,10 @@ import { MemberRole } from "@/lib/db/types";
 import { OnlineUsersList } from "@/components/server/online-users-list";
 import { currentProfile } from "@/lib/current-profile";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
+import { makeIntegrationBotProfileId } from "@/lib/integration-bot-profile";
 import { ensureServerRolesSchema } from "@/lib/server-roles";
 import { server } from "@/lib/db/schema";
+import { getUserPreferences } from "@/lib/user-preferences";
 import { and, eq } from "drizzle-orm";
 
 interface ServerUserRolesRailProps {
@@ -30,16 +32,36 @@ type RoleRow = {
   lastLogonAt: Date | string | null;
 };
 
+type ServerRoleGroupRow = {
+  id: string;
+  name: string;
+  position: number;
+};
+
 export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps) => {
   const profile = await currentProfile();
   await ensureServerRolesSchema();
 
-  const ownerRecord = profile?.id
-    ? await db.query.server.findFirst({
-        where: and(eq(server.id, serverId), eq(server.profileId, profile.id)),
-        columns: { id: true },
-      })
-    : null;
+  const targetServer = await db.query.server.findFirst({
+    where: eq(server.id, serverId),
+    columns: {
+      id: true,
+      profileId: true,
+    },
+  });
+
+  if (!targetServer) {
+    return null;
+  }
+
+  const ownerPreferences = await getUserPreferences(targetServer.profileId);
+  const validOwnedBotProfileIds = new Set(
+    ownerPreferences.OtherBots.map((bot) => makeIntegrationBotProfileId(targetServer.profileId, bot.id))
+  );
+
+  const ownerBotPrefix = `botcfg_${targetServer.profileId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 60)}_`;
+
+  const ownerRecord = profile?.id && profile.id === targetServer.profileId ? { id: targetServer.id } : null;
 
   const membersResult = await db.execute(sql`
     select
@@ -81,7 +103,29 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
       coalesce(nullif(trim(up."profileName"), ''), u."name", u."email", m."profileId") asc
   `);
 
-  const rows = (membersResult as unknown as { rows: RoleRow[] }).rows;
+  const roleGroupsResult = await db.execute(sql`
+    select
+      r."id" as "id",
+      r."name" as "name",
+      r."position" as "position"
+    from "ServerRole" r
+    where r."serverId" = ${serverId}
+    order by r."position" asc, r."name" asc
+  `);
+
+  const roleGroups = ((roleGroupsResult as unknown as { rows?: ServerRoleGroupRow[] }).rows ?? []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    position: Number(row.position ?? 0),
+  }));
+
+  const rows = ((membersResult as unknown as { rows: RoleRow[] }).rows ?? []).filter((row) => {
+    if (!row.profileId.startsWith(ownerBotPrefix)) {
+      return true;
+    }
+
+    return validOwnedBotProfileIds.has(row.profileId);
+  });
 
   const currentMemberRole = rows.find((row) => row.profileId === profile?.id)?.role;
   const canSeeInvisibleMembers = hasInAccordAdministrativeAccess(profile?.role) || currentMemberRole === MemberRole.ADMIN;
@@ -137,6 +181,7 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
     .map((row) => ({
     ...row,
     role: resolveEffectiveRole(row),
+    assignedRoleName: row.assignedRoleName,
     realName: row.realName ?? "",
     displayName: row.realName || row.email || row.profileId,
     presenceStatus: String(row.presenceStatus ?? "ONLINE").toUpperCase(),
@@ -191,7 +236,7 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
           {onlineUsers.length === 0 ? (
             <p className="text-xs text-[#6f7680]">N/A</p>
           ) : (
-            <OnlineUsersList users={onlineUsers} />
+            <OnlineUsersList users={onlineUsers} roleGroups={roleGroups} />
           )}
 
           <div className="mt-4">
@@ -202,7 +247,7 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
             {offlineUsers.length === 0 ? (
               <p className="text-xs text-[#6f7680]">N/A</p>
             ) : (
-              <OnlineUsersList users={offlineUsers} />
+              <OnlineUsersList users={offlineUsers} roleGroups={roleGroups} />
             )}
           </div>
         </div>

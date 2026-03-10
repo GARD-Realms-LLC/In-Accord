@@ -10,6 +10,7 @@ import { getSessionUserId } from "@/lib/session";
 import { getUserBanner } from "@/lib/user-banner-store";
 
 const CURRENT_PROFILE_CACHE_TTL_MS = 10_000;
+const DISABLE_CURRENT_PROFILE_CACHE = true;
 
 type CachedProfile = {
   id: string;
@@ -22,6 +23,8 @@ type CachedProfile = {
   nameplateColor: string | null;
   nameplateImageUrl: string | null;
   pronouns: string | null;
+  businessRole: string | null;
+  businessSection: string | null;
   comment: string | null;
   avatarDecorationUrl: string | null;
   phoneNumber: string | null;
@@ -39,6 +42,10 @@ type CachedProfile = {
 const currentProfileCache = new Map<string, { value: CachedProfile | null; expiresAt: number }>();
 
 const getCachedCurrentProfile = (userId: string) => {
+  if (DISABLE_CURRENT_PROFILE_CACHE) {
+    return null;
+  }
+
   const cached = currentProfileCache.get(userId);
   if (!cached) {
     return null;
@@ -53,6 +60,10 @@ const getCachedCurrentProfile = (userId: string) => {
 };
 
 const setCachedCurrentProfile = (userId: string, value: CachedProfile | null) => {
+  if (DISABLE_CURRENT_PROFILE_CACHE) {
+    return;
+  }
+
   currentProfileCache.set(userId, {
     value,
     expiresAt: Date.now() + CURRENT_PROFILE_CACHE_TTL_MS,
@@ -90,6 +101,8 @@ export const currentProfile = async () => {
         up."nameplateColor" as "nameplateColor",
         up."nameplateImageUrl" as "nameplateImageUrl",
         up."pronouns" as "pronouns",
+        up."businessRole" as "businessRole",
+        up."businessSection" as "businessSection",
         up."comment" as "comment",
         up."avatarDecorationUrl" as "avatarDecorationUrl",
         nullif(trim(to_jsonb(u)->>'phone'), '') as "phoneNumber",
@@ -118,6 +131,8 @@ export const currentProfile = async () => {
         nameplateColor: string | null;
         nameplateImageUrl: string | null;
         pronouns: string | null;
+        businessRole: string | null;
+        businessSection: string | null;
         comment: string | null;
         avatarDecorationUrl: string | null;
         phoneNumber: string | null;
@@ -154,6 +169,8 @@ export const currentProfile = async () => {
           nameplateColor: user.nameplateColor ?? null,
           nameplateImageUrl: user.nameplateImageUrl ?? null,
           pronouns: user.pronouns ?? null,
+          businessRole: user.businessRole ?? null,
+          businessSection: user.businessSection ?? null,
           comment: user.comment ?? null,
           avatarDecorationUrl: user.avatarDecorationUrl ?? null,
           phoneNumber: user.phoneNumber ?? null,

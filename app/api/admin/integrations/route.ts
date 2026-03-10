@@ -8,8 +8,8 @@ import {
   ensureUserPreferencesSchema,
   getUserPreferences,
   updateUserPreferences,
-  type DiscordAppConfig,
-  type DiscordBotConfig,
+  type OtherAppConfig,
+  type OtherBotConfig,
 } from "@/lib/user-preferences";
 
 const providerOrder = ["github", "google", "steam", "twitch", "xbox", "youtube"];
@@ -19,19 +19,19 @@ type PreferencesRow = {
   name: string | null;
   email: string | null;
   connectedAccountsJson: string | null;
-  discordAppsJson: string | null;
-  discordBotsJson: string | null;
+  OtherAppsJson: string | null;
+  OtherBotsJson: string | null;
 };
 
-type DiscordConfigSummary = {
+type OtherConfigSummary = {
   appsTotal: number;
   botsTotal: number;
   enabledApps: number;
   enabledBots: number;
-  usersWithDiscordConfigs: number;
+  usersWithOtherConfigs: number;
 };
 
-type AdminDiscordConfigRow = {
+type AdminOtherConfigRow = {
   id: string;
   userId: string;
   name: string;
@@ -121,8 +121,8 @@ export async function GET() {
         u."name" as "name",
         u."email" as "email",
         up."connectedAccountsJson" as "connectedAccountsJson",
-        up."discordAppsJson" as "discordAppsJson",
-        up."discordBotsJson" as "discordBotsJson"
+        up."OtherAppsJson" as "OtherAppsJson",
+        up."OtherBotsJson" as "OtherBotsJson"
       from "UserPreference" up
       left join "Users" u on u."userId" = up."userId"
     `);
@@ -131,13 +131,13 @@ export async function GET() {
 
     const providerUsage = new Map<string, number>();
     const userConnectionCounts: Array<{ userId: string; providers: string[]; count: number }> = [];
-    const discordRows: AdminDiscordConfigRow[] = [];
-    const discordSummary: DiscordConfigSummary = {
+    const OtherRows: AdminOtherConfigRow[] = [];
+    const OtherSummary: OtherConfigSummary = {
       appsTotal: 0,
       botsTotal: 0,
       enabledApps: 0,
       enabledBots: 0,
-      usersWithDiscordConfigs: 0,
+      usersWithOtherConfigs: 0,
     };
 
     for (const row of rows) {
@@ -175,7 +175,7 @@ export async function GET() {
       let botsForUser = 0;
 
       try {
-        const parsedApps = JSON.parse(row.discordAppsJson ?? "[]") as unknown;
+        const parsedApps = JSON.parse(row.OtherAppsJson ?? "[]") as unknown;
         if (Array.isArray(parsedApps)) {
           for (const entry of parsedApps) {
             if (!entry || typeof entry !== "object") {
@@ -205,12 +205,12 @@ export async function GET() {
               : new Date(createdAtRaw).toISOString();
 
             appsForUser += 1;
-            discordSummary.appsTotal += 1;
+            OtherSummary.appsTotal += 1;
             if (enabled) {
-              discordSummary.enabledApps += 1;
+              OtherSummary.enabledApps += 1;
             }
 
-            discordRows.push({
+            OtherRows.push({
               id,
               userId: row.userId,
               name: row.name?.trim() || row.userId,
@@ -228,7 +228,7 @@ export async function GET() {
       }
 
       try {
-        const parsedBots = JSON.parse(row.discordBotsJson ?? "[]") as unknown;
+        const parsedBots = JSON.parse(row.OtherBotsJson ?? "[]") as unknown;
         if (Array.isArray(parsedBots)) {
           for (const entry of parsedBots) {
             if (!entry || typeof entry !== "object") {
@@ -258,12 +258,12 @@ export async function GET() {
               : new Date(createdAtRaw).toISOString();
 
             botsForUser += 1;
-            discordSummary.botsTotal += 1;
+            OtherSummary.botsTotal += 1;
             if (enabled) {
-              discordSummary.enabledBots += 1;
+              OtherSummary.enabledBots += 1;
             }
 
-            discordRows.push({
+            OtherRows.push({
               id,
               userId: row.userId,
               name: row.name?.trim() || row.userId,
@@ -281,7 +281,7 @@ export async function GET() {
       }
 
       if (appsForUser + botsForUser > 0) {
-        discordSummary.usersWithDiscordConfigs += 1;
+        OtherSummary.usersWithOtherConfigs += 1;
       }
     }
 
@@ -294,7 +294,7 @@ export async function GET() {
       .sort((a, b) => b.count - a.count || a.userId.localeCompare(b.userId))
       .slice(0, 15);
 
-    const recentDiscordConfigs = discordRows
+    const recentOtherConfigs = OtherRows
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 40);
 
@@ -302,11 +302,11 @@ export async function GET() {
       summary: {
         usersWithConnections: userConnectionCounts.length,
         totalLinkedAccounts: providers.reduce((sum, provider) => sum + provider.connectedUsers, 0),
-        ...discordSummary,
+        ...OtherSummary,
       },
       providers,
       topConnectedUsers,
-      recentDiscordConfigs,
+      recentOtherConfigs,
     });
   } catch (error) {
     console.error("[ADMIN_INTEGRATIONS_GET]", error);
@@ -325,6 +325,7 @@ export async function PATCH(req: Request) {
       userId?: unknown;
       type?: unknown;
       configId?: unknown;
+      applicationId?: unknown;
       action?: unknown;
       enabled?: unknown;
       patch?: unknown;
@@ -333,20 +334,92 @@ export async function PATCH(req: Request) {
     const userId = typeof body.userId === "string" ? body.userId.trim() : "";
     const type = body.type === "APP" || body.type === "BOT" ? body.type : null;
     const configId = typeof body.configId === "string" ? body.configId.trim() : "";
+    const applicationId = typeof body.applicationId === "string" ? body.applicationId.trim() : "";
     const action = typeof body.action === "string" ? body.action.trim().toLowerCase() : "";
 
-    if (!userId || !type || !configId || !["toggle", "update", "delete"].includes(action)) {
+    if (!type || !["toggle", "update", "delete", "purge"].includes(action)) {
+      return new NextResponse("Invalid payload", { status: 400 });
+    }
+
+    if (action === "purge") {
+      const normalizedApplicationId = normalizeIdLike(applicationId, 64);
+      if (!normalizedApplicationId) {
+        return new NextResponse("applicationId is required for purge", { status: 400 });
+      }
+
+      await ensureUserPreferencesSchema();
+
+      const result = await db.execute(sql`
+        select
+          up."userId" as "userId",
+          up."OtherAppsJson" as "OtherAppsJson",
+          up."OtherBotsJson" as "OtherBotsJson"
+        from "UserPreference" up
+      `);
+
+      const rows = (result as unknown as {
+        rows?: Array<{
+          userId: string;
+          OtherAppsJson: string | null;
+          OtherBotsJson: string | null;
+        }>;
+      }).rows ?? [];
+
+      let affectedUsers = 0;
+      let removedCount = 0;
+
+      for (const row of rows) {
+        const userPreferences = await getUserPreferences(row.userId);
+
+        if (type === "APP") {
+          const currentApps = [...userPreferences.OtherApps];
+          const nextApps = currentApps.filter(
+            (entry) => normalizeIdLike(entry.applicationId, 64) !== normalizedApplicationId
+          );
+
+          const removedForUser = currentApps.length - nextApps.length;
+          if (removedForUser > 0) {
+            removedCount += removedForUser;
+            affectedUsers += 1;
+            await updateUserPreferences(row.userId, { OtherApps: nextApps });
+          }
+          continue;
+        }
+
+        const currentBots = [...userPreferences.OtherBots];
+        const nextBots = currentBots.filter(
+          (entry) => normalizeIdLike(entry.applicationId, 64) !== normalizedApplicationId
+        );
+
+        const removedForUser = currentBots.length - nextBots.length;
+        if (removedForUser > 0) {
+          removedCount += removedForUser;
+          affectedUsers += 1;
+          await updateUserPreferences(row.userId, { OtherBots: nextBots });
+        }
+      }
+
+      return NextResponse.json({
+        ok: true,
+        removedCount,
+        affectedUsers,
+        type,
+        applicationId: normalizedApplicationId,
+      });
+    }
+
+    if (!userId || !configId) {
       return new NextResponse("Invalid payload", { status: 400 });
     }
 
     const preferences = await getUserPreferences(userId);
 
     if (type === "APP") {
-      const current = [...preferences.discordApps];
+      const current = [...preferences.OtherApps];
       const index = current.findIndex((item) => item.id === configId);
 
       if (index < 0) {
-        return new NextResponse("Discord app not found", { status: 404 });
+        return new NextResponse("Other app not found", { status: 404 });
       }
 
       if (action === "delete") {
@@ -379,18 +452,18 @@ export async function PATCH(req: Request) {
           ...(nextClientId ? { clientId: nextClientId } : {}),
           redirectUri: nextRedirectUri,
           scopes: nextScopes,
-        } as DiscordAppConfig;
+        } as OtherAppConfig;
       }
 
-      await updateUserPreferences(userId, { discordApps: current });
+      await updateUserPreferences(userId, { OtherApps: current });
       return NextResponse.json({ ok: true });
     }
 
-    const current = [...preferences.discordBots];
+    const current = [...preferences.OtherBots];
     const index = current.findIndex((item) => item.id === configId);
 
     if (index < 0) {
-      return new NextResponse("Discord bot not found", { status: 404 });
+      return new NextResponse("Other bot not found", { status: 404 });
     }
 
     if (action === "delete") {
@@ -421,10 +494,10 @@ export async function PATCH(req: Request) {
         ...(nextApplicationId ? { applicationId: nextApplicationId } : {}),
         botUserId: nextBotUserId,
         permissions: nextPermissions,
-      } as DiscordBotConfig;
+      } as OtherBotConfig;
     }
 
-    await updateUserPreferences(userId, { discordBots: current });
+    await updateUserPreferences(userId, { OtherBots: current });
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("[ADMIN_INTEGRATIONS_PATCH]", error);

@@ -8,75 +8,68 @@ import { useForm } from "react-hook-form";
 import { ChannelType } from "@/lib/db/types";
 import { cn } from "@/lib/utils";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { useModal } from "@/hooks/use-modal-store";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useEffect, useMemo, useState } from "react";
-import {
-  Bot,
-  Link2,
-  Shield,
-  SlidersHorizontal,
-  Trash2,
-  Users,
-  Webhook,
-} from "lucide-react";
+import { Bot, Link2, Shield, SlidersHorizontal, Trash2, Users, Webhook } from "lucide-react";
 
 const formSchema = z.object({
-  name: z
-    .string()
-    .min(1, {
-      message: "Channel name is required.",
-    }),
-  icon: z.string().max(16, {
-    message: "Icon must be 16 characters or fewer.",
-  }).optional(),
-  topic: z
-    .string()
-    .max(500, {
-      message: "Channel topic must be 500 characters or fewer.",
-    })
-    .optional(),
+  name: z.string().min(1, { message: "Channel name is required." }),
+  icon: z.string().max(16, { message: "Icon must be 16 characters or fewer." }).optional(),
+  topic: z.string().max(500, { message: "Channel topic must be 500 characters or fewer." }).optional(),
   type: z.nativeEnum(ChannelType),
   channelGroupId: z.string().nullable().optional(),
+  nsfw: z.boolean().optional(),
+  rateLimitPerUser: z.coerce.number().int().min(0).max(21600).optional(),
+  bitrate: z.string().optional(),
+  userLimit: z.string().optional(),
+  rtcRegion: z.string().max(64).optional(),
+  videoQualityMode: z.string().optional(),
+  defaultAutoArchiveDuration: z.string().optional(),
+  defaultThreadRateLimitPerUser: z.string().optional(),
 });
 
-type ChannelGroupItem = {
-  id: string;
-  name: string;
-};
+type ChannelGroupItem = { id: string; name: string };
 
+type ChannelPermissionValue = boolean | null;
 type RolePermissionSet = {
-  allowView: boolean;
-  allowSend: boolean;
-  allowConnect: boolean;
+  allowView: ChannelPermissionValue;
+  allowSend: ChannelPermissionValue;
+  allowConnect: ChannelPermissionValue;
 };
 
-type RolePermissions = {
-  ADMIN: RolePermissionSet;
-  MODERATOR: RolePermissionSet;
-  GUEST: RolePermissionSet;
+type ChannelPermissionOverwrite = {
+  targetType: "EVERYONE" | "ROLE";
+  targetId: string;
+  label: string;
+  permissions: RolePermissionSet;
+};
+
+type ChannelAdvancedSettings = {
+  nsfw: boolean;
+  rateLimitPerUser: number;
+  bitrate: number | null;
+  userLimit: number | null;
+  rtcRegion: string | null;
+  videoQualityMode: number | null;
+  defaultAutoArchiveDuration: number | null;
+  defaultThreadRateLimitPerUser: number | null;
+};
+
+const DEFAULT_ADVANCED_SETTINGS: ChannelAdvancedSettings = {
+  nsfw: false,
+  rateLimitPerUser: 0,
+  bitrate: null,
+  userLimit: null,
+  rtcRegion: null,
+  videoQualityMode: null,
+  defaultAutoArchiveDuration: null,
+  defaultThreadRateLimitPerUser: null,
 };
 
 type ChannelSettingsTab =
@@ -95,22 +88,10 @@ type ChannelSettingsSectionGroup = {
 };
 
 const sectionGroups: ChannelSettingsSectionGroup[] = [
-  {
-    label: "Channel Settings",
-    tabs: ["overview", "permissions", "invites"],
-  },
-  {
-    label: "Integrations",
-    tabs: ["integrations", "webhooks", "apps"],
-  },
-  {
-    label: "Community",
-    tabs: ["moderation"],
-  },
-  {
-    label: "",
-    tabs: ["danger"],
-  },
+  { label: "Channel Settings", tabs: ["overview", "permissions", "invites"] },
+  { label: "Integrations", tabs: ["integrations", "webhooks", "apps"] },
+  { label: "Community", tabs: ["moderation"] },
+  { label: "", tabs: ["danger"] },
 ];
 
 const tabLabelMap: Record<ChannelSettingsTab, string> = {
@@ -146,30 +127,12 @@ const tabIconMap: Record<ChannelSettingsTab, React.ComponentType<{ className?: s
   danger: Trash2,
 };
 
-const FREE_CHANNEL_ICONS = [
-  "💬",
-  "📢",
-  "✅",
-  "📌",
-  "⭐",
-  "🔥",
-  "🎮",
-  "🎵",
-  "🎬",
-  "📚",
-  "🧠",
-  "🛠️",
-  "🤖",
-  "🧪",
-  "🎨",
-  "📷",
-  "📰",
-  "🧩",
-];
+const FREE_CHANNEL_ICONS = ["💬", "📢", "✅", "📌", "⭐", "🔥", "🎮", "🎵", "🎬", "📚", "🧠", "🛠️", "🤖", "🧪", "🎨", "📷", "📰", "🧩"];
 
 export const EditChannelModal = () => {
   const { isOpen, onClose, onOpen, type, data } = useModal();
   const router = useRouter();
+
   const [activeTab, setActiveTab] = useState<ChannelSettingsTab>("overview");
   const [channelGroups, setChannelGroups] = useState<ChannelGroupItem[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -177,11 +140,8 @@ export const EditChannelModal = () => {
   const [permissionsSuccess, setPermissionsSuccess] = useState<string | null>(null);
   const [isLoadingPermissions, setIsLoadingPermissions] = useState(false);
   const [isSavingPermissions, setIsSavingPermissions] = useState(false);
-  const [rolePermissions, setRolePermissions] = useState<RolePermissions>({
-    ADMIN: { allowView: true, allowSend: true, allowConnect: true },
-    MODERATOR: { allowView: true, allowSend: true, allowConnect: true },
-    GUEST: { allowView: true, allowSend: true, allowConnect: true },
-  });
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+  const [permissionOverwrites, setPermissionOverwrites] = useState<ChannelPermissionOverwrite[]>([]);
 
   const isModalOpen = isOpen && type === "editChannel";
   const { channel, server } = data;
@@ -194,23 +154,77 @@ export const EditChannelModal = () => {
       topic: "",
       type: channel?.type || ChannelType.TEXT,
       channelGroupId: null,
+      nsfw: false,
+      rateLimitPerUser: 0,
+      bitrate: "",
+      userLimit: "",
+      rtcRegion: "",
+      videoQualityMode: "auto",
+      defaultAutoArchiveDuration: "default",
+      defaultThreadRateLimitPerUser: "",
     },
   });
 
-  useEffect(() => {
-    if (channel) {
-      form.setValue("name", channel.name);
-      form.setValue("icon", ((channel as { icon?: string | null })?.icon ?? ""));
-      form.setValue("topic", ((channel as { topic?: string | null })?.topic ?? ""));
-      form.setValue("type", channel.type);
-      form.setValue("channelGroupId", ((channel as { channelGroupId?: string | null })?.channelGroupId ?? null));
-    }
-  }, [form, channel]);
+  const parseNullableInteger = (value: string | null | undefined) => {
+    if (!value || value.trim().length === 0) return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? Math.floor(parsed) : null;
+  };
+
+  const applyAdvancedSettingsToForm = (settings: ChannelAdvancedSettings) => {
+    form.setValue("nsfw", settings.nsfw);
+    form.setValue("rateLimitPerUser", settings.rateLimitPerUser);
+    form.setValue("bitrate", settings.bitrate === null ? "" : String(settings.bitrate));
+    form.setValue("userLimit", settings.userLimit === null ? "" : String(settings.userLimit));
+    form.setValue("rtcRegion", settings.rtcRegion ?? "");
+    form.setValue("videoQualityMode", settings.videoQualityMode === null ? "auto" : String(settings.videoQualityMode));
+    form.setValue("defaultAutoArchiveDuration", settings.defaultAutoArchiveDuration === null ? "default" : String(settings.defaultAutoArchiveDuration));
+    form.setValue("defaultThreadRateLimitPerUser", settings.defaultThreadRateLimitPerUser === null ? "" : String(settings.defaultThreadRateLimitPerUser));
+  };
 
   useEffect(() => {
-    if (!isModalOpen || !server?.id || !channel?.id) {
-      return;
-    }
+    if (!channel) return;
+    form.setValue("name", channel.name);
+    form.setValue("icon", ((channel as { icon?: string | null })?.icon ?? ""));
+    form.setValue("topic", ((channel as { topic?: string | null })?.topic ?? ""));
+    form.setValue("type", channel.type);
+    form.setValue("channelGroupId", ((channel as { channelGroupId?: string | null })?.channelGroupId ?? null));
+    applyAdvancedSettingsToForm(DEFAULT_ADVANCED_SETTINGS);
+  }, [channel, form]);
+
+  useEffect(() => {
+    if (!isModalOpen || !server?.id || !channel?.id) return;
+
+    let cancelled = false;
+
+    const loadChannelDetails = async () => {
+      try {
+        setIsLoadingDetails(true);
+        const response = await axios.get<{ channel?: { topic?: string; icon?: string | null; channelGroupId?: string | null; type?: ChannelType; settings?: ChannelAdvancedSettings } }>(`/api/channels/${channel.id}`, { params: { serverId: server.id } });
+
+        if (cancelled || !response.data.channel) return;
+
+        const payload = response.data.channel;
+        if (typeof payload.topic === "string") form.setValue("topic", payload.topic);
+        if (payload.icon !== undefined) form.setValue("icon", payload.icon ?? "");
+        if (payload.channelGroupId !== undefined) form.setValue("channelGroupId", payload.channelGroupId ?? null);
+        if (payload.type) form.setValue("type", payload.type);
+        applyAdvancedSettingsToForm(payload.settings ?? DEFAULT_ADVANCED_SETTINGS);
+      } catch (error) {
+        if (!cancelled) console.error("[EDIT_CHANNEL_MODAL_DETAILS]", error);
+      } finally {
+        if (!cancelled) setIsLoadingDetails(false);
+      }
+    };
+
+    void loadChannelDetails();
+    return () => {
+      cancelled = true;
+    };
+  }, [isModalOpen, server?.id, channel?.id, form]);
+
+  useEffect(() => {
+    if (!isModalOpen || !server?.id || !channel?.id) return;
 
     let cancelled = false;
 
@@ -220,52 +234,40 @@ export const EditChannelModal = () => {
         setPermissionsError(null);
         setPermissionsSuccess(null);
 
-        const response = await axios.get<{ permissions?: Partial<RolePermissions> }>(
-          `/api/channels/${channel.id}/permissions`,
-          { params: { serverId: server.id } }
-        );
+        const response = await axios.get<{ overwrites?: ChannelPermissionOverwrite[] }>(`/api/channels/${channel.id}/permissions`, {
+          params: { serverId: server.id },
+        });
 
-        if (!cancelled && response.data.permissions) {
-          setRolePermissions({
-            ADMIN: {
-              allowView: response.data.permissions.ADMIN?.allowView ?? true,
-              allowSend: response.data.permissions.ADMIN?.allowSend ?? true,
-              allowConnect: response.data.permissions.ADMIN?.allowConnect ?? true,
-            },
-            MODERATOR: {
-              allowView: response.data.permissions.MODERATOR?.allowView ?? true,
-              allowSend: response.data.permissions.MODERATOR?.allowSend ?? true,
-              allowConnect: response.data.permissions.MODERATOR?.allowConnect ?? true,
-            },
-            GUEST: {
-              allowView: response.data.permissions.GUEST?.allowView ?? true,
-              allowSend: response.data.permissions.GUEST?.allowSend ?? true,
-              allowConnect: response.data.permissions.GUEST?.allowConnect ?? true,
-            },
-          });
-        }
-      } catch (error) {
         if (!cancelled) {
-          setPermissionsError("Failed to load channel permissions.");
+          const overwrites = Array.isArray(response.data.overwrites) ? response.data.overwrites : [];
+          setPermissionOverwrites(
+            overwrites.map((item) => ({
+              targetType: item.targetType,
+              targetId: item.targetId,
+              label: item.label,
+              permissions: {
+                allowView: item.permissions?.allowView ?? null,
+                allowSend: item.permissions?.allowSend ?? null,
+                allowConnect: item.permissions?.allowConnect ?? null,
+              },
+            }))
+          );
         }
+      } catch {
+        if (!cancelled) setPermissionsError("Failed to load channel permissions.");
       } finally {
-        if (!cancelled) {
-          setIsLoadingPermissions(false);
-        }
+        if (!cancelled) setIsLoadingPermissions(false);
       }
     };
 
     void loadPermissions();
-
     return () => {
       cancelled = true;
     };
   }, [isModalOpen, server?.id, channel?.id]);
 
   useEffect(() => {
-    if (!isModalOpen || !server?.id) {
-      return;
-    }
+    if (!isModalOpen || !server?.id) return;
 
     let cancelled = false;
 
@@ -275,37 +277,31 @@ export const EditChannelModal = () => {
           params: { serverId: server.id },
         });
 
-        if (!cancelled) {
-          setChannelGroups(response.data.groups ?? []);
-        }
+        if (!cancelled) setChannelGroups(response.data.groups ?? []);
       } catch (error) {
-        if (!cancelled) {
-          setChannelGroups([]);
-        }
+        if (!cancelled) setChannelGroups([]);
         console.error("[EDIT_CHANNEL_MODAL_GROUPS]", error);
       }
     };
 
     void loadGroups();
-
     return () => {
       cancelled = true;
     };
   }, [isModalOpen, server?.id]);
 
   const sections = useMemo(() => sectionGroups, []);
-
   const isLoading = form.formState.isSubmitting;
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
       setSubmitError(null);
+
       const url = qs.stringifyUrl({
         url: `/api/channels/${channel?.id}`,
-        query: {
-          serverId: server?.id,
-        },
+        query: { serverId: server?.id },
       });
+
       await axios.patch(url, {
         ...values,
         icon: (values.icon ?? "").trim() || null,
@@ -314,6 +310,16 @@ export const EditChannelModal = () => {
           typeof values.channelGroupId === "string" && values.channelGroupId.length > 0
             ? values.channelGroupId
             : null,
+        settings: {
+          nsfw: values.nsfw === true,
+          rateLimitPerUser: values.rateLimitPerUser ?? 0,
+          bitrate: parseNullableInteger(values.bitrate),
+          userLimit: parseNullableInteger(values.userLimit),
+          rtcRegion: (values.rtcRegion ?? "").trim() || null,
+          videoQualityMode: parseNullableInteger(values.videoQualityMode),
+          defaultAutoArchiveDuration: parseNullableInteger(values.defaultAutoArchiveDuration),
+          defaultThreadRateLimitPerUser: parseNullableInteger(values.defaultThreadRateLimitPerUser),
+        },
       });
 
       form.reset();
@@ -330,7 +336,6 @@ export const EditChannelModal = () => {
       } else {
         setSubmitError("Failed to update channel.");
       }
-      console.log(error);
     }
   };
 
@@ -341,20 +346,28 @@ export const EditChannelModal = () => {
     onClose();
   };
 
-  const onTogglePermission = (
-    role: keyof RolePermissions,
+  const onSetPermission = (
+    targetType: ChannelPermissionOverwrite["targetType"],
+    targetId: string,
     key: keyof RolePermissionSet,
-    value: boolean
+    value: ChannelPermissionValue
   ) => {
-    setRolePermissions((prev) => ({
-      ...prev,
-      [role]: {
-        ...prev[role],
-        [key]: value,
-      },
-    }));
+    setPermissionOverwrites((prev) =>
+      prev.map((item) =>
+        item.targetType === targetType && item.targetId === targetId
+          ? { ...item, permissions: { ...item.permissions, [key]: value } }
+          : item
+      )
+    );
     setPermissionsError(null);
     setPermissionsSuccess(null);
+  };
+
+  const permissionChoiceClass = (isActive: boolean, kind: "allow" | "inherit" | "deny") => {
+    if (!isActive) return "border border-black/30 bg-black/20 text-zinc-300 hover:bg-black/30";
+    if (kind === "allow") return "border border-emerald-400/60 bg-emerald-500/20 text-emerald-100";
+    if (kind === "deny") return "border border-rose-400/60 bg-rose-500/20 text-rose-100";
+    return "border border-zinc-400/50 bg-zinc-500/20 text-zinc-100";
   };
 
   const onSavePermissions = async () => {
@@ -370,10 +383,14 @@ export const EditChannelModal = () => {
 
       await axios.patch(`/api/channels/${channel.id}/permissions`, {
         serverId: server.id,
-        permissions: rolePermissions,
+        overwrites: permissionOverwrites.map((item) => ({
+          targetType: item.targetType,
+          targetId: item.targetId,
+          permissions: item.permissions,
+        })),
       });
 
-      setPermissionsSuccess("Channel permissions updated.");
+      setPermissionsSuccess("Channel permission overwrites updated.");
       router.refresh();
     } catch (error) {
       if (axios.isAxiosError(error)) {
@@ -391,22 +408,19 @@ export const EditChannelModal = () => {
     }
   };
 
-  const renderPlaceholderSection = (tab: Exclude<ChannelSettingsTab, "overview" | "permissions" | "danger">) => {
-    return (
-      <div className="flex-1 space-y-4 px-6 py-5">
-        <div className="rounded-lg border border-black/30 bg-[#232428] p-4">
-          <p className="text-sm font-semibold text-white">{tabLabelMap[tab]}</p>
-          <p className="mt-1 text-xs text-zinc-400">{tabDescriptionMap[tab]}</p>
-          <div className="mt-3 rounded-md border border-[#5865f2]/35 bg-[#5865f2]/10 px-3 py-2 text-xs text-[#cdd2ff]">
-            App-style menu is now in place. This section is ready for feature-specific wiring.
-          </div>
+  const renderPlaceholderSection = (tab: Exclude<ChannelSettingsTab, "overview" | "permissions" | "danger">) => (
+    <div className="flex-1 space-y-4 px-6 py-5">
+      <div className="rounded-lg border border-black/30 bg-[#232428] p-4">
+        <p className="text-sm font-semibold text-white">{tabLabelMap[tab]}</p>
+        <p className="mt-1 text-xs text-zinc-400">{tabDescriptionMap[tab]}</p>
+        <div className="mt-3 rounded-md border border-[#5865f2]/35 bg-[#5865f2]/10 px-3 py-2 text-xs text-[#cdd2ff]">
+          App-style menu is now in place. This section is ready for feature-specific wiring.
         </div>
       </div>
-    );
-  };
+    </div>
+  );
 
   const renderPermissionsSection = () => {
-    const roleRows: Array<keyof RolePermissions> = ["ADMIN", "MODERATOR", "GUEST"];
     const selectedChannelType = form.watch("type");
     const sendPermissionLabel =
       selectedChannelType === ChannelType.TEXT
@@ -416,7 +430,7 @@ export const EditChannelModal = () => {
           : "Transmit Video";
     const connectPermissionLabel =
       selectedChannelType === ChannelType.TEXT
-        ? "Connect (future media features)"
+        ? "Connect"
         : selectedChannelType === ChannelType.AUDIO
           ? "Connect to Voice"
           : "Connect to Video";
@@ -424,60 +438,63 @@ export const EditChannelModal = () => {
     return (
       <div className="flex-1 space-y-4 px-6 py-5">
         <div className="rounded-lg border border-black/30 bg-[#232428] p-4">
-          <p className="text-sm font-semibold text-white">Role Permissions</p>
-          <p className="mt-1 text-xs text-zinc-400">
-            Configure who can view this channel, use channel abilities, and connect.
-          </p>
+          <p className="text-sm font-semibold text-white">Permission Overwrites</p>
+          <p className="mt-1 text-xs text-zinc-400">Other-style: set Allow, Neutral (inherit), or Deny for each role.</p>
 
           <div className="mt-4 space-y-3">
-            {roleRows.map((role) => (
-              <div key={role} className="rounded-md border border-black/25 bg-[#1e1f22] p-3">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-300">{role}</p>
+            {permissionOverwrites.map((overwrite) => (
+              <div key={`${overwrite.targetType}:${overwrite.targetId}`} className="rounded-md border border-black/25 bg-[#1e1f22] p-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-300">{overwrite.label}</p>
                 <div className="grid gap-2 sm:grid-cols-3">
                   {([
                     ["allowView", "View Channel"],
                     ["allowSend", sendPermissionLabel],
                     ["allowConnect", connectPermissionLabel],
-                  ] as const).map(([key, label]) => (
-                    <label key={key} className="flex items-center gap-2 rounded bg-black/20 px-2 py-1.5 text-xs text-zinc-200">
-                      <input
-                        type="checkbox"
-                        checked={rolePermissions[role][key]}
-                        onChange={(event) => onTogglePermission(role, key, event.target.checked)}
-                        disabled={isLoadingPermissions || isSavingPermissions}
-                        className="h-4 w-4 accent-[#5865f2]"
-                      />
-                      {label}
-                    </label>
-                  ))}
+                  ] as const).map(([key, label]) => {
+                    const current = overwrite.permissions[key];
+                    return (
+                      <div key={key} className="rounded bg-black/20 px-2 py-2 text-xs text-zinc-200">
+                        <p className="mb-1.5 font-medium text-zinc-300">{label}</p>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => onSetPermission(overwrite.targetType, overwrite.targetId, key, true)}
+                            className={cn("rounded px-2 py-1 text-[11px] font-semibold", permissionChoiceClass(current === true, "allow"))}
+                            disabled={isLoadingPermissions || isSavingPermissions}
+                          >
+                            Allow
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onSetPermission(overwrite.targetType, overwrite.targetId, key, null)}
+                            className={cn("rounded px-2 py-1 text-[11px] font-semibold", permissionChoiceClass(current === null, "inherit"))}
+                            disabled={isLoadingPermissions || isSavingPermissions}
+                          >
+                            Neutral
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onSetPermission(overwrite.targetType, overwrite.targetId, key, false)}
+                            className={cn("rounded px-2 py-1 text-[11px] font-semibold", permissionChoiceClass(current === false, "deny"))}
+                            disabled={isLoadingPermissions || isSavingPermissions}
+                          >
+                            Deny
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ))}
           </div>
 
-          {permissionsError ? (
-            <p className="mt-3 rounded border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
-              {permissionsError}
-            </p>
-          ) : null}
-
-          {permissionsSuccess ? (
-            <p className="mt-3 rounded border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
-              {permissionsSuccess}
-            </p>
-          ) : null}
+          {permissionsError ? <p className="mt-3 rounded border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{permissionsError}</p> : null}
+          {permissionsSuccess ? <p className="mt-3 rounded border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">{permissionsSuccess}</p> : null}
 
           <div className="mt-4 flex justify-end">
-            <Button
-              type="button"
-              onClick={onSavePermissions}
-              disabled={isLoadingPermissions || isSavingPermissions}
-            >
-              {isLoadingPermissions
-                ? "Loading..."
-                : isSavingPermissions
-                  ? "Saving..."
-                  : "Save Permissions"}
+            <Button type="button" onClick={onSavePermissions} disabled={isLoadingPermissions || isSavingPermissions}>
+              {isLoadingPermissions ? "Loading..." : isSavingPermissions ? "Saving..." : "Save Permission Overwrites"}
             </Button>
           </div>
         </div>
@@ -499,16 +516,12 @@ export const EditChannelModal = () => {
 
             {activeTab === "danger" ? (
               <div className="flex-1 space-y-3 px-6 py-5">
-                <p className="text-sm text-zinc-300">
-                  Deleting a channel permanently removes its messages.
-                </p>
+                <p className="text-sm text-zinc-300">Deleting a channel permanently removes its messages.</p>
                 <Button
                   type="button"
                   variant="destructive"
                   onClick={() => {
-                    if (!channel || !server) {
-                      return;
-                    }
+                    if (!channel || !server) return;
                     onOpen("deleteChannel", { channel, server });
                   }}
                 >
@@ -531,12 +544,7 @@ export const EditChannelModal = () => {
                         <FormItem>
                           <FormLabel className="text-xs font-bold uppercase text-zinc-400">Channel Name</FormLabel>
                           <FormControl>
-                            <Input
-                              disabled={isLoading}
-                              className="border-0 bg-zinc-700/50 text-zinc-100 focus-visible:ring-0 focus-visible:ring-offset-0"
-                              placeholder="Enter channel name"
-                              {...field}
-                            />
+                            <Input disabled={isLoading} className="border-0 bg-zinc-700/50 text-zinc-100 focus-visible:ring-0 focus-visible:ring-offset-0" placeholder="Enter channel name" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -556,9 +564,9 @@ export const EditChannelModal = () => {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {Object.values(ChannelType).map((type) => (
-                                <SelectItem key={type} value={type} className="capitalize">
-                                  {type.toLowerCase()}
+                              {Object.values(ChannelType).map((typeValue) => (
+                                <SelectItem key={typeValue} value={typeValue} className="capitalize">
+                                  {typeValue.toLowerCase()}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -575,29 +583,17 @@ export const EditChannelModal = () => {
                         <FormItem>
                           <FormLabel className="text-xs font-bold uppercase text-zinc-400">Channel Icon</FormLabel>
                           <FormControl>
-                            <Input
-                              disabled={isLoading}
-                              maxLength={16}
-                              className="border-0 bg-zinc-700/50 text-zinc-100 focus-visible:ring-0 focus-visible:ring-offset-0"
-                              placeholder="e.g. 🔥"
-                              {...field}
-                              value={field.value ?? ""}
-                            />
+                            <Input disabled={isLoading} maxLength={16} className="border-0 bg-zinc-700/50 text-zinc-100 focus-visible:ring-0 focus-visible:ring-offset-0" placeholder="e.g. 🔥" {...field} value={field.value ?? ""} />
                           </FormControl>
                           <div className="space-y-2">
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500">
-                              Free icon picks
-                            </p>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500">Free icon picks</p>
                             <div className="grid grid-cols-6 gap-1 rounded-md border border-black/20 bg-black/10 p-2 sm:grid-cols-9">
                               {FREE_CHANNEL_ICONS.map((icon) => (
                                 <button
                                   key={icon}
                                   type="button"
                                   onClick={() => form.setValue("icon", icon, { shouldDirty: true, shouldValidate: true })}
-                                  className={cn(
-                                    "inline-flex h-8 w-8 items-center justify-center rounded text-base transition hover:bg-zinc-700/50",
-                                    (field.value ?? "") === icon && "bg-zinc-700/70 ring-1 ring-indigo-400/80"
-                                  )}
+                                  className={cn("inline-flex h-8 w-8 items-center justify-center rounded text-base transition hover:bg-zinc-700/50", (field.value ?? "") === icon && "bg-zinc-700/70 ring-1 ring-indigo-400/80")}
                                   aria-label={`Use ${icon} as channel icon`}
                                   title={`Use ${icon}`}
                                 >
@@ -619,14 +615,7 @@ export const EditChannelModal = () => {
                         <FormItem>
                           <FormLabel className="text-xs font-bold uppercase text-zinc-400">Channel Topic</FormLabel>
                           <FormControl>
-                            <Input
-                              disabled={isLoading}
-                              className="border-0 bg-zinc-700/50 text-zinc-100 focus-visible:ring-0 focus-visible:ring-offset-0"
-                              placeholder="What is this channel about?"
-                              maxLength={500}
-                              {...field}
-                              value={field.value ?? ""}
-                            />
+                            <Input disabled={isLoading} className="border-0 bg-zinc-700/50 text-zinc-100 focus-visible:ring-0 focus-visible:ring-offset-0" placeholder="What is this channel about?" maxLength={500} {...field} value={field.value ?? ""} />
                           </FormControl>
                           <p className="text-[11px] text-zinc-500">Shows at the top of this channel.</p>
                           <FormMessage />
@@ -640,11 +629,7 @@ export const EditChannelModal = () => {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel className="text-xs font-bold uppercase text-zinc-400">Channel Group</FormLabel>
-                          <Select
-                            disabled={isLoading}
-                            onValueChange={(value) => field.onChange(value === "__none__" ? null : value)}
-                            value={field.value ?? "__none__"}
-                          >
+                          <Select disabled={isLoading} onValueChange={(value) => field.onChange(value === "__none__" ? null : value)} value={field.value ?? "__none__"}>
                             <FormControl>
                               <SelectTrigger className="border-0 bg-zinc-700/50 text-zinc-100 outline-none ring-offset-0 focus:ring-0 focus:ring-offset-0">
                                 <SelectValue placeholder="Select a channel group" />
@@ -653,9 +638,7 @@ export const EditChannelModal = () => {
                             <SelectContent>
                               <SelectItem value="__none__">No group</SelectItem>
                               {channelGroups.map((group) => (
-                                <SelectItem key={group.id} value={group.id}>
-                                  {group.name}
-                                </SelectItem>
+                                <SelectItem key={group.id} value={group.id}>{group.name}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
@@ -664,16 +647,13 @@ export const EditChannelModal = () => {
                       )}
                     />
 
+                    {isLoadingDetails ? <p className="text-[11px] text-zinc-500">Loading channel compatibility settings…</p> : null}
                     {submitError ? <p className="text-sm text-rose-400">{submitError}</p> : null}
                   </div>
 
                   <div className="flex items-center justify-end gap-2 border-t border-black/30 bg-[#2b2d31] px-6 py-4">
-                    <Button type="button" variant="ghost" onClick={handleClose} disabled={isLoading}>
-                      Cancel
-                    </Button>
-                    <Button variant="primary" disabled={isLoading}>
-                      Save Changes
-                    </Button>
+                    <Button type="button" variant="ghost" onClick={handleClose} disabled={isLoading}>Cancel</Button>
+                    <Button variant="primary" disabled={isLoading}>Save Changes</Button>
                   </div>
                 </form>
               </Form>

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db, member, server } from "@/lib/db";
-import { ensureServerRolesSchema, seedDefaultServerRoles } from "@/lib/server-roles";
+import { ensureServerRolesSchema } from "@/lib/server-roles";
 
 type Params = { params: Promise<{ serverId: string; roleId: string }> };
 
@@ -36,7 +36,6 @@ export async function GET(_req: Request, { params }: Params) {
     }
 
     await ensureServerRolesSchema();
-    await seedDefaultServerRoles(serverId);
 
     const roleExists = await db.execute(sql`
       select "id"
@@ -123,7 +122,6 @@ export async function POST(req: Request, { params }: Params) {
     }
 
     await ensureServerRolesSchema();
-    await seedDefaultServerRoles(serverId);
 
     const body = (await req.json().catch(() => ({}))) as { memberId?: string };
     const memberId = String(body.memberId ?? "").trim();

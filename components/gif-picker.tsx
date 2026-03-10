@@ -109,7 +109,7 @@ export const GifPicker = ({ onSelect, serverId }: GifPickerProps) => {
           title="Send GIF"
           aria-label="Send GIF"
         >
-          <ImagePlus className="h-4 w-4" />
+            <ImagePlus className="h-4 w-4" suppressHydrationWarning />
         </button>
       </PopoverTrigger>
 

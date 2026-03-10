@@ -5,6 +5,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { currentProfile } from "@/lib/current-profile";
+import { getEffectiveSiteUrl } from "@/lib/runtime-site-url-config";
 import {
   ensureUserPreferencesSchema,
   getUserPreferences,
@@ -186,7 +187,7 @@ export async function POST(req: Request) {
     const pdfBytes = await pdfDoc.save();
     const pdfPayload = new Uint8Array(pdfBytes);
     const key = `Client/Applications/${Date.now()}-${safeFileName(profile.userId)}-family-application.pdf`;
-    const appUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+    const appUrl = await getEffectiveSiteUrl();
     let pdfUrl = "";
 
     if (r2Client) {

@@ -18,6 +18,7 @@ import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-
 import { ProfileIconRow } from "@/components/profile-icon-row";
 import { ActionTooltip } from "@/components/action-tooltip";
 import { ModeratorLineIcon } from "@/components/moderator-line-icon";
+import { BotCommandsDialog } from "@/components/bot-commands-dialog";
 import { cn } from "@/lib/utils";
 import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -95,7 +96,7 @@ const createPostEmoteItemsFromReactions = (
   reactions?: Array<{ emoji: string; count: number }>
 ): PostEmoteItem[] => {
   const reactionItems: PostEmoteItem[] = (reactions ?? [])
-    .filter((item) => typeof item.emoji === "string" && basicEmotes.includes(item.emoji))
+    .filter((item) => typeof item.emoji === "string" && item.emoji.trim().length > 0)
     .map((item) => ({
       id: crypto.randomUUID(),
       kind: "reaction" as const,
@@ -113,8 +114,407 @@ const reactionSummary = (items: PostEmoteItem[]) =>
     .map((item) => `${item.emoji}:${item.count}`)
     .join("|");
 
+type RuntimeNotificationPreferences = {
+  mentionsEnabled: boolean;
+  enableDesktopNotifications: boolean;
+  notifyOnDirectMessages: boolean;
+  notifyOnReplies: boolean;
+};
+
+type RuntimeTextImagesPreferences = {
+  showEmbeds: boolean;
+  showLinkPreviews: boolean;
+  showInlineMedia: boolean;
+  autoplayGifs: boolean;
+  autoplayStickers: boolean;
+  convertEmoticons: boolean;
+};
+
+type RuntimeAccessibilityPreferences = {
+  preferReducedMotion: boolean;
+  highContrastMode: boolean;
+  largerChatFont: boolean;
+  enableScreenReaderAnnouncements: boolean;
+  messageSpacing: "compact" | "comfortable";
+};
+
+type RuntimeEmojiPreferences = {
+  showComposerEmojiButton: boolean;
+  compactReactionButtons: boolean;
+  defaultComposerEmoji: string;
+  favoriteEmojis: string[];
+};
+
+const defaultRuntimeNotificationPreferences: RuntimeNotificationPreferences = {
+  mentionsEnabled: true,
+  enableDesktopNotifications: true,
+  notifyOnDirectMessages: true,
+  notifyOnReplies: true,
+};
+
+const defaultRuntimeTextImagesPreferences: RuntimeTextImagesPreferences = {
+  showEmbeds: true,
+  showLinkPreviews: true,
+  showInlineMedia: true,
+  autoplayGifs: true,
+  autoplayStickers: true,
+  convertEmoticons: true,
+};
+
+const defaultRuntimeAccessibilityPreferences: RuntimeAccessibilityPreferences = {
+  preferReducedMotion: false,
+  highContrastMode: false,
+  largerChatFont: false,
+  enableScreenReaderAnnouncements: true,
+  messageSpacing: "comfortable",
+};
+
+const defaultRuntimeEmojiPreferences: RuntimeEmojiPreferences = {
+  showComposerEmojiButton: true,
+  compactReactionButtons: false,
+  defaultComposerEmoji: "😊",
+  favoriteEmojis: ["😀", "😂", "😍", "🔥", "👏", "🎉", "👍", "👀"],
+};
+
+const normalizeRuntimeTextImagesPreferences = (value: unknown): RuntimeTextImagesPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultRuntimeTextImagesPreferences };
+  }
+
+  const source = value as Partial<Record<keyof RuntimeTextImagesPreferences, unknown>>;
+
+  return {
+    showEmbeds:
+      typeof source.showEmbeds === "boolean"
+        ? source.showEmbeds
+        : defaultRuntimeTextImagesPreferences.showEmbeds,
+    showLinkPreviews:
+      typeof source.showLinkPreviews === "boolean"
+        ? source.showLinkPreviews
+        : defaultRuntimeTextImagesPreferences.showLinkPreviews,
+    showInlineMedia:
+      typeof source.showInlineMedia === "boolean"
+        ? source.showInlineMedia
+        : defaultRuntimeTextImagesPreferences.showInlineMedia,
+    autoplayGifs:
+      typeof source.autoplayGifs === "boolean"
+        ? source.autoplayGifs
+        : defaultRuntimeTextImagesPreferences.autoplayGifs,
+    autoplayStickers:
+      typeof source.autoplayStickers === "boolean"
+        ? source.autoplayStickers
+        : defaultRuntimeTextImagesPreferences.autoplayStickers,
+    convertEmoticons:
+      typeof source.convertEmoticons === "boolean"
+        ? source.convertEmoticons
+        : defaultRuntimeTextImagesPreferences.convertEmoticons,
+  };
+};
+
+const normalizeRuntimeNotificationPreferences = (value: unknown): RuntimeNotificationPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultRuntimeNotificationPreferences };
+  }
+
+  const source = value as {
+    mentionsEnabled?: unknown;
+    notifications?: {
+      enableDesktopNotifications?: unknown;
+      notifyOnDirectMessages?: unknown;
+      notifyOnReplies?: unknown;
+    };
+  };
+
+  const notifications = source.notifications ?? {};
+
+  return {
+    mentionsEnabled:
+      typeof source.mentionsEnabled === "boolean"
+        ? source.mentionsEnabled
+        : defaultRuntimeNotificationPreferences.mentionsEnabled,
+    enableDesktopNotifications:
+      typeof notifications.enableDesktopNotifications === "boolean"
+        ? notifications.enableDesktopNotifications
+        : defaultRuntimeNotificationPreferences.enableDesktopNotifications,
+    notifyOnDirectMessages:
+      typeof notifications.notifyOnDirectMessages === "boolean"
+        ? notifications.notifyOnDirectMessages
+        : defaultRuntimeNotificationPreferences.notifyOnDirectMessages,
+    notifyOnReplies:
+      typeof notifications.notifyOnReplies === "boolean"
+        ? notifications.notifyOnReplies
+        : defaultRuntimeNotificationPreferences.notifyOnReplies,
+  };
+};
+
+const normalizeRuntimeAccessibilityPreferences = (value: unknown): RuntimeAccessibilityPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultRuntimeAccessibilityPreferences };
+  }
+
+  const source = value as Partial<Record<keyof RuntimeAccessibilityPreferences, unknown>>;
+  const messageSpacing =
+    source.messageSpacing === "compact" || source.messageSpacing === "comfortable"
+      ? source.messageSpacing
+      : defaultRuntimeAccessibilityPreferences.messageSpacing;
+
+  return {
+    preferReducedMotion:
+      typeof source.preferReducedMotion === "boolean"
+        ? source.preferReducedMotion
+        : defaultRuntimeAccessibilityPreferences.preferReducedMotion,
+    highContrastMode:
+      typeof source.highContrastMode === "boolean"
+        ? source.highContrastMode
+        : defaultRuntimeAccessibilityPreferences.highContrastMode,
+    largerChatFont:
+      typeof source.largerChatFont === "boolean"
+        ? source.largerChatFont
+        : defaultRuntimeAccessibilityPreferences.largerChatFont,
+    enableScreenReaderAnnouncements:
+      typeof source.enableScreenReaderAnnouncements === "boolean"
+        ? source.enableScreenReaderAnnouncements
+        : defaultRuntimeAccessibilityPreferences.enableScreenReaderAnnouncements,
+    messageSpacing,
+  };
+};
+
+const normalizeRuntimeEmojiPreferences = (value: unknown): RuntimeEmojiPreferences => {
+  if (!value || typeof value !== "object") {
+    return { ...defaultRuntimeEmojiPreferences };
+  }
+
+  const source = value as Partial<Record<keyof RuntimeEmojiPreferences, unknown>>;
+  const defaultComposerEmoji =
+    typeof source.defaultComposerEmoji === "string" && source.defaultComposerEmoji.trim().length > 0
+      ? source.defaultComposerEmoji.trim().slice(0, 16)
+      : defaultRuntimeEmojiPreferences.defaultComposerEmoji;
+
+  const favoriteEmojis = Array.isArray(source.favoriteEmojis)
+    ? Array.from(
+        new Set(
+          source.favoriteEmojis
+            .filter((item): item is string => typeof item === "string")
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0)
+            .slice(0, 32)
+        )
+      )
+    : [...defaultRuntimeEmojiPreferences.favoriteEmojis];
+
+  return {
+    showComposerEmojiButton:
+      typeof source.showComposerEmojiButton === "boolean"
+        ? source.showComposerEmojiButton
+        : defaultRuntimeEmojiPreferences.showComposerEmojiButton,
+    compactReactionButtons:
+      typeof source.compactReactionButtons === "boolean"
+        ? source.compactReactionButtons
+        : defaultRuntimeEmojiPreferences.compactReactionButtons,
+    defaultComposerEmoji,
+    favoriteEmojis,
+  };
+};
+
+const RUNTIME_NOTIFICATION_PREF_CACHE_TTL_MS = 60_000;
+let runtimeNotificationPreferencesCache: RuntimeNotificationPreferences | null = null;
+let runtimeNotificationPreferencesCacheExpiresAt = 0;
+let runtimeNotificationPreferencesInFlight: Promise<RuntimeNotificationPreferences> | null = null;
+let runtimeTextImagesPreferencesCache: RuntimeTextImagesPreferences | null = null;
+let runtimeTextImagesPreferencesCacheExpiresAt = 0;
+let runtimeTextImagesPreferencesInFlight: Promise<RuntimeTextImagesPreferences> | null = null;
+let runtimeAccessibilityPreferencesCache: RuntimeAccessibilityPreferences | null = null;
+let runtimeAccessibilityPreferencesCacheExpiresAt = 0;
+let runtimeAccessibilityPreferencesInFlight: Promise<RuntimeAccessibilityPreferences> | null = null;
+let runtimeEmojiPreferencesCache: RuntimeEmojiPreferences | null = null;
+let runtimeEmojiPreferencesCacheExpiresAt = 0;
+let runtimeEmojiPreferencesInFlight: Promise<RuntimeEmojiPreferences> | null = null;
+
+const emoticonToEmojiMap: Record<string, string> = {
+  ":)": "😊",
+  ":-)": "😊",
+  ":(": "☹️",
+  ":-(": "☹️",
+  ";)": "😉",
+  ";-)": "😉",
+  ":D": "😄",
+  ":-D": "😄",
+  ":P": "😛",
+  ":-P": "😛",
+  ":p": "😛",
+  ":-p": "😛",
+  "<3": "❤️",
+};
+
+const convertEmoticonsToEmoji = (value: string) => {
+  let next = String(value ?? "");
+
+  for (const [emoticon, emoji] of Object.entries(emoticonToEmojiMap)) {
+    const escaped = emoticon.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    next = next.replace(new RegExp(`(^|\\s)${escaped}(?=\\s|$)`, "g"), `$1${emoji}`);
+  }
+
+  return next;
+};
+
+const fetchRuntimeNotificationPreferences = async (force = false) => {
+  if (
+    !force &&
+    runtimeNotificationPreferencesCache &&
+    runtimeNotificationPreferencesCacheExpiresAt > Date.now()
+  ) {
+    return runtimeNotificationPreferencesCache;
+  }
+
+  if (runtimeNotificationPreferencesInFlight) {
+    return runtimeNotificationPreferencesInFlight;
+  }
+
+  runtimeNotificationPreferencesInFlight = axios
+    .get<{
+      mentionsEnabled?: unknown;
+      notifications?: unknown;
+    }>("/api/profile/preferences")
+    .then((response) => normalizeRuntimeNotificationPreferences(response.data))
+    .catch(() => ({ ...defaultRuntimeNotificationPreferences }))
+    .then((next) => {
+      runtimeNotificationPreferencesCache = next;
+      runtimeNotificationPreferencesCacheExpiresAt = Date.now() + RUNTIME_NOTIFICATION_PREF_CACHE_TTL_MS;
+      return next;
+    })
+    .finally(() => {
+      runtimeNotificationPreferencesInFlight = null;
+    });
+
+  return runtimeNotificationPreferencesInFlight;
+};
+
+const fetchRuntimeTextImagesPreferences = async (force = false) => {
+  if (
+    !force &&
+    runtimeTextImagesPreferencesCache &&
+    runtimeTextImagesPreferencesCacheExpiresAt > Date.now()
+  ) {
+    return runtimeTextImagesPreferencesCache;
+  }
+
+  if (runtimeTextImagesPreferencesInFlight) {
+    return runtimeTextImagesPreferencesInFlight;
+  }
+
+  runtimeTextImagesPreferencesInFlight = axios
+    .get<{
+      textImages?: unknown;
+    }>("/api/profile/preferences")
+    .then((response) => normalizeRuntimeTextImagesPreferences(response.data?.textImages))
+    .catch(() => ({ ...defaultRuntimeTextImagesPreferences }))
+    .then((next) => {
+      runtimeTextImagesPreferencesCache = next;
+      runtimeTextImagesPreferencesCacheExpiresAt = Date.now() + RUNTIME_NOTIFICATION_PREF_CACHE_TTL_MS;
+      return next;
+    })
+    .finally(() => {
+      runtimeTextImagesPreferencesInFlight = null;
+    });
+
+  return runtimeTextImagesPreferencesInFlight;
+};
+
+const fetchRuntimeAccessibilityPreferences = async (force = false) => {
+  if (
+    !force &&
+    runtimeAccessibilityPreferencesCache &&
+    runtimeAccessibilityPreferencesCacheExpiresAt > Date.now()
+  ) {
+    return runtimeAccessibilityPreferencesCache;
+  }
+
+  if (runtimeAccessibilityPreferencesInFlight) {
+    return runtimeAccessibilityPreferencesInFlight;
+  }
+
+  runtimeAccessibilityPreferencesInFlight = axios
+    .get<{
+      accessibility?: unknown;
+    }>("/api/profile/preferences")
+    .then((response) => normalizeRuntimeAccessibilityPreferences(response.data?.accessibility))
+    .catch(() => ({ ...defaultRuntimeAccessibilityPreferences }))
+    .then((next) => {
+      runtimeAccessibilityPreferencesCache = next;
+      runtimeAccessibilityPreferencesCacheExpiresAt = Date.now() + RUNTIME_NOTIFICATION_PREF_CACHE_TTL_MS;
+      return next;
+    })
+    .finally(() => {
+      runtimeAccessibilityPreferencesInFlight = null;
+    });
+
+  return runtimeAccessibilityPreferencesInFlight;
+};
+
+const fetchRuntimeEmojiPreferences = async (force = false) => {
+  if (
+    !force &&
+    runtimeEmojiPreferencesCache &&
+    runtimeEmojiPreferencesCacheExpiresAt > Date.now()
+  ) {
+    return runtimeEmojiPreferencesCache;
+  }
+
+  if (runtimeEmojiPreferencesInFlight) {
+    return runtimeEmojiPreferencesInFlight;
+  }
+
+  runtimeEmojiPreferencesInFlight = axios
+    .get<{
+      emoji?: unknown;
+    }>("/api/profile/preferences")
+    .then((response) => normalizeRuntimeEmojiPreferences(response.data?.emoji))
+    .catch(() => ({ ...defaultRuntimeEmojiPreferences }))
+    .then((next) => {
+      runtimeEmojiPreferencesCache = next;
+      runtimeEmojiPreferencesCacheExpiresAt = Date.now() + RUNTIME_NOTIFICATION_PREF_CACHE_TTL_MS;
+      return next;
+    })
+    .finally(() => {
+      runtimeEmojiPreferencesInFlight = null;
+    });
+
+  return runtimeEmojiPreferencesInFlight;
+};
+
 const notifiedMentionMessageIds = new Set<string>();
+const notifiedReplyMessageIds = new Set<string>();
+const notifiedDirectMessageIds = new Set<string>();
 const previewCache = new Map<string, LinkPreview | null>();
+const NOTIFICATION_SEEN_CACHE_LIMIT = 5_000;
+const PREVIEW_CACHE_LIMIT = 1_000;
+const PROFILE_CARD_CACHE_LIMIT = 1_000;
+
+const addToBoundedSet = (target: Set<string>, value: string, limit = NOTIFICATION_SEEN_CACHE_LIMIT) => {
+  target.add(value);
+
+  while (target.size > limit) {
+    const oldest = target.values().next().value;
+    if (typeof oldest !== "string") {
+      break;
+    }
+
+    target.delete(oldest);
+  }
+};
+
+const setBoundedMapEntry = <TValue,>(target: Map<string, TValue>, key: string, value: TValue, limit: number) => {
+  target.set(key, value);
+
+  while (target.size > limit) {
+    const oldest = target.keys().next().value;
+    if (typeof oldest !== "string") {
+      break;
+    }
+
+    target.delete(oldest);
+  }
+};
 const PROFILE_CARD_CACHE_TTL_MS = 120_000;
 
 type ProfileCardData = {
@@ -210,10 +610,15 @@ const fetchProfileCardData = async ({
     .then((response) => response.data)
     .catch(() => null)
     .then((data) => {
-      profileCardCache.set(cacheKey, {
-        data,
-        expiresAt: Date.now() + PROFILE_CARD_CACHE_TTL_MS,
-      });
+      setBoundedMapEntry(
+        profileCardCache,
+        cacheKey,
+        {
+          data,
+          expiresAt: Date.now() + PROFILE_CARD_CACHE_TTL_MS,
+        },
+        PROFILE_CARD_CACHE_LIMIT
+      );
       return data;
     })
     .finally(() => {
@@ -329,6 +734,10 @@ export const ChatItem = ({
   const [isEditing, setIsEditing] = useState(false);
   const [isProfilePopoverOpen, setIsProfilePopoverOpen] = useState(false);
   const [profileCard, setProfileCard] = useState<ProfileCardData | null>(null);
+  const [botCommands, setBotCommands] = useState<string[]>([]);
+  const [botCommandsName, setBotCommandsName] = useState("Bot");
+  const [isLoadingBotCommands, setIsLoadingBotCommands] = useState(false);
+  const [isBotCommandsDialogOpen, setIsBotCommandsDialogOpen] = useState(false);
   const [displayName, setDisplayName] = useState(member.profile.name);
   const [displayImageUrl, setDisplayImageUrl] = useState(member.profile.imageUrl);
   const [linkPreviews, setLinkPreviews] = useState<Record<string, LinkPreview | null>>({});
@@ -337,6 +746,22 @@ export const ChatItem = ({
   );
   const [activePickerId, setActivePickerId] = useState<string | null>(null);
   const [isThreadActionPending, setIsThreadActionPending] = useState(false);
+  const [runtimeNotificationPreferences, setRuntimeNotificationPreferences] =
+    useState<RuntimeNotificationPreferences>({
+      ...defaultRuntimeNotificationPreferences,
+    });
+  const [runtimeTextImagesPreferences, setRuntimeTextImagesPreferences] =
+    useState<RuntimeTextImagesPreferences>({
+      ...defaultRuntimeTextImagesPreferences,
+    });
+  const [runtimeAccessibilityPreferences, setRuntimeAccessibilityPreferences] =
+    useState<RuntimeAccessibilityPreferences>({
+      ...defaultRuntimeAccessibilityPreferences,
+    });
+  const [runtimeEmojiPreferences, setRuntimeEmojiPreferences] =
+    useState<RuntimeEmojiPreferences>({
+      ...defaultRuntimeEmojiPreferences,
+    });
   const { onOpen } = useModal();
   const params = useParams();
   const router = useRouter();
@@ -474,7 +899,7 @@ export const ChatItem = ({
     const effectiveServerId = dmServerId ?? serverIdFromRoute;
 
     if (!effectiveServerId) {
-      window.alert("Unable to open DM from this view.");
+      window.alert("Unable to open PM from this view.");
       return;
     }
 
@@ -534,12 +959,54 @@ export const ChatItem = ({
     }
   };
 
+  const loadBotCommands = async () => {
+    if (botCommands.length > 0) {
+      return;
+    }
+
+    try {
+      setIsLoadingBotCommands(true);
+
+      const response = await axios.get<{ botName?: string; commands?: string[] }>(
+        `/api/profile/${encodeURIComponent(member.profile.id)}/bot-commands`,
+        {
+          params: {
+            memberId: member.id,
+          },
+        }
+      );
+
+      const commands = Array.isArray(response.data?.commands)
+        ? response.data.commands
+            .filter((item): item is string => typeof item === "string")
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0)
+        : [];
+
+      setBotCommands(commands);
+
+      const nextName = String(response.data?.botName ?? "").trim();
+      if (nextName) {
+        setBotCommandsName(nextName);
+      }
+    } catch {
+      // ignore when this profile is not a configured bot
+    } finally {
+      setIsLoadingBotCommands(false);
+    }
+  };
+
+  const onOpenBotCommandsDialog = () => {
+    setIsBotCommandsDialogOpen(true);
+    void loadBotCommands();
+  };
+
   const onReportMessage = async () => {
     if (deleted) {
       return;
     }
 
-    const sourceLabel = reactionScope === "direct" ? "direct message" : "channel message";
+    const sourceLabel = reactionScope === "direct" ? "private message" : "channel message";
 
     try {
       await axios.post("/api/reports", {
@@ -569,6 +1036,7 @@ export const ChatItem = ({
         detail: {
           messageId: id,
           authorName: displayName,
+          authorProfileId: member.profile.id,
           snippet: getQuoteSnippetFromBody(body),
         },
       })
@@ -585,9 +1053,21 @@ export const ChatItem = ({
     }
 
     const existingThreadId = String(thread?.id ?? "").trim();
+    const routeServerSegment =
+      typeof params?.serverId === "string"
+        ? params.serverId
+        : Array.isArray(params?.serverId)
+          ? (params?.serverId[0] ?? "")
+          : serverId;
+    const routeChannelSegment =
+      typeof params?.channelId === "string"
+        ? params.channelId
+        : Array.isArray(params?.channelId)
+          ? (params?.channelId[0] ?? "")
+          : channelId;
 
     if (existingThreadId) {
-      router.push(`/servers/${serverId}/channels/${channelId}/threads/${existingThreadId}`);
+      router.push(`/servers/${routeServerSegment}/channels/${routeChannelSegment}/threads/${existingThreadId}`);
       return;
     }
 
@@ -606,7 +1086,7 @@ export const ChatItem = ({
         throw new Error("Thread creation response did not include threadId");
       }
 
-      router.push(`/servers/${serverId}/channels/${channelId}/threads/${createdThreadId}`);
+      router.push(`/servers/${routeServerSegment}/channels/${routeChannelSegment}/threads/${createdThreadId}`);
     } catch (error) {
       console.error("[CHAT_ITEM_OPEN_THREAD]", error);
       window.alert("Unable to open thread right now.");
@@ -624,7 +1104,101 @@ export const ChatItem = ({
 
     window.addEventListener("keydown", handleKeyDown);
 
-    return () => window.removeEventListener("keyDown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const syncEmojiPreferences = async (force = false) => {
+      const next = await fetchRuntimeEmojiPreferences(force);
+
+      if (cancelled) {
+        return;
+      }
+
+      setRuntimeEmojiPreferences(next);
+    };
+
+    void syncEmojiPreferences();
+
+    const onEmojiPreferencesChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<{ emoji?: unknown }>;
+
+      if (customEvent.detail?.emoji) {
+        const next = normalizeRuntimeEmojiPreferences(customEvent.detail.emoji);
+        setRuntimeEmojiPreferences(next);
+        runtimeEmojiPreferencesCache = next;
+        runtimeEmojiPreferencesCacheExpiresAt = Date.now() + RUNTIME_NOTIFICATION_PREF_CACHE_TTL_MS;
+        return;
+      }
+
+      void syncEmojiPreferences(true);
+    };
+
+    window.addEventListener("inaccord:emoji-preferences-updated", onEmojiPreferencesChanged);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("inaccord:emoji-preferences-updated", onEmojiPreferencesChanged);
+    };
+  }, []);
+
+  const quickReactionEmojis = useMemo(() => {
+    const normalizedFavorites = runtimeEmojiPreferences.favoriteEmojis
+      .map((item) => String(item ?? "").trim())
+      .filter((item) => item.length > 0)
+      .slice(0, 12);
+
+    if (!normalizedFavorites.length) {
+      return basicEmotes;
+    }
+
+    return normalizedFavorites;
+  }, [runtimeEmojiPreferences.favoriteEmojis]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const syncAccessibilityPreferences = async (force = false) => {
+      const next = await fetchRuntimeAccessibilityPreferences(force);
+
+      if (cancelled) {
+        return;
+      }
+
+      setRuntimeAccessibilityPreferences(next);
+    };
+
+    void syncAccessibilityPreferences();
+
+    const onAccessibilityPreferencesChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<{ accessibility?: unknown }>;
+
+      if (customEvent.detail?.accessibility) {
+        const next = normalizeRuntimeAccessibilityPreferences(customEvent.detail.accessibility);
+
+        setRuntimeAccessibilityPreferences(next);
+        runtimeAccessibilityPreferencesCache = next;
+        runtimeAccessibilityPreferencesCacheExpiresAt = Date.now() + RUNTIME_NOTIFICATION_PREF_CACHE_TTL_MS;
+        return;
+      }
+
+      void syncAccessibilityPreferences(true);
+    };
+
+    window.addEventListener(
+      "inaccord:accessibility-preferences-updated",
+      onAccessibilityPreferencesChanged
+    );
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener(
+        "inaccord:accessibility-preferences-updated",
+        onAccessibilityPreferencesChanged
+      );
+    };
   }, []);
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -767,6 +1341,7 @@ export const ChatItem = ({
     name: displayName,
     email: member.profile.email,
   });
+  const canShowBotCommands = showBotBadge || member.profile.id.startsWith("botcfg_");
   const globalRoleFromProfile = (member.profile as Profile & { role?: string | null }).role ?? null;
   const effectiveGlobalRole = profileCard?.role ?? globalRoleFromProfile;
   const isGlobalDeveloper = isInAccordDeveloper(effectiveGlobalRole);
@@ -774,15 +1349,15 @@ export const ChatItem = ({
   const isGlobalModerator = isInAccordModerator(effectiveGlobalRole);
   const globalRoleLabel = getInAccordStaffLabel(effectiveGlobalRole);
   const highestRoleIcon = isGlobalDeveloper
-    ? <Wrench className="h-4 w-4 text-cyan-400" aria-label={globalRoleLabel ?? "Developer"} />
+    ? <Wrench suppressHydrationWarning className="h-4 w-4 text-cyan-400" aria-label={globalRoleLabel ?? "Developer"} />
     : isGlobalAdministrator
-      ? <Crown className="h-4 w-4 text-rose-500" aria-label={globalRoleLabel ?? "Administrator"} />
+      ? <Crown suppressHydrationWarning className="h-4 w-4 text-rose-500" aria-label={globalRoleLabel ?? "Administrator"} />
       : isGlobalModerator
-        ? <ModeratorLineIcon className="h-4 w-4 text-indigo-500" aria-label={globalRoleLabel ?? "Moderator"} />
+        ? <ModeratorLineIcon suppressHydrationWarning className="h-4 w-4 text-indigo-500" aria-label={globalRoleLabel ?? "Moderator"} />
         : isInAccordAdministrator(member.role)
-          ? <Crown className="h-4 w-4 text-rose-500" aria-label="Administrator" />
+          ? <Crown suppressHydrationWarning className="h-4 w-4 text-rose-500" aria-label="Administrator" />
           : isInAccordModerator(member.role)
-            ? <ModeratorLineIcon className="h-4 w-4 text-indigo-500" aria-label="Moderator" />
+            ? <ModeratorLineIcon suppressHydrationWarning className="h-4 w-4 text-indigo-500" aria-label="Moderator" />
             : null;
   const highestRoleLabel = isGlobalDeveloper
     ? "Developer"
@@ -841,7 +1416,10 @@ export const ChatItem = ({
   const { quote: quotedMessage, body: rawMessageBody } = extractQuotedContent(content);
   const voiceJoinNotification = parseVoiceJoinNotification(rawMessageBody);
   const messageBody = voiceJoinNotification?.displayText ?? rawMessageBody;
-  const contentSegments = parseMentionSegments(messageBody);
+  const normalizedMessageBody = runtimeTextImagesPreferences.convertEmoticons
+    ? convertEmoticonsToEmoji(messageBody)
+    : messageBody;
+  const contentSegments = parseMentionSegments(normalizedMessageBody);
   const hasMention = contentSegments.some((segment) => segment.kind === "mention");
   const isMentioningCurrentUser = contentSegments.some(
     (segment) =>
@@ -849,11 +1427,15 @@ export const ChatItem = ({
       segment.entityType === "user" &&
       segment.entityId === currentMember.profileId
   );
+  const isReplyToCurrentUser =
+    typeof quotedMessage?.authorProfileId === "string" &&
+    quotedMessage.authorProfileId.trim().length > 0 &&
+    quotedMessage.authorProfileId === currentMember.profileId;
   const plainContentForNotification = contentSegments
     .map((segment) => (segment.kind === "mention" ? `@${segment.label}` : segment.value))
     .join("")
     .trim();
-  const messageUrls = useMemo(() => extractUrlsFromText(messageBody, 3), [messageBody]);
+  const messageUrls = useMemo(() => extractUrlsFromText(normalizedMessageBody, 3), [normalizedMessageBody]);
   const renderedPreviews = messageUrls
     .map((url) => linkPreviews[url])
     .filter((item): item is LinkPreview => Boolean(item));
@@ -878,7 +1460,124 @@ export const ChatItem = ({
     "cursor-not-allowed text-zinc-400/70 dark:text-zinc-500/70";
 
   useEffect(() => {
-    if (!isMentioningCurrentUser || deleted) {
+    let cancelled = false;
+
+    const syncNotificationPreferences = async (force = false) => {
+      const next = await fetchRuntimeNotificationPreferences(force);
+
+      if (cancelled) {
+        return;
+      }
+
+      setRuntimeNotificationPreferences(next);
+    };
+
+    void syncNotificationPreferences();
+
+    const onMentionsPreferenceChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<{ mentionsEnabled?: boolean }>;
+      const nextMentionsEnabled = customEvent.detail?.mentionsEnabled;
+
+      if (typeof nextMentionsEnabled === "boolean") {
+        setRuntimeNotificationPreferences((current) => {
+          const next = {
+            ...current,
+            mentionsEnabled: nextMentionsEnabled,
+          };
+
+          runtimeNotificationPreferencesCache = next;
+          runtimeNotificationPreferencesCacheExpiresAt = Date.now() + RUNTIME_NOTIFICATION_PREF_CACHE_TTL_MS;
+          return next;
+        });
+        return;
+      }
+
+      void syncNotificationPreferences(true);
+    };
+
+    const onNotificationPreferencesChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<{ notifications?: unknown }>;
+      const normalized = normalizeRuntimeNotificationPreferences({
+        mentionsEnabled: runtimeNotificationPreferences.mentionsEnabled,
+        notifications: customEvent.detail?.notifications,
+      });
+
+      setRuntimeNotificationPreferences((current) => {
+        const next = {
+          ...current,
+          enableDesktopNotifications: normalized.enableDesktopNotifications,
+          notifyOnDirectMessages: normalized.notifyOnDirectMessages,
+          notifyOnReplies: normalized.notifyOnReplies,
+        };
+
+        runtimeNotificationPreferencesCache = next;
+        runtimeNotificationPreferencesCacheExpiresAt = Date.now() + RUNTIME_NOTIFICATION_PREF_CACHE_TTL_MS;
+        return next;
+      });
+    };
+
+    window.addEventListener("inaccord:mentions-setting-updated", onMentionsPreferenceChanged);
+    window.addEventListener(
+      "inaccord:notification-preferences-updated",
+      onNotificationPreferencesChanged
+    );
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("inaccord:mentions-setting-updated", onMentionsPreferenceChanged);
+      window.removeEventListener(
+        "inaccord:notification-preferences-updated",
+        onNotificationPreferencesChanged
+      );
+    };
+  }, [runtimeNotificationPreferences.mentionsEnabled]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const syncTextImagesPreferences = async (force = false) => {
+      const next = await fetchRuntimeTextImagesPreferences(force);
+
+      if (cancelled) {
+        return;
+      }
+
+      setRuntimeTextImagesPreferences(next);
+    };
+
+    void syncTextImagesPreferences();
+
+    const onTextImagesPreferencesChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<{ textImages?: unknown }>;
+
+      if (customEvent.detail?.textImages) {
+        const next = normalizeRuntimeTextImagesPreferences(customEvent.detail.textImages);
+
+        setRuntimeTextImagesPreferences(next);
+        runtimeTextImagesPreferencesCache = next;
+        runtimeTextImagesPreferencesCacheExpiresAt = Date.now() + RUNTIME_NOTIFICATION_PREF_CACHE_TTL_MS;
+        return;
+      }
+
+      void syncTextImagesPreferences(true);
+    };
+
+    window.addEventListener(
+      "inaccord:text-images-preferences-updated",
+      onTextImagesPreferencesChanged
+    );
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener(
+        "inaccord:text-images-preferences-updated",
+        onTextImagesPreferencesChanged
+      );
+    };
+  }, []);
+
+  useEffect(() => {
+    if (deleted) {
       return;
     }
 
@@ -890,14 +1589,56 @@ export const ChatItem = ({
       return;
     }
 
-    if (notifiedMentionMessageIds.has(id)) {
+    if (!runtimeNotificationPreferences.enableDesktopNotifications) {
       return;
     }
 
-    notifiedMentionMessageIds.add(id);
+    const isDirectMessage = reactionScope === "direct";
+    const shouldNotifyMention = isMentioningCurrentUser && runtimeNotificationPreferences.mentionsEnabled;
+    const shouldNotifyReply = isReplyToCurrentUser && runtimeNotificationPreferences.notifyOnReplies;
+    const shouldNotifyDirectMessage =
+      isDirectMessage && runtimeNotificationPreferences.notifyOnDirectMessages;
 
-    const title = `New mention from ${displayName}`;
-    const body = plainContentForNotification || "You were mentioned in chat.";
+    let notificationType: "mention" | "reply" | "direct" | null = null;
+
+    if (shouldNotifyMention) {
+      notificationType = "mention";
+    } else if (shouldNotifyReply) {
+      notificationType = "reply";
+    } else if (shouldNotifyDirectMessage) {
+      notificationType = "direct";
+    }
+
+    if (!notificationType) {
+      return;
+    }
+
+    const seenIds =
+      notificationType === "mention"
+        ? notifiedMentionMessageIds
+        : notificationType === "reply"
+          ? notifiedReplyMessageIds
+          : notifiedDirectMessageIds;
+
+    if (seenIds.has(id)) {
+      return;
+    }
+
+    addToBoundedSet(seenIds, id);
+
+    const title =
+      notificationType === "mention"
+        ? `New mention from ${displayName}`
+        : notificationType === "reply"
+          ? `New reply from ${displayName}`
+          : `New direct message from ${displayName}`;
+    const fallbackBody =
+      notificationType === "mention"
+        ? "You were mentioned in chat."
+        : notificationType === "reply"
+          ? "Someone replied to your message."
+          : "You received a direct message.";
+    const body = plainContentForNotification || fallbackBody;
     const shouldUseBrowserNotification = document.visibilityState !== "visible";
 
     if (shouldUseBrowserNotification && "Notification" in window) {
@@ -905,7 +1646,7 @@ export const ChatItem = ({
         try {
           new Notification(title, {
             body,
-            tag: `mention-${id}`,
+            tag: `${notificationType}-${id}`,
           });
         } catch {
           // ignore notification failures
@@ -928,11 +1669,22 @@ export const ChatItem = ({
     displayName,
     id,
     isMentioningCurrentUser,
+    isReplyToCurrentUser,
     member.id,
     plainContentForNotification,
+    reactionScope,
+    runtimeNotificationPreferences.enableDesktopNotifications,
+    runtimeNotificationPreferences.mentionsEnabled,
+    runtimeNotificationPreferences.notifyOnDirectMessages,
+    runtimeNotificationPreferences.notifyOnReplies,
   ]);
 
   useEffect(() => {
+    if (!runtimeTextImagesPreferences.showEmbeds || !runtimeTextImagesPreferences.showLinkPreviews) {
+      setLinkPreviews({});
+      return;
+    }
+
     if (!messageUrls.length) {
       setLinkPreviews({});
       return;
@@ -955,10 +1707,10 @@ export const ChatItem = ({
           });
 
           const preview = response.data.preview ?? null;
-          previewCache.set(url, preview);
+          setBoundedMapEntry(previewCache, url, preview, PREVIEW_CACHE_LIMIT);
           nextEntries.push([url, preview]);
         } catch {
-          previewCache.set(url, null);
+          setBoundedMapEntry(previewCache, url, null, PREVIEW_CACHE_LIMIT);
           nextEntries.push([url, null]);
         }
       }
@@ -975,7 +1727,11 @@ export const ChatItem = ({
     return () => {
       cancelled = true;
     };
-  }, [messageUrls]);
+  }, [
+    messageUrls,
+    runtimeTextImagesPreferences.showEmbeds,
+    runtimeTextImagesPreferences.showLinkPreviews,
+  ]);
 
   if (deleted) {
     const deletedByName = String(displayName ?? "").trim() || "Unknown User";
@@ -1008,7 +1764,11 @@ export const ChatItem = ({
   return (
     <div
       className={cn(
-        "relative group flex items-center p-4 transition w-full",
+        "chat-message-item relative group flex w-full items-center px-4 transition",
+        runtimeAccessibilityPreferences.messageSpacing === "compact" ? "py-2" : "py-4",
+        runtimeAccessibilityPreferences.highContrastMode
+          ? "outline-1 outline-white/25 dark:outline-white/40"
+          : null,
         isMentioningCurrentUser
           ? "bg-zinc-400 hover:bg-zinc-400 dark:bg-zinc-700 dark:hover:bg-zinc-700 border-l-4 border-amber-500/80"
           : hasMention
@@ -1111,6 +1871,20 @@ export const ChatItem = ({
               ) : null}
 
               <div className="mt-3 flex items-center gap-2 border-t border-white/10 pt-3">
+                {canShowBotCommands ? (
+                  <ActionTooltip label="Commands" align="center">
+                    <button
+                      type="button"
+                      onClick={onOpenBotCommandsDialog}
+                      className="inline-flex h-8 items-center justify-center rounded-md border border-indigo-500/35 bg-indigo-500/15 px-2 text-[11px] font-semibold tracking-[0.05em] text-indigo-200 transition hover:bg-indigo-500/25"
+                      aria-label="Show bot commands"
+                      title="Commands"
+                    >
+                      {isLoadingBotCommands ? "..." : "COMMANDS"}
+                    </button>
+                  </ActionTooltip>
+                ) : null}
+
                 <ActionTooltip label="Add Friend" align="center">
                   <button
                     type="button"
@@ -1119,7 +1893,7 @@ export const ChatItem = ({
                     aria-label="Add friend"
                     title="Add Friend"
                   >
-                    <UserPlus className="h-4 w-4" />
+                    <UserPlus suppressHydrationWarning className="h-4 w-4" />
                   </button>
                 </ActionTooltip>
 
@@ -1131,19 +1905,19 @@ export const ChatItem = ({
                     aria-label="Block user"
                     title="Block"
                   >
-                    <Ban className="h-4 w-4" />
+                    <Ban suppressHydrationWarning className="h-4 w-4" />
                   </button>
                 </ActionTooltip>
 
-                <ActionTooltip label="Direct Message" align="center">
+                <ActionTooltip label="Private Message" align="center">
                   <button
                     type="button"
                     onClick={onStartDirectMessage}
                     className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/15 bg-[#1e1f22] text-[#dbdee1] transition hover:bg-[#2a2b30]"
-                    aria-label="Open direct message"
-                    title="Direct Message"
+                    aria-label="Open private message"
+                    title="Private Message"
                   >
-                    <MessageCircle className="h-4 w-4" />
+                    <MessageCircle suppressHydrationWarning className="h-4 w-4" />
                   </button>
                 </ActionTooltip>
 
@@ -1155,13 +1929,19 @@ export const ChatItem = ({
                     aria-label="Report user"
                     title="Report User"
                   >
-                    <Flag className="h-4 w-4" />
+                    <Flag suppressHydrationWarning className="h-4 w-4" />
                   </button>
                 </ActionTooltip>
               </div>
             </div>
           </PopoverContent>
         </Popover>
+        <BotCommandsDialog
+          open={isBotCommandsDialogOpen}
+          onOpenChange={setIsBotCommandsDialogOpen}
+          botName={botCommandsName || displayName || "Bot"}
+          commands={botCommands}
+        />
         <div className="flex w-full min-w-0 flex-col">
           <div className="flex items-center gap-x-2">
             <div className="flex items-center gap-1">
@@ -1175,7 +1955,10 @@ export const ChatItem = ({
                   name={displayName}
                   profileId={member.profile.id}
                   memberId={member.id}
-                  nameClassName="font-semibold text-sm"
+                  nameClassName={cn(
+                    "font-semibold",
+                    runtimeAccessibilityPreferences.largerChatFont ? "text-base" : "text-sm"
+                  )}
                   showNameplate
                   plateMetaIcons={roleAndMetaIcons}
                   stretchTagUnderPlate
@@ -1186,7 +1969,7 @@ export const ChatItem = ({
               {timestamp}
             </span>
           </div>
-          {isImage && (
+          {isImage && runtimeTextImagesPreferences.showInlineMedia && (
             <a
               href={fileUrl}
               target="_blank"
@@ -1200,13 +1983,23 @@ export const ChatItem = ({
                   : "aspect-square rounded-md border bg-secondary h-48 w-48"
               )}
             >
-              {isGif ? (
+              {isGif && runtimeTextImagesPreferences.autoplayGifs ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={fileUrl}
                   alt={content}
                   className="h-full w-full object-cover"
                 />
+              ) : isGif ? (
+                <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-zinc-900/70 px-2 text-center text-[11px] text-zinc-100">
+                  <span>GIF autoplay is off</span>
+                  <span className="text-[10px] text-zinc-300">Open to view</span>
+                </div>
+              ) : isSticker && !runtimeTextImagesPreferences.autoplayStickers ? (
+                <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-zinc-900/70 px-2 text-center text-[11px] text-zinc-100">
+                  <span>Sticker autoplay is off</span>
+                  <span className="text-[10px] text-zinc-300">Open to view</span>
+                </div>
               ) : (
                 <Image
                   src={fileUrl}
@@ -1217,9 +2010,22 @@ export const ChatItem = ({
               )}
             </a>
           )}
-          {isPDF && (
+          {isImage && !runtimeTextImagesPreferences.showInlineMedia ? (
+            <div className="relative mt-2 flex items-center p-2 rounded-md border border-zinc-300/70 bg-zinc-100/80 dark:border-zinc-700 dark:bg-zinc-900/80">
+              <FileIcon suppressHydrationWarning className="h-10 w-10 fill-indigo-200 stroke-indigo-400" />
+              <a
+                href={fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-2 text-sm text-indigo-500 dark:text-indigo-400 hover:underline"
+              >
+                Media attachment
+              </a>
+            </div>
+          ) : null}
+          {isPDF && runtimeTextImagesPreferences.showInlineMedia && (
             <div className="relative flex items-center p-2 mt-2 rounded-md bg-background/10">
-              <FileIcon className="h-10 w-10 fill-indigo-200 stroke-indigo-400" />
+              <FileIcon suppressHydrationWarning className="h-10 w-10 fill-indigo-200 stroke-indigo-400" />
               <a
                 href={fileUrl}
                 target="_blank"
@@ -1230,7 +2036,20 @@ export const ChatItem = ({
               </a>
             </div>
           )}
-          {isSoundEfx && fileUrl ? (
+          {isPDF && !runtimeTextImagesPreferences.showInlineMedia && (
+            <div className="relative flex items-center p-2 mt-2 rounded-md border border-zinc-300/70 bg-zinc-100/80 dark:border-zinc-700 dark:bg-zinc-900/80">
+              <FileIcon suppressHydrationWarning className="h-10 w-10 fill-indigo-200 stroke-indigo-400" />
+              <a
+                href={fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-2 text-sm text-indigo-500 dark:text-indigo-400 hover:underline"
+              >
+                PDF File
+              </a>
+            </div>
+          )}
+          {isSoundEfx && fileUrl && runtimeTextImagesPreferences.showInlineMedia ? (
             <div className="mt-2 w-full max-w-md rounded-md border border-zinc-300/70 bg-zinc-100/80 p-2 dark:border-zinc-700 dark:bg-zinc-900/80">
               <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
                 Sound EFX
@@ -1240,8 +2059,24 @@ export const ChatItem = ({
               </audio>
             </div>
           ) : null}
+          {isSoundEfx && fileUrl && !runtimeTextImagesPreferences.showInlineMedia ? (
+            <div className="relative mt-2 flex items-center p-2 rounded-md border border-zinc-300/70 bg-zinc-100/80 dark:border-zinc-700 dark:bg-zinc-900/80">
+              <FileIcon suppressHydrationWarning className="h-10 w-10 fill-indigo-200 stroke-indigo-400" />
+              <a
+                href={fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-2 text-sm text-indigo-500 dark:text-indigo-400 hover:underline"
+              >
+                Audio attachment
+              </a>
+            </div>
+          ) : null}
           {!fileUrl && !isEditing && (
-            <div>
+            <div
+              aria-live={runtimeAccessibilityPreferences.enableScreenReaderAnnouncements ? "polite" : "off"}
+              aria-atomic="false"
+            >
               {quotedMessage ? (
                 <div className="mb-1 rounded-md border-l-2 border-indigo-400/70 bg-indigo-500/10 px-2 py-1 text-xs text-indigo-100/95">
                   <p className="font-semibold text-indigo-200">Replying to {quotedMessage.authorName}</p>
@@ -1251,7 +2086,11 @@ export const ChatItem = ({
 
               <p
                 className={cn(
-                  "chat-wrap-text max-w-full text-sm text-zinc-600 dark:text-zinc-300",
+                  "chat-wrap-text max-w-full text-zinc-600 dark:text-zinc-300",
+                  runtimeAccessibilityPreferences.largerChatFont ? "text-base leading-7" : "text-sm",
+                  runtimeAccessibilityPreferences.highContrastMode
+                    ? "text-zinc-900 dark:text-zinc-100"
+                    : null,
                   deleted &&
                     "italic text-zinc-500 dark:text-zinc-400 text-xs mt-1"
                 )}
@@ -1299,7 +2138,7 @@ export const ChatItem = ({
                 </div>
               ) : null}
 
-              {renderedPreviews.length ? (
+              {runtimeTextImagesPreferences.showEmbeds && runtimeTextImagesPreferences.showLinkPreviews && renderedPreviews.length ? (
                 <div className="mt-2 space-y-2">
                   {renderedPreviews.map((preview) => (
                     <a
@@ -1348,7 +2187,10 @@ export const ChatItem = ({
                     type="button"
                     onClick={() => onReactionClick(item.id)}
                     className={cn(
-                      "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition",
+                      "inline-flex items-center rounded-full border text-xs transition",
+                      runtimeEmojiPreferences.compactReactionButtons
+                        ? "gap-1 px-2 py-0.5"
+                        : "gap-1.5 px-2.5 py-1",
                       item.reactedByCurrentMember
                         ? "border-emerald-400/80 bg-emerald-500/15 text-emerald-100"
                         : "border-zinc-600/80 bg-zinc-700/40 text-zinc-200 hover:bg-zinc-700/60"
@@ -1365,13 +2207,13 @@ export const ChatItem = ({
                       className="inline-flex items-center gap-1 rounded-full border border-dashed border-zinc-500/80 bg-zinc-700/25 px-2.5 py-1 text-xs text-zinc-200 transition hover:bg-zinc-700/50"
                       title="Pick emoji"
                     >
-                      <SmilePlus className="h-3.5 w-3.5" />
+                      <SmilePlus suppressHydrationWarning className="h-3.5 w-3.5" />
                       <span>Add</span>
                     </button>
 
                     {activePickerId === item.id ? (
                       <div className="absolute bottom-full z-20 mb-2 w-[320px] max-w-[80vw] grid grid-cols-6 gap-2 rounded-xl border border-zinc-500 bg-[#1e1f22] p-3 shadow-2xl shadow-black/50">
-                        {basicEmotes.map((emoji) => (
+                        {quickReactionEmojis.map((emoji) => (
                           <button
                             key={`${item.id}-${emoji}`}
                             type="button"
@@ -1428,6 +2270,7 @@ export const ChatItem = ({
         <div className="flex items-center gap-x-2 absolute p-1 -top-2 right-5 bg-white/95 dark:bg-zinc-800/95 border rounded-sm shadow-sm">
           <ActionTooltip label={threadActionLabel} align="center">
             <MessageCircle
+              suppressHydrationWarning
               onClick={() => {
                 if (canUseThreads) {
                   void onOpenThread();
@@ -1444,6 +2287,7 @@ export const ChatItem = ({
 
           <ActionTooltip label="Reply" align="center">
             <Reply
+              suppressHydrationWarning
               onClick={onQuoteMessage}
               className={cn(actionIconClassName, actionIconEnabledClassName)}
             />
@@ -1451,6 +2295,7 @@ export const ChatItem = ({
 
           <ActionTooltip label={canEditMessage ? "Edit" : "Edit unavailable"} align="center">
             <Edit
+              suppressHydrationWarning
               onClick={() => {
                 if (canEditMessage) {
                   setIsEditing(true);
@@ -1465,6 +2310,7 @@ export const ChatItem = ({
 
           <ActionTooltip label={canDeleteMessage ? "Delete" : "Delete unavailable"} align="center">
             <Trash
+              suppressHydrationWarning
               onClick={() => {
                 if (canDeleteMessage) {
                   onOpen("deleteMessage", {
@@ -1482,6 +2328,7 @@ export const ChatItem = ({
 
           <ActionTooltip label="Report" align="center">
             <Flag
+              suppressHydrationWarning
               onClick={() => {
                 void onReportMessage();
               }}

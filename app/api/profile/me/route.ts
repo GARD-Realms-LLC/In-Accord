@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { currentProfile } from "@/lib/current-profile";
+import { hasSucceededPatronage } from "@/lib/patronage";
 import { resolveProfileIcons } from "@/lib/profile-icons";
 
 export async function GET() {
@@ -10,6 +11,8 @@ export async function GET() {
     if (!profile) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
+
+    const isPatron = await hasSucceededPatronage(profile.id);
 
     return NextResponse.json({
       id: profile.id,
@@ -35,6 +38,7 @@ export async function GET() {
         createdAt: profile.createdAt,
         dateOfBirth: profile.dateOfBirth,
         familyParentUserId: profile.familyParentUserId,
+        isPatron,
       }),
       email: profile.email,
       imageUrl: profile.imageUrl,

@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { currentProfile } from "@/lib/current-profile";
 import { db, server } from "@/lib/db";
 import { getServerBannerConfig, setServerBannerConfig } from "@/lib/server-banner-store";
+import { isInAccordProtectedServer } from "@/lib/server-security";
 
 export async function DELETE(
   req: Request,
@@ -28,6 +29,10 @@ export async function DELETE(
 
     if (!target) {
       return new NextResponse("Server not found", { status: 404 });
+    }
+
+    if (isInAccordProtectedServer({ serverId: target.id, serverName: target.name })) {
+      return new NextResponse("In-Accord server is protected and cannot be deleted.", { status: 403 });
     }
 
     await db.delete(server).where(
@@ -57,6 +62,21 @@ export async function PATCH(
 
     if (!serverId) {
       return new NextResponse("Server ID missing", { status: 400 });
+    }
+
+    const target = await db.query.server.findFirst({
+      where: and(eq(server.id, serverId), eq(server.profileId, profile.id)),
+    });
+
+    if (!target) {
+      return new NextResponse("Server not found", { status: 404 });
+    }
+
+    if (
+      isInAccordProtectedServer({ serverId: target.id, serverName: target.name }) &&
+      String(name ?? "").trim() !== String(target.name ?? "").trim()
+    ) {
+      return new NextResponse("In-Accord server name is protected and cannot be renamed.", { status: 403 });
     }
 
     await db.update(server).set({

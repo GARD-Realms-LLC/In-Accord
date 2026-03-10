@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MessagesSquare } from "lucide-react";
 import { toast } from "sonner";
+import { buildThreadPath } from "@/lib/route-slugs";
 
 type ThreadToastItem = {
   id: string;
@@ -262,7 +263,13 @@ export const ThreadsToastButton = ({ initialThreads = [], className }: ThreadsTo
           threads={nextThreads}
           onSelect={(thread) => {
             toast.dismiss(THREADS_TOAST_ID);
-            router.push(`/servers/${thread.serverId}/channels/${thread.channelId}/threads/${thread.id}`);
+            router.push(
+              buildThreadPath({
+                server: { id: thread.serverId, name: thread.serverName },
+                channel: { id: thread.channelId, name: thread.channelName },
+                threadId: thread.id,
+              })
+            );
           }}
         />
       ),

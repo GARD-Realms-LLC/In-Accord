@@ -64,8 +64,20 @@ const defaultPermissions: ChannelPermissionSet = {
   allowConnect: true,
 };
 
-const rolePermissionRows = async (serverId: string, role: MemberRole) => {
+const rolePermissionRows = async ({
+  serverId,
+  role,
+  channelId,
+}: {
+  serverId: string;
+  role: MemberRole;
+  channelId?: string;
+}) => {
   await ensureChannelPermissionSchema();
+
+  const channelFilter = channelId
+    ? sql`and cp."channelId" = ${channelId}`
+    : sql``;
 
   const result = await db.execute(sql`
     select
@@ -77,6 +89,7 @@ const rolePermissionRows = async (serverId: string, role: MemberRole) => {
       cp."allowConnect" as "allowConnect"
     from "ChannelPermission" cp
     where cp."serverId" = ${serverId}
+      ${channelFilter}
       and (
         (cp."targetType" = 'EVERYONE' and cp."targetId" = 'EVERYONE')
         or
@@ -108,7 +121,7 @@ export const computeChannelPermissionForRole = async ({
     return defaultPermissions;
   }
 
-  const rows = await rolePermissionRows(serverId, role);
+  const rows = await rolePermissionRows({ serverId, role, channelId });
   const relevant = rows.filter((row) => row.channelId === channelId);
 
   const resolved = { ...defaultPermissions };
@@ -143,7 +156,7 @@ export const visibleChannelIdsForRole = async ({
     return new Set(channelIds);
   }
 
-  const rows = await rolePermissionRows(serverId, role);
+  const rows = await rolePermissionRows({ serverId, role });
   const map = new Map<string, ChannelPermissionSet>();
 
   for (const channelId of channelIds) {

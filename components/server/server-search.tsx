@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
+import { buildChannelPath, buildServerPath } from "@/lib/route-slugs";
 
 import {
   CommandDialog,
@@ -43,15 +44,29 @@ export const ServerSearch = ({ serverId, serverName, data }: ServerSearchProps) 
     setOpen(false);
 
     if (type === "server") {
-      return router.push(`/servers/${id}`);
+      return router.push(buildServerPath({ id, name: serverName }));
     }
 
     if (type === "member") {
-      return router.push(`/servers/${serverId}/conversations/${id}`);
+      return router.push(`${buildServerPath({ id: serverId, name: serverName })}/conversations/${id}`);
     }
 
     if (type === "channel") {
-      return router.push(`/servers/${serverId}/channels/${id}`);
+      const channel = data
+        .filter((group) => group.type === "channel")
+        .flatMap((group) => group.data ?? [])
+        .find((item) => item.id === id);
+
+      if (!channel) {
+        return router.push(buildServerPath({ id: serverId, name: serverName }));
+      }
+
+      return router.push(
+        buildChannelPath({
+          server: { id: serverId, name: serverName },
+          channel: { id, name: channel.name },
+        })
+      );
     }
   };
 

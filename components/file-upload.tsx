@@ -10,13 +10,38 @@ import "@uploadthing/react/styles.css";
 interface FileUploadProps {
   onChange: (url?: string) => void;
   value: string;
-  endpoint: "serverImage" | "messageFile";
+  endpoint: "serverImage" | "messageFile" | "emojiImage";
+  multiple?: boolean;
+  onUploadComplete?: (urls: string[]) => void;
+  onUploadError?: (message: string) => void;
 }
 
-export const FileUpload = ({ onChange, value, endpoint }: FileUploadProps) => {
+const resolveUploadedUrl = (
+  uploaded:
+    | {
+        url?: string;
+        ufsUrl?: string;
+        fileUrl?: string;
+        appUrl?: string;
+        serverData?: {
+          url?: string;
+          appUrl?: string;
+        } | null;
+      }
+    | undefined
+) =>
+  uploaded?.url ||
+  uploaded?.ufsUrl ||
+  uploaded?.fileUrl ||
+  uploaded?.appUrl ||
+  uploaded?.serverData?.url ||
+  uploaded?.serverData?.appUrl ||
+  "";
+
+export const FileUpload = ({ onChange, value, endpoint, multiple = false, onUploadComplete, onUploadError }: FileUploadProps) => {
   const fileType = value.split(".")[0];
 
-  if (value && fileType !== "pdf") {
+  if (!multiple && value && fileType !== "pdf") {
     return (
       <div className="relative h-20 w-20">
         <Image fill src={value} alt="Upload" className="rounded-full" />
@@ -35,30 +60,39 @@ export const FileUpload = ({ onChange, value, endpoint }: FileUploadProps) => {
     <UploadDropzone
       endpoint={endpoint}
       onClientUploadComplete={(res) => {
-        const uploaded = res?.[0] as
-          | {
-              url?: string;
-              ufsUrl?: string;
-              fileUrl?: string;
-              appUrl?: string;
-              serverData?: {
-                url?: string;
-                appUrl?: string;
-              } | null;
-            }
-          | undefined;
+        const uploadedUrls =
+          res
+            ?.map((item) =>
+              resolveUploadedUrl(
+                item as
+                  | {
+                      url?: string;
+                      ufsUrl?: string;
+                      fileUrl?: string;
+                      appUrl?: string;
+                      serverData?: {
+                        url?: string;
+                        appUrl?: string;
+                      } | null;
+                    }
+                  | undefined
+              )
+            )
+            .filter((url) => url.length > 0) ?? [];
 
-        onChange(
-          uploaded?.url ||
-            uploaded?.ufsUrl ||
-            uploaded?.fileUrl ||
-            uploaded?.appUrl ||
-            uploaded?.serverData?.url ||
-            uploaded?.serverData?.appUrl ||
-            ""
-        );
+        if (onUploadComplete) {
+          onUploadComplete(uploadedUrls);
+        }
+
+        onChange(uploadedUrls[0] ?? "");
       }}
-      onUploadError={(error: Error) => console.log(error)}
+      onUploadError={(error: Error) => {
+        const message = String(error?.message ?? "Upload failed.").trim() || "Upload failed.";
+        if (onUploadError) {
+          onUploadError(message);
+        }
+        console.log(error);
+      }}
     />
   );
 };

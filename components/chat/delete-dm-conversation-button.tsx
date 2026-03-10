@@ -9,7 +9,7 @@ interface DeleteDmConversationButtonProps {
   title?: string;
 }
 
-export const DeleteDmConversationButton = ({ title = "Delete DM" }: DeleteDmConversationButtonProps) => {
+export const DeleteDmConversationButton = ({ title = "Delete PM" }: DeleteDmConversationButtonProps) => {
   return (
     <button
       type="button"
@@ -17,7 +17,7 @@ export const DeleteDmConversationButton = ({ title = "Delete DM" }: DeleteDmConv
       title={title}
       aria-label={title}
     >
-      <Trash2 className="h-3.5 w-3.5" />
+      <Trash2 className="h-3.5 w-3.5" suppressHydrationWarning />
       <span>Delete</span>
     </button>
   );

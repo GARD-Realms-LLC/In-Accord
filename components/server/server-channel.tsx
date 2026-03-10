@@ -9,6 +9,7 @@ import { useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { ActionTooltip } from "@/components/action-tooltip";
 import { ModalType, useModal } from "@/hooks/use-modal-store";
+import { buildChannelPath, matchesRouteParam } from "@/lib/route-slugs";
 
 interface ServerChannelProps {
   channel: Channel;
@@ -42,6 +43,10 @@ export const ServerChannel = ({
   const customIcon = String((channel as { icon?: string | null }).icon ?? "").trim();
   const canReorder = !!role && role !== MemberRole.GUEST && draggable;
   const showConnectedCount = (channel.type === ChannelType.AUDIO || channel.type === ChannelType.VIDEO) && connectedCount > 0;
+  const isActiveChannel = matchesRouteParam(String(params?.channelId ?? ""), {
+    id: channel.id,
+    name: channel.name,
+  });
 
   const onClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     if (isDraggingRef.current) {
@@ -50,7 +55,12 @@ export const ServerChannel = ({
       return;
     }
 
-    router.push(`/servers/${server.id}/channels/${channel.id}`);
+    router.push(
+      buildChannelPath({
+        server: { id: server.id, name: server.name },
+        channel: { id: channel.id, name: channel.name },
+      })
+    );
   };
 
   const onAction = (e: React.MouseEvent, action: ModalType) => {
@@ -152,7 +162,7 @@ export const ServerChannel = ({
         "group px-2 py-2 rounded-md flex items-center gap-x-2 w-full text-left hover:bg-zinc-700/10 dark:hover:bg-zinc-700/50 transition mb-1",
         canReorder && "cursor-grab active:cursor-grabbing",
         isDragOver && "ring-1 ring-indigo-400/70 bg-indigo-500/10",
-        params?.channelId === channel.id && "bg-zinc-700/20 dark:bg-zinc-700"
+        isActiveChannel && "bg-zinc-700/20 dark:bg-zinc-700"
       )}
     >
       {customIcon ? (
@@ -165,7 +175,7 @@ export const ServerChannel = ({
       <p
         className={cn(
           "line-clamp-1 min-w-0 flex-1 text-left text-sm font-semibold text-zinc-500 transition group-hover:text-zinc-600 dark:text-zinc-400 dark:group-hover:text-zinc-300",
-          params?.channelId === channel.id &&
+          isActiveChannel &&
             "text-primary dark:text-zinc-200 dark:group-hover:text-white"
         )}
       >
