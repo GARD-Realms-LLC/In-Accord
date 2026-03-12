@@ -217,7 +217,7 @@ export const ServerRouteShell = ({
   const TOPBAR_LEFT_GAP = 8;
   const CHANNELS_TO_CHAT_GAP = 8;
   const RIGHT_RAIL_WIDTH = 288;
-  const SEARCH_SHELL_WIDTH = 163;
+  const SEARCH_SHELL_WIDTH = 224;
   const TOPBAR_HEIGHT = 48;
   const TABBAR_HEIGHT = 40;
   const TOP_TO_CONTENT_GAP = 8;
@@ -609,14 +609,10 @@ export const ServerRouteShell = ({
 
   const headerTitleStyle = useMemo(
     () => ({
-      left: isMembersCollapsed
-        ? `calc((100% + ${CONTENT_LEFT_PADDING}px) / 2)`
-        : `calc((100% + ${CONTENT_LEFT_PADDING}px - ${RIGHT_RAIL_WIDTH}px) / 2)`,
-      maxWidth: isMembersCollapsed
-        ? `calc(100% - ${CONTENT_LEFT_PADDING + 24}px)`
-        : `calc(100% - ${CONTENT_LEFT_PADDING + RIGHT_RAIL_WIDTH + 24}px)`,
+      left: "50%",
+      maxWidth: "min(52vw, 760px)",
     }),
-    [CONTENT_LEFT_PADDING, RIGHT_RAIL_WIDTH, isMembersCollapsed]
+    []
   );
 
   const updaterStatus = updaterState.status || "idle";
@@ -802,7 +798,7 @@ export const ServerRouteShell = ({
           className="absolute inset-y-0 z-20 flex items-center"
           style={{ right: `${(RIGHT_RAIL_WIDTH - SEARCH_SHELL_WIDTH) / 2}px` }}
         >
-          <div className="theme-server-search-shell w-40.75 rounded-md border border-border bg-card/90">
+          <div className="theme-server-search-shell w-56 rounded-md border border-border bg-card/90">
             <ServerSearch
               serverId={serverId}
               serverName={serverName}

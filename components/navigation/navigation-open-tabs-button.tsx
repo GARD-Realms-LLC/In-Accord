@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 interface NavigationOpenTabsButtonProps {
   fallbackServerId?: string;
@@ -8,7 +8,6 @@ interface NavigationOpenTabsButtonProps {
 
 export const NavigationOpenTabsButton = ({ fallbackServerId }: NavigationOpenTabsButtonProps) => {
   const router = useRouter();
-  const pathname = usePathname();
 
   return (
     <div className="mb-2 mt-0 flex w-full justify-center px-2">
@@ -33,11 +32,12 @@ export const NavigationOpenTabsButton = ({ fallbackServerId }: NavigationOpenTab
             return true;
           };
 
-          if (pathname?.includes("/servers/")) {
-            if (!jumpToTabsBar()) {
-              window.location.hash = "server-tabs-bar";
-            }
+          if (jumpToTabsBar()) {
             return;
+          }
+
+          if (typeof window !== "undefined") {
+            window.location.hash = "server-tabs-bar";
           }
 
           if (fallbackServerId) {

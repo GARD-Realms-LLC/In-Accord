@@ -1641,6 +1641,45 @@ type DeviceSession = {
   isCurrent: boolean;
 };
 
+type SecurityKeyItem = {
+  id: string;
+  credentialId: string;
+  nickname: string;
+  transports: string[];
+  createdAt: string;
+  lastUsedAt: string | null;
+};
+
+type SmsAuthStatus = {
+  enabled: boolean;
+  hasPendingVerification: boolean;
+  maskedPhoneNumber: string | null;
+  verifiedAt: string | null;
+  lastUsedAt: string | null;
+};
+
+const defaultSmsAuthStatus: SmsAuthStatus = {
+  enabled: false,
+  hasPendingVerification: false,
+  maskedPhoneNumber: null,
+  verifiedAt: null,
+  lastUsedAt: null,
+};
+
+type AuthenticatorAppStatus = {
+  enabled: boolean;
+  hasPendingSetup: boolean;
+  verifiedAt: string | null;
+  lastUsedAt: string | null;
+};
+
+const defaultAuthenticatorAppStatus: AuthenticatorAppStatus = {
+  enabled: false,
+  hasPendingSetup: false,
+  verifiedAt: null,
+  lastUsedAt: null,
+};
+
 type ServerTagIconOption = {
   key: string;
   label: string;
@@ -1984,6 +2023,25 @@ export const SettingsModal = () => {
   const [familyMemberEmailInput, setFamilyMemberEmailInput] = useState("");
   const [familyMemberPasswordInput, setFamilyMemberPasswordInput] = useState("");
   const [familyMemberRepeatPasswordInput, setFamilyMemberRepeatPasswordInput] = useState("");
+  const [authenticatorAppStatus, setAuthenticatorAppStatus] = useState<AuthenticatorAppStatus>({
+    ...defaultAuthenticatorAppStatus,
+  });
+  const [authenticatorSetupSecret, setAuthenticatorSetupSecret] = useState("");
+  const [authenticatorSetupUri, setAuthenticatorSetupUri] = useState("");
+  const [authenticatorCodeInput, setAuthenticatorCodeInput] = useState("");
+  const [authenticatorAppMessage, setAuthenticatorAppMessage] = useState<string | null>(null);
+  const [isAuthenticatorAppBusy, setIsAuthenticatorAppBusy] = useState(false);
+  const [isAuthenticatorAppModalOpen, setIsAuthenticatorAppModalOpen] = useState(false);
+  const [isSecurityKeyModalOpen, setIsSecurityKeyModalOpen] = useState(false);
+  const [securityKeys, setSecurityKeys] = useState<SecurityKeyItem[]>([]);
+  const [isSecurityKeyBusy, setIsSecurityKeyBusy] = useState(false);
+  const [securityKeyMessage, setSecurityKeyMessage] = useState<string | null>(null);
+  const [isSmsModalOpen, setIsSmsModalOpen] = useState(false);
+  const [smsAuthStatus, setSmsAuthStatus] = useState<SmsAuthStatus>({ ...defaultSmsAuthStatus });
+  const [smsPhoneInput, setSmsPhoneInput] = useState("");
+  const [smsCodeInput, setSmsCodeInput] = useState("");
+  const [isSmsBusy, setIsSmsBusy] = useState(false);
+  const [smsMessage, setSmsMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const onVoiceStateSync = (event: Event) => {
@@ -2710,6 +2768,38 @@ export const SettingsModal = () => {
     };
   }, [isModalOpen]);
 
+  const loadAuthenticatorAppStatus = useCallback(async () => {
+    try {
+      const response = await axios.get<AuthenticatorAppStatus>("/api/profile/authenticator-app");
+      setAuthenticatorAppStatus({
+        enabled: response.data?.enabled === true,
+        hasPendingSetup: response.data?.hasPendingSetup === true,
+        verifiedAt: response.data?.verifiedAt ?? null,
+        lastUsedAt: response.data?.lastUsedAt ?? null,
+      });
+    } catch {
+      setAuthenticatorAppStatus({ ...defaultAuthenticatorAppStatus });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isModalOpen) {
+      return;
+    }
+
+    void loadAuthenticatorAppStatus();
+  }, [isModalOpen, loadAuthenticatorAppStatus]);
+
+  useEffect(() => {
+    if (!isModalOpen) {
+      return;
+    }
+
+    if (authenticatorAppStatus.hasPendingSetup && !authenticatorAppStatus.enabled) {
+      setIsAuthenticatorAppModalOpen(true);
+    }
+  }, [authenticatorAppStatus.enabled, authenticatorAppStatus.hasPendingSetup, isModalOpen]);
+
   useEffect(() => {
     if (!isModalOpen) {
       return;
@@ -2767,6 +2857,401 @@ export const SettingsModal = () => {
       setLanguagePreferenceStatus("Could not save language preference.");
     } finally {
       setIsSavingLanguagePreference(false);
+    }
+  };
+
+  const onStartAuthenticatorAppSetup = async () => {
+    try {
+      setIsAuthenticatorAppBusy(true);
+      setAuthenticatorAppMessage(null);
+
+      const response = await axios.post<{
+        secret: string;
+        otpauthUri: string;
+      }>("/api/profile/authenticator-app", {
+        action: "begin",
+      });
+
+      setAuthenticatorSetupSecret(String(response.data?.secret ?? "").trim());
+      setAuthenticatorSetupUri(String(response.data?.otpauthUri ?? "").trim());
+      setAuthenticatorCodeInput("");
+      setIsAuthenticatorAppModalOpen(true);
+      setAuthenticatorAppMessage("Authenticator setup started. Add the key to your app, then verify with a 6-digit code.");
+      await loadAuthenticatorAppStatus();
+    } catch (error) {
+      const message =
+        axios.isAxiosError(error) && typeof error.response?.data?.error === "string"
+          ? error.response?.data?.error
+          : "Could not start authenticator setup.";
+      setAuthenticatorAppMessage(message);
+    } finally {
+      setIsAuthenticatorAppBusy(false);
+    }
+  };
+
+  const onVerifyAuthenticatorAppSetup = async () => {
+    try {
+      setIsAuthenticatorAppBusy(true);
+      setAuthenticatorAppMessage(null);
+
+      const response = await axios.post<AuthenticatorAppStatus>("/api/profile/authenticator-app", {
+        action: "verify",
+        code: authenticatorCodeInput,
+      });
+
+      setAuthenticatorAppStatus({
+        enabled: response.data?.enabled === true,
+        hasPendingSetup: response.data?.hasPendingSetup === true,
+        verifiedAt: response.data?.verifiedAt ?? null,
+        lastUsedAt: response.data?.lastUsedAt ?? null,
+      });
+      setAuthenticatorSetupSecret("");
+      setAuthenticatorSetupUri("");
+      setAuthenticatorCodeInput("");
+      setAuthenticatorAppMessage("Authenticator app enabled.");
+    } catch (error) {
+      const message =
+        axios.isAxiosError(error) && typeof error.response?.data?.error === "string"
+          ? error.response?.data?.error
+          : "Could not verify authenticator code.";
+      setAuthenticatorAppMessage(message);
+    } finally {
+      setIsAuthenticatorAppBusy(false);
+    }
+  };
+
+  const onDisableAuthenticatorApp = async () => {
+    try {
+      setIsAuthenticatorAppBusy(true);
+      setAuthenticatorAppMessage(null);
+
+      const response = await axios.delete<AuthenticatorAppStatus>("/api/profile/authenticator-app", {
+        data: {
+          code: authenticatorCodeInput,
+        },
+      });
+
+      setAuthenticatorAppStatus({
+        enabled: response.data?.enabled === true,
+        hasPendingSetup: response.data?.hasPendingSetup === true,
+        verifiedAt: response.data?.verifiedAt ?? null,
+        lastUsedAt: response.data?.lastUsedAt ?? null,
+      });
+      setAuthenticatorSetupSecret("");
+      setAuthenticatorSetupUri("");
+      setAuthenticatorCodeInput("");
+      setAuthenticatorAppMessage("Authenticator app disabled.");
+    } catch (error) {
+      const message =
+        axios.isAxiosError(error) && typeof error.response?.data?.error === "string"
+          ? error.response?.data?.error
+          : "Could not disable authenticator app.";
+      setAuthenticatorAppMessage(message);
+    } finally {
+      setIsAuthenticatorAppBusy(false);
+    }
+  };
+
+  const onCopyAuthenticatorSecret = async () => {
+    if (!authenticatorSetupSecret.trim()) {
+      setAuthenticatorAppMessage("No authenticator secret available to copy.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(authenticatorSetupSecret.trim());
+      setAuthenticatorAppMessage("Authenticator key copied.");
+    } catch {
+      setAuthenticatorAppMessage("Could not copy authenticator key.");
+    }
+  };
+
+  const onCopyAuthenticatorUri = async () => {
+    if (!authenticatorSetupUri.trim()) {
+      setAuthenticatorAppMessage("No authenticator URI available to copy.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(authenticatorSetupUri.trim());
+      setAuthenticatorAppMessage("Authenticator URI copied.");
+    } catch {
+      setAuthenticatorAppMessage("Could not copy authenticator URI.");
+    }
+  };
+
+  const decodeBase64UrlToUint8Array = (value: string) => {
+    const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+    const padding = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4));
+    const binary = window.atob(`${normalized}${padding}`);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    return bytes;
+  };
+
+  const encodeArrayBufferToBase64Url = (buffer: ArrayBuffer) => {
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    for (let index = 0; index < bytes.length; index += 1) {
+      binary += String.fromCharCode(bytes[index]);
+    }
+
+    return window
+      .btoa(binary)
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/g, "");
+  };
+
+  const loadSecurityKeys = useCallback(async () => {
+    try {
+      const response = await axios.get<{ keys?: SecurityKeyItem[] }>("/api/profile/security-keys");
+      const nextKeys = Array.isArray(response.data?.keys)
+        ? response.data.keys.map((item, index) => ({
+            id: String(item.id ?? "").trim(),
+            credentialId: String(item.credentialId ?? "").trim(),
+            nickname: String(item.nickname ?? "").trim() || `Security Key ${index + 1}`,
+            transports: Array.isArray(item.transports)
+              ? item.transports.filter((entry): entry is string => typeof entry === "string")
+              : [],
+            createdAt: String(item.createdAt ?? "").trim(),
+            lastUsedAt: item.lastUsedAt ? String(item.lastUsedAt) : null,
+          }))
+        : [];
+
+      setSecurityKeys(nextKeys);
+    } catch {
+      setSecurityKeys([]);
+    }
+  }, []);
+
+  const onOpenSecurityKeyModal = async () => {
+    setIsSecurityKeyModalOpen(true);
+    setSecurityKeyMessage(null);
+    await loadSecurityKeys();
+  };
+
+  const onRegisterSecurityKey = async () => {
+    if (typeof window === "undefined" || typeof navigator === "undefined") {
+      setSecurityKeyMessage("Security key registration is unavailable in this environment.");
+      return;
+    }
+
+    if (!window.isSecureContext || !window.PublicKeyCredential) {
+      setSecurityKeyMessage("Security keys require a secure context and browser WebAuthn support.");
+      return;
+    }
+
+    try {
+      setIsSecurityKeyBusy(true);
+      setSecurityKeyMessage(null);
+
+      const beginResponse = await axios.post<{
+        challenge: string;
+        rp: { name: string; id: string };
+        user: { id: string; name: string; displayName: string };
+        pubKeyCredParams: Array<{ type: "public-key"; alg: number }>;
+        timeout: number;
+        attestation: "none";
+        excludeCredentials: Array<{ type: "public-key"; id: string; transports: string[] }>;
+      }>("/api/profile/security-keys", {
+        action: "begin",
+        origin: window.location.origin,
+      });
+
+      const begin = beginResponse.data;
+
+      const credential = (await navigator.credentials.create({
+        publicKey: {
+          challenge: decodeBase64UrlToUint8Array(begin.challenge),
+          rp: begin.rp,
+          user: {
+            id: decodeBase64UrlToUint8Array(begin.user.id),
+            name: begin.user.name,
+            displayName: begin.user.displayName,
+          },
+          pubKeyCredParams: begin.pubKeyCredParams,
+          timeout: begin.timeout,
+          attestation: begin.attestation,
+          excludeCredentials: (begin.excludeCredentials ?? []).map((entry) => ({
+            type: entry.type,
+            id: decodeBase64UrlToUint8Array(entry.id),
+            transports: entry.transports,
+          })),
+        },
+      })) as PublicKeyCredential | null;
+
+      if (!credential) {
+        setSecurityKeyMessage("Security key registration was cancelled.");
+        return;
+      }
+
+      const response = credential.response as AuthenticatorAttestationResponse;
+      const transports =
+        typeof response.getTransports === "function"
+          ? response.getTransports()
+          : [];
+
+      const finishResponse = await axios.post<{ keys?: SecurityKeyItem[] }>("/api/profile/security-keys", {
+        action: "finish",
+        credential: {
+          id: credential.id,
+          response: {
+            clientDataJSON: encodeArrayBufferToBase64Url(response.clientDataJSON),
+            transports,
+          },
+        },
+      });
+
+      setSecurityKeys(Array.isArray(finishResponse.data?.keys) ? finishResponse.data.keys : []);
+      setSecurityKeyMessage("Security key registered.");
+    } catch (error) {
+      const message =
+        axios.isAxiosError(error) && typeof error.response?.data?.error === "string"
+          ? error.response.data.error
+          : "Could not register security key.";
+      setSecurityKeyMessage(message);
+    } finally {
+      setIsSecurityKeyBusy(false);
+    }
+  };
+
+  const onDeleteSecurityKey = async (securityKeyId: string) => {
+    try {
+      setIsSecurityKeyBusy(true);
+      setSecurityKeyMessage(null);
+
+      const response = await axios.delete<{ keys?: SecurityKeyItem[] }>(`/api/profile/security-keys/${securityKeyId}`);
+      setSecurityKeys(Array.isArray(response.data?.keys) ? response.data.keys : []);
+      setSecurityKeyMessage("Security key removed.");
+    } catch (error) {
+      const message =
+        axios.isAxiosError(error) && typeof error.response?.data?.error === "string"
+          ? error.response.data.error
+          : "Could not remove security key.";
+      setSecurityKeyMessage(message);
+    } finally {
+      setIsSecurityKeyBusy(false);
+    }
+  };
+
+  const loadSmsAuthStatus = useCallback(async () => {
+    try {
+      const response = await axios.get<SmsAuthStatus>("/api/profile/sms-auth");
+      setSmsAuthStatus({
+        enabled: response.data?.enabled === true,
+        hasPendingVerification: response.data?.hasPendingVerification === true,
+        maskedPhoneNumber: response.data?.maskedPhoneNumber ?? null,
+        verifiedAt: response.data?.verifiedAt ?? null,
+        lastUsedAt: response.data?.lastUsedAt ?? null,
+      });
+    } catch {
+      setSmsAuthStatus({ ...defaultSmsAuthStatus });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isModalOpen) {
+      return;
+    }
+
+    void loadSmsAuthStatus();
+  }, [isModalOpen, loadSmsAuthStatus]);
+
+  const onOpenSmsModal = async () => {
+    setIsSmsModalOpen(true);
+    setSmsMessage(null);
+    setSmsCodeInput("");
+    setSmsPhoneInput((current) => current || phoneNumber || "");
+    await loadSmsAuthStatus();
+  };
+
+  const onSendSmsCode = async () => {
+    try {
+      setIsSmsBusy(true);
+      setSmsMessage(null);
+
+      const response = await axios.post<SmsAuthStatus>("/api/profile/sms-auth", {
+        action: "begin",
+        phoneNumber: smsPhoneInput,
+      });
+
+      setSmsAuthStatus({
+        enabled: response.data?.enabled === true,
+        hasPendingVerification: response.data?.hasPendingVerification === true,
+        maskedPhoneNumber: response.data?.maskedPhoneNumber ?? null,
+        verifiedAt: response.data?.verifiedAt ?? null,
+        lastUsedAt: response.data?.lastUsedAt ?? null,
+      });
+
+      setSmsMessage("Verification code sent.");
+    } catch (error) {
+      const message =
+        axios.isAxiosError(error) && typeof error.response?.data?.error === "string"
+          ? error.response.data.error
+          : "Could not send SMS verification code.";
+      setSmsMessage(message);
+    } finally {
+      setIsSmsBusy(false);
+    }
+  };
+
+  const onVerifySmsCode = async () => {
+    try {
+      setIsSmsBusy(true);
+      setSmsMessage(null);
+
+      const response = await axios.post<SmsAuthStatus>("/api/profile/sms-auth", {
+        action: "verify",
+        code: smsCodeInput,
+      });
+
+      setSmsAuthStatus({
+        enabled: response.data?.enabled === true,
+        hasPendingVerification: response.data?.hasPendingVerification === true,
+        maskedPhoneNumber: response.data?.maskedPhoneNumber ?? null,
+        verifiedAt: response.data?.verifiedAt ?? null,
+        lastUsedAt: response.data?.lastUsedAt ?? null,
+      });
+
+      setSmsCodeInput("");
+      setSmsMessage("SMS verification enabled.");
+    } catch (error) {
+      const message =
+        axios.isAxiosError(error) && typeof error.response?.data?.error === "string"
+          ? error.response.data.error
+          : "Could not verify SMS code.";
+      setSmsMessage(message);
+    } finally {
+      setIsSmsBusy(false);
+    }
+  };
+
+  const onDisableSms = async () => {
+    try {
+      setIsSmsBusy(true);
+      setSmsMessage(null);
+
+      const response = await axios.delete<SmsAuthStatus>("/api/profile/sms-auth");
+      setSmsAuthStatus({
+        enabled: response.data?.enabled === true,
+        hasPendingVerification: response.data?.hasPendingVerification === true,
+        maskedPhoneNumber: response.data?.maskedPhoneNumber ?? null,
+        verifiedAt: response.data?.verifiedAt ?? null,
+        lastUsedAt: response.data?.lastUsedAt ?? null,
+      });
+      setSmsCodeInput("");
+      setSmsMessage("SMS verification disabled.");
+    } catch (error) {
+      const message =
+        axios.isAxiosError(error) && typeof error.response?.data?.error === "string"
+          ? error.response.data.error
+          : "Could not disable SMS verification.";
+      setSmsMessage(message);
+    } finally {
+      setIsSmsBusy(false);
     }
   };
 
@@ -6332,10 +6817,10 @@ export const SettingsModal = () => {
     if (displaySection === "myAccount") {
       return (
         <div className="space-y-12">
-          <div className="mx-auto mt-8 h-[80vh] w-[80%] max-w-none rounded-[2.5rem] border border-black/20 bg-[#1e1f22] p-4 shadow-xl shadow-black/35">
+          <div className="mx-auto mt-8 max-h-[88vh] min-h-[80vh] w-full max-w-6xl overflow-y-auto rounded-[2.5rem] border border-black/20 bg-[#1e1f22] p-4 shadow-xl shadow-black/35">
             <p className="text-center text-sm font-medium text-white">Account Actions</p>
 
-            <div className="mx-auto mt-8 w-full max-w-[28rem] space-y-3 rounded-3xl border border-white/10 bg-[#232428] p-4">
+            <div className="mx-auto mt-8 w-full max-w-md space-y-3 rounded-3xl border border-white/10 bg-[#232428] p-4">
               <p className="text-center text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
                 Password Settings
               </p>
@@ -6459,7 +6944,7 @@ export const SettingsModal = () => {
               </Button>
             </div>
 
-            <div className="mx-auto mt-6 w-full max-w-[28rem] rounded-3xl border border-yellow-500/25 bg-yellow-500/10 p-4">
+            <div className="mx-auto mt-6 w-full max-w-md rounded-3xl border border-yellow-500/25 bg-yellow-500/10 p-4">
               <p className="text-center text-xs font-semibold uppercase tracking-[0.08em] text-yellow-200">
                 Patronage
               </p>
@@ -6479,31 +6964,161 @@ export const SettingsModal = () => {
               </Button>
             </div>
 
-            <div className="mx-auto w-full max-w-[28rem] py-10">
-              <div className="h-[6px] rounded-full bg-[#d9d9d9] shadow-[0_0_10px_rgba(217,217,217,0.45)]" />
-            </div>
-
-            <div className="mx-auto w-full max-w-[28rem] rounded-3xl border border-white/10 bg-[#232428] p-4">
+            <div className="mx-auto w-full max-w-md rounded-3xl border border-white/10 bg-[#232428] p-4">
               <p className="text-center text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
                 Authenticator App
               </p>
               <p className="mt-2 text-center text-xs text-[#b5bac1]">
                 Add an authenticator app for extra account security.
               </p>
-              <Button
-                type="button"
-                disabled
-                className="mt-3 w-full bg-[#5865f2]/60 text-white hover:bg-[#5865f2]/60 disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                Coming Soon
-              </Button>
+
+              <p className="mt-3 text-center text-[11px] text-[#949ba4]">
+                Status: {authenticatorAppStatus.enabled ? "Enabled" : authenticatorAppStatus.hasPendingSetup ? "Pending Setup" : "Disabled"}
+              </p>
+
+              {authenticatorAppStatus.verifiedAt ? (
+                <p className="mt-1 text-center text-[11px] text-[#949ba4]">
+                  Verified: {new Date(authenticatorAppStatus.verifiedAt).toLocaleString()}
+                </p>
+              ) : null}
+
+              {authenticatorAppMessage ? (
+                <p className="mt-3 rounded-md border border-white/10 bg-black/20 px-3 py-2 text-xs text-[#b5bac1]">
+                  {authenticatorAppMessage}
+                </p>
+              ) : null}
+
+              <div className="mt-3 grid grid-cols-1 gap-2">
+                {!authenticatorAppStatus.enabled ? (
+                  <Button
+                    type="button"
+                    onClick={() => void onStartAuthenticatorAppSetup()}
+                    disabled={isAuthenticatorAppBusy}
+                    className="w-full bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isAuthenticatorAppBusy ? "Working..." : authenticatorAppStatus.hasPendingSetup ? "Regenerate Setup Key" : "Set Up Authenticator App"}
+                  </Button>
+                ) : null}
+
+                <Button
+                  type="button"
+                  onClick={() => setIsAuthenticatorAppModalOpen(true)}
+                  className="w-full border border-white/15 bg-[#1a1b1e] text-[#dbdee1] hover:bg-[#2a2b30]"
+                >
+                  {authenticatorAppStatus.enabled ? "Manage Authenticator App" : "Open Setup Popup"}
+                </Button>
+              </div>
             </div>
 
-            <div className="mx-auto w-full max-w-[28rem] py-10">
-              <div className="h-[6px] rounded-full bg-[#d9d9d9] shadow-[0_0_10px_rgba(217,217,217,0.45)]" />
-            </div>
+            <Dialog open={isAuthenticatorAppModalOpen} onOpenChange={setIsAuthenticatorAppModalOpen}>
+              <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Authenticator App</DialogTitle>
+                  <DialogDescription className="text-[#949ba4]">
+                    Add an authenticator app for extra account security.
+                  </DialogDescription>
+                </DialogHeader>
 
-            <div className="mx-auto w-full max-w-[28rem] rounded-3xl border border-white/10 bg-[#232428] p-4">
+                <div className="space-y-3">
+                  <p className="text-xs text-[#949ba4]">
+                    Status: {authenticatorAppStatus.enabled ? "Enabled" : authenticatorAppStatus.hasPendingSetup ? "Pending Setup" : "Disabled"}
+                  </p>
+
+                  {(authenticatorSetupSecret || authenticatorSetupUri) ? (
+                    <div className="space-y-2 rounded-xl border border-white/10 bg-[#1a1b1e] p-3">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">Manual key</p>
+                        <p className="mt-1 break-all rounded-md border border-white/10 bg-black/20 px-2 py-1.5 text-xs text-white">
+                          {authenticatorSetupSecret}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">OTP URI</p>
+                        <p className="mt-1 break-all rounded-md border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-[#b5bac1]">
+                          {authenticatorSetupUri}
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          type="button"
+                          onClick={() => void onCopyAuthenticatorSecret()}
+                          className="h-8 border border-white/15 bg-[#1a1b1e] px-3 text-xs text-[#dbdee1] hover:bg-[#2a2b30]"
+                        >
+                          Copy Key
+                        </Button>
+                        <Button
+                          type="button"
+                          onClick={() => void onCopyAuthenticatorUri()}
+                          className="h-8 border border-white/15 bg-[#1a1b1e] px-3 text-xs text-[#dbdee1] hover:bg-[#2a2b30]"
+                        >
+                          Copy URI
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {(authenticatorAppStatus.enabled || authenticatorAppStatus.hasPendingSetup || authenticatorSetupSecret) ? (
+                    <input
+                      type="text"
+                      value={authenticatorCodeInput}
+                      onChange={(event) => {
+                        const digitsOnly = event.target.value.replace(/\D/g, "").slice(0, 6);
+                        setAuthenticatorCodeInput(digitsOnly);
+                        setAuthenticatorAppMessage(null);
+                      }}
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      placeholder="Enter 6-digit code"
+                      className="w-full rounded-xl border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                    />
+                  ) : null}
+
+                  {authenticatorAppMessage ? (
+                    <p className="rounded-md border border-white/10 bg-black/20 px-3 py-2 text-xs text-[#b5bac1]">
+                      {authenticatorAppMessage}
+                    </p>
+                  ) : null}
+                </div>
+
+                <DialogFooter className="gap-2 sm:justify-between">
+                  <div className="flex flex-wrap gap-2">
+                    {(authenticatorAppStatus.hasPendingSetup || authenticatorSetupSecret) && !authenticatorAppStatus.enabled ? (
+                      <Button
+                        type="button"
+                        onClick={() => void onVerifyAuthenticatorAppSetup()}
+                        disabled={isAuthenticatorAppBusy || authenticatorCodeInput.trim().length !== 6}
+                        className="border border-emerald-500/35 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/30 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isAuthenticatorAppBusy ? "Verifying..." : "Verify & Enable"}
+                      </Button>
+                    ) : null}
+
+                    {authenticatorAppStatus.enabled ? (
+                      <Button
+                        type="button"
+                        onClick={() => void onDisableAuthenticatorApp()}
+                        disabled={isAuthenticatorAppBusy || authenticatorCodeInput.trim().length !== 6}
+                        className="border border-rose-500/35 bg-rose-500/20 text-rose-100 hover:bg-rose-500/30 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isAuthenticatorAppBusy ? "Disabling..." : "Disable Authenticator App"}
+                      </Button>
+                    ) : null}
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsAuthenticatorAppModalOpen(false)}
+                  >
+                    Close
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            <div className="mx-auto w-full max-w-md rounded-3xl border border-white/10 bg-[#232428] p-4">
               <p className="text-center text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
                 Security Key
               </p>
@@ -6512,18 +7127,91 @@ export const SettingsModal = () => {
               </p>
               <Button
                 type="button"
-                disabled
-                className="mt-3 w-full bg-[#5865f2]/60 text-white hover:bg-[#5865f2]/60 disabled:cursor-not-allowed disabled:opacity-70"
+                onClick={() => void onOpenSecurityKeyModal()}
+                className="mt-3 w-full bg-[#5865f2] text-white hover:bg-[#4752c4]"
               >
-                Coming Soon
+                Manage Security Keys
               </Button>
+
+              <p className="mt-2 text-center text-[11px] text-[#949ba4]">
+                Keys registered: {securityKeys.length}
+              </p>
             </div>
 
-            <div className="mx-auto w-full max-w-[28rem] py-10">
-              <div className="h-[6px] rounded-full bg-[#d9d9d9] shadow-[0_0_10px_rgba(217,217,217,0.45)]" />
-            </div>
+            <Dialog open={isSecurityKeyModalOpen} onOpenChange={setIsSecurityKeyModalOpen}>
+              <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Security Key</DialogTitle>
+                  <DialogDescription className="text-[#949ba4]">
+                    Register and manage physical security keys.
+                  </DialogDescription>
+                </DialogHeader>
 
-            <div className="mx-auto w-full max-w-[28rem] rounded-3xl border border-white/10 bg-[#232428] p-4">
+                <div className="space-y-3">
+                  <Button
+                    type="button"
+                    onClick={() => void onRegisterSecurityKey()}
+                    disabled={isSecurityKeyBusy}
+                    className="w-full bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isSecurityKeyBusy ? "Working..." : "Register New Security Key"}
+                  </Button>
+
+                  <div className="max-h-60 space-y-2 overflow-y-auto">
+                    {securityKeys.length === 0 ? (
+                      <p className="rounded-md border border-white/10 bg-black/20 px-3 py-2 text-xs text-[#b5bac1]">
+                        No security keys registered yet.
+                      </p>
+                    ) : (
+                      securityKeys.map((key) => (
+                        <div
+                          key={key.id}
+                          className="rounded-md border border-white/10 bg-black/20 px-3 py-2"
+                        >
+                          <p className="text-xs font-semibold text-white">{key.nickname || "Security Key"}</p>
+                          <p className="mt-1 text-[11px] text-[#949ba4]">
+                            Added: {key.createdAt ? new Date(key.createdAt).toLocaleString() : "Unknown"}
+                          </p>
+                          {key.transports.length > 0 ? (
+                            <p className="mt-1 text-[11px] text-[#949ba4]">
+                              Transports: {key.transports.join(", ")}
+                            </p>
+                          ) : null}
+                          <div className="mt-2 flex justify-end">
+                            <Button
+                              type="button"
+                              onClick={() => void onDeleteSecurityKey(key.id)}
+                              disabled={isSecurityKeyBusy}
+                              className="h-7 border border-rose-500/35 bg-rose-500/15 px-3 text-xs text-rose-200 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {securityKeyMessage ? (
+                    <p className="rounded-md border border-white/10 bg-black/20 px-3 py-2 text-xs text-[#b5bac1]">
+                      {securityKeyMessage}
+                    </p>
+                  ) : null}
+                </div>
+
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsSecurityKeyModalOpen(false)}
+                  >
+                    Close
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            <div className="mx-auto w-full max-w-md rounded-3xl border border-white/10 bg-[#232428] p-4">
               <p className="text-center text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
                 SMS
               </p>
@@ -6532,18 +7220,114 @@ export const SettingsModal = () => {
               </p>
               <Button
                 type="button"
-                disabled
-                className="mt-3 w-full bg-[#5865f2]/60 text-white hover:bg-[#5865f2]/60 disabled:cursor-not-allowed disabled:opacity-70"
+                onClick={() => void onOpenSmsModal()}
+                className="mt-3 w-full bg-[#5865f2] text-white hover:bg-[#4752c4]"
               >
-                Coming Soon
+                Manage SMS
               </Button>
+
+              <p className="mt-2 text-center text-[11px] text-[#949ba4]">
+                Status: {smsAuthStatus.enabled ? "Enabled" : smsAuthStatus.hasPendingVerification ? "Pending Verification" : "Disabled"}
+              </p>
+              {smsAuthStatus.maskedPhoneNumber ? (
+                <p className="mt-1 text-center text-[11px] text-[#949ba4]">Phone: {smsAuthStatus.maskedPhoneNumber}</p>
+              ) : null}
             </div>
 
-            <div className="mx-auto w-full max-w-[28rem] py-10">
-              <div className="h-[6px] rounded-full bg-[#d9d9d9] shadow-[0_0_10px_rgba(217,217,217,0.45)]" />
-            </div>
+            <Dialog open={isSmsModalOpen} onOpenChange={setIsSmsModalOpen}>
+              <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>SMS Verification</DialogTitle>
+                  <DialogDescription className="text-[#949ba4]">
+                    Add SMS-based verification as an additional sign-in factor.
+                  </DialogDescription>
+                </DialogHeader>
 
-            <div className="mx-auto w-full max-w-[28rem] rounded-3xl border border-rose-500/20 bg-rose-950/20 p-4 pb-8">
+                <div className="space-y-3">
+                  <p className="text-xs text-[#949ba4]">
+                    Status: {smsAuthStatus.enabled ? "Enabled" : smsAuthStatus.hasPendingVerification ? "Pending Verification" : "Disabled"}
+                  </p>
+
+                  {!smsAuthStatus.enabled ? (
+                    <input
+                      type="tel"
+                      value={smsPhoneInput}
+                      onChange={(event) => {
+                        setSmsPhoneInput(event.target.value);
+                        setSmsMessage(null);
+                      }}
+                      placeholder="Phone number (+15551234567)"
+                      className="w-full rounded-xl border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                    />
+                  ) : null}
+
+                  {(smsAuthStatus.hasPendingVerification || smsAuthStatus.enabled) ? (
+                    <input
+                      type="text"
+                      value={smsCodeInput}
+                      onChange={(event) => {
+                        const digitsOnly = event.target.value.replace(/\D/g, "").slice(0, 6);
+                        setSmsCodeInput(digitsOnly);
+                        setSmsMessage(null);
+                      }}
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      placeholder="Enter 6-digit SMS code"
+                      className="w-full rounded-xl border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                    />
+                  ) : null}
+
+                  {smsMessage ? (
+                    <p className="rounded-md border border-white/10 bg-black/20 px-3 py-2 text-xs text-[#b5bac1]">
+                      {smsMessage}
+                    </p>
+                  ) : null}
+                </div>
+
+                <DialogFooter className="gap-2 sm:justify-between">
+                  <div className="flex flex-wrap gap-2">
+                    {!smsAuthStatus.enabled ? (
+                      <Button
+                        type="button"
+                        onClick={() => void onSendSmsCode()}
+                        disabled={isSmsBusy || !smsPhoneInput.trim()}
+                        className="bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isSmsBusy ? "Sending..." : smsAuthStatus.hasPendingVerification ? "Resend Code" : "Send Code"}
+                      </Button>
+                    ) : null}
+
+                    {smsAuthStatus.hasPendingVerification ? (
+                      <Button
+                        type="button"
+                        onClick={() => void onVerifySmsCode()}
+                        disabled={isSmsBusy || smsCodeInput.trim().length !== 6}
+                        className="border border-emerald-500/35 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/30 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isSmsBusy ? "Verifying..." : "Verify & Enable"}
+                      </Button>
+                    ) : null}
+
+                    {smsAuthStatus.enabled ? (
+                      <Button
+                        type="button"
+                        onClick={() => void onDisableSms()}
+                        disabled={isSmsBusy}
+                        className="border border-rose-500/35 bg-rose-500/20 text-rose-100 hover:bg-rose-500/30 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isSmsBusy ? "Disabling..." : "Disable SMS"}
+                      </Button>
+                    ) : null}
+                  </div>
+
+                  <Button type="button" variant="outline" onClick={() => setIsSmsModalOpen(false)}>
+                    Close
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            <div className="mx-auto w-full max-w-md rounded-3xl border border-rose-500/20 bg-rose-950/20 p-4 pb-8">
               <p className="text-center text-xs font-semibold uppercase tracking-[0.08em] text-rose-200">
                 Delete Account
               </p>
@@ -6557,10 +7341,6 @@ export const SettingsModal = () => {
               >
                 Delete Account (Coming Soon)
               </Button>
-
-              <div className="py-10">
-                <div className="h-[6px] w-full rounded-full bg-[#d9d9d9] shadow-[0_0_10px_rgba(217,217,217,0.45)]" />
-              </div>
             </div>
           </div>
         </div>
@@ -12958,12 +13738,6 @@ export const SettingsModal = () => {
                         </Dialog>
                       </div>
                     </div>
-                  </div>
-                ) : null}
-
-                {displaySection === "myAccount" ? (
-                  <div className="mx-auto w-full max-w-[32rem] py-10">
-                    <div className="h-[6px] rounded-full bg-[#d9d9d9] shadow-[0_0_10px_rgba(217,217,217,0.45)]" />
                   </div>
                 ) : null}
 

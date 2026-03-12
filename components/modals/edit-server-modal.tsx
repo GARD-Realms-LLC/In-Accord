@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Camera, ChevronDown, ChevronRight, Loader2, Pause, Play, Plus, Trash2, X } from "lucide-react";
+import { Camera, ChevronDown, ChevronRight, Loader2, Pause, Play, Plus, Shield, Trash2, X } from "lucide-react";
 
 import {
   Dialog,
@@ -38,6 +38,11 @@ const formSchema = z.object({
   bannerUrl: z.string().optional(),
   bannerFit: z.enum(["cover", "contain", "scale"]).optional(),
   bannerScale: z.number().min(0.25).max(2).optional(),
+  description: z.string().max(800).optional(),
+  bannerColor: z.string().optional(),
+  traits: z.array(z.string()).optional(),
+  gamesPlayed: z.array(z.string()).optional(),
+  inviteMode: z.enum(["normal", "approval"]).optional(),
 });
 
 type ServerSettingsSection =
@@ -83,16 +88,16 @@ const SETTINGS_SECTIONS: Array<{
   {
     items: [
       { key: "overview", label: "Overview" },
-      { key: "boostStatus", label: "Server Boost Status" },
+      { key: "onboarding", label: "Onboarding" },
       { key: "roles", label: "Roles" },
       { key: "members", label: "Members" },
       { key: "invites", label: "Invites" },
       { key: "integrations", label: "Manage Bots" },
       { key: "serverGuide", label: "Server Guide" },
-      { key: "onboarding", label: "Onboarding" },
       { key: "emoji", label: "Emoji" },
       { key: "stickers", label: "Stickers" },
       { key: "soundboard", label: "Sound EFX" },
+      { key: "boostStatus", label: "Server Boost Status" },
     ],
   },
   {
@@ -338,6 +343,44 @@ const DEFAULT_SOUND_TILE_DEFS = [
   { key: "zap", label: "Zap", frequency: 1320 },
 ] as const;
 
+const SERVER_BANNER_COLOR_PRESETS = [
+  "#5865f2",
+  "#57f287",
+  "#fee75c",
+  "#eb459e",
+  "#ed4245",
+  "#1e1f22",
+  "#2b2d31",
+  "#3ba55d",
+] as const;
+
+const GAME_SEARCH_OPTIONS = [
+  "Minecraft",
+  "Fortnite",
+  "Valorant",
+  "League of Legends",
+  "Rocket League",
+  "Apex Legends",
+  "Overwatch 2",
+  "Call of Duty",
+  "Counter-Strike 2",
+  "Grand Theft Auto V",
+  "Rainbow Six Siege",
+  "Roblox",
+  "Among Us",
+  "Destiny 2",
+  "Warframe",
+  "World of Warcraft",
+  "Dota 2",
+  "The Finals",
+  "Rust",
+  "Sea of Thieves",
+  "Helldivers 2",
+  "Palworld",
+  "Marvel Rivals",
+  "Brawlhalla",
+] as const;
+
 const Other_ROLE_COLOR_SWATCHES = [
   "#99aab5",
   "#1abc9c",
@@ -376,6 +419,25 @@ const createDefaultSettingsGroupCollapseState = () =>
     return accumulator;
   }, {});
 
+type OverviewSectionKey =
+  | "identity"
+  | "banner"
+  | "description"
+  | "bannerColor"
+  | "traits"
+  | "gamesPlayed"
+  | "privacy";
+
+const createDefaultOverviewSectionCollapseState = (): Record<OverviewSectionKey, boolean> => ({
+  identity: false,
+  banner: false,
+  description: false,
+  bannerColor: false,
+  traits: false,
+  gamesPlayed: false,
+  privacy: false,
+});
+
 type ServerRoleItem = {
   id: string;
   name: string;
@@ -413,9 +475,15 @@ const reorderRoles = (items: ServerRoleItem[], draggedId: string, targetId: stri
 type RoleMemberItem = {
   memberId: string;
   profileId: string;
+  profileName: string | null;
   displayName: string;
   email: string | null;
   imageUrl: string | null;
+  memberSince: string | null;
+  joinedInAccord: string | null;
+  joinedMethod: string;
+  highestRoleName: string | null;
+  roleCount: number;
   isAssigned: boolean;
 };
 
@@ -798,12 +866,12 @@ export const EditServerModal = () => {
   const [isCreatingRole, setIsCreatingRole] = useState(false);
   const [isUploadingNewRoleIcon, setIsUploadingNewRoleIcon] = useState(false);
   const [isSavingRole, setIsSavingRole] = useState(false);
-  const [savingRoleGroupId, setSavingRoleGroupId] = useState<string | null>(null);
   const [isDeletingRole, setIsDeletingRole] = useState(false);
   const [isSavingRoleOrder, setIsSavingRoleOrder] = useState(false);
   const [draggedRoleId, setDraggedRoleId] = useState<string | null>(null);
   const [dragOverRoleId, setDragOverRoleId] = useState<string | null>(null);
   const [roleEditorTab, setRoleEditorTab] = useState<"display" | "members" | "permissions">("display");
+  const [isManageRoleMembersModalOpen, setIsManageRoleMembersModalOpen] = useState(false);
   const [editRoleName, setEditRoleName] = useState("");
   const [editRoleColor, setEditRoleColor] = useState("#99aab5");
   const [editRoleIconUrl, setEditRoleIconUrl] = useState("");
@@ -902,6 +970,9 @@ export const EditServerModal = () => {
   const [collapsedSettingsGroups, setCollapsedSettingsGroups] = useState<Record<string, boolean>>(
     () => createDefaultSettingsGroupCollapseState()
   );
+  const [collapsedOverviewSections, setCollapsedOverviewSections] = useState<Record<OverviewSectionKey, boolean>>(
+    () => createDefaultOverviewSectionCollapseState()
+  );
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const bannerInputRef = useRef<HTMLInputElement | null>(null);
   const newRoleIconInputRef = useRef<HTMLInputElement | null>(null);
@@ -925,6 +996,11 @@ export const EditServerModal = () => {
       bannerUrl: "",
       bannerFit: "cover",
       bannerScale: 1,
+      description: "",
+      bannerColor: "#5865f2",
+      traits: [],
+      gamesPlayed: [],
+      inviteMode: "normal",
     },
   });
 
@@ -947,8 +1023,77 @@ export const EditServerModal = () => {
         "bannerScale",
         (server as { bannerScale?: number | null }).bannerScale ?? 1
       );
+      form.setValue("description", (server as { description?: string | null }).description ?? "");
+      form.setValue("bannerColor", (server as { bannerColor?: string | null }).bannerColor ?? "#5865f2");
+      form.setValue("traits", (server as { traits?: string[] | null }).traits ?? []);
+      form.setValue("gamesPlayed", (server as { gamesPlayed?: string[] | null }).gamesPlayed ?? []);
+      form.setValue(
+        "inviteMode",
+        ((server as { inviteMode?: "normal" | "approval" | null }).inviteMode ?? "normal") as
+          | "normal"
+          | "approval"
+      );
     }
   }, [server, form]);
+
+  useEffect(() => {
+    if (!isModalOpen || !server?.id) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadServerProfile = async () => {
+      try {
+        const response = await axios.get<{
+          name?: string;
+          imageUrl?: string;
+          bannerUrl?: string | null;
+          bannerFit?: "cover" | "contain" | "scale";
+          bannerScale?: number;
+          description?: string | null;
+          bannerColor?: string | null;
+          traits?: string[];
+          gamesPlayed?: string[];
+          inviteMode?: "normal" | "approval";
+        }>(`/api/servers/${server.id}`);
+
+        if (cancelled) {
+          return;
+        }
+
+        form.setValue("name", String(response.data?.name ?? server.name));
+        form.setValue("imageUrl", String(response.data?.imageUrl ?? server.imageUrl));
+        form.setValue("bannerUrl", String(response.data?.bannerUrl ?? ""));
+        form.setValue("bannerFit", (response.data?.bannerFit ?? "cover") as "cover" | "contain" | "scale");
+        form.setValue("bannerScale", Number(response.data?.bannerScale ?? 1));
+        form.setValue("description", String(response.data?.description ?? ""));
+        form.setValue("bannerColor", String(response.data?.bannerColor ?? "#5865f2"));
+        form.setValue("traits", Array.isArray(response.data?.traits) ? response.data.traits : []);
+        form.setValue("gamesPlayed", Array.isArray(response.data?.gamesPlayed) ? response.data.gamesPlayed : []);
+        form.setValue(
+          "inviteMode",
+          (response.data?.inviteMode ?? "normal") as "normal" | "approval"
+        );
+
+        const normalizedBannerUrl = String(response.data?.bannerUrl ?? "").trim();
+        if (normalizedBannerUrl) {
+          setUploadedServerBannerThumbnails((previous) => [
+            normalizedBannerUrl,
+            ...previous.filter((entry) => entry !== normalizedBannerUrl),
+          ]);
+        }
+      } catch {
+        // keep existing modal values when profile fetch fails
+      }
+    };
+
+    void loadServerProfile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [form, isModalOpen, server?.id, server?.imageUrl, server?.name]);
 
   useEffect(() => {
     if (!isModalOpen) {
@@ -975,10 +1120,10 @@ export const EditServerModal = () => {
       setShowRoleGroupsInList(true);
       setIsCreateRolePopupOpen(false);
       setIsSavingRoleOrder(false);
-      setSavingRoleGroupId(null);
       setDraggedRoleId(null);
       setDragOverRoleId(null);
       setRoleEditorTab("display");
+      setIsManageRoleMembersModalOpen(false);
       setEditRoleName("");
       setEditRoleColor("#99aab5");
       setEditRoleIconUrl("");
@@ -1070,6 +1215,9 @@ export const EditServerModal = () => {
       setGenericSectionSettings(createDefaultGenericSectionSettings());
       setGenericSectionSaveMessage(null);
       setCollapsedSettingsGroups(createDefaultSettingsGroupCollapseState());
+      setCollapsedOverviewSections(createDefaultOverviewSectionCollapseState());
+      setTraitDraft("");
+      setGameSearchQuery("");
     }
   }, [isModalOpen]);
 
@@ -1969,6 +2117,69 @@ export const EditServerModal = () => {
   const bannerUrl = form.watch("bannerUrl") || "";
   const bannerFit = form.watch("bannerFit") || "cover";
   const bannerScale = form.watch("bannerScale") || 1;
+  const description = form.watch("description") || "";
+  const bannerColor = form.watch("bannerColor") || "#5865f2";
+  const traits = form.watch("traits") || [];
+  const gamesPlayed = form.watch("gamesPlayed") || [];
+  const inviteMode = form.watch("inviteMode") || "normal";
+  const [traitDraft, setTraitDraft] = useState("");
+  const [gameSearchQuery, setGameSearchQuery] = useState("");
+
+  const normalizedGameSearch = gameSearchQuery.trim().toLowerCase();
+  const gameSuggestions = GAME_SEARCH_OPTIONS.filter((game) => {
+    if (gamesPlayed.includes(game)) {
+      return false;
+    }
+
+    if (!normalizedGameSearch) {
+      return true;
+    }
+
+    return game.toLowerCase().includes(normalizedGameSearch);
+  }).slice(0, 8);
+
+  const addTrait = () => {
+    const trimmed = traitDraft.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    const exists = traits.some((trait) => trait.toLowerCase() === trimmed.toLowerCase());
+    if (!exists) {
+      form.setValue("traits", [...traits, trimmed], { shouldDirty: true, shouldValidate: true });
+    }
+    setTraitDraft("");
+  };
+
+  const removeTrait = (traitToRemove: string) => {
+    form.setValue(
+      "traits",
+      traits.filter((trait) => trait !== traitToRemove),
+      { shouldDirty: true, shouldValidate: true }
+    );
+  };
+
+  const addGame = (game: string) => {
+    const trimmed = String(game ?? "").trim();
+    if (!trimmed) {
+      return;
+    }
+
+    const exists = gamesPlayed.some((entry) => entry.toLowerCase() === trimmed.toLowerCase());
+    if (!exists) {
+      form.setValue("gamesPlayed", [...gamesPlayed, trimmed], { shouldDirty: true, shouldValidate: true });
+    }
+
+    setGameSearchQuery("");
+  };
+
+  const removeGame = (gameToRemove: string) => {
+    form.setValue(
+      "gamesPlayed",
+      gamesPlayed.filter((game) => game !== gameToRemove),
+      { shouldDirty: true, shouldValidate: true }
+    );
+  };
 
   const registerServerBannerThumbnail = (url?: string | null) => {
     const normalizedUrl = (url ?? "").trim();
@@ -2400,51 +2611,6 @@ export const EditServerModal = () => {
       }
     } finally {
       setIsSavingRole(false);
-    }
-  };
-
-  const onSaveRoleGroupVisibility = async (roleItem: ServerRoleItem, nextShowInOnlineMembers: boolean) => {
-    if (!server?.id || !canManageRoles || savingRoleGroupId) {
-      return;
-    }
-
-    if (nextShowInOnlineMembers === Boolean(roleItem.showInOnlineMembers)) {
-      return;
-    }
-
-    try {
-      setRolesError(null);
-      setSavingRoleGroupId(roleItem.id);
-
-      const response = await axios.patch<{ role?: ServerRoleItem }>(
-        `/api/servers/${server.id}/roles/${roleItem.id}`,
-        {
-          showInOnlineMembers: nextShowInOnlineMembers,
-        }
-      );
-
-      const savedRole = response.data.role;
-      if (!savedRole) {
-        throw new Error("Failed to save role group visibility.");
-      }
-
-      setRoles((prev) => prev.map((item) => (item.id === savedRole.id ? savedRole : item)));
-      if (selectedRoleId === savedRole.id) {
-        setEditRoleShowInOnlineMembers(Boolean(savedRole.showInOnlineMembers));
-      }
-      router.refresh();
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        const message =
-          (error.response?.data as { error?: string })?.error ||
-          (typeof error.response?.data === "string" ? error.response.data : "") ||
-          error.message;
-        setRolesError(message || "Failed to save role group visibility.");
-      } else {
-        setRolesError("Failed to save role group visibility.");
-      }
-    } finally {
-      setSavingRoleGroupId(null);
     }
   };
 
@@ -3340,6 +3506,13 @@ export const EditServerModal = () => {
     }
   };
 
+  const toggleOverviewSectionCollapse = (sectionKey: OverviewSectionKey) => {
+    setCollapsedOverviewSections((previous) => ({
+      ...previous,
+      [sectionKey]: !previous[sectionKey],
+    }));
+  };
+
   return (
     <Dialog open={isModalOpen} onOpenChange={handleClose}>
       <DialogContent className="settings-theme-scope settings-scrollbar theme-settings-shell flex h-[85vh] max-h-[85vh] w-[85vw] max-w-[85vw] flex-col overflow-hidden rounded-3xl border-black/30 bg-[#2b2d31] p-0 text-[#dbdee1]">
@@ -3426,13 +3599,12 @@ export const EditServerModal = () => {
 
                         <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
                           <div className="rounded-lg border border-zinc-700 bg-[#1e1f22] p-2">
-                            <div className="mb-2 grid grid-cols-[1fr_72px_110px] items-center gap-2 px-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-zinc-400">
+                            <div className="mb-2 grid grid-cols-[1fr_72px] items-center gap-2 px-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-zinc-400">
                               <span className="text-left">Roles</span>
                               <span className="text-center">Members</span>
-                              <span className="text-center">Hide Group</span>
                             </div>
 
-                            <div className="max-h-80 space-y-1 overflow-y-auto overflow-x-hidden pr-1">
+                            <div className="max-h-160 space-y-1 overflow-y-auto overflow-x-hidden pr-1">
                               {isLoadingRoles ? (
                                 <div className="flex items-center gap-2 rounded-md bg-[#2b2d31] px-3 py-2 text-sm text-zinc-300">
                                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -3463,7 +3635,7 @@ export const EditServerModal = () => {
                                       }
                                     }}
                                     className={cn(
-                                      "grid w-full cursor-pointer grid-cols-[1fr_72px_110px] items-center gap-2 rounded-md px-2 py-2 text-left transition",
+                                      "grid w-full cursor-pointer grid-cols-[1fr_72px] items-center gap-2 rounded-md px-2 py-1.5 text-left transition",
                                       canManageRoles ? "cursor-grab active:cursor-grabbing" : "",
                                       draggedRoleId && dragOverRoleId === role.id ? "ring-1 ring-indigo-500/50" : "",
                                       selectedRoleId === role.id
@@ -3489,23 +3661,6 @@ export const EditServerModal = () => {
                                     </span>
                                     <span className="text-center text-xs text-zinc-300">
                                       {(role.memberCount ?? 0) === 0 ? "N/N" : role.memberCount}
-                                    </span>
-                                    <span
-                                      className="inline-flex items-center justify-center"
-                                      onClick={(event) => event.stopPropagation()}
-                                      onMouseDown={(event) => event.stopPropagation()}
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={!Boolean(role.showInOnlineMembers)}
-                                        onChange={(event) => {
-                                          const nextShow = !event.target.checked;
-                                          void onSaveRoleGroupVisibility(role, nextShow);
-                                        }}
-                                        disabled={!canManageRoles || savingRoleGroupId === role.id}
-                                        aria-label={`Hide ${role.name} group from Online Members`}
-                                        title="Hide this role group from Online Members"
-                                      />
                                     </span>
                                   </div>
                                 ))
@@ -3555,10 +3710,13 @@ export const EditServerModal = () => {
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => setRoleEditorTab("members")}
+                                    onClick={() => {
+                                      setIsManageRoleMembersModalOpen(true);
+                                      setRoleEditorTab("display");
+                                    }}
                                     className={cn(
                                       "rounded px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.08em] transition",
-                                      roleEditorTab === "members"
+                                      isManageRoleMembersModalOpen
                                         ? "bg-indigo-500/20 text-indigo-200"
                                         : "text-zinc-400 hover:bg-white/10 hover:text-zinc-200"
                                     )}
@@ -3696,105 +3854,155 @@ export const EditServerModal = () => {
                                       <label className="inline-flex items-center gap-2 rounded-md border border-zinc-700 bg-[#15161a] px-3 py-2 text-xs text-zinc-200">
                                         <input
                                           type="checkbox"
-                                          checked={editRoleShowInOnlineMembers}
-                                          onChange={(event) => setEditRoleShowInOnlineMembers(event.target.checked)}
+                                          checked={!editRoleShowInOnlineMembers}
+                                          onChange={(event) => setEditRoleShowInOnlineMembers(!event.target.checked)}
                                           disabled={!canManageRoles || isSavingRole}
                                         />
-                                        Show Role Groups in Online Members
+                                        Hide Group in Online Members
                                       </label>
                                       <p className="mt-1 text-[11px] text-zinc-500">
-                                        Enabled roles create grouped sections in the Online Members rail.
+                                        Enabled toggle hides this role group from the Online Members rail.
                                       </p>
                                     </div>
                                   </>
                                 ) : null}
 
-                                {roleEditorTab === "members" ? (
-                                  <div className="grid gap-3 lg:grid-cols-2">
-                                  <div>
-                                    <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Members with this role</p>
-                                    <div className="max-h-55 space-y-1 overflow-y-auto overflow-x-hidden rounded-md border border-zinc-700 bg-[#15161a] p-2">
-                                      {isLoadingRoleMembers ? (
-                                        <div className="flex items-center gap-2 px-2 py-2 text-xs text-zinc-300">
-                                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                          Loading members...
-                                        </div>
-                                      ) : assignedRoleMembers.length === 0 ? (
-                                        <p className="px-2 py-2 text-xs text-zinc-400">No users currently have this role.</p>
-                                      ) : (
-                                        assignedRoleMembers.map((memberItem) => (
-                                          <div key={memberItem.memberId} className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-black/20">
-                                            <UserAvatar src={memberItem.imageUrl ?? undefined} className="h-7 w-7" />
-                                            <div className="min-w-0 flex-1">
-                                              <p className="truncate text-xs font-medium text-white">
-                                                <ProfileNameWithServerTag
-                                                  name={memberItem.displayName}
-                                                  profileId={memberItem.profileId}
-                                                  memberId={memberItem.memberId}
-                                                />
-                                              </p>
-                                            </div>
-                                            <Button
-                                              type="button"
-                                              onClick={() => void onToggleRoleMember(memberItem)}
-                                              disabled={!canManageRoleMembers || togglingMemberId === memberItem.memberId}
-                                              className="h-7 bg-rose-600/80 px-2 text-[11px] text-white hover:bg-rose-600"
-                                            >
-                                              {togglingMemberId === memberItem.memberId ? "..." : "Remove"}
-                                            </Button>
+                                {isManageRoleMembersModalOpen ? (
+                                  <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/70 p-4">
+                                    <div className="flex h-[85vh] max-h-[85vh] w-[85vw] max-w-[85vw] flex-col rounded-2xl border border-zinc-700 bg-[#2B2D31] shadow-2xl shadow-black/60">
+                                      <div className="flex items-center justify-between border-b border-zinc-700 px-4 py-3">
+                                        <p className="text-sm font-semibold text-white">Manage Members — {selectedRole.name}</p>
+                                        <button
+                                          type="button"
+                                          onClick={() => setIsManageRoleMembersModalOpen(false)}
+                                          className="rounded p-1 text-zinc-300 transition hover:bg-white/10 hover:text-white"
+                                          aria-label="Close manage members modal"
+                                        >
+                                          <X className="h-4 w-4" />
+                                        </button>
+                                      </div>
+
+                                      <div className="grid min-h-0 flex-1 gap-4 p-4 lg:grid-cols-2">
+                                        <div className="min-h-0">
+                                          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Members with this role</p>
+                                          <div className="max-h-full h-full space-y-1 overflow-y-auto overflow-x-hidden rounded-md border border-zinc-700 bg-[#15161a] p-2">
+                                            {isLoadingRoleMembers ? (
+                                              <div className="flex items-center gap-2 px-2 py-2 text-xs text-zinc-300">
+                                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                Loading members...
+                                              </div>
+                                            ) : assignedRoleMembers.length === 0 ? (
+                                              <p className="px-2 py-2 text-xs text-zinc-400">No users currently have this role.</p>
+                                            ) : (
+                                              assignedRoleMembers.map((memberItem) => (
+                                                <div key={memberItem.memberId} className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-black/20">
+                                                  <UserAvatar src={memberItem.imageUrl ?? undefined} className="h-7 w-7" />
+                                                  <div className="min-w-0 flex-1">
+                                                    <p className="truncate text-xs font-medium text-white">
+                                                      <ProfileNameWithServerTag
+                                                        name={memberItem.displayName}
+                                                        profileId={memberItem.profileId}
+                                                        memberId={memberItem.memberId}
+                                                      />
+                                                    </p>
+                                                    <div className="mt-1 grid grid-cols-1 gap-0.5 text-[10px] text-zinc-400">
+                                                      <p className="truncate">
+                                                        Profile name: {memberItem.profileName?.trim() ? memberItem.profileName : memberItem.displayName}
+                                                      </p>
+                                                      <p className="truncate">
+                                                        Member Since: {memberItem.memberSince ? new Date(memberItem.memberSince).toLocaleString() : "N/A"}
+                                                      </p>
+                                                      <p className="truncate">
+                                                        Joined In-Accord: {memberItem.joinedInAccord ? new Date(memberItem.joinedInAccord).toLocaleString() : "N/A"}
+                                                      </p>
+                                                      <p className="truncate">Joined Method: {memberItem.joinedMethod || "N/A"}</p>
+                                                      <p className="truncate">Highest Role: {memberItem.highestRoleName || "None"}</p>
+                                                    </div>
+                                                  </div>
+                                                  <span className="inline-flex items-center gap-1 rounded bg-black/25 px-2 py-1 text-[10px] font-semibold text-zinc-200" title="Total roles">
+                                                    <Shield className="h-3 w-3" />
+                                                    {memberItem.roleCount}
+                                                  </span>
+                                                  <Button
+                                                    type="button"
+                                                    onClick={() => void onToggleRoleMember(memberItem)}
+                                                    disabled={!canManageRoleMembers || togglingMemberId === memberItem.memberId}
+                                                    className="h-7 bg-rose-600/80 px-2 text-[11px] text-white hover:bg-rose-600"
+                                                  >
+                                                    {togglingMemberId === memberItem.memberId ? "..." : "Remove"}
+                                                  </Button>
+                                                </div>
+                                              ))
+                                            )}
                                           </div>
-                                        ))
-                                      )}
+                                        </div>
+
+                                        <div className="min-h-0">
+                                          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Add members</p>
+                                          <input
+                                            value={addMemberSearch}
+                                            onChange={(event) => setAddMemberSearch(event.target.value)}
+                                            placeholder="Search users by name, email, or ID"
+                                            className="h-9 w-full rounded-md border border-zinc-700 bg-[#15161a] px-3 text-xs text-white outline-none focus:border-indigo-500"
+                                            disabled={!canManageRoleMembers || isLoadingRoleMembers}
+                                          />
+
+                                          <div className="mt-2 max-h-[calc(100%-2.5rem)] h-[calc(100%-2.5rem)] space-y-1 overflow-y-auto overflow-x-hidden rounded-md border border-zinc-700 bg-[#15161a] p-2">
+                                            {isLoadingRoleMembers ? (
+                                              <div className="flex items-center gap-2 px-2 py-2 text-xs text-zinc-300">
+                                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                Loading users...
+                                              </div>
+                                            ) : addableRoleMembers.length === 0 ? (
+                                              <p className="px-2 py-2 text-xs text-zinc-400">
+                                                {normalizedAddMemberSearch ? "No users match your search." : "Type in search to find users."}
+                                              </p>
+                                            ) : (
+                                              addableRoleMembers.map((memberItem) => (
+                                                <div key={`add-${memberItem.memberId}`} className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-black/20">
+                                                  <UserAvatar src={memberItem.imageUrl ?? undefined} className="h-7 w-7" />
+                                                  <div className="min-w-0 flex-1">
+                                                    <p className="truncate text-xs font-medium text-white">
+                                                      <ProfileNameWithServerTag
+                                                        name={memberItem.displayName}
+                                                        profileId={memberItem.profileId}
+                                                        memberId={memberItem.memberId}
+                                                      />
+                                                    </p>
+                                                    <div className="mt-1 grid grid-cols-1 gap-0.5 text-[10px] text-zinc-400">
+                                                      <p className="truncate">
+                                                        Profile name: {memberItem.profileName?.trim() ? memberItem.profileName : memberItem.displayName}
+                                                      </p>
+                                                      <p className="truncate">
+                                                        Member Since: {memberItem.memberSince ? new Date(memberItem.memberSince).toLocaleString() : "N/A"}
+                                                      </p>
+                                                      <p className="truncate">
+                                                        Joined In-Accord: {memberItem.joinedInAccord ? new Date(memberItem.joinedInAccord).toLocaleString() : "N/A"}
+                                                      </p>
+                                                      <p className="truncate">Joined Method: {memberItem.joinedMethod || "N/A"}</p>
+                                                      <p className="truncate">Highest Role: {memberItem.highestRoleName || "None"}</p>
+                                                    </div>
+                                                  </div>
+                                                  <span className="inline-flex items-center gap-1 rounded bg-black/25 px-2 py-1 text-[10px] font-semibold text-zinc-200" title="Total roles">
+                                                    <Shield className="h-3 w-3" />
+                                                    {memberItem.roleCount}
+                                                  </span>
+                                                  <Button
+                                                    type="button"
+                                                    onClick={() => void onToggleRoleMember(memberItem)}
+                                                    disabled={!canManageRoleMembers || togglingMemberId === memberItem.memberId}
+                                                    className="h-7 bg-emerald-600/80 px-2 text-[11px] text-white hover:bg-emerald-600"
+                                                  >
+                                                    {togglingMemberId === memberItem.memberId ? "..." : "Add"}
+                                                  </Button>
+                                                </div>
+                                              ))
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
                                     </div>
                                   </div>
-
-                                  <div>
-                                    <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Add members</p>
-                                    <input
-                                      value={addMemberSearch}
-                                      onChange={(event) => setAddMemberSearch(event.target.value)}
-                                      placeholder="Search users by name, email, or ID"
-                                      className="h-9 w-full rounded-md border border-zinc-700 bg-[#15161a] px-3 text-xs text-white outline-none focus:border-indigo-500"
-                                      disabled={!canManageRoleMembers || isLoadingRoleMembers}
-                                    />
-
-                                    <div className="mt-2 max-h-45 space-y-1 overflow-y-auto overflow-x-hidden rounded-md border border-zinc-700 bg-[#15161a] p-2">
-                                      {isLoadingRoleMembers ? (
-                                        <div className="flex items-center gap-2 px-2 py-2 text-xs text-zinc-300">
-                                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                          Loading users...
-                                        </div>
-                                      ) : addableRoleMembers.length === 0 ? (
-                                        <p className="px-2 py-2 text-xs text-zinc-400">
-                                          {normalizedAddMemberSearch ? "No users match your search." : "Type in search to find users."}
-                                        </p>
-                                      ) : (
-                                        addableRoleMembers.map((memberItem) => (
-                                          <div key={`add-${memberItem.memberId}`} className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-black/20">
-                                            <UserAvatar src={memberItem.imageUrl ?? undefined} className="h-7 w-7" />
-                                            <div className="min-w-0 flex-1">
-                                              <p className="truncate text-xs font-medium text-white">
-                                                <ProfileNameWithServerTag
-                                                  name={memberItem.displayName}
-                                                  profileId={memberItem.profileId}
-                                                  memberId={memberItem.memberId}
-                                                />
-                                              </p>
-                                            </div>
-                                            <Button
-                                              type="button"
-                                              onClick={() => void onToggleRoleMember(memberItem)}
-                                              disabled={!canManageRoleMembers || togglingMemberId === memberItem.memberId}
-                                              className="h-7 bg-emerald-600/80 px-2 text-[11px] text-white hover:bg-emerald-600"
-                                            >
-                                              {togglingMemberId === memberItem.memberId ? "..." : "Add"}
-                                            </Button>
-                                          </div>
-                                        ))
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
                                 ) : null}
 
                                 {roleEditorTab === "permissions" ? (
@@ -5692,128 +5900,149 @@ export const EditServerModal = () => {
                   className="settings-scrollbar theme-settings-content-body min-h-0 flex-1 overflow-y-scroll overflow-x-hidden space-y-4 px-4 py-3"
                   style={{ scrollbarGutter: "stable" }}
                 >
-                  <div className="mx-auto w-full max-w-3xl grid gap-3 md:grid-cols-[84px_1fr] md:items-start">
-                    <FormField
-                      control={form.control}
-                      name="imageUrl"
-                      render={() => (
-                        <FormItem>
-                          <FormControl>
-                            <div className="flex flex-col items-start gap-3">
-                              {imageUrl ? (
-                                <div className="group relative h-20 w-20">
-                                  <Image
-                                    fill
-                                    src={imageUrl}
-                                    alt="Server icon"
-                                    className="rounded-full object-cover"
+                  <div className="relative mx-auto w-full max-w-3xl rounded-xl border border-zinc-700/80 bg-[#1b1d21] p-3 shadow-[0_6px_24px_rgba(0,0,0,0.35)]">
+                    <p className="text-xs font-bold uppercase tracking-[0.08em] text-zinc-300">Identity</p>
+                    <button
+                      type="button"
+                      onClick={() => toggleOverviewSectionCollapse("identity")}
+                      className="hidden absolute right-3 top-3 h-5 w-5 rounded text-xs font-bold leading-none text-zinc-300 transition hover:bg-white/10 hover:text-white"
+                      aria-label={`${collapsedOverviewSections.identity ? "Expand" : "Collapse"} identity section`}
+                    >
+                      {collapsedOverviewSections.identity ? "+" : "-"}
+                    </button>
+
+                    {!collapsedOverviewSections.identity ? (
+                      <div className="mt-3 grid gap-3 md:grid-cols-[84px_1fr] md:items-start">
+                        <FormField
+                          control={form.control}
+                          name="imageUrl"
+                          render={() => (
+                            <FormItem>
+                              <FormControl>
+                                <div className="flex flex-col items-start gap-3">
+                                  {imageUrl ? (
+                                    <div className="group relative h-20 w-20">
+                                      <Image
+                                        fill
+                                        src={imageUrl}
+                                        alt="Server icon"
+                                        className="rounded-full object-cover"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={onPickImage}
+                                        disabled={isUploadingImage || isLoading}
+                                        className="absolute inset-0 flex items-center justify-center rounded-full bg-black/45 text-white opacity-0 transition group-hover:opacity-100 disabled:cursor-not-allowed"
+                                        aria-label="Change server icon"
+                                      >
+                                        <Camera className="h-4 w-4" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => form.setValue("imageUrl", "", { shouldValidate: true, shouldDirty: true })}
+                                        className="absolute right-0 top-0 rounded-full bg-rose-500 p-1 text-white shadow-sm"
+                                        aria-label="Remove server icon"
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={onPickImage}
+                                      disabled={isUploadingImage || isLoading}
+                                      className="group relative flex h-20 w-20 items-center justify-center rounded-full border-2 border-dashed border-zinc-500 bg-[#232428] transition hover:border-zinc-300 disabled:cursor-not-allowed disabled:opacity-60"
+                                      aria-label="Upload server icon"
+                                    >
+                                      <Camera className="h-7 w-7 text-zinc-300" />
+                                      <span className="absolute -bottom-1 -right-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-indigo-500 text-white shadow-sm">
+                                        <Plus className="h-4 w-4" />
+                                      </span>
+                                    </button>
+                                  )}
+
+                                  <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={(event) => onImageChange(event.target.files?.[0])}
                                   />
-                                  <button
-                                    type="button"
-                                    onClick={onPickImage}
-                                    disabled={isUploadingImage || isLoading}
-                                    className="absolute inset-0 flex items-center justify-center rounded-full bg-black/45 text-white opacity-0 transition group-hover:opacity-100 disabled:cursor-not-allowed"
-                                    aria-label="Change server icon"
-                                  >
-                                    <Camera className="h-4 w-4" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => form.setValue("imageUrl", "", { shouldValidate: true, shouldDirty: true })}
-                                    className="absolute right-0 top-0 rounded-full bg-rose-500 p-1 text-white shadow-sm"
-                                    aria-label="Remove server icon"
-                                  >
-                                    <X className="h-4 w-4" />
-                                  </button>
                                 </div>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={onPickImage}
-                                  disabled={isUploadingImage || isLoading}
-                                  className="group relative flex h-20 w-20 items-center justify-center rounded-full border-2 border-dashed border-zinc-500 bg-[#232428] transition hover:border-zinc-300 disabled:cursor-not-allowed disabled:opacity-60"
-                                  aria-label="Upload server icon"
-                                >
-                                  <Camera className="h-7 w-7 text-zinc-300" />
-                                  <span className="absolute -bottom-1 -right-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-indigo-500 text-white shadow-sm">
-                                    <Plus className="h-4 w-4" />
-                                  </span>
-                                </button>
-                              )}
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
 
-                              <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                onChange={(event) => onImageChange(event.target.files?.[0])}
-                              />
-                            </div>
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                        <div className="space-y-3">
+                          <FormField
+                            control={form.control}
+                            name="name"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs font-bold uppercase tracking-[0.08em] text-zinc-300">
+                                  Server name
+                                </FormLabel>
+                                <FormControl>
+                                  <Input
+                                    disabled={isLoading || isProtectedInAccordServer}
+                                    className="h-9 border border-zinc-700 bg-[#1E1F22] text-sm text-zinc-100 placeholder:text-zinc-500 focus-visible:ring-1 focus-visible:ring-indigo-500 focus-visible:ring-offset-0"
+                                    placeholder="Enter server name"
+                                    {...field}
+                                  />
+                                </FormControl>
+                                {isProtectedInAccordServer ? (
+                                  <p className="mt-1 text-[11px] text-amber-300">
+                                    In-Accord server name is protected and cannot be changed.
+                                  </p>
+                                ) : null}
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
 
-                    <div className="space-y-3">
-                      <FormField
-                        control={form.control}
-                        name="name"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs font-bold uppercase tracking-[0.08em] text-zinc-300">
-                              Server name
-                            </FormLabel>
-                            <FormControl>
-                              <Input
-                                disabled={isLoading || isProtectedInAccordServer}
-                                className="h-9 border border-zinc-700 bg-[#1E1F22] text-sm text-zinc-100 placeholder:text-zinc-500 focus-visible:ring-1 focus-visible:ring-indigo-500 focus-visible:ring-offset-0"
-                                placeholder="Enter server name"
-                                {...field}
-                              />
-                            </FormControl>
-                            {isProtectedInAccordServer ? (
-                              <p className="mt-1 text-[11px] text-amber-300">
-                                In-Accord server name is protected and cannot be changed.
-                              </p>
-                            ) : null}
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <p className="text-xs font-bold uppercase tracking-[0.08em] text-zinc-300">
-                        Server icon
-                      </p>
-                      <p className="text-sm text-zinc-300">
-                        Upload a square image for best results.
-                      </p>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        disabled={isUploadingImage || isLoading}
-                        onClick={onPickImage}
-                        className="bg-[#4E5058] text-white hover:bg-[#5D6069]"
-                      >
-                        {isUploadingImage ? "Uploading..." : imageUrl ? "Change icon" : "Upload icon"}
-                      </Button>
-                    </div>
+                          <p className="text-xs font-bold uppercase tracking-[0.08em] text-zinc-300">
+                            Server icon
+                          </p>
+                          <p className="text-sm text-zinc-300">
+                            Upload a square image for best results.
+                          </p>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            disabled={isUploadingImage || isLoading}
+                            onClick={onPickImage}
+                            className="bg-[#4E5058] text-white hover:bg-[#5D6069]"
+                          >
+                            {isUploadingImage ? "Uploading..." : imageUrl ? "Change icon" : "Upload icon"}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
 
                   {submitError ? (
                     <p className="text-sm font-medium text-rose-400">Save error: {submitError}</p>
                   ) : null}
 
-                  <div className="mx-auto w-full max-w-3xl">
+                  <div className="relative mx-auto w-full max-w-3xl rounded-xl border border-zinc-700/80 bg-[#1b1d21] p-3 shadow-[0_6px_24px_rgba(0,0,0,0.35)]">
+                  <p className="text-xs font-bold uppercase tracking-[0.08em] text-zinc-300">Server banner</p>
+                  <button
+                    type="button"
+                    onClick={() => toggleOverviewSectionCollapse("banner")}
+                    className="hidden absolute right-3 top-3 h-5 w-5 rounded text-xs font-bold leading-none text-zinc-300 transition hover:bg-white/10 hover:text-white"
+                    aria-label={`${collapsedOverviewSections.banner ? "Expand" : "Collapse"} server banner section`}
+                  >
+                    {collapsedOverviewSections.banner ? "+" : "-"}
+                  </button>
+                  {!collapsedOverviewSections.banner ? (
                   <FormField
                     control={form.control}
                     name="bannerUrl"
                     render={() => (
-                      <FormItem>
-                        <FormLabel className="text-xs font-bold uppercase tracking-[0.08em] text-zinc-300">
-                          Server banner
-                        </FormLabel>
+                      <FormItem className="mt-3">
                         <FormControl>
                           <div className="space-y-3">
                             <div className="relative h-[260px] w-full overflow-hidden rounded-md border border-zinc-700 bg-[#1E1F22]">
@@ -5961,6 +6190,261 @@ export const EditServerModal = () => {
                       </FormItem>
                     )}
                   />
+                  ) : null}
+                  </div>
+
+                  <div className="mx-auto w-full max-w-3xl space-y-5 rounded-xl border border-zinc-700/80 bg-[#1b1d21] p-4 shadow-[0_6px_24px_rgba(0,0,0,0.35)]">
+                    <div className="relative rounded-lg border border-zinc-700/80 bg-[#23262c] p-3">
+                      <p className="text-xs font-bold uppercase tracking-[0.08em] text-zinc-300">Description</p>
+                      <button
+                        type="button"
+                        onClick={() => toggleOverviewSectionCollapse("description")}
+                        className="hidden absolute right-3 top-3 h-5 w-5 rounded text-xs font-bold leading-none text-zinc-300 transition hover:bg-white/10 hover:text-white"
+                        aria-label={`${collapsedOverviewSections.description ? "Expand" : "Collapse"} description section`}
+                      >
+                        {collapsedOverviewSections.description ? "+" : "-"}
+                      </button>
+                      {!collapsedOverviewSections.description ? (
+                        <>
+                          <p className="mt-1 text-xs text-zinc-400">Show what your server is about in a Discord-style profile card.</p>
+                          <textarea
+                            value={description}
+                            onChange={(event) =>
+                              form.setValue("description", event.target.value.slice(0, 800), {
+                                shouldDirty: true,
+                                shouldValidate: true,
+                              })
+                            }
+                            placeholder="Write a short server description..."
+                            className="mt-2 min-h-24 w-full rounded-md border border-zinc-700 bg-[#15161a] px-3 py-2 text-sm text-zinc-100 shadow-inner outline-none focus:border-indigo-500"
+                            disabled={isLoading || isUploadingBanner || isUploadingImage}
+                          />
+                          <p className="mt-1 text-right text-[11px] text-zinc-500">{description.length}/800</p>
+                        </>
+                      ) : null}
+                    </div>
+
+                    <div className="relative rounded-lg border border-zinc-700/80 bg-[#23262c] p-3">
+                      <p className="text-xs font-bold uppercase tracking-[0.08em] text-zinc-300">Banner Color</p>
+                      <button
+                        type="button"
+                        onClick={() => toggleOverviewSectionCollapse("bannerColor")}
+                        className="hidden absolute right-3 top-3 h-5 w-5 rounded text-xs font-bold leading-none text-zinc-300 transition hover:bg-white/10 hover:text-white"
+                        aria-label={`${collapsedOverviewSections.bannerColor ? "Expand" : "Collapse"} banner color section`}
+                      >
+                        {collapsedOverviewSections.bannerColor ? "+" : "-"}
+                      </button>
+                      {!collapsedOverviewSections.bannerColor ? (
+                        <>
+                      <p className="mt-1 text-xs text-zinc-400">Choose a fallback/accent color for the server profile banner.</p>
+                      <div className="mt-2 flex flex-wrap gap-2.5">
+                        {SERVER_BANNER_COLOR_PRESETS.map((color) => {
+                          const isSelected = String(bannerColor).toLowerCase() === color.toLowerCase();
+                          return (
+                            <button
+                              key={color}
+                              type="button"
+                              onClick={() =>
+                                form.setValue("bannerColor", color, {
+                                  shouldDirty: true,
+                                  shouldValidate: true,
+                                })
+                              }
+                              className={cn(
+                                "relative h-8 w-8 rounded-full border transition",
+                                isSelected ? "border-white ring-2 ring-indigo-400/70 ring-offset-2 ring-offset-[#23262c]" : "border-black/40 hover:border-zinc-200"
+                              )}
+                              style={{ backgroundColor: color }}
+                              title={color}
+                              aria-label={`Set banner color ${color}`}
+                              disabled={isLoading || isUploadingBanner || isUploadingImage}
+                            >
+                              {isSelected ? <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-white">✓</span> : null}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_120px]">
+                        <Input
+                          value={bannerColor}
+                          onChange={(event) =>
+                            form.setValue("bannerColor", event.target.value, {
+                              shouldDirty: true,
+                              shouldValidate: true,
+                            })
+                          }
+                          placeholder="#5865f2"
+                          className="h-9 border-zinc-700 bg-[#15161a] font-mono text-xs text-zinc-100 placeholder:text-zinc-500"
+                          disabled={isLoading || isUploadingBanner || isUploadingImage}
+                        />
+
+                        <input
+                          type="color"
+                          value={bannerColor}
+                          onChange={(event) =>
+                            form.setValue("bannerColor", event.target.value, {
+                              shouldDirty: true,
+                              shouldValidate: true,
+                            })
+                          }
+                          className="h-9 w-full cursor-pointer rounded-md border border-zinc-700 bg-[#15161a] px-1"
+                          disabled={isLoading || isUploadingBanner || isUploadingImage}
+                          aria-label="Custom banner color"
+                        />
+                      </div>
+                      </>
+                      ) : null}
+                    </div>
+
+                    <div className="relative rounded-lg border border-zinc-700/80 bg-[#23262c] p-3">
+                      <p className="text-xs font-bold uppercase tracking-[0.08em] text-zinc-300">Traits</p>
+                      <button
+                        type="button"
+                        onClick={() => toggleOverviewSectionCollapse("traits")}
+                        className="hidden absolute right-3 top-3 h-5 w-5 rounded text-xs font-bold leading-none text-zinc-300 transition hover:bg-white/10 hover:text-white"
+                        aria-label={`${collapsedOverviewSections.traits ? "Expand" : "Collapse"} traits section`}
+                      >
+                        {collapsedOverviewSections.traits ? "+" : "-"}
+                      </button>
+                      {!collapsedOverviewSections.traits ? (
+                        <>
+                      <p className="mt-1 text-xs text-zinc-400">Add quick profile tags (community, pvp, roleplay, chill, etc.).</p>
+                      <div className="mt-2 flex gap-2">
+                        <Input
+                          value={traitDraft}
+                          onChange={(event) => setTraitDraft(event.target.value)}
+                          placeholder="Add a trait"
+                          className="h-9 border-zinc-700 bg-[#15161a] text-zinc-100 placeholder:text-zinc-500"
+                          disabled={isLoading}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              addTrait();
+                            }
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          onClick={addTrait}
+                          disabled={isLoading || !traitDraft.trim()}
+                          className="bg-[#5865f2] text-white hover:bg-[#4752c4]"
+                        >
+                          Add
+                        </Button>
+                      </div>
+                      {traits.length > 0 ? (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {traits.map((trait) => (
+                            <button
+                              key={trait}
+                              type="button"
+                              onClick={() => removeTrait(trait)}
+                              className="inline-flex items-center gap-1 rounded-full border border-indigo-400/35 bg-indigo-500/15 px-2.5 py-1 text-[11px] font-medium text-indigo-100 hover:bg-indigo-500/25"
+                              title="Remove trait"
+                            >
+                              {trait}
+                              <X className="h-3 w-3" />
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                      </>
+                      ) : null}
+                    </div>
+
+                    <div className="relative rounded-lg border border-zinc-700/80 bg-[#23262c] p-3">
+                      <p className="text-xs font-bold uppercase tracking-[0.08em] text-zinc-300">Games Played</p>
+                      <button
+                        type="button"
+                        onClick={() => toggleOverviewSectionCollapse("gamesPlayed")}
+                        className="hidden absolute right-3 top-3 h-5 w-5 rounded text-xs font-bold leading-none text-zinc-300 transition hover:bg-white/10 hover:text-white"
+                        aria-label={`${collapsedOverviewSections.gamesPlayed ? "Expand" : "Collapse"} games played section`}
+                      >
+                        {collapsedOverviewSections.gamesPlayed ? "+" : "-"}
+                      </button>
+                      {!collapsedOverviewSections.gamesPlayed ? (
+                        <>
+                      <p className="mt-1 text-xs text-zinc-400">Search games and add what your server plays.</p>
+                      <Input
+                        value={gameSearchQuery}
+                        onChange={(event) => setGameSearchQuery(event.target.value)}
+                        placeholder="Search game title"
+                        className="mt-2 h-9 border-zinc-700 bg-[#15161a] text-zinc-100 placeholder:text-zinc-500"
+                        disabled={isLoading}
+                      />
+
+                      {gameSuggestions.length > 0 ? (
+                        <div className="mt-2 max-h-32 space-y-1 overflow-y-auto rounded-md border border-zinc-700 bg-[#15161a] p-2">
+                          {gameSuggestions.map((game) => (
+                            <button
+                              key={game}
+                              type="button"
+                              onClick={() => addGame(game)}
+                              className="flex w-full items-center justify-between rounded-md border border-zinc-700 bg-[#23262c] px-2 py-1.5 text-left text-[11px] text-zinc-100 hover:border-indigo-400/50 hover:bg-[#2b2f37]"
+                            >
+                              <span className="truncate">{game}</span>
+                              <span className="ml-2 text-zinc-400">Add</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      {gamesPlayed.length > 0 ? (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {gamesPlayed.map((game) => (
+                            <button
+                              key={game}
+                              type="button"
+                              onClick={() => removeGame(game)}
+                              className="inline-flex items-center gap-1 rounded-full border border-emerald-500/35 bg-emerald-500/15 px-2 py-1 text-[11px] text-emerald-100 hover:bg-emerald-500/25"
+                              title="Remove game"
+                            >
+                              {game}
+                              <X className="h-3 w-3" />
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                      </>
+                      ) : null}
+                    </div>
+
+                    <div className="relative rounded-lg border border-zinc-700/80 bg-[#23262c] p-3">
+                      <p className="text-xs font-bold uppercase tracking-[0.08em] text-zinc-300">Server Privacy</p>
+                      <button
+                        type="button"
+                        onClick={() => toggleOverviewSectionCollapse("privacy")}
+                        className="hidden absolute right-3 top-3 h-5 w-5 rounded text-xs font-bold leading-none text-zinc-300 transition hover:bg-white/10 hover:text-white"
+                        aria-label={`${collapsedOverviewSections.privacy ? "Expand" : "Collapse"} server privacy section`}
+                      >
+                        {collapsedOverviewSections.privacy ? "+" : "-"}
+                      </button>
+                      {!collapsedOverviewSections.privacy ? (
+                        <>
+                          <p className="mt-1 text-xs text-zinc-400">Choose whether invite joins are automatic or require approval.</p>
+                          <select
+                            value={inviteMode}
+                            onChange={(event) =>
+                              form.setValue("inviteMode", event.target.value as "normal" | "approval", {
+                                shouldDirty: true,
+                                shouldValidate: true,
+                              })
+                            }
+                            className="mt-2 h-9 w-full rounded-md border border-zinc-700 bg-[#15161a] px-2 text-sm text-zinc-100 outline-none focus:border-indigo-500"
+                            disabled={isLoading}
+                          >
+                            <option value="normal">Normal (any valid invite can join)</option>
+                            <option value="approval">Private (invite requests require approval)</option>
+                          </select>
+                          <p className="mt-1 text-[11px] text-zinc-500">
+                            {inviteMode === "approval"
+                              ? "New joins are routed to approval-required flow."
+                              : "Invites join immediately when valid."}
+                          </p>
+                        </>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
 
@@ -6008,7 +6492,9 @@ export const EditServerModal = () => {
                           aria-expanded={!isCollapsed}
                         >
                           <span className="truncate">{groupLabel}</span>
-                          {isCollapsed ? <ChevronRight className="h-3.5 w-3.5 shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0" />}
+                          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border border-zinc-600/70 text-[10px] font-bold text-zinc-300">
+                            {isCollapsed ? "+" : "-"}
+                          </span>
                         </button>
 
                         {!isCollapsed && section.items.map((item) => (

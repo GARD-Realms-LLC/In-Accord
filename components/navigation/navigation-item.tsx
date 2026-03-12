@@ -3,6 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import { useMemo, useRef, useState } from "react";
+import type { MouseEvent } from "react";
 
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -16,6 +17,7 @@ interface NavigationItemProps {
   draggable?: boolean;
   onDragStart?: () => void;
   onDragEnd?: () => void;
+  onContextMenu?: (event: MouseEvent<HTMLButtonElement>) => void;
 }
 
 type ServerProfileCard = {
@@ -54,6 +56,7 @@ export const NavigationItem = ({
   draggable = false,
   onDragStart,
   onDragEnd,
+  onContextMenu,
 }: NavigationItemProps) => {
   const SERVER_TAB_DRAG_MIME = "application/x-inaccord-server-tab";
   const params = useParams();
@@ -154,6 +157,7 @@ export const NavigationItem = ({
       <PopoverTrigger asChild>
         <button
           onClick={onClick}
+          onContextMenu={onContextMenu}
           draggable={draggable}
           onDragStart={(event) => {
             if (!draggable) {
@@ -183,17 +187,10 @@ export const NavigationItem = ({
           title={name}
           aria-label={`Open ${name} server`}
         >
-          <span
-            className={cn(
-              "absolute -left-2 h-2 w-1 rounded-r-full bg-white transition-all duration-150",
-              isActiveServer ? "h-8 opacity-100" : "h-2 opacity-0 group-hover:h-5 group-hover:opacity-100"
-            )}
-            aria-hidden
-          />
           <div
             className={cn(
               "relative mx-3 flex h-12 w-12 overflow-hidden rounded-3xl border border-zinc-500/20 bg-[#2b2d31] transition-all duration-150 group-hover:rounded-2xl group-hover:border-[#5865f2]/55",
-              isActiveServer && "rounded-2xl border-[#5865f2]/70 bg-[#5865f2]/20"
+              isActiveServer && "rounded-2xl border-[#5865f2]/80 bg-[#5865f2]/20 ring-2 ring-[#5865f2]/80 ring-offset-2 ring-offset-transparent"
             )}
           >
             {showImage ? (

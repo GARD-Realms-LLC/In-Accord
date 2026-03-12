@@ -54,22 +54,63 @@ export async function GET(_req: Request, { params }: Params) {
     });
 
     const membersResult = await db.execute(sql`
+      with role_ranked as (
+        select
+          a."memberId",
+          r."name" as "roleName",
+          row_number() over (
+            partition by a."memberId"
+            order by r."position" desc, r."name" asc
+          ) as "rn"
+        from "ServerRoleAssignment" a
+        inner join "ServerRole" r on r."id" = a."roleId"
+        where a."serverId" = ${serverId}
+      ),
+      role_counts as (
+        select
+          a."memberId",
+          count(*)::int as "roleCount"
+        from "ServerRoleAssignment" a
+        where a."serverId" = ${serverId}
+        group by a."memberId"
+      ),
+      role_highest as (
+        select
+          rr."memberId",
+          rr."roleName" as "highestRoleName"
+        from role_ranked rr
+        where rr."rn" = 1
+      ),
+      role_assigned as (
+        select distinct
+          a."memberId"
+        from "ServerRoleAssignment" a
+        where a."serverId" = ${serverId}
+          and a."roleId" = ${roleId}
+      )
       select
         m."id" as "memberId",
         m."profileId" as "profileId",
+        nullif(trim(up."profileName"), '') as "profileName",
         coalesce(nullif(trim(up."profileName"), ''), u."name", u."email", m."profileId") as "displayName",
         u."email" as "email",
         coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
-        exists (
-          select 1
-          from "ServerRoleAssignment" a
-          where a."serverId" = ${serverId}
-            and a."roleId" = ${roleId}
-            and a."memberId" = m."id"
-        ) as "isAssigned"
+        m."createdAt" as "memberSince",
+        u."account.created" as "joinedInAccord",
+        case
+          when m."profileId" = s."profileId" then 'Owner Created Server'
+          else 'Invite'
+        end as "joinedMethod",
+        rh."highestRoleName" as "highestRoleName",
+        coalesce(rc."roleCount", 0)::int as "roleCount",
+        (ra."memberId" is not null) as "isAssigned"
       from "Member" m
+      inner join "Server" s on s."id" = m."serverId"
       left join "Users" u on u."userId" = m."profileId"
       left join "UserProfile" up on up."userId" = m."profileId"
+      left join role_counts rc on rc."memberId" = m."id"
+      left join role_highest rh on rh."memberId" = m."id"
+      left join role_assigned ra on ra."memberId" = m."id"
       where m."serverId" = ${serverId}
       order by coalesce(nullif(trim(up."profileName"), ''), u."name", u."email", m."profileId") asc
     `);
@@ -78,13 +119,20 @@ export async function GET(_req: Request, { params }: Params) {
       rows?: Array<{
         memberId: string;
         profileId: string;
+        profileName: string | null;
         displayName: string;
         email: string | null;
         imageUrl: string | null;
+        memberSince: Date | string | null;
+        joinedInAccord: Date | string | null;
+        joinedMethod: string;
+        highestRoleName: string | null;
+        roleCount: number;
         isAssigned: boolean;
       }>;
     }).rows ?? []).map((row) => ({
       ...row,
+      roleCount: Number(row.roleCount ?? 0),
       isAssigned: Boolean(row.isAssigned),
     }));
 

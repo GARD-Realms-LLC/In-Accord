@@ -1,14 +1,13 @@
 import { redirect } from "next/navigation";
-import { and, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 
-import { db, member, server } from "@/lib/db";
+import { channel, db, member, server } from "@/lib/db";
 import { currentProfile } from "@/lib/current-profile";
 import { ServerSidebar } from "@/components/server/server-sidebar";
 import { ServerUserRolesRail } from "@/components/server/server-user-roles-rail";
 import { ServerRouteShell } from "@/components/server/server-route-shell";
 import { ChannelType, MemberRole } from "@/lib/db/types";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
-import { ensureChannelGroupSchema } from "@/lib/channel-groups";
 import { resolveServerRouteContext } from "@/lib/route-slug-resolver";
 import { buildRouteSegment } from "@/lib/route-slugs";
 
@@ -16,7 +15,6 @@ type ChannelRow = {
   id: string;
   name: string;
   type: ChannelType;
-  sortOrder: number | string | null;
 };
 
 type MemberRow = {
@@ -73,18 +71,15 @@ const ServerIdLayout = async ({
   const currentServerName = hasAccess[0].name;
   const isServerOwner = hasAccess[0].ownerProfileId === profile.id;
 
-  await ensureChannelGroupSchema();
-
-  const channelsResult = await db.execute(sql`
-    select
-      c."id" as "id",
-      c."name" as "name",
-      c."type" as "type",
-      c."sortOrder" as "sortOrder"
-    from "Channel" c
-    where c."serverId" = ${serverId}
-    order by c."channelGroupId" asc nulls first, c."sortOrder" asc, c."createdAt" asc
-  `);
+  const channelsResult = await db
+    .select({
+      id: channel.id,
+      name: channel.name,
+      type: channel.type,
+    })
+    .from(channel)
+    .where(eq(channel.serverId, serverId))
+    .orderBy(asc(channel.createdAt));
 
   const membersResult = await db.execute(sql`
     select
@@ -107,7 +102,7 @@ const ServerIdLayout = async ({
       coalesce(u."name", u."email", m."profileId") asc
   `);
 
-  const channelRows = (channelsResult as unknown as { rows: ChannelRow[] }).rows;
+  const channelRows = channelsResult as ChannelRow[];
   const memberRows = (membersResult as unknown as { rows: MemberRow[] }).rows;
 
   const textChannels = channelRows.filter((row) => row.type === ChannelType.TEXT);

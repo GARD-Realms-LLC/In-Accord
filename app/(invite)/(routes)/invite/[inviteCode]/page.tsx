@@ -11,6 +11,7 @@ import {
   recordChannelInviteUse,
   resolveChannelInviteByCode,
 } from "@/lib/channel-invite-store";
+import { isServerInviteApprovalRequired } from "@/lib/server-profile-settings-store";
 import { buildChannelPath, buildServerPath } from "@/lib/route-slugs";
 
 export const dynamic = "force-dynamic";
@@ -49,6 +50,10 @@ const InviteCodePage = async ({ params }: InviteCodeProps) => {
 
   const channelInviteMatch = await resolveChannelInviteByCode(inviteCode);
   if (channelInviteMatch) {
+    if (await isServerInviteApprovalRequired(channelInviteMatch.serverId)) {
+      return redirect(`/invite/invalid?reason=approval-required&code=${encodeURIComponent(inviteCode)}`);
+    }
+
     const isBanned = await isServerIntegrationBotBanned(channelInviteMatch.serverId, profile.id);
     if (isBanned) {
       return redirect(`/invite/invalid?reason=banned&code=${encodeURIComponent(inviteCode)}`);
@@ -97,6 +102,10 @@ const InviteCodePage = async ({ params }: InviteCodeProps) => {
   });
 
   if (inviteServer) {
+    if (await isServerInviteApprovalRequired(inviteServer.id)) {
+      return redirect(`/invite/invalid?reason=approval-required&code=${encodeURIComponent(inviteCode)}`);
+    }
+
     const isBanned = await isServerIntegrationBotBanned(inviteServer.id, profile.id);
     if (isBanned) {
       return redirect(`/invite/invalid?reason=banned&code=${encodeURIComponent(inviteCode)}`);

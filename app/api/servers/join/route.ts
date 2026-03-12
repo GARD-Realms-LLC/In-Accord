@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from "uuid";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db, member, MemberRole, server } from "@/lib/db";
+import { isServerInviteApprovalRequired } from "@/lib/server-profile-settings-store";
 
 export async function POST(request: Request) {
   try {
@@ -28,6 +29,16 @@ export async function POST(request: Request) {
 
     if (!targetServer) {
       return new NextResponse("Server not found", { status: 404 });
+    }
+
+    if (await isServerInviteApprovalRequired(serverId)) {
+      return NextResponse.json(
+        {
+          error: "This server is private. Join requests require approval from the server owner.",
+          requiresApproval: true,
+        },
+        { status: 403 }
+      );
     }
 
     const existingMember = await db.query.member.findFirst({

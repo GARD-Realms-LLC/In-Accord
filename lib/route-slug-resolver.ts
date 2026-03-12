@@ -5,6 +5,12 @@ import { buildRouteSegment, matchesRouteParam } from "@/lib/route-slugs";
 
 type ServerCandidate = { id: string; name: string };
 type ChannelCandidate = { id: string; name: string };
+type ProfileChannelCandidate = {
+  channelId: string;
+  channelName: string;
+  serverId: string;
+  serverName: string;
+};
 const safeDecode = (value: string) => {
   try {
     return decodeURIComponent(value);
@@ -103,5 +109,77 @@ export async function resolveChannelRouteContext(input: {
     id: match.id,
     name: match.name,
     segment: buildRouteSegment(match.name, match.id),
+  };
+}
+
+export async function resolveChannelRouteContextForProfile(input: {
+  profileId: string;
+  channelParam: string;
+}): Promise<{
+  channelId: string;
+  channelName: string;
+  channelSegment: string;
+  serverId: string;
+  serverName: string;
+  serverSegment: string;
+} | null> {
+  const normalizedParam = safeDecode(String(input.channelParam ?? "").trim());
+  if (!normalizedParam) {
+    return null;
+  }
+
+  const direct = await db
+    .select({
+      channelId: channel.id,
+      channelName: channel.name,
+      serverId: server.id,
+      serverName: server.name,
+    })
+    .from(channel)
+    .innerJoin(server, eq(server.id, channel.serverId))
+    .innerJoin(member, and(eq(member.serverId, channel.serverId), eq(member.profileId, input.profileId)))
+    .where(eq(channel.id, normalizedParam))
+    .limit(1);
+
+  if (direct[0]) {
+    return {
+      channelId: direct[0].channelId,
+      channelName: direct[0].channelName,
+      channelSegment: buildRouteSegment(direct[0].channelName, direct[0].channelId),
+      serverId: direct[0].serverId,
+      serverName: direct[0].serverName,
+      serverSegment: buildRouteSegment(direct[0].serverName, direct[0].serverId),
+    };
+  }
+
+  const candidates = await db
+    .select({
+      channelId: channel.id,
+      channelName: channel.name,
+      serverId: server.id,
+      serverName: server.name,
+    })
+    .from(channel)
+    .innerJoin(server, eq(server.id, channel.serverId))
+    .innerJoin(member, and(eq(member.serverId, channel.serverId), eq(member.profileId, input.profileId)));
+
+  const match = (candidates as ProfileChannelCandidate[]).find((item) =>
+    matchesRouteParam(normalizedParam, {
+      id: item.channelId,
+      name: item.channelName,
+    })
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  return {
+    channelId: match.channelId,
+    channelName: match.channelName,
+    channelSegment: buildRouteSegment(match.channelName, match.channelId),
+    serverId: match.serverId,
+    serverName: match.serverName,
+    serverSegment: buildRouteSegment(match.serverName, match.serverId),
   };
 }

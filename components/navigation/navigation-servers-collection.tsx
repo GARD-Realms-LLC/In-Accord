@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Folder, FolderOpen, Trash2 } from "lucide-react";
+import type { MouseEvent } from "react";
+import { useRouter } from "next/navigation";
+import { Trash2 } from "lucide-react";
 
 import { NavigationItem } from "@/components/navigation/navigation-item";
 import { NavigationOpenTabsButton } from "@/components/navigation/navigation-open-tabs-button";
@@ -35,6 +37,20 @@ type NavigationServersCollectionProps = {
   joinedServers: ServerEntry[];
   fallbackServerId?: string;
 };
+
+type RailContextMenuState =
+  | {
+      kind: "server";
+      x: number;
+      y: number;
+      serverId: string;
+    }
+  | {
+      kind: "folder";
+      x: number;
+      y: number;
+      folderId: string;
+    };
 
 const safeParseFolders = (raw: string | null): ServerFolder[] => {
   if (!raw) {
@@ -112,6 +128,7 @@ export const NavigationServersCollection = ({
   joinedServers,
   fallbackServerId,
 }: NavigationServersCollectionProps) => {
+  const router = useRouter();
   const { onOpen } = useModal();
   const [folders, setFolders] = useState<ServerFolder[]>([]);
   const [isFoldersLoaded, setIsFoldersLoaded] = useState(false);
@@ -124,6 +141,7 @@ export const NavigationServersCollection = ({
   const [draggedServerId, setDraggedServerId] = useState<string | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [dragOverServerId, setDragOverServerId] = useState<string | null>(null);
+  const [railContextMenu, setRailContextMenu] = useState<RailContextMenuState | null>(null);
   const hasLocalFolderEdits = useRef(false);
   const lastAppliedLayoutSignature = useRef<string>("[]");
 
@@ -452,6 +470,51 @@ export const NavigationServersCollection = ({
     closeEditFolderPopup();
   };
 
+  const openServerContextMenu = (event: MouseEvent, serverId: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setRailContextMenu({
+      kind: "server",
+      x: event.clientX,
+      y: event.clientY,
+      serverId,
+    });
+  };
+
+  const openFolderContextMenu = (event: MouseEvent, folderId: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setRailContextMenu({
+      kind: "folder",
+      x: event.clientX,
+      y: event.clientY,
+      folderId,
+    });
+  };
+
+  useEffect(() => {
+    if (!railContextMenu) {
+      return;
+    }
+
+    const onDismiss = () => setRailContextMenu(null);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setRailContextMenu(null);
+      }
+    };
+
+    document.addEventListener("pointerdown", onDismiss);
+    document.addEventListener("scroll", onDismiss, true);
+    document.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", onDismiss);
+      document.removeEventListener("scroll", onDismiss, true);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [railContextMenu]);
+
   const renderServerItem = (server: ServerEntry) => (
     <div
       key={server.id}
@@ -488,6 +551,7 @@ export const NavigationServersCollection = ({
         name={server.name}
         imageUrl={server.imageUrl}
         updatedAt={server.updatedAt}
+        onContextMenu={(event) => openServerContextMenu(event, server.id)}
         draggable
         onDragStart={() => setDraggedServerId(server.id)}
         onDragEnd={() => {
@@ -612,101 +676,147 @@ export const NavigationServersCollection = ({
             const previewServers = containedServers.slice(0, 4);
 
             return (
-              <div key={folder.id} className="w-full">
-                <button
-                  type="button"
-                  onClick={() => setExpandedFolderId((prev) => (prev === folder.id ? null : folder.id))}
-                  onDoubleClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    openEditFolderPopup(folder);
-                  }}
-                  onDragOver={(event) => {
-                    const activeDraggedServerId = resolveDraggedServerId(event, draggedServerId);
-                    if (!activeDraggedServerId) {
-                      return;
-                    }
-                    event.preventDefault();
-                    setDragOverFolderId(folder.id);
-                  }}
-                  onDragLeave={() => {
-                    if (dragOverFolderId === folder.id) {
-                      setDragOverFolderId(null);
-                    }
-                  }}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    const activeDraggedServerId = resolveDraggedServerId(event, draggedServerId);
-                    if (activeDraggedServerId) {
-                      assignServerToFolder(activeDraggedServerId, folder.id);
-                    }
-                    setDragOverFolderId(null);
-                    setDragOverServerId(null);
-                  }}
-                  className={`relative mx-auto flex h-14 w-20 items-center justify-center overflow-hidden rounded-[10px] border transition-all ${
-                    dragOverFolderId === folder.id
-                      ? "border-emerald-400 bg-emerald-500/20 ring-2 ring-emerald-400/40"
-                      : "border-zinc-300 bg-zinc-200 hover:border-primary/50 hover:ring-2 hover:ring-primary/25 dark:border-zinc-600 dark:bg-zinc-700"
-                  }`}
-                  title={`${folder.name} (${folder.serverIds.length})`}
-                  aria-label={`${folder.name} folder`}
-                >
-                  {previewServers.length > 0 ? (
-                    <div className="grid h-full w-full grid-cols-2 gap-0.5 overflow-hidden p-1 pb-4">
-                      {previewServers.map((server) => {
-                        const normalizedImageUrl = String(server.imageUrl ?? "").trim();
-                        const showImage =
-                          normalizedImageUrl.length > 0 &&
-                          normalizedImageUrl !== "/in-accord-steampunk-logo.png";
-                        const initials = (server.name?.trim()?.[0] ?? "S").toUpperCase();
-
-                        return (
-                          <div
-                            key={`preview-${folder.id}-${server.id}`}
-                            className="flex h-full w-full items-center justify-center overflow-hidden rounded-[4px] bg-zinc-700 text-[9px] font-bold text-white"
-                          >
-                            {showImage ? (
-                              <img
-                                src={normalizedImageUrl}
-                                alt={server.name}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <span>{initials}</span>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : isExpanded ? (
-                    <FolderOpen className="mb-3 h-5 w-5 text-zinc-700 dark:text-zinc-100" />
-                  ) : (
-                    <Folder className="mb-3 h-5 w-5 text-zinc-700 dark:text-zinc-100" />
-                  )}
-
+              <div key={folder.id} className="flex w-full justify-center">
+                {isExpanded ? (
                   <div
-                    className={`absolute inset-x-0 bottom-0 flex h-[5%] min-h-3.5 items-center justify-center border-t px-1 backdrop-blur-[1px] ${
+                    onDragOver={(event) => {
+                      const activeDraggedServerId = resolveDraggedServerId(event, draggedServerId);
+                      if (!activeDraggedServerId) {
+                        return;
+                      }
+                      event.preventDefault();
+                      setDragOverFolderId(folder.id);
+                    }}
+                    onDragLeave={() => {
+                      if (dragOverFolderId === folder.id) {
+                        setDragOverFolderId(null);
+                      }
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      const activeDraggedServerId = resolveDraggedServerId(event, draggedServerId);
+                      if (activeDraggedServerId) {
+                        assignServerToFolder(activeDraggedServerId, folder.id);
+                      }
+                      setDragOverFolderId(null);
+                      setDragOverServerId(null);
+                    }}
+                    className={`w-20 rounded-xl border px-2 py-2 transition-all ${
                       dragOverFolderId === folder.id
-                        ? "border-emerald-300/50 bg-emerald-500/20"
-                        : "border-zinc-500/20 bg-zinc-900/40"
+                        ? "border-emerald-400 bg-emerald-500/15 ring-2 ring-emerald-400/35"
+                        : "border-zinc-300/70 bg-zinc-100/60 dark:border-zinc-700 dark:bg-zinc-800/60"
                     }`}
                   >
-                    <span className="truncate text-[9px] font-semibold uppercase tracking-[0.05em] text-zinc-100">
-                      {folder.name}
-                    </span>
-                  </div>
-                </button>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedFolderId(null)}
+                      onContextMenu={(event) => openFolderContextMenu(event, folder.id)}
+                      onDoubleClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        openEditFolderPopup(folder);
+                      }}
+                      className="mx-auto flex w-full items-center justify-center gap-1.5 rounded-md border border-zinc-300/70 bg-zinc-200/80 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.05em] text-zinc-800 transition hover:bg-zinc-200 dark:border-zinc-600 dark:bg-zinc-700/80 dark:text-zinc-100 dark:hover:bg-zinc-700"
+                      title={`${folder.name} (${folder.serverIds.length})`}
+                      aria-label={`${folder.name} folder`}
+                    >
+                      <span className="truncate">{folder.name}</span>
+                    </button>
 
-                {isExpanded && containedServers.length > 0 ? (
-                  <div className="mt-2 flex flex-col items-center gap-3">
-                    {containedServers.map((server) => (
-                      <div key={`folder-${folder.id}-${server.id}`} className="flex justify-center">
-                        {renderServerItem(server)}
+                    {containedServers.length > 0 ? (
+                      <div className="mt-2 flex flex-col items-center gap-2.5">
+                        {containedServers.map((server) => (
+                          <div key={`folder-${folder.id}-${server.id}`} className="flex origin-center justify-center scale-92">
+                            {renderServerItem(server)}
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    ) : null}
                   </div>
-                ) : null}
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setExpandedFolderId(folder.id)}
+                    onContextMenu={(event) => openFolderContextMenu(event, folder.id)}
+                    onDoubleClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      openEditFolderPopup(folder);
+                    }}
+                    onDragOver={(event) => {
+                      const activeDraggedServerId = resolveDraggedServerId(event, draggedServerId);
+                      if (!activeDraggedServerId) {
+                        return;
+                      }
+                      event.preventDefault();
+                      setDragOverFolderId(folder.id);
+                    }}
+                    onDragLeave={() => {
+                      if (dragOverFolderId === folder.id) {
+                        setDragOverFolderId(null);
+                      }
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      const activeDraggedServerId = resolveDraggedServerId(event, draggedServerId);
+                      if (activeDraggedServerId) {
+                        assignServerToFolder(activeDraggedServerId, folder.id);
+                      }
+                      setDragOverFolderId(null);
+                      setDragOverServerId(null);
+                    }}
+                    className={`relative mx-auto flex h-10 w-20 items-center justify-center overflow-hidden rounded-[10px] border transition-all ${
+                      dragOverFolderId === folder.id
+                        ? "border-emerald-400 bg-emerald-500/20 ring-2 ring-emerald-400/40"
+                        : "border-zinc-300 bg-zinc-200 hover:border-primary/50 hover:ring-2 hover:ring-primary/25 dark:border-zinc-600 dark:bg-zinc-700"
+                    }`}
+                    title={`${folder.name} (${folder.serverIds.length})`}
+                    aria-label={`${folder.name} folder`}
+                  >
+                    {previewServers.length > 0 ? (
+                      <div className="grid h-full w-full grid-cols-2 gap-0.5 overflow-hidden p-1 pb-4">
+                        {previewServers.map((server) => {
+                          const normalizedImageUrl = String(server.imageUrl ?? "").trim();
+                          const showImage =
+                            normalizedImageUrl.length > 0 &&
+                            normalizedImageUrl !== "/in-accord-steampunk-logo.png";
+                          const initials = (server.name?.trim()?.[0] ?? "S").toUpperCase();
+
+                          return (
+                            <div
+                              key={`preview-${folder.id}-${server.id}`}
+                              className="flex h-full w-full items-center justify-center overflow-hidden rounded-[4px] bg-zinc-700 text-[9px] font-bold text-white"
+                            >
+                              {showImage ? (
+                                <img
+                                  src={normalizedImageUrl}
+                                  alt={server.name}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <span>{initials}</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+
+                    <div
+                      className={`absolute inset-x-0 bottom-0 flex h-[5%] min-h-3.5 items-center justify-center border-t px-0.5 backdrop-blur-[1px] ${
+                        dragOverFolderId === folder.id
+                          ? "border-emerald-300/50 bg-emerald-500/20"
+                          : "border-zinc-500/20 bg-zinc-900/40"
+                      }`}
+                    >
+                      <span className="max-w-18 truncate text-[9px] font-semibold uppercase tracking-[0.04em] text-zinc-100">
+                        {folder.name}
+                      </span>
+                    </div>
+                  </button>
+                )}
               </div>
             );
           })}
@@ -744,6 +854,88 @@ export const NavigationServersCollection = ({
       {joinedServers.length === 0 ? (
         <div className="mb-2 text-center text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
           JOINED - 0
+        </div>
+      ) : null}
+
+      {railContextMenu ? (
+        <div
+          className="fixed z-120 min-w-42 rounded-md border border-zinc-700 bg-[#1f2125] p-1 shadow-2xl shadow-black/70"
+          style={{
+            left: railContextMenu.x,
+            top: railContextMenu.y,
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          {railContextMenu.kind === "server" ? (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  const targetServer = allServerMap.get(railContextMenu.serverId);
+                  if (targetServer) {
+                    router.push(`/servers/${encodeURIComponent(targetServer.id)}`);
+                  }
+                  setRailContextMenu(null);
+                }}
+                className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs text-zinc-100 transition hover:bg-white/10"
+              >
+                Open Server
+              </button>
+              {findFolderIdByServer(railContextMenu.serverId, folders) ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    ungroupServer(railContextMenu.serverId);
+                    setRailContextMenu(null);
+                  }}
+                  className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs text-zinc-100 transition hover:bg-white/10"
+                >
+                  Remove from Folder
+                </button>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setExpandedFolderId((previous) =>
+                    previous === railContextMenu.folderId ? null : railContextMenu.folderId
+                  );
+                  setRailContextMenu(null);
+                }}
+                className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs text-zinc-100 transition hover:bg-white/10"
+              >
+                {expandedFolderId === railContextMenu.folderId ? "Collapse Folder" : "Expand Folder"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const folder = folders.find((entry) => entry.id === railContextMenu.folderId);
+                  if (folder) {
+                    openEditFolderPopup(folder);
+                  }
+                  setRailContextMenu(null);
+                }}
+                className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs text-zinc-100 transition hover:bg-white/10"
+              >
+                Rename Folder
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const folder = folders.find((entry) => entry.id === railContextMenu.folderId);
+                  if (folder) {
+                    openEditFolderPopup(folder);
+                  }
+                  setRailContextMenu(null);
+                }}
+                className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs text-rose-300 transition hover:bg-rose-500/15"
+              >
+                Delete Folder
+              </button>
+            </>
+          )}
         </div>
       ) : null}
     </div>

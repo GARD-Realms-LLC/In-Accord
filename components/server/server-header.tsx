@@ -92,17 +92,18 @@ export const ServerHeader = ({ server, role, isServerOwner = false }: ServerHead
         <div className="absolute inset-0 bg-[#1f2023]" />
       )}
 
-      <div className="absolute left-0 right-0 top-0 z-10 grid h-11 grid-cols-[0.75rem_minmax(0,1fr)_0.75rem] items-center gap-0.5 bg-transparent px-0.5 text-white">
-        <div className="relative z-10 flex h-4 w-4 items-center justify-center">
+      <div className="absolute left-0 right-0 top-0 z-10 flex h-11 items-center gap-1 bg-transparent px-1.5 text-white">
+        <div className="relative z-10 flex h-5 w-5 shrink-0 items-center justify-center">
           <Star className="h-4 w-4 text-zinc-100" />
         </div>
 
+        <div className="min-w-0 flex-1">
         <DropdownMenu>
           <DropdownMenuTrigger className="focus:outline-none" asChild>
             <button
-              className="z-10 flex h-8 w-full items-center justify-center gap-2 rounded-md bg-black/20 px-3 py-1 text-sm font-semibold transition hover:bg-black/35"
+              className="z-10 flex h-8 w-full items-center justify-between gap-1 rounded-md bg-black/20 px-2 py-1 text-sm font-semibold transition hover:bg-black/35"
             >
-              <span className="truncate">{server.name}</span>
+              <span className="min-w-0 flex-1 truncate text-left">{server.name}</span>
               <ChevronDown className="h-4 w-4 shrink-0" />
             </button>
           </DropdownMenuTrigger>
@@ -198,19 +199,20 @@ export const ServerHeader = ({ server, role, isServerOwner = false }: ServerHead
             )}
           </DropdownMenuContent>
         </DropdownMenu>
+        </div>
 
         {isModerator && (
           <button
             type="button"
             onClick={() => onOpen("invite", { server })}
-            className="relative z-10 inline-flex h-4 w-4 items-center justify-center rounded-md bg-black/20 text-zinc-100 transition hover:bg-black/35"
+            className="relative z-10 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-black/20 text-zinc-100 transition hover:bg-black/35"
             title="Invite People"
             aria-label="Invite People"
           >
             <UserPlus className="h-4 w-4" />
           </button>
         )}
-        {!isModerator && <div className="h-4 w-4" />}
+        {!isModerator && <div className="h-5 w-5 shrink-0" />}
       </div>
     </div>
   );

@@ -16,7 +16,7 @@ import { MeetingPopbackListener } from "@/components/server/meeting-popback-list
 import { MeetingParticipantsRail } from "@/components/server/meeting-participants-rail";
 // import { MediaRoom } from "@/components/media-room";
 import { channel, db, member, message, server } from "@/lib/db";
-import { computeChannelPermissionForRole } from "@/lib/channel-permissions";
+import { computeChannelPermissionForRole, visibleChannelIdsForRole } from "@/lib/channel-permissions";
 import { resolveMemberContext } from "@/lib/channel-permissions";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 import { getUserProfileNameMap } from "@/lib/user-profile";
@@ -24,7 +24,7 @@ import type { Profile } from "@/lib/db/types";
 import { listThreadsForMessages } from "@/lib/channel-threads";
 import { listActiveVoiceMembersForChannel, pruneStaleVoiceStates } from "@/lib/voice-states";
 import { resolveChannelRouteContext, resolveServerRouteContext } from "@/lib/route-slug-resolver";
-import { buildChannelPath } from "@/lib/route-slugs";
+import { buildChannelPath, buildServerPath } from "@/lib/route-slugs";
 
 interface ChannelIdPageProps {
   params: Promise<{
@@ -60,6 +60,54 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
   }
 
   const serverId = resolvedServer.id;
+  const serverPath = buildServerPath({ id: resolvedServer.id, name: resolvedServer.name });
+
+  const currentMember = await db.query.member.findFirst({
+    where: and(
+      eq(member.serverId, serverId),
+      eq(member.profileId, profile.id)
+    ),
+  });
+
+  if (!currentMember) {
+    redirect("/");
+  }
+
+  const serverOwner = await db
+    .select({ id: server.id })
+    .from(server)
+    .where(and(eq(server.id, serverId), eq(server.profileId, profile.id)))
+    .limit(1);
+
+  const resolveDefaultVisibleChannelPath = async () => {
+    const channels = await db
+      .select({ id: channel.id, name: channel.name, type: channel.type, createdAt: channel.createdAt })
+      .from(channel)
+      .where(eq(channel.serverId, serverId))
+      .orderBy(asc(channel.createdAt));
+
+    const visibleIds = await visibleChannelIdsForRole({
+      serverId,
+      role: currentMember.role,
+      isServerOwner: !!serverOwner[0],
+      channelIds: channels.map((item) => item.id),
+    });
+
+    const visibleChannels = channels.filter((item) => visibleIds.has(item.id));
+    const defaultChannel =
+      visibleChannels.find((item) => item.type === ChannelType.TEXT) ??
+      visibleChannels[0] ??
+      null;
+
+    if (!defaultChannel) {
+      return null;
+    }
+
+    return buildChannelPath({
+      server: { id: serverId, name: resolvedServer.name },
+      channel: { id: defaultChannel.id, name: defaultChannel.name },
+    });
+  };
 
   const resolvedChannel = await resolveChannelRouteContext({
     serverId,
@@ -67,7 +115,8 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
   });
 
   if (!resolvedChannel) {
-    redirect(`/servers/${resolvedServer.segment}`);
+    const defaultChannelPath = await resolveDefaultVisibleChannelPath();
+    redirect(defaultChannelPath ?? serverPath);
   }
 
   const channelId = resolvedChannel.id;
@@ -82,14 +131,7 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
     where: and(eq(channel.id, channelId), eq(channel.serverId, serverId)),
   });
 
-  const currentMember = await db.query.member.findFirst({
-    where: and(
-      eq(member.serverId, serverId),
-      eq(member.profileId, profile.id)
-    ),
-  });
-
-  if (!currentChannel || !currentMember) {
+  if (!currentChannel) {
     redirect("/");
   }
 
@@ -98,17 +140,7 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
   const isMediaChannel =
     currentChannel.type === ChannelType.AUDIO || currentChannel.type === ChannelType.VIDEO;
 
-  const topicResult = await db.execute(sql`
-    select "topic"
-    from "ChannelTopic"
-    where "channelId" = ${currentChannel.id}
-      and "serverId" = ${currentChannel.serverId}
-    limit 1
-  `);
-
-  const channelTopic = (topicResult as unknown as {
-    rows?: Array<{ topic: string | null }>;
-  }).rows?.[0]?.topic ?? null;
+  const channelTopic = null;
 
   const memberContext = await resolveMemberContext({
     profileId: profile.id,
@@ -142,7 +174,8 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
     : [];
 
   if (!channelPermissions.allowView) {
-    redirect(`/servers/${resolvedServer.segment}`);
+    const defaultChannelPath = await resolveDefaultVisibleChannelPath();
+    redirect(defaultChannelPath ?? serverPath);
   }
 
   const canonicalChannelPath = buildChannelPath({

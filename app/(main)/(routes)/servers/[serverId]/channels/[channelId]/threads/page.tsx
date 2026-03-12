@@ -10,7 +10,7 @@ import {
   ensureChannelThreadSchema,
 } from "@/lib/channel-threads";
 import { resolveChannelRouteContext, resolveServerRouteContext } from "@/lib/route-slug-resolver";
-import { buildChannelPath, buildThreadPath } from "@/lib/route-slugs";
+import { buildChannelPath, buildServerPath, buildThreadPath } from "@/lib/route-slugs";
 
 type ThreadRow = {
   id: string;
@@ -58,7 +58,7 @@ const ChannelThreadsPage = async ({ params }: ChannelThreadsPageProps) => {
   });
 
   if (!resolvedChannel) {
-    return redirect(`/servers/${resolvedServer.segment}`);
+    return redirect(buildServerPath({ id: resolvedServer.id, name: resolvedServer.name }));
   }
 
   const channelId = resolvedChannel.id;
@@ -70,7 +70,7 @@ const ChannelThreadsPage = async ({ params }: ChannelThreadsPageProps) => {
   });
 
   if (!currentChannel) {
-    return redirect(`/servers/${resolvedServer.segment}`);
+    return redirect(buildServerPath({ id: resolvedServer.id, name: resolvedServer.name }));
   }
 
   const access = await canAccessChannelAsProfile({
@@ -80,7 +80,7 @@ const ChannelThreadsPage = async ({ params }: ChannelThreadsPageProps) => {
   });
 
   if (!access.allowed) {
-    return redirect(`/servers/${resolvedServer.segment}`);
+    return redirect(buildServerPath({ id: resolvedServer.id, name: resolvedServer.name }));
   }
 
   const channelPath = buildChannelPath({

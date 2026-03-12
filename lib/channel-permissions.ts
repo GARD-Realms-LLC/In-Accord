@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { db, member, server } from "@/lib/db";
 import { MemberRole } from "@/lib/db/types";
@@ -18,46 +18,6 @@ type PermissionRow = {
   allowConnect: boolean | null;
 };
 
-let channelPermissionSchemaReady = false;
-
-export const ensureChannelPermissionSchema = async () => {
-  if (channelPermissionSchemaReady) {
-    return;
-  }
-
-  await db.execute(sql`
-    create table if not exists "ChannelPermission" (
-      "id" varchar(191) primary key,
-      "serverId" varchar(191) not null,
-      "channelId" varchar(191) not null,
-      "targetType" varchar(32) not null,
-      "targetId" varchar(191) not null,
-      "allowView" boolean,
-      "allowSend" boolean,
-      "allowConnect" boolean,
-      "createdAt" timestamp not null,
-      "updatedAt" timestamp not null
-    )
-  `);
-
-  await db.execute(sql`
-    create index if not exists "ChannelPermission_serverId_idx"
-    on "ChannelPermission" ("serverId")
-  `);
-
-  await db.execute(sql`
-    create index if not exists "ChannelPermission_channelId_idx"
-    on "ChannelPermission" ("channelId")
-  `);
-
-  await db.execute(sql`
-    create unique index if not exists "ChannelPermission_unique_target_per_channel"
-    on "ChannelPermission" ("channelId", "targetType", "targetId")
-  `);
-
-  channelPermissionSchemaReady = true;
-};
-
 const defaultPermissions: ChannelPermissionSet = {
   allowView: true,
   allowSend: true,
@@ -73,8 +33,6 @@ const rolePermissionRows = async ({
   role: MemberRole;
   channelId?: string;
 }) => {
-  await ensureChannelPermissionSchema();
-
   const channelFilter = channelId
     ? sql`and cp."channelId" = ${channelId}`
     : sql``;
@@ -194,8 +152,6 @@ export const channelRolePermissionMatrix = async ({
   serverId: string;
   channelId: string;
 }) => {
-  await ensureChannelPermissionSchema();
-
   const rowsResult = await db.execute(sql`
     select
       cp."targetId" as "targetId",
@@ -253,8 +209,6 @@ export const upsertChannelRolePermissions = async ({
   channelId: string;
   permissions: Record<MemberRole, ChannelPermissionSet>;
 }) => {
-  await ensureChannelPermissionSchema();
-
   const now = new Date();
 
   await db.transaction(async (tx) => {

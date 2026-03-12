@@ -20,7 +20,7 @@ import { extractQuotedContent } from "@/lib/message-quotes";
 import { ThreadToolbar } from "@/components/chat/thread-toolbar";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 import { resolveChannelRouteContext, resolveServerRouteContext } from "@/lib/route-slug-resolver";
-import { buildChannelPath } from "@/lib/route-slugs";
+import { buildChannelPath, buildServerPath } from "@/lib/route-slugs";
 
 interface ThreadPageProps {
   params: Promise<{
@@ -58,7 +58,7 @@ const ThreadPage = async ({ params }: ThreadPageProps) => {
   });
 
   if (!resolvedChannel) {
-    return redirect(`/servers/${resolvedServer.segment}`);
+    return redirect(buildServerPath({ id: resolvedServer.id, name: resolvedServer.name }));
   }
 
   const channelId = resolvedChannel.id;
@@ -74,7 +74,7 @@ const ThreadPage = async ({ params }: ThreadPageProps) => {
   });
 
   if (!currentChannel) {
-    return redirect(`/servers/${resolvedServer.segment}`);
+    return redirect(buildServerPath({ id: resolvedServer.id, name: resolvedServer.name }));
   }
 
   const access = await canAccessChannelAsProfile({
@@ -89,7 +89,7 @@ const ThreadPage = async ({ params }: ThreadPageProps) => {
   });
 
   if (!access.allowed || !access.currentMember) {
-    return redirect(`/servers/${resolvedServer.segment}`);
+    return redirect(buildServerPath({ id: resolvedServer.id, name: resolvedServer.name }));
   }
 
   const threadResult = await db.execute(sql`

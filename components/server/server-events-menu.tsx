@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { BookOpen, CalendarDays, Gem, Link2, ScrollText, Users, Video } from "lucide-react";
 import { type Channel } from "@/lib/db/types";
 
@@ -27,6 +28,7 @@ export const ServerEventsMenu = ({
   rulesChannel = null,
 }: Props) => {
   const { onOpen, isOpen, type, data } = useModal();
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const isActive = isOpen && type === "serverEvents" && String(data.server?.id ?? "") === server.id;
   const isGuideActive = isOpen && type === "aergerGuide" && String(data.server?.id ?? "") === server.id;
   const isInvitesActive = isOpen && type === "invite" && String(data.server?.id ?? "") === server.id;
@@ -47,6 +49,16 @@ export const ServerEventsMenu = ({
   return (
     <div className="mt-3">
       <div className="space-y-0.5 rounded-xl border border-black/20 bg-black/10 p-1.5 dark:border-white/10 dark:bg-black/20">
+      <div className="mb-1 flex items-center justify-end">
+        <button
+          type="button"
+          onClick={() => setIsCollapsed((previous) => !previous)}
+          className="inline-flex h-4.5 w-4.5 items-center justify-center rounded border border-zinc-600/70 text-[10px] font-bold text-zinc-300 transition hover:bg-white/10 hover:text-white"
+          aria-label={isCollapsed ? "Expand server quick links" : "Collapse server quick links"}
+        >
+          -
+        </button>
+      </div>
       <button
         type="button"
         onClick={() => onOpen("serverRules", { server, channel: rulesChannel ?? undefined })}
@@ -67,6 +79,8 @@ export const ServerEventsMenu = ({
         </span>
       </button>
 
+      {!isCollapsed ? (
+        <>
       <button
         type="button"
         onClick={() => onOpen("aergerGuide", { server })}
@@ -201,6 +215,8 @@ export const ServerEventsMenu = ({
           {stageJoinedCount}
         </span>
       </button>
+        </>
+      ) : null}
 
       </div>
     </div>

@@ -9,7 +9,7 @@ import { pruneStaleVoiceStates, listActiveVoiceMembersForChannel } from "@/lib/v
 import { VoiceStateSession } from "@/components/server/voice-state-session";
 import { VideoChannelMeetingPanel } from "@/components/server/video-channel-meeting-panel";
 import { resolveChannelRouteContext, resolveServerRouteContext } from "@/lib/route-slug-resolver";
-import { buildChannelPath } from "@/lib/route-slugs";
+import { buildChannelPath, buildServerPath } from "@/lib/route-slugs";
 
 type MeetingPopoutPageProps = {
   params: Promise<{
@@ -47,7 +47,7 @@ const MeetingPopoutPage = async ({ params, searchParams }: MeetingPopoutPageProp
   });
 
   if (!resolvedChannel) {
-    return redirect(`/servers/${resolvedServer.segment}`);
+    return redirect(buildServerPath({ id: resolvedServer.id, name: resolvedServer.name }));
   }
 
   const channelId = resolvedChannel.id;
@@ -92,7 +92,7 @@ const MeetingPopoutPage = async ({ params, searchParams }: MeetingPopoutPageProp
   });
 
   if (!channelPermissions.allowView) {
-    return redirect(`/servers/${resolvedServer.segment}`);
+    return redirect(buildServerPath({ id: resolvedServer.id, name: resolvedServer.name }));
   }
 
   const isLiveSessionRequested = String(resolvedSearchParams?.live ?? "true").toLowerCase() === "true";

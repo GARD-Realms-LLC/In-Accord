@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { and, asc, eq } from "drizzle-orm";
-import { v4 as uuidv4 } from "uuid";
 
 import { currentProfile } from "@/lib/current-profile";
 import { channel, ChannelType, db, member, server } from "@/lib/db";
@@ -67,34 +66,11 @@ const ServerIdPage = async ({ params }: ServerIdPageProps) => {
     .where(and(eq(server.id, serverId), eq(server.profileId, profile.id)))
     .limit(1);
 
-  let serverChannels = await db
-    .select({ id: channel.id, name: channel.name, createdAt: channel.createdAt })
+  const serverChannels = await db
+    .select({ id: channel.id, name: channel.name, type: channel.type, createdAt: channel.createdAt })
     .from(channel)
     .where(eq(channel.serverId, serverId))
     .orderBy(asc(channel.createdAt));
-
-  if (serverChannels.length === 0) {
-    const now = new Date();
-    const fallbackChannelId = uuidv4();
-
-    await db.insert(channel).values({
-      id: fallbackChannelId,
-      name: "general",
-      type: ChannelType.TEXT,
-      profileId: profile.id,
-      serverId,
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    serverChannels = [
-      {
-        id: fallbackChannelId,
-        name: "general",
-        createdAt: now,
-      },
-    ];
-  }
 
   const visibleIds = await visibleChannelIdsForRole({
     serverId,
@@ -105,7 +81,9 @@ const ServerIdPage = async ({ params }: ServerIdPageProps) => {
 
   const visibleChannels = serverChannels.filter((item) => visibleIds.has(item.id));
   const initialChannel =
-    visibleChannels.find((item) => item.name === "general") ?? visibleChannels[0] ?? null;
+    visibleChannels.find((item) => item.type === ChannelType.TEXT) ??
+    visibleChannels[0] ??
+    null;
 
   if (!initialChannel?.id) {
     return redirect("/");

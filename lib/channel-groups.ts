@@ -2,6 +2,8 @@ import { sql } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { db } from "@/lib/db";
 
+let channelGroupSchemaReady = false;
+
 type MediaChannelType = "AUDIO" | "VIDEO";
 
 const MEDIA_GROUP_CONFIG: Record<
@@ -19,9 +21,17 @@ const MEDIA_GROUP_CONFIG: Record<
 };
 
 export const ensureChannelGroupSchema = async () => {
+  if (channelGroupSchemaReady) {
+    return;
+  }
+
   await db.execute(sql`select pg_advisory_lock(hashtext('ensure_channel_group_schema_v1'))`);
 
   try {
+    if (channelGroupSchemaReady) {
+      return;
+    }
+
     await db.execute(sql`
       create table if not exists "ChannelGroup" (
         "id" varchar(191) primary key,
@@ -174,6 +184,8 @@ export const ensureChannelGroupSchema = async () => {
         lower(trim(coalesce("name", '')))
       )
     `);
+
+    channelGroupSchemaReady = true;
   } finally {
     await db.execute(sql`select pg_advisory_unlock(hashtext('ensure_channel_group_schema_v1'))`);
   }

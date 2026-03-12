@@ -5,7 +5,53 @@ import { currentProfile } from "@/lib/current-profile";
 import { db, server } from "@/lib/db";
 import { emitInAccordSystemEvent } from "@/lib/in-accord-event-system";
 import { getServerBannerConfig, setServerBannerConfig } from "@/lib/server-banner-store";
+import { getServerProfileSettings, setServerProfileSettings } from "@/lib/server-profile-settings-store";
 import { isInAccordProtectedServer } from "@/lib/server-security";
+
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ serverId: string }> }
+) {
+  try {
+    const { serverId } = await params;
+
+    const profile = await currentProfile();
+
+    if (!profile) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
+
+    if (!serverId) {
+      return new NextResponse("Server ID missing", { status: 400 });
+    }
+
+    const target = await db.query.server.findFirst({
+      where: and(eq(server.id, serverId), eq(server.profileId, profile.id)),
+    });
+
+    if (!target) {
+      return new NextResponse("Server not found", { status: 404 });
+    }
+
+    const resolvedBanner = await getServerBannerConfig(serverId);
+    const profileSettings = await getServerProfileSettings(serverId);
+
+    return NextResponse.json({
+      ...target,
+      bannerUrl: resolvedBanner?.url ?? null,
+      bannerFit: resolvedBanner?.fit ?? "cover",
+      bannerScale: resolvedBanner?.scale ?? 1,
+      description: profileSettings.description,
+      traits: profileSettings.traits,
+      gamesPlayed: profileSettings.gamesPlayed,
+      bannerColor: profileSettings.bannerColor,
+      inviteMode: profileSettings.inviteMode,
+    });
+  } catch (error) {
+    console.log("[SERVER_ID_GET]", error);
+    return new NextResponse("Internal Error", { status: 500 });
+  }
+}
 
 export async function DELETE(
   req: Request,
@@ -40,7 +86,7 @@ export async function DELETE(
       and(eq(server.id, serverId), eq(server.profileId, profile.id))
     );
 
-    await emitInAccordSystemEvent({
+    void emitInAccordSystemEvent({
       eventType: "SERVER_SETTINGS_DELETED",
       scope: "server-settings",
       actorProfileId: profile.id,
@@ -50,6 +96,8 @@ export async function DELETE(
       metadata: {
         serverName: target.name,
       },
+    }).catch((eventError) => {
+      console.warn("[SERVER_ID_DELETE_EVENT]", eventError);
     });
 
     return NextResponse.json(target);
@@ -67,7 +115,18 @@ export async function PATCH(
     const { serverId } = await params;
 
     const profile = await currentProfile();
-    const { name, imageUrl, bannerUrl, bannerFit, bannerScale } = await req.json();
+    const {
+      name,
+      imageUrl,
+      bannerUrl,
+      bannerFit,
+      bannerScale,
+      description,
+      traits,
+      gamesPlayed,
+      bannerColor,
+      inviteMode,
+    } = await req.json();
 
     if (!profile) {
       return new NextResponse("Unauthorized", { status: 401 });
@@ -104,13 +163,21 @@ export async function PATCH(
       scale: typeof bannerScale === "number" ? bannerScale : Number(bannerScale),
     });
 
+    const resolvedProfileSettings = await setServerProfileSettings(serverId, {
+      description: typeof description === "string" ? description : null,
+      traits: Array.isArray(traits) ? traits : [],
+      gamesPlayed: Array.isArray(gamesPlayed) ? gamesPlayed : [],
+      bannerColor: typeof bannerColor === "string" ? bannerColor : null,
+      inviteMode: typeof inviteMode === "string" ? inviteMode : "normal",
+    });
+
     const updatedServer = await db.query.server.findFirst({
       where: and(eq(server.id, serverId), eq(server.profileId, profile.id)),
     });
 
     const resolvedBanner = await getServerBannerConfig(serverId);
 
-    await emitInAccordSystemEvent({
+    void emitInAccordSystemEvent({
       eventType: "SERVER_SETTINGS_UPDATED",
       scope: "server-settings",
       actorProfileId: profile.id,
@@ -123,7 +190,14 @@ export async function PATCH(
         bannerUrl,
         bannerFit,
         bannerScale,
+        description: resolvedProfileSettings.description,
+        traits: resolvedProfileSettings.traits,
+        gamesPlayed: resolvedProfileSettings.gamesPlayed,
+        bannerColor: resolvedProfileSettings.bannerColor,
+        inviteMode: resolvedProfileSettings.inviteMode,
       },
+    }).catch((eventError) => {
+      console.warn("[SERVER_ID_PATCH_EVENT]", eventError);
     });
 
     return NextResponse.json(
@@ -133,6 +207,11 @@ export async function PATCH(
             bannerUrl: resolvedBanner?.url ?? null,
             bannerFit: resolvedBanner?.fit ?? "cover",
             bannerScale: resolvedBanner?.scale ?? 1,
+            description: resolvedProfileSettings.description,
+            traits: resolvedProfileSettings.traits,
+            gamesPlayed: resolvedProfileSettings.gamesPlayed,
+            bannerColor: resolvedProfileSettings.bannerColor,
+            inviteMode: resolvedProfileSettings.inviteMode,
           }
         : updatedServer
     );

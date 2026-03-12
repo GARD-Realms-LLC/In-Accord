@@ -1,25 +1,19 @@
 import { ChannelType, MemberRole } from "@/lib/db/types";
 import { Hash, Mic, Video } from "lucide-react";
-import { eq, sql } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { currentProfile } from "@/lib/current-profile";
-import { db, server } from "@/lib/db";
-import { ensureChannelGroupSchema } from "@/lib/channel-groups";
-import { ensureChannelTopicSchema } from "@/lib/channel-topic";
+import { channel, db, server } from "@/lib/db";
 import { visibleChannelIdsForRole } from "@/lib/channel-permissions";
 import { getServerBannerConfig } from "@/lib/server-banner-store";
-import { appendServerInviteHistory, getServerInviteHistory } from "@/lib/server-invite-store";
-import { ensureRulesChannelForServer, ensureStageChannelForServer } from "@/lib/system-channels";
-import { listActiveVoiceCountsForServer, pruneStaleVoiceStates } from "@/lib/voice-states";
+import { listActiveVoiceCountsForServer } from "@/lib/voice-states";
 
 import { ServerHeader } from "./server-header";
 import { ServerSection } from "./server-section";
 import { ServerChannel } from "./server-channel";
 import { ChannelDropZone } from "./channel-drop-zone";
-import { ChannelGroupsList } from "./channel-groups-list";
 import { ServerEventsMenu } from "./server-events-menu";
-import { listServerScheduledEvents } from "@/lib/server-scheduled-events-store";
 
 interface ServerSidebarProps {
   serverId: string;
@@ -28,26 +22,11 @@ interface ServerSidebarProps {
 type ChannelRow = {
   id: string;
   name: string;
-  icon: string | null;
-  topic: string | null;
   type: ChannelType;
   profileId: string;
   serverId: string;
-  sortOrder: number | string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
-  channelGroupId: string | null;
-};
-
-type ChannelGroupRow = {
-  id: string;
-  name: string;
-  icon: string | null;
-  sortOrder: number | string | null;
-};
-
-type ServerRoleNameRow = {
-  name: string | null;
 };
 
 const iconMap = {
@@ -68,72 +47,19 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
   const currentServer = currentServerResult[0];
   const bannerConfig = currentServer ? await getServerBannerConfig(currentServer.id) : null;
 
-  if (currentServer) {
-    await ensureRulesChannelForServer(currentServer.id, currentServer.profileId);
-    await ensureStageChannelForServer(currentServer.id, currentServer.profileId);
-  }
-
-  await ensureChannelGroupSchema();
-  await ensureChannelTopicSchema();
-  await pruneStaleVoiceStates();
-
-  const channelsResult = await db.execute(sql`
-    select
-      c."id" as "id",
-      c."name" as "name",
-      c."icon" as "icon",
-      ct."topic" as "topic",
-      c."type" as "type",
-      c."profileId" as "profileId",
-      c."serverId" as "serverId",
-      c."sortOrder" as "sortOrder",
-      c."createdAt" as "createdAt",
-      c."updatedAt" as "updatedAt",
-      c."channelGroupId" as "channelGroupId"
-    from "Channel" c
-    left join "ChannelTopic" ct on ct."channelId" = c."id" and ct."serverId" = c."serverId"
-    where c."serverId" = ${serverId}
-    order by c."channelGroupId" asc nulls first, c."sortOrder" asc, c."createdAt" asc
-  `);
-
-  const channels = ((channelsResult as unknown as { rows: ChannelRow[] }).rows ?? []).map((row) => ({
-    id: row.id,
-    name: row.name,
-    icon: row.icon,
-    topic: row.topic,
-    type: row.type,
-    profileId: row.profileId,
-    serverId: row.serverId,
-    sortOrder: Number(row.sortOrder ?? 0),
-    createdAt: new Date(row.createdAt),
-    updatedAt: new Date(row.updatedAt),
-    channelGroupId: row.channelGroupId,
-  }));
-
-  const channelGroupsResult = await db.execute(sql`
-    select
-      cg."id" as "id",
-      cg."name" as "name",
-      cg."icon" as "icon",
-      cg."sortOrder" as "sortOrder"
-    from "ChannelGroup" cg
-    where cg."serverId" = ${serverId}
-    order by cg."sortOrder" asc, cg."createdAt" asc
-  `);
-
-  const channelGroups = (channelGroupsResult as unknown as { rows: ChannelGroupRow[] }).rows ?? [];
-
-  const serverRoleNamesResult = await db.execute(sql`
-    select r."name" as "name"
-    from "ServerRole" r
-    where r."serverId" = ${serverId}
-  `);
-
-  const serverRoleNames = new Set(
-    (((serverRoleNamesResult as unknown as { rows?: ServerRoleNameRow[] }).rows ?? [])
-      .map((row) => String(row.name ?? "").trim().toLowerCase())
-      .filter(Boolean))
-  );
+  const channels = (await db
+    .select({
+      id: channel.id,
+      name: channel.name,
+      type: channel.type,
+      profileId: channel.profileId,
+      serverId: channel.serverId,
+      createdAt: channel.createdAt,
+      updatedAt: channel.updatedAt,
+    })
+    .from(channel)
+    .where(eq(channel.serverId, serverId))
+    .orderBy(asc(channel.createdAt))) as ChannelRow[];
 
   const membersResult = await db.execute(sql`
     select
@@ -223,24 +149,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
     return normalizedName !== "stage" && normalizedName !== "rules";
   });
 
-  const groupedChannels = channelGroups.map((group) => ({
-    id: group.id,
-    name: group.name,
-    icon: group.icon,
-    channels: visibleChannelsWithoutSpecial.filter((item) => item.channelGroupId === group.id),
-  })).filter((group) => {
-    const isLegacyRoleGroupArtifact =
-      group.channels.length === 0 &&
-      group.icon === "🛡️" &&
-      serverRoleNames.has(group.name.trim().toLowerCase());
-
-    return !isLegacyRoleGroupArtifact;
-  });
-  const groupedChannelIds = new Set(
-    groupedChannels.flatMap((group) => group.channels.map((item) => item.id))
-  );
-
-  const ungroupedChannels = visibleChannelsWithoutSpecial.filter((item) => !groupedChannelIds.has(item.id));
+  const ungroupedChannels = visibleChannelsWithoutSpecial;
   const serverWithMembers = {
     ...currentServer,
     members,
@@ -258,17 +167,8 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
     bannerScale: bannerConfig?.scale ?? 1,
   };
 
-  const events = await listServerScheduledEvents(serverId);
-  const eventsCount = events.length;
-  if (currentServer?.inviteCode?.trim()) {
-    await appendServerInviteHistory(serverId, {
-      code: currentServer.inviteCode,
-      source: "created",
-      createdByProfileId: currentServer.profileId,
-    });
-  }
-  const invites = await getServerInviteHistory(serverId);
-  const invitesCount = invites.length;
+  const eventsCount = 0;
+  const invitesCount = 0;
 
   return (
     <div className="theme-channels-rail flex h-full w-full flex-col overflow-hidden rounded-2xl border border-border bg-card text-primary">
@@ -309,17 +209,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
           </ChannelDropZone>
         )}
 
-        {!!groupedChannels.length && (
-          <div className="mb-2">
-            <ChannelGroupsList
-              serverId={serverId}
-              role={role}
-              server={serverWithMembers}
-              groups={groupedChannels}
-              connectedVoiceCountsByChannelId={Object.fromEntries(connectedVoiceCountsByChannelId)}
-            />
-          </div>
-        )}
+        {false ? <div /> : null}
       </ScrollArea>
 
     </div>
