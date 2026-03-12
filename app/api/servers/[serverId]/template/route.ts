@@ -715,6 +715,65 @@ export async function GET(_req: Request, { params }: Params) {
       }>;
     }).rows;
 
+    const exportedChannelGroups = groups.map((group) => ({
+      id: group.id,
+      name: group.name,
+      icon: group.icon,
+      sortOrder: Number(group.sortOrder ?? 0),
+    }));
+
+    const usedExportGroupIds = new Set(exportedChannelGroups.map((group) => group.id));
+    const autoGroupIdByType = new Map<string, string>();
+    const autoGroupLabelByType: Record<string, string> = {
+      TEXT: "Text Channels",
+      AUDIO: "Audio Channels",
+      VIDEO: "Video Channels",
+    };
+    let nextExportGroupSortOrder =
+      exportedChannelGroups.reduce((max, group) => Math.max(max, Number(group.sortOrder ?? 0)), 0) + 1;
+
+    const ensureExportAutoGroupForType = (channelType: string) => {
+      const normalizedType = String(channelType ?? "").trim().toUpperCase();
+      if (!normalizedType || !autoGroupLabelByType[normalizedType]) {
+        return null;
+      }
+
+      const existing = autoGroupIdByType.get(normalizedType);
+      if (existing) {
+        return existing;
+      }
+
+      let candidateId = `template-auto-${normalizedType.toLowerCase()}-channels`;
+      while (usedExportGroupIds.has(candidateId)) {
+        candidateId = `template-auto-${normalizedType.toLowerCase()}-${uuidv4()}`;
+      }
+
+      usedExportGroupIds.add(candidateId);
+      autoGroupIdByType.set(normalizedType, candidateId);
+      exportedChannelGroups.push({
+        id: candidateId,
+        name: autoGroupLabelByType[normalizedType],
+        icon: null,
+        sortOrder: nextExportGroupSortOrder,
+      });
+      nextExportGroupSortOrder += 1;
+
+      return candidateId;
+    };
+
+    const exportedChannels = channels.map((item) => {
+      const normalizedType = String(item.type ?? "").trim().toUpperCase();
+      const resolvedGroupId = item.channelGroupId || ensureExportAutoGroupForType(normalizedType);
+
+      return {
+        name: item.name,
+        type: item.type,
+        channelGroupId: resolvedGroupId ?? null,
+        sortOrder: Number(item.sortOrder ?? 0),
+        isSystem: Boolean(item.isSystem),
+      };
+    });
+
     const exportTemplate = {
       version: 1,
       source: "in-accord",
@@ -731,19 +790,8 @@ export async function GET(_req: Request, { params }: Params) {
           isMentionable: Boolean(role.isMentionable),
           position: Number(role.position ?? 0),
         })),
-      channelGroups: groups.map((group) => ({
-        id: group.id,
-        name: group.name,
-        icon: group.icon,
-        sortOrder: Number(group.sortOrder ?? 0),
-      })),
-      channels: channels.map((channel) => ({
-        name: channel.name,
-        type: channel.type,
-        channelGroupId: channel.channelGroupId,
-        sortOrder: Number(channel.sortOrder ?? 0),
-        isSystem: Boolean(channel.isSystem),
-      })),
+      channelGroups: exportedChannelGroups,
+      channels: exportedChannels,
     };
 
     return NextResponse.json({
@@ -1031,6 +1079,18 @@ export async function POST(req: Request, { params }: Params) {
       const groupByTemplateCategoryId = new Map<string, string>();
       let importedGroups = 0;
       let skippedGroups = 0;
+      const maxSortOrderResult = await tx.execute(sql`
+        select coalesce(max("sortOrder"), 0) as "maxSortOrder"
+        from "ChannelGroup"
+        where "serverId" = ${serverId}
+      `);
+      let maxAssignedGroupSortOrder = Number(
+        (
+          maxSortOrderResult as unknown as {
+            rows?: Array<{ maxSortOrder?: number | string | null }>;
+          }
+        ).rows?.[0]?.maxSortOrder ?? 0
+      );
       for (const category of categories) {
         const categoryId = String(category.id ?? "").trim();
         const categoryNameRaw = String(category.name ?? "").trim().slice(0, 191);
@@ -1067,6 +1127,8 @@ export async function POST(req: Request, { params }: Params) {
         if (categoryId) {
           groupByTemplateCategoryId.set(categoryId, groupId);
         }
+
+        maxAssignedGroupSortOrder = Math.max(maxAssignedGroupSortOrder, groupSort);
 
         importedGroups += 1;
       }
@@ -1109,10 +1171,11 @@ export async function POST(req: Request, { params }: Params) {
         }
 
         const parentTemplateId = String(templateChannel.parent_id ?? "").trim();
-        const channelGroupId = parentTemplateId ? groupByTemplateCategoryId.get(parentTemplateId) ?? null : null;
+        let channelGroupId = parentTemplateId ? groupByTemplateCategoryId.get(parentTemplateId) ?? null : null;
         if (parentTemplateId && !channelGroupId) {
           channelsWithMissingParentGroup += 1;
         }
+
         const groupKey = channelGroupId ?? uncategorizedKey;
 
         const currentSort = channelSortByGroup.get(groupKey) ?? 0;

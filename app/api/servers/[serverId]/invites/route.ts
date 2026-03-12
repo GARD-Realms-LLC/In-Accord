@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
+import { sql } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db, member, profile, server } from "@/lib/db";
@@ -56,22 +57,32 @@ export async function GET(
       new Set(invites.map((item) => item.createdByProfileId).filter((id): id is string => Boolean(id)))
     );
 
-    const creators = await Promise.all(
-      creatorIds.map(async (creatorId) => {
-        const creatorProfile = await db.query.profile.findFirst({
-          where: eq(profile.id, creatorId),
-        });
+    const creatorsResult = creatorIds.length
+      ? await db.execute(sql`
+          select
+            u."userId" as "id",
+            coalesce(nullif(trim(up."profileName"), ''), nullif(trim(u."name"), ''), nullif(trim(u."email"), '')) as "displayName",
+            u."email" as "email",
+            coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl"
+          from "Users" u
+          left join "UserProfile" up on up."userId" = u."userId"
+          where u."userId" in (${sql.join(creatorIds.map((id) => sql`${id}`), sql`, `)})
+        `)
+      : ({ rows: [] } as unknown as { rows: Array<{ id: string; displayName: string | null; email: string | null; imageUrl: string | null }> });
 
-        return {
-          id: creatorId,
-          name: creatorProfile?.name ?? null,
-          email: creatorProfile?.email ?? null,
-          imageUrl: creatorProfile?.imageUrl ?? null,
-        };
-      })
+    const creatorById = new Map(
+      ((creatorsResult as unknown as {
+        rows?: Array<{ id: string; displayName: string | null; email: string | null; imageUrl: string | null }>;
+      }).rows ?? []).map((item) => [
+        item.id,
+        {
+          id: item.id,
+          name: item.displayName ?? null,
+          email: item.email ?? null,
+          imageUrl: item.imageUrl ?? null,
+        },
+      ])
     );
-
-    const creatorById = new Map(creators.map((item) => [item.id, item]));
 
     const enrichedInvites = invites.map((inviteItem) => {
       const creator = inviteItem.createdByProfileId

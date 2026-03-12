@@ -22,6 +22,10 @@ import { DeleteMessageModal } from "@/components/modals/delete-message-modal";
 import { BulkDeleteMessagesModal } from "@/components/modals/bulk-delete-messages-modal";
 import { CreateEventModal } from "@/components/modals/create-event-modal";
 import { ServerEventsModal } from "@/components/modals/server-events-modal";
+import { AergerGuideModal } from "@/components/modals/aerger-guide-modal";
+import { BoostersModal } from "@/components/modals/boosters-modal";
+import { ServerStageModal } from "@/components/modals/server-stage-modal";
+import { ServerRulesModal } from "@/components/modals/server-rules-modal";
 
 export const ModalProvider = () => {
   const [isMounted, setIsMounted] = useState(false);
@@ -44,6 +48,10 @@ export const ModalProvider = () => {
       <CreateChannelModal />
       <CreateEventModal />
       <ServerEventsModal />
+      <AergerGuideModal />
+      <BoostersModal />
+      <ServerStageModal />
+      <ServerRulesModal />
       <CreateFormModal />
       <CreateChannelGroupModal />
       <EditChannelGroupModal />

@@ -61,6 +61,7 @@ export async function PATCH(req: Request) {
       select
         c."id" as "id",
         c."name" as "name",
+        c."type" as "type",
         c."channelGroupId" as "channelGroupId",
         c."sortOrder" as "sortOrder"
       from "Channel" c
@@ -72,6 +73,7 @@ export async function PATCH(req: Request) {
       rows: Array<{
         id: string;
         name: string;
+        type: string;
         channelGroupId: string | null;
         sortOrder: number | string | null;
       }>;
@@ -88,8 +90,13 @@ export async function PATCH(req: Request) {
       return new NextResponse("Cannot move default channel", { status: 400 });
     }
 
+    const draggedName = String(dragged.name ?? "").trim().toLowerCase();
     const fromGroupId = dragged.channelGroupId ?? null;
-    const toGroupId = target.channelGroupId ?? null;
+    const toGroupIdRaw = target.channelGroupId ?? null;
+    const toGroupId =
+      draggedName === "stage"
+        ? null
+        : toGroupIdRaw;
     const fromSort = Number(dragged.sortOrder ?? 0);
     const toSort = Number(target.sortOrder ?? 0);
 

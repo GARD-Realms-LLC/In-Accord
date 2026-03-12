@@ -1290,9 +1290,7 @@ export const ServerRouteShell = ({
             aria-label="Resize channels rail"
             title="Resize channels rail"
             onMouseDown={onStartChannelsRailResize}
-            className={`absolute inset-y-0 -right-1 z-40 w-2 cursor-col-resize transition ${
-              isResizingChannelsRail ? "bg-teal-500/50" : "bg-teal-500/20 hover:bg-teal-500/40"
-            }`}
+            className="absolute inset-y-0 -right-1 z-40 w-2 cursor-col-resize bg-transparent"
           />
         </div>
       </aside>

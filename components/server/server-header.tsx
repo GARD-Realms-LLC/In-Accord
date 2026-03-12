@@ -71,7 +71,7 @@ export const ServerHeader = ({ server, role, isServerOwner = false }: ServerHead
   };
 
   return (
-    <div className="relative h-24.5 border-b-2 border-neutral-200 dark:border-neutral-800 overflow-hidden">
+    <div className="relative h-32 border-b-2 border-neutral-200 dark:border-neutral-800 overflow-hidden">
       {normalizedBannerUrl ? (
         <>
           <img

@@ -48,6 +48,12 @@
     "db:replace-discord-db:dry": "node scripts/replace-discord-live-db.cjs --use-database-url --dry-run",
     "db:cleanup:legacy-role-groups:dry": "node scripts/cleanup-legacy-role-channel-groups.cjs --use-database-url",
     "db:cleanup:legacy-role-groups": "node scripts/cleanup-legacy-role-channel-groups.cjs --use-database-url --apply",
+    "db:backfill:stage:dry": "node scripts/backfill-stage-channels.cjs --use-database-url",
+    "db:backfill:stage": "node scripts/backfill-stage-channels.cjs --use-database-url --apply",
+    "db:remove:stage-groups:dry": "node scripts/remove-stage-channel-groups.cjs --use-database-url",
+    "db:remove:stage-groups": "node scripts/remove-stage-channel-groups.cjs --use-database-url --apply",
+    "db:backfill:ungroup-audio-video:dry": "node scripts/backfill-ungroup-audio-video-channels.cjs --use-database-url",
+    "db:backfill:ungroup-audio-video": "node scripts/backfill-ungroup-audio-video-channels.cjs --use-database-url --apply",
     "bot:template-me:inspect": "node scripts/inspect-bot-ciphers.cjs",
     "bot:template-me:smoke": "node scripts/smoke-template-me-control-port.cjs",
     "bot:template-me:live": "node scripts/template-me-live-terminal.cjs"

@@ -1958,8 +1958,6 @@ export const ChatItem = ({
                     "font-semibold",
                     runtimeAccessibilityPreferences.largerChatFont ? "text-base" : "text-sm"
                   )}
-                  showNameplate
-                  nameplateSize="compact"
                   plateMetaIcons={roleAndMetaIcons}
                 />
               </button>

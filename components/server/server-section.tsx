@@ -24,6 +24,9 @@ export const ServerSection = ({
 }: ServerSectionProps) => {
   const { onOpen } = useModal();
   const isChannelGroupsHeader = label.startsWith("Channel Groups");
+  const hideCreateChannelButton =
+    sectionType === "channels" &&
+    (channelType === ChannelType.AUDIO || channelType === ChannelType.VIDEO);
 
   if (sectionType === "channels" && label === "Channels") {
     return null;
@@ -46,14 +49,16 @@ export const ServerSection = ({
               </button>
             </ActionTooltip>
           )}
-          <ActionTooltip label="Create Channel" side="top" align="center">
-            <button
-              onClick={() => onOpen("createChannel", { server, channelType })}
-              className="text-zinc-500 hover:text-zinc-600 dark:text-zinc-400 dark:hover:text-zinc-300 transition"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
-          </ActionTooltip>
+          {!hideCreateChannelButton ? (
+            <ActionTooltip label="Create Channel" side="top" align="center">
+              <button
+                onClick={() => onOpen("createChannel", { server, channelType })}
+                className="text-zinc-500 hover:text-zinc-600 dark:text-zinc-400 dark:hover:text-zinc-300 transition"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            </ActionTooltip>
+          ) : null}
         </div>
       )}
       {role === MemberRole.ADMIN && sectionType === "members" && (

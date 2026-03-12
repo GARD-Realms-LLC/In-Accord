@@ -9,7 +9,8 @@ import { ensureChannelGroupSchema } from "@/lib/channel-groups";
 import { ensureChannelTopicSchema } from "@/lib/channel-topic";
 import { visibleChannelIdsForRole } from "@/lib/channel-permissions";
 import { getServerBannerConfig } from "@/lib/server-banner-store";
-import { ensureRulesChannelForServer } from "@/lib/system-channels";
+import { appendServerInviteHistory, getServerInviteHistory } from "@/lib/server-invite-store";
+import { ensureRulesChannelForServer, ensureStageChannelForServer } from "@/lib/system-channels";
 import { listActiveVoiceCountsForServer, pruneStaleVoiceStates } from "@/lib/voice-states";
 
 import { ServerHeader } from "./server-header";
@@ -17,7 +18,6 @@ import { ServerSection } from "./server-section";
 import { ServerChannel } from "./server-channel";
 import { ChannelDropZone } from "./channel-drop-zone";
 import { ChannelGroupsList } from "./channel-groups-list";
-import { ServerScheduledEventsPanel } from "./server-scheduled-events-panel";
 import { ServerEventsMenu } from "./server-events-menu";
 import { listServerScheduledEvents } from "@/lib/server-scheduled-events-store";
 
@@ -70,6 +70,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
 
   if (currentServer) {
     await ensureRulesChannelForServer(currentServer.id, currentServer.profileId);
+    await ensureStageChannelForServer(currentServer.id, currentServer.profileId);
   }
 
   await ensureChannelGroupSchema();
@@ -213,20 +214,20 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
 
   const visibleChannels = channels.filter((item) => visibleChannelIds.has(item.id));
 
-  const textChannels = visibleChannels.filter(
-    (channel) => channel.type === ChannelType.TEXT
-  );
-  const audioChannels = visibleChannels.filter(
-    (channel) => channel.type === ChannelType.AUDIO
-  );
-  const videoChannels = visibleChannels.filter(
-    (channel) => channel.type === ChannelType.VIDEO
-  );
+  const stageChannel =
+    visibleChannels.find((item) => String(item.name ?? "").trim().toLowerCase() === "stage") ?? null;
+  const rulesChannel =
+    visibleChannels.find((item) => String(item.name ?? "").trim().toLowerCase() === "rules") ?? null;
+  const visibleChannelsWithoutSpecial = visibleChannels.filter((item) => {
+    const normalizedName = String(item.name ?? "").trim().toLowerCase();
+    return normalizedName !== "stage" && normalizedName !== "rules";
+  });
+
   const groupedChannels = channelGroups.map((group) => ({
     id: group.id,
     name: group.name,
     icon: group.icon,
-    channels: visibleChannels.filter((item) => item.channelGroupId === group.id),
+    channels: visibleChannelsWithoutSpecial.filter((item) => item.channelGroupId === group.id),
   })).filter((group) => {
     const isLegacyRoleGroupArtifact =
       group.channels.length === 0 &&
@@ -239,15 +240,16 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
     groupedChannels.flatMap((group) => group.channels.map((item) => item.id))
   );
 
-  const textChannelsUngrouped = textChannels.filter((item) => !groupedChannelIds.has(item.id));
-  const audioChannelsUngrouped = audioChannels.filter((item) => !groupedChannelIds.has(item.id));
-  const videoChannelsUngrouped = videoChannels.filter((item) => !groupedChannelIds.has(item.id));
+  const ungroupedChannels = visibleChannelsWithoutSpecial.filter((item) => !groupedChannelIds.has(item.id));
   const serverWithMembers = {
     ...currentServer,
     members,
   };
 
   const connectedVoiceCountsByChannelId = await listActiveVoiceCountsForServer({ serverId });
+  const stageJoinedCount = stageChannel?.id
+    ? connectedVoiceCountsByChannelId.get(stageChannel.id) ?? 0
+    : 0;
 
   const serverWithBanner = {
     ...serverWithMembers,
@@ -258,71 +260,42 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
 
   const events = await listServerScheduledEvents(serverId);
   const eventsCount = events.length;
+  if (currentServer?.inviteCode?.trim()) {
+    await appendServerInviteHistory(serverId, {
+      code: currentServer.inviteCode,
+      source: "created",
+      createdByProfileId: currentServer.profileId,
+    });
+  }
+  const invites = await getServerInviteHistory(serverId);
+  const invitesCount = invites.length;
 
   return (
     <div className="theme-channels-rail flex h-full w-full flex-col overflow-hidden rounded-2xl border border-border bg-card text-primary">
       <div className="px-3 pt-2 pb-2">
         <ServerHeader server={serverWithBanner} role={role} isServerOwner={isServerOwner} />
-        <ServerEventsMenu server={currentServer} eventsCount={eventsCount} />
+        <ServerEventsMenu
+          server={serverWithMembers}
+          eventsCount={eventsCount}
+          invitesCount={invitesCount}
+          boostersCount={0}
+          stageJoinedCount={stageJoinedCount}
+          stageChannel={stageChannel}
+          rulesChannel={rulesChannel}
+        />
       </div>
       <ScrollArea className="settings-scrollbar min-h-0 flex-1 px-3 pt-3">
-        {!!textChannelsUngrouped?.length && (
+        {!!ungroupedChannels?.length && (
           <ChannelDropZone serverId={serverId} targetGroupId={null} className="mb-2">
             <ServerSection
               sectionType="channels"
-              channelType={ChannelType.TEXT}
+              channelType={undefined}
               role={role}
               label="Channels"
               server={serverWithMembers}
             />
             <div className="space-y-0.5">
-              {textChannelsUngrouped.map((channel) => (
-                <ServerChannel
-                  key={channel.id}
-                  channel={channel}
-                  role={role}
-                  server={serverWithMembers}
-                  draggable
-                  connectedCount={connectedVoiceCountsByChannelId.get(channel.id) ?? 0}
-                />
-              ))}
-            </div>
-          </ChannelDropZone>
-        )}
-        {!!audioChannelsUngrouped?.length && (
-          <ChannelDropZone serverId={serverId} targetGroupId={null} className="mb-2">
-            <ServerSection
-              sectionType="channels"
-              channelType={ChannelType.AUDIO}
-              role={role}
-              label="Voice Channels"
-              server={serverWithMembers}
-            />
-            <div className="space-y-0.5">
-              {audioChannelsUngrouped.map((channel) => (
-                <ServerChannel
-                  key={channel.id}
-                  channel={channel}
-                  role={role}
-                  server={serverWithMembers}
-                  draggable
-                  connectedCount={connectedVoiceCountsByChannelId.get(channel.id) ?? 0}
-                />
-              ))}
-            </div>
-          </ChannelDropZone>
-        )}
-        {!!videoChannelsUngrouped?.length && (
-          <ChannelDropZone serverId={serverId} targetGroupId={null} className="mb-2">
-            <ServerSection
-              sectionType="channels"
-              channelType={ChannelType.VIDEO}
-              role={role}
-              label="Video Channels"
-              server={serverWithMembers}
-            />
-            <div className="space-y-0.5">
-              {videoChannelsUngrouped.map((channel) => (
+              {ungroupedChannels.map((channel) => (
                 <ServerChannel
                   key={channel.id}
                   channel={channel}
@@ -338,7 +311,6 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
 
         {!!groupedChannels.length && (
           <div className="mb-2">
-            <div className="my-4 h-px w-full bg-zinc-500 dark:bg-zinc-300" />
             <ChannelGroupsList
               serverId={serverId}
               role={role}
@@ -348,11 +320,6 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
             />
           </div>
         )}
-
-        <ServerScheduledEventsPanel
-          serverId={serverId}
-          canManage={Boolean(isServerOwner)}
-        />
       </ScrollArea>
 
     </div>

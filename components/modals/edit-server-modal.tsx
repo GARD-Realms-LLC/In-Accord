@@ -62,6 +62,7 @@ type ServerSettingsSection =
   | "welcomeScreen"
   | "safetyAlerts"
   | "communityOverview"
+  | "eventsManagement"
   | "safetySetup"
   | "serverInsights"
   | "partnerProgram"
@@ -112,6 +113,7 @@ const SETTINGS_SECTIONS: Array<{
     heading: "Community",
     items: [
       { key: "communityOverview", label: "Community Overview" },
+      { key: "eventsManagement", label: "Events Management" },
       { key: "safetySetup", label: "Safety Setup" },
       { key: "serverInsights", label: "Server Insights" },
       { key: "partnerProgram", label: "Partner Program" },
@@ -168,6 +170,7 @@ const SECTION_TITLES: Record<ServerSettingsSection, string> = {
   installedApps: "Installed Apps",
   serverTemplate: "Server Template",
   communityOverview: "Community Overview",
+  eventsManagement: "Events Management",
   widget: "Widget",
   deleteServer: "Delete Server",
 };
@@ -195,6 +198,7 @@ const GENERIC_SECTION_DESCRIPTIONS: Partial<Record<ServerSettingsSection, string
   welcomeScreen: "Customize welcome content for new members.",
   safetyAlerts: "Configure safety alert delivery and severity handling.",
   communityOverview: "Manage community-level server settings.",
+  eventsManagement: "Manage scheduled events for this server.",
   safetySetup: "Configure recommended safety defaults.",
   serverInsights: "Adjust server metrics and insights preferences.",
   partnerProgram: "Manage partner program visibility and settings.",
@@ -230,6 +234,7 @@ const SERVER_GUIDE_USAGE: Partial<Record<ServerSettingsSection, string>> = {
   welcomeScreen: "Customize first impressions with welcome text and highlighted channels.",
   safetyAlerts: "Configure alert visibility and review high-priority server safety notices.",
   communityOverview: "Manage community feature readiness and participation standards.",
+  eventsManagement: "Create events and review upcoming and past event activity for your server.",
   safetySetup: "Walk through baseline safety recommendations for your server.",
   serverInsights: "Review growth and engagement analytics to guide server improvements.",
   partnerProgram: "Manage partner-related settings, eligibility visibility, and readiness.",
@@ -741,6 +746,17 @@ type TemplateMeBotOption = {
   enabled: boolean;
 };
 
+type CommunityEventItem = {
+  id: string;
+  title: string;
+  description: string | null;
+  startsAt: string;
+  frequency?: string;
+  bannerUrl?: string | null;
+  channelKind?: string | null;
+  channelId?: string | null;
+};
+
 const DEFAULT_ONBOARDING_CONFIG: OnboardingConfig = {
   enabled: false,
   welcomeMessage: "Welcome to the server! Complete onboarding to unlock your best channels.",
@@ -874,6 +890,11 @@ export const EditServerModal = () => {
   const [serverGuideQuery, setServerGuideQuery] = useState("");
   const [serverGuideScrollTop, setServerGuideScrollTop] = useState(0);
   const [serverGuideViewportHeight, setServerGuideViewportHeight] = useState(460);
+  const [communityEvents, setCommunityEvents] = useState<CommunityEventItem[]>([]);
+  const [isLoadingCommunityEvents, setIsLoadingCommunityEvents] = useState(false);
+  const [communityEventsError, setCommunityEventsError] = useState<string | null>(null);
+  const [communityEventsSuccess, setCommunityEventsSuccess] = useState<string | null>(null);
+  const [deletingCommunityEventId, setDeletingCommunityEventId] = useState<string | null>(null);
   const [genericSectionSettings, setGenericSectionSettings] = useState<Record<ServerSettingsSection, GenericSectionSettings>>(
     () => createDefaultGenericSectionSettings()
   );
@@ -1041,6 +1062,11 @@ export const EditServerModal = () => {
       setIsLoadingTemplateMeBots(false);
       setServerGuideQuery("");
       setServerGuideScrollTop(0);
+      setCommunityEvents([]);
+      setIsLoadingCommunityEvents(false);
+      setCommunityEventsError(null);
+      setCommunityEventsSuccess(null);
+      setDeletingCommunityEventId(null);
       setGenericSectionSettings(createDefaultGenericSectionSettings());
       setGenericSectionSaveMessage(null);
       setCollapsedSettingsGroups(createDefaultSettingsGroupCollapseState());
@@ -3243,6 +3269,77 @@ export const EditServerModal = () => {
     setGenericSectionSaveMessage(`${SECTION_TITLES[activeSection]} settings saved.`);
   };
 
+  const loadCommunityEvents = useCallback(async () => {
+    if (!server?.id) {
+      return;
+    }
+
+    try {
+      setIsLoadingCommunityEvents(true);
+      setCommunityEventsError(null);
+
+      const response = await axios.get<{ events?: CommunityEventItem[] }>(
+        `/api/servers/${server.id}/scheduled-events`
+      );
+
+      const events = Array.isArray(response.data.events) ? response.data.events : [];
+      setCommunityEvents(events);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          (typeof error.response?.data === "string" ? error.response.data : "") ||
+          error.message;
+        setCommunityEventsError(message || "Failed to load events.");
+      } else {
+        setCommunityEventsError("Failed to load events.");
+      }
+
+      setCommunityEvents([]);
+    } finally {
+      setIsLoadingCommunityEvents(false);
+    }
+  }, [server?.id]);
+
+  useEffect(() => {
+    if (!isModalOpen || activeSection !== "eventsManagement") {
+      return;
+    }
+
+    void loadCommunityEvents();
+  }, [activeSection, isModalOpen, loadCommunityEvents]);
+
+  const onDeleteCommunityEvent = async (eventId: string) => {
+    if (!server?.id || !eventId || deletingCommunityEventId) {
+      return;
+    }
+
+    try {
+      setCommunityEventsError(null);
+      setCommunityEventsSuccess(null);
+      setDeletingCommunityEventId(eventId);
+
+      await axios.delete(`/api/servers/${server.id}/scheduled-events/${eventId}`);
+
+      setCommunityEventsSuccess("Event deleted.");
+      await loadCommunityEvents();
+      router.refresh();
+      window.dispatchEvent(new CustomEvent("inaccord:event-created", { detail: { serverId: server.id } }));
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          (typeof error.response?.data === "string" ? error.response.data : "") ||
+          error.message;
+        setCommunityEventsError(message || "Failed to delete event.");
+      } else {
+        setCommunityEventsError("Failed to delete event.");
+      }
+    } finally {
+      setDeletingCommunityEventId(null);
+    }
+  };
+
   return (
     <Dialog open={isModalOpen} onOpenChange={handleClose}>
       <DialogContent className="settings-theme-scope settings-scrollbar theme-settings-shell flex h-[85vh] max-h-[85vh] w-[85vw] max-w-[85vw] flex-col overflow-hidden rounded-3xl border-black/30 bg-[#2b2d31] p-0 text-[#dbdee1]">
@@ -4282,6 +4379,113 @@ export const EditServerModal = () => {
                               </div>
                             ))
                           )}
+                        </div>
+                      </div>
+                    ) : activeSection === "eventsManagement" ? (
+                      <div className="space-y-4">
+                        <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-4">
+                          <p className="text-sm text-zinc-100">
+                            Create and manage events for this server from one place.
+                          </p>
+                          <p className="mt-1 text-xs text-zinc-400">
+                            Open the Events modal to review upcoming and past events, or create a new event now.
+                          </p>
+                        </div>
+
+                        <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-4">
+                          <div className="mb-3 flex items-center justify-between gap-2">
+                            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-300">
+                              Event List
+                            </p>
+                            <span className="rounded bg-black/25 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-300">
+                              {communityEvents.length} total
+                            </span>
+                          </div>
+
+                          {communityEventsError ? (
+                            <p className="mb-2 rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+                              {communityEventsError}
+                            </p>
+                          ) : null}
+
+                          {communityEventsSuccess ? (
+                            <p className="mb-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+                              {communityEventsSuccess}
+                            </p>
+                          ) : null}
+
+                          <div className="max-h-[280px] space-y-2 overflow-y-auto overflow-x-hidden pr-1">
+                            {isLoadingCommunityEvents ? (
+                              <div className="flex items-center gap-2 rounded-md border border-zinc-700 bg-[#1e1f22] px-3 py-2 text-sm text-zinc-300">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Loading events...
+                              </div>
+                            ) : communityEvents.length === 0 ? (
+                              <p className="rounded-md border border-zinc-700 bg-[#1e1f22] px-3 py-2 text-xs text-zinc-400">
+                                No events found for this server.
+                              </p>
+                            ) : (
+                              [...communityEvents]
+                                .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
+                                .map((eventItem) => (
+                                  <div
+                                    key={eventItem.id}
+                                    className="flex items-start gap-3 rounded-lg border border-zinc-700 bg-[#1e1f22] px-3 py-2"
+                                  >
+                                    <div className="min-w-0 flex-1">
+                                      <p className="truncate text-sm font-semibold text-zinc-100">{eventItem.title}</p>
+                                      <p className="text-xs text-zinc-400">
+                                        {new Date(eventItem.startsAt).toLocaleString()} • {eventItem.frequency || "ONCE"}
+                                      </p>
+                                      {eventItem.description ? (
+                                        <p className="mt-1 line-clamp-2 text-xs text-zinc-300">{eventItem.description}</p>
+                                      ) : null}
+                                    </div>
+
+                                    <Button
+                                      type="button"
+                                      onClick={() => void onDeleteCommunityEvent(eventItem.id)}
+                                      disabled={deletingCommunityEventId === eventItem.id}
+                                      className="h-8 shrink-0 bg-rose-600/80 px-2.5 text-xs text-white hover:bg-rose-600"
+                                    >
+                                      {deletingCommunityEventId === eventItem.id ? "..." : "Delete"}
+                                    </Button>
+                                  </div>
+                                ))
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-4">
+                          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-300">
+                            Events Management Actions
+                          </p>
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                              type="button"
+                              onClick={() => {
+                                if (server) {
+                                  onOpen("serverEvents", { server });
+                                }
+                              }}
+                              className="bg-[#4e5058] text-white hover:bg-[#5d6069]"
+                            >
+                              Open Events
+                            </Button>
+
+                            <Button
+                              type="button"
+                              onClick={() => {
+                                if (server) {
+                                  onOpen("createEvent", { server });
+                                }
+                              }}
+                              className="bg-[#5865f2] text-white hover:bg-[#4752c4]"
+                            >
+                              Create Event
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     ) : activeSection === "onboarding" ? (

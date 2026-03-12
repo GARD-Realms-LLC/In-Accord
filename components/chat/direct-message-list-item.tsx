@@ -47,8 +47,11 @@ export const DirectMessageListItem = ({
             name={displayName}
             profileId={profileId}
             memberId={memberId}
+            containerClassName="w-full min-w-0"
+            nameClassName="min-w-0 truncate text-xs text-[#dbdee1]"
             showNameplate
             nameplateSize="compact"
+            stretchTagUnderPlate
           />
           <NewUserCloverBadge createdAt={profileCreatedAt} className="text-[11px]" />
         </p>

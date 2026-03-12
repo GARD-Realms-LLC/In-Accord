@@ -3,7 +3,30 @@
     {
       "code": "55acae70-f164-4614-9133-3591afbe7042",
       "source": "created",
-      "createdAt": "2026-03-08T00:49:41.840Z"
+      "createdByProfileId": "00000001",
+      "createdAt": "2026-03-12T15:44:13.451Z",
+      "usedCount": 0,
+      "usedByProfileIds": []
+    }
+  ],
+  "101a4ed8-f7a0-4fe0-b6d7-ef80b2145c61": [
+    {
+      "code": "211baafb-191e-4a1a-8cea-ab3b51c33806",
+      "source": "created",
+      "createdByProfileId": "00000001",
+      "createdAt": "2026-03-12T15:44:13.516Z",
+      "usedCount": 0,
+      "usedByProfileIds": []
+    }
+  ],
+  "48dc1193-d9a1-4311-b0ce-04b219fb0094": [
+    {
+      "code": "8e4ee027-35de-4393-8293-0ca8acdcd833",
+      "source": "created",
+      "createdByProfileId": "00000002",
+      "createdAt": "2026-03-12T15:55:26.125Z",
+      "usedCount": 0,
+      "usedByProfileIds": []
     }
   ]
 }

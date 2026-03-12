@@ -56,24 +56,10 @@ export async function PATCH(
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    if (channelGroupId) {
-      const targetGroup = await db.execute(sql`
-        select "id"
-        from "ChannelGroup"
-        where "id" = ${channelGroupId}
-          and "serverId" = ${serverId}
-        limit 1
-      `);
-
-      const exists = (targetGroup as unknown as { rows: Array<{ id: string }> }).rows?.[0];
-      if (!exists) {
-        return new NextResponse("Channel group not found", { status: 404 });
-      }
-    }
-
     const draggedChannelResult = await db.execute(sql`
       select
         c."id" as "id",
+        c."type" as "type",
         c."channelGroupId" as "channelGroupId",
         c."sortOrder" as "sortOrder",
         c."name" as "name"
@@ -87,6 +73,7 @@ export async function PATCH(
       draggedChannelResult as unknown as {
         rows: Array<{
           id: string;
+          type: string;
           channelGroupId: string | null;
           sortOrder: number | string | null;
           name: string;
@@ -102,15 +89,32 @@ export async function PATCH(
       return new NextResponse("Cannot move default channel", { status: 400 });
     }
 
+    const effectiveChannelGroupId = channelGroupId;
+
+    if (effectiveChannelGroupId) {
+      const targetGroup = await db.execute(sql`
+        select "id"
+        from "ChannelGroup"
+        where "id" = ${effectiveChannelGroupId}
+          and "serverId" = ${serverId}
+        limit 1
+      `);
+
+      const exists = (targetGroup as unknown as { rows: Array<{ id: string }> }).rows?.[0];
+      if (!exists) {
+        return new NextResponse("Channel group not found", { status: 404 });
+      }
+    }
+
     const currentGroupId = draggedChannel.channelGroupId ?? null;
     const currentSortOrder = Number(draggedChannel.sortOrder ?? 0);
 
-    if (currentGroupId !== channelGroupId) {
+    if (currentGroupId !== effectiveChannelGroupId) {
       const maxSortOrderResult = await db.execute(sql`
         select coalesce(max(c."sortOrder"), 0) as "maxSortOrder"
         from "Channel" c
         where c."serverId" = ${serverId}
-          and c."channelGroupId" is not distinct from ${channelGroupId}
+          and c."channelGroupId" is not distinct from ${effectiveChannelGroupId}
       `);
 
       const nextSortOrder =
@@ -136,7 +140,7 @@ export async function PATCH(
         await tx.execute(sql`
           update "Channel"
           set
-            "channelGroupId" = ${channelGroupId},
+            "channelGroupId" = ${effectiveChannelGroupId},
             "sortOrder" = ${nextSortOrder},
             "updatedAt" = ${new Date()}
           where "id" = ${channelId}
@@ -145,7 +149,7 @@ export async function PATCH(
       });
     }
 
-    return NextResponse.json({ ok: true, channelId, channelGroupId });
+    return NextResponse.json({ ok: true, channelId, channelGroupId: effectiveChannelGroupId });
   } catch (error) {
     console.error("[CHANNEL_GROUP_MOVE_PATCH]", error);
     return new NextResponse("Internal Error", { status: 500 });

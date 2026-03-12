@@ -6,7 +6,12 @@ import { currentProfile } from "@/lib/current-profile";
 import { channel, ChannelType, db, MemberRole, member, server } from "@/lib/db";
 import { getServerBannerConfig, setServerBannerConfig } from "@/lib/server-banner-store";
 import { appendServerInviteHistory } from "@/lib/server-invite-store";
-import { ensureRulesChannelForServer, ensureSystemChannelSchema } from "@/lib/system-channels";
+import { createServerScheduledEvent } from "@/lib/server-scheduled-events-store";
+import {
+  ensureRulesChannelForServer,
+  ensureStageChannelForServer,
+  ensureSystemChannelSchema,
+} from "@/lib/system-channels";
 
 export async function POST(req: Request) {
   try {
@@ -63,6 +68,7 @@ export async function POST(req: Request) {
           "type",
           "profileId",
           "serverId",
+          "channelGroupId",
           "isSystem",
           "createdAt",
           "updatedAt"
@@ -73,6 +79,32 @@ export async function POST(req: Request) {
           ${ChannelType.TEXT},
           ${profile.id},
           ${serverId},
+          ${null},
+          ${true},
+          ${now},
+          ${now}
+        )
+      `);
+
+      await tx.execute(sql`
+        insert into "Channel" (
+          "id",
+          "name",
+          "type",
+          "profileId",
+          "serverId",
+          "channelGroupId",
+          "isSystem",
+          "createdAt",
+          "updatedAt"
+        )
+        values (
+          ${uuidv4()},
+          ${"stage"},
+          ${ChannelType.VIDEO},
+          ${profile.id},
+          ${serverId},
+          ${null},
           ${true},
           ${now},
           ${now}
@@ -108,6 +140,17 @@ export async function POST(req: Request) {
 
     // Final safety for idempotency/race conditions: ensures exactly one rules channel.
     await ensureRulesChannelForServer(serverId, profile.id);
+    await ensureStageChannelForServer(serverId, profile.id);
+
+    const defaultEventStartAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    await createServerScheduledEvent({
+      serverId,
+      title: "Welcome Event",
+      description: "Kick things off and say hello.",
+      startsAt: defaultEventStartAt,
+      frequency: "ONCE",
+      createdByProfileId: profile.id,
+    });
 
     const resolvedBanner = await getServerBannerConfig(serverId);
 

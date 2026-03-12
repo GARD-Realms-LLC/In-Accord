@@ -433,21 +433,6 @@ export async function PATCH(
         ? channelGroupId.trim()
         : null;
 
-    if (normalizedGroupId) {
-      const groupResult = await db.execute(sql`
-        select "id"
-        from "ChannelGroup"
-        where "id" = ${normalizedGroupId}
-          and "serverId" = ${serverId}
-        limit 1
-      `);
-
-      const groupExists = (groupResult as unknown as { rows: Array<{ id: string }> }).rows?.[0];
-      if (!groupExists) {
-        return new NextResponse("Channel group not found", { status: 404 });
-      }
-    }
-
     const incomingName = String(name ?? "").trim();
     const nextName = incomingName;
     const nextType = typeof type === "string" ? type.trim().toUpperCase() : "";
@@ -464,6 +449,21 @@ export async function PATCH(
     const allowedChannelTypes = await resolveAllowedChannelTypes();
     if (!allowedChannelTypes.has(nextType)) {
       return new NextResponse("Invalid channel type", { status: 400 });
+    }
+
+    if (normalizedGroupId) {
+      const groupResult = await db.execute(sql`
+        select "id"
+        from "ChannelGroup"
+        where "id" = ${normalizedGroupId}
+          and "serverId" = ${serverId}
+        limit 1
+      `);
+
+      const groupExists = (groupResult as unknown as { rows: Array<{ id: string }> }).rows?.[0];
+      if (!groupExists) {
+        return new NextResponse("Channel group not found", { status: 404 });
+      }
     }
 
     const duplicateNameResult = await db.execute(sql`

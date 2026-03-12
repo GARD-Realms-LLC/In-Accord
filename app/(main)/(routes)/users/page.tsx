@@ -1467,8 +1467,11 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                                     name={friend.displayName}
                                     profileId={friend.profileId}
                                     memberId={friend.memberId}
+                                    containerClassName="w-full min-w-0"
+                                    nameClassName="min-w-0 truncate text-xs text-[#dbdee1]"
                                     showNameplate
                                     nameplateSize="compact"
+                                    stretchTagUnderPlate
                                   />
                                   <NewUserCloverBadge createdAt={friend.profileCreatedAt} className="text-xs" />
                                 </p>
@@ -1540,8 +1543,11 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                     <ProfileNameWithServerTag
                       name={profile.name}
                       profileId={profile.id}
+                      containerClassName="w-full min-w-0"
+                      nameClassName="min-w-0 truncate text-xs text-[#dbdee1]"
                       showNameplate
                       nameplateSize="compact"
+                      stretchTagUnderPlate
                     />
                   </p>
                 </div>
@@ -1664,8 +1670,11 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                             name={friend.displayName}
                             profileId={friend.profileId}
                             memberId={friend.memberId}
+                            containerClassName="w-full min-w-0"
+                            nameClassName="min-w-0 truncate text-xs text-[#dbdee1]"
                             showNameplate
                             nameplateSize="compact"
+                            stretchTagUnderPlate
                           />
                           <NewUserCloverBadge createdAt={friend.profileCreatedAt} className="text-[11px]" />
                         </p>
