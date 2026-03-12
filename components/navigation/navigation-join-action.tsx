@@ -13,13 +13,12 @@ export const NavigationJoinAction = () => {
       <ActionTooltip side="right" align="center" label="Join a server">
         <button
           onClick={() => onOpen("joinServer")}
-          className="group flex items-center justify-center rounded-full p-0 m-0 leading-none align-middle border-0 bg-transparent shadow-none ring-0 outline-none"
+          className="group flex flex-col items-center gap-1 rounded-md border-0 bg-transparent p-0 m-0 leading-none align-middle shadow-none ring-0 outline-none"
           style={{ boxShadow: "none", filter: "none", WebkitAppearance: "none", appearance: "none", border: "0", background: "transparent" }}
           suppressHydrationWarning
         >
           <div
-            className="flex h-[48px] w-[48px] rounded-full
-            transition-all overflow-hidden items-center justify-center shadow-none ring-0 border-0"
+            className="relative mx-3 flex h-10 w-20 items-center justify-center overflow-hidden rounded-[10px] border border-zinc-500/20 transition-all group-hover:rounded-[8px] group-hover:border-primary/50 group-hover:ring-2 group-hover:ring-primary/25"
             style={{ backgroundColor: "#3b82f6", boxShadow: "none", filter: "none" }}
             suppressHydrationWarning
             onMouseEnter={(e) => {
@@ -29,7 +28,13 @@ export const NavigationJoinAction = () => {
               e.currentTarget.style.backgroundColor = "#3b82f6";
             }}
           >
-            <Link2 className="transition text-white" size={22} suppressHydrationWarning />
+            <Link2 className="absolute top-1.5 text-white transition" size={22} suppressHydrationWarning />
+
+            <div className="absolute inset-x-0 bottom-0 flex h-[5%] min-h-3.5 items-center justify-center border-t border-zinc-500/20 bg-zinc-900/40 px-1 backdrop-blur-[1px]">
+              <span className="truncate text-[9px] font-semibold uppercase tracking-[0.05em] text-zinc-100">
+                Find Server
+              </span>
+            </div>
           </div>
         </button>
       </ActionTooltip>

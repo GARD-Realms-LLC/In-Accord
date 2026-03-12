@@ -86,13 +86,13 @@ export const ServerSearch = ({ serverId, serverName, data }: ServerSearchProps) 
     <>
       <button
         onClick={() => setOpen(true)}
-        className="group px-2 py-2 rounbed-md 
-        flex items-center gap-x-2 w-full hover:bg-zinc-700/10
+        className="group my-1 w-full rounded-2xl px-2 py-1.5
+        flex items-center gap-x-2 hover:bg-zinc-700/10
         dark:hover:bg-zinc-700/50 transition"
       >
         <Search className="w-4 h-4 text-zinc-500 dark:text-zinc-400" />
         <p
-          className="font-semibold text-sm text-zinc-500 
+          className="font-semibold text-[11px] text-zinc-500 
         dark:text-zinc-400 group-hover:text-zinc-600 
         dark:group-hover:text-zinc-300 transition"
         >
@@ -108,7 +108,10 @@ export const ServerSearch = ({ serverId, serverName, data }: ServerSearchProps) 
         </kbd>
       </button>
       <CommandDialog open={open} onOpenChange={setOpen}>
-        <CommandInput placeholder="Search server name, channels, and members" />
+        <CommandInput
+          placeholder="Search server name, channels, and members"
+          className="text-xs placeholder:text-xs"
+        />
         <CommandList>
           <CommandEmpty>No Results found</CommandEmpty>
           {data.map(({ label, type, data }) => {

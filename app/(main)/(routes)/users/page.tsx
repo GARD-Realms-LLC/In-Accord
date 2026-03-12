@@ -25,6 +25,7 @@ import { IncomingPmCallTabNotifier } from "@/components/friends/incoming-pm-call
 import { isBotUser } from "@/lib/is-bot-user";
 import { formatPresenceStatusLabel, presenceStatusDotClassMap, resolveAutoPresenceStatus } from "@/lib/presence-status";
 import { ensureFriendRelationsSchema } from "@/lib/friend-relations";
+import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 import { NewUserCloverBadge } from "@/components/new-user-clover-badge";
 import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
 import { ensureMessageReactionSchema } from "@/lib/message-reactions";
@@ -835,6 +836,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
     : "/users?view=friends";
   const currentUserPresenceStatus = resolveAutoPresenceStatus(profile.presenceStatus, profile.updatedAt);
   const showPmVideoSplitLayout = !isPmRequestPending && isPmVideoCallActive;
+  const canSeeInvisibleBoxes = hasInAccordAdministrativeAccess(profile.role);
 
   return (
     <div className="theme-users-shell h-full bg-[#313338] text-[#dbdee1]">
@@ -844,7 +846,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
         className="theme-server-topbar fixed right-0 top-0 z-40 flex h-12 items-center overflow-hidden rounded-b-xl border-b border-border bg-background"
         style={{ left: "116px" }}
       >
-        <SupportHelpControls panelTop={56} />
+        <SupportHelpControls panelTop={56} showInvisibleBoxes={canSeeInvisibleBoxes} />
 
         <h1
           className="absolute inset-y-0 z-10 flex -translate-x-1/2 items-center truncate text-center text-sm font-bold uppercase tracking-[0.08em] text-foreground"
@@ -1466,6 +1468,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                                     profileId={friend.profileId}
                                     memberId={friend.memberId}
                                     showNameplate
+                                    nameplateSize="compact"
                                   />
                                   <NewUserCloverBadge createdAt={friend.profileCreatedAt} className="text-xs" />
                                 </p>
@@ -1534,7 +1537,12 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                 </span>
                 <div className="min-w-0">
                   <p className="truncate text-xs font-semibold text-foreground">
-                    <ProfileNameWithServerTag name={profile.name} profileId={profile.id} showNameplate />
+                    <ProfileNameWithServerTag
+                      name={profile.name}
+                      profileId={profile.id}
+                      showNameplate
+                      nameplateSize="compact"
+                    />
                   </p>
                 </div>
               </div>
@@ -1657,6 +1665,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                             profileId={friend.profileId}
                             memberId={friend.memberId}
                             showNameplate
+                            nameplateSize="compact"
                           />
                           <NewUserCloverBadge createdAt={friend.profileCreatedAt} className="text-[11px]" />
                         </p>

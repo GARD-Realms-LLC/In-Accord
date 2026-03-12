@@ -2,13 +2,29 @@ import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { NextResponse } from "next/server";
 import { currentProfile } from "@/lib/current-profile";
 import { getEffectiveSiteUrl } from "@/lib/runtime-site-url-config";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
+import { Readable } from "node:stream";
+import type { ReadableStream as NodeReadableStream } from "node:stream/web";
+import { createWriteStream } from "node:fs";
+import { pipeline } from "node:stream/promises";
 
 const accountId = process.env.CLOUDFLARE_R2_ACCOUNT_ID;
 const accessKeyId = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID;
 const secretAccessKey = process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY;
 const bucketName = process.env.CLOUDFLARE_R2_BUCKET_NAME || "inaccord";
+const ENABLE_DEV_PERF_LOGS =
+  process.env.NODE_ENV !== "production" && process.env.INACCORD_DEV_PERF_LOGS === "1";
+
+const logPerf = (label: string, startedAtMs: number, extra?: string) => {
+  if (!ENABLE_DEV_PERF_LOGS) {
+    return;
+  }
+
+  const elapsedMs = Date.now() - startedAtMs;
+  const suffix = extra ? ` ${extra}` : "";
+  console.info(`[PERF] ${label} ${elapsedMs}ms${suffix}`);
+};
 
 const isPlaceholder = (value?: string) =>
   !value || value.trim() === "" || value.includes("replace_me");
@@ -41,6 +57,8 @@ const prefixMap = {
   familyApplication: "Client/Family Applications/",
 } as const;
 
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+
 function getFileExtension(filename: string) {
   const dot = filename.lastIndexOf(".");
   return dot > -1 ? filename.slice(dot).toLowerCase() : "";
@@ -51,6 +69,7 @@ function safeFileName(name: string) {
 }
 
 export async function POST(req: Request) {
+  const startedAtMs = ENABLE_DEV_PERF_LOGS ? Date.now() : 0;
   try {
     const user = await currentProfile();
 
@@ -73,8 +92,14 @@ export async function POST(req: Request) {
       return new NextResponse("File is required", { status: 400 });
     }
 
-    const bytes = await file.arrayBuffer();
-    const body = Buffer.from(bytes);
+    if (!Number.isFinite(file.size) || file.size <= 0) {
+      return new NextResponse("File is empty or invalid", { status: 400 });
+    }
+
+    if (file.size > MAX_UPLOAD_BYTES) {
+      return new NextResponse(`File exceeds max size of ${MAX_UPLOAD_BYTES} bytes`, { status: 413 });
+    }
+
     const ext = getFileExtension(file.name) || ".bin";
     const fileName = `${Date.now()}-${safeFileName(user.id)}${ext}`;
     const key = `${prefix}${fileName}`;
@@ -96,11 +121,13 @@ export async function POST(req: Request) {
             ? "user-banners"
             : "server-icons";
       const localDir = path.join(process.cwd(), "public", "uploads", localSubDir);
+      const localPath = path.join(localDir, fileName);
 
       await mkdir(localDir, { recursive: true });
-      await writeFile(path.join(localDir, fileName), body);
+      await pipeline(Readable.fromWeb(file.stream() as unknown as NodeReadableStream), createWriteStream(localPath));
 
       const localUrl = `/uploads/${localSubDir}/${fileName}`;
+      logPerf("r2.upload.post", startedAtMs, `status=200 storage=local bytes=${file.size}`);
 
       return NextResponse.json({
         url: localUrl,
@@ -114,7 +141,8 @@ export async function POST(req: Request) {
       new PutObjectCommand({
         Bucket: bucketName,
         Key: key,
-        Body: body,
+        Body: Readable.fromWeb(file.stream() as unknown as NodeReadableStream),
+        ContentLength: file.size,
         ContentType: file.type || "application/octet-stream",
       })
     );
@@ -122,8 +150,10 @@ export async function POST(req: Request) {
     const appUrl = await getEffectiveSiteUrl();
     const objectUrl = `${appUrl}/api/r2/object?key=${encodeURIComponent(key)}`;
 
+    logPerf("r2.upload.post", startedAtMs, `status=200 storage=r2 bytes=${file.size}`);
     return NextResponse.json({ url: objectUrl, key });
   } catch (error) {
+    logPerf("r2.upload.post", startedAtMs, "status=500");
     console.error("[R2_UPLOAD_POST]", error);
     const message =
       error instanceof Error ? error.message : "Internal Error";

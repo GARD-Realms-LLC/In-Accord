@@ -79,6 +79,7 @@ export const ChatHeader = ({
               memberId={memberId}
               nameClassName="font-semibold text-md text-black dark:text-white"
               showNameplate
+              nameplateSize="compact"
             />
           ) : (
             <p className="truncate font-semibold text-md text-black dark:text-white">{name}</p>

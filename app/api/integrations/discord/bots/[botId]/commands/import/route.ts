@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { currentProfile } from "@/lib/current-profile";
 import { importOtherBotCommandsForOwner } from "@/lib/discord-bot-commands";
+import { updateOtherBotTemplateStats } from "@/lib/user-preferences";
 
 export async function POST(
   _req: Request,
@@ -24,6 +25,11 @@ export async function POST(
     const imported = await importOtherBotCommandsForOwner({
       ownerProfileId: profile.id,
       botId,
+    });
+
+    await updateOtherBotTemplateStats(profile.id, botId, {
+      importsMadeDelta: 1,
+      templatesImportedDelta: imported.importedCount,
     });
 
     return NextResponse.json({

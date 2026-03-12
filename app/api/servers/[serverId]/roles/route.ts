@@ -47,7 +47,8 @@ export async function GET(_req: Request, { params }: Params) {
         r."name",
         r."color",
         r."iconUrl",
-         r."isMentionable",
+        r."isMentionable",
+        r."showInOnlineMembers",
         r."position",
         r."isManaged",
         count(a."memberId")::int as "memberCount"
@@ -55,7 +56,7 @@ export async function GET(_req: Request, { params }: Params) {
       left join "ServerRoleAssignment" a
         on a."roleId" = r."id"
       where r."serverId" = ${serverId}
-        group by r."id", r."name", r."color", r."iconUrl", r."isMentionable", r."position", r."isManaged"
+      group by r."id", r."name", r."color", r."iconUrl", r."isMentionable", r."showInOnlineMembers", r."position", r."isManaged"
       order by r."position" asc, r."name" asc
     `);
 
@@ -72,6 +73,7 @@ export async function GET(_req: Request, { params }: Params) {
         color: string;
         iconUrl: string | null;
         isMentionable: boolean;
+        showInOnlineMembers: boolean;
         position: number;
         isManaged: boolean;
         memberCount: number;
@@ -130,13 +132,16 @@ export async function POST(req: Request, { params }: Params) {
       name?: string;
       color?: string;
       iconUrl?: string | null;
-       isMentionable?: boolean;
+      isMentionable?: boolean;
+      showInOnlineMembers?: boolean;
     };
 
     const name = String(body.name ?? "").trim();
     const color = String(body.color ?? "#99aab5").trim();
     const iconUrl = body.iconUrl === null ? null : String(body.iconUrl ?? "").trim() || null;
-      const isMentionable = typeof body.isMentionable === "boolean" ? body.isMentionable : true;
+    const isMentionable = typeof body.isMentionable === "boolean" ? body.isMentionable : true;
+    const showInOnlineMembers =
+      typeof body.showInOnlineMembers === "boolean" ? body.showInOnlineMembers : false;
 
     if (!name) {
       return new NextResponse("Role name is required", { status: 400 });
@@ -168,6 +173,7 @@ export async function POST(req: Request, { params }: Params) {
         "color",
         "iconUrl",
         "isMentionable",
+        "showInOnlineMembers",
         "position",
         "isManaged",
         "createdAt",
@@ -179,13 +185,14 @@ export async function POST(req: Request, { params }: Params) {
         ${name},
         ${color},
         ${iconUrl},
-         ${isMentionable},
+        ${isMentionable},
+        ${showInOnlineMembers},
         ${nextPosition},
         false,
         now(),
         now()
       )
-        returning "id", "name", "color", "iconUrl", "isMentionable", "position", "isManaged"
+      returning "id", "name", "color", "iconUrl", "isMentionable", "showInOnlineMembers", "position", "isManaged"
     `);
 
     let role = (insertResult as unknown as {
@@ -194,7 +201,8 @@ export async function POST(req: Request, { params }: Params) {
         name: string;
         color: string;
         iconUrl: string | null;
-         isMentionable: boolean;
+        isMentionable: boolean;
+        showInOnlineMembers: boolean;
         position: number;
         isManaged: boolean;
       }>;
@@ -202,7 +210,7 @@ export async function POST(req: Request, { params }: Params) {
 
     if (!role) {
       const roleResult = await db.execute(sql`
-        select "id", "name", "color", "iconUrl", "isMentionable", "position", "isManaged"
+        select "id", "name", "color", "iconUrl", "isMentionable", "showInOnlineMembers", "position", "isManaged"
         from "ServerRole"
         where "id" = ${roleId}
           and "serverId" = ${serverId}
@@ -215,7 +223,8 @@ export async function POST(req: Request, { params }: Params) {
           name: string;
           color: string;
           iconUrl: string | null;
-           isMentionable: boolean;
+          isMentionable: boolean;
+          showInOnlineMembers: boolean;
           position: number;
           isManaged: boolean;
         }>;

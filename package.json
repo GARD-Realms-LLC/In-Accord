@@ -47,7 +47,10 @@
     "db:replace-discord-live:dry:fallback": "node scripts/replace-discord-live-db.cjs --dry-run --allow-fallback",
     "db:replace-discord-db:dry": "node scripts/replace-discord-live-db.cjs --use-database-url --dry-run",
     "db:cleanup:legacy-role-groups:dry": "node scripts/cleanup-legacy-role-channel-groups.cjs --use-database-url",
-    "db:cleanup:legacy-role-groups": "node scripts/cleanup-legacy-role-channel-groups.cjs --use-database-url --apply"
+    "db:cleanup:legacy-role-groups": "node scripts/cleanup-legacy-role-channel-groups.cjs --use-database-url --apply",
+    "bot:template-me:inspect": "node scripts/inspect-bot-ciphers.cjs",
+    "bot:template-me:smoke": "node scripts/smoke-template-me-control-port.cjs",
+    "bot:template-me:live": "node scripts/template-me-live-terminal.cjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1002.0",
@@ -74,6 +77,7 @@
     "class-variance-authority": "0.7.1-canary.2",
     "clsx": "2.1.1",
     "cmdk": "^1.1.1",
+    "discord.js": "^14.25.1",
     "drizzle-orm": "^0.44.5",
     "eslint-config-next": "^16.1.6",
     "lucide-react": "0.438.0",
@@ -98,6 +102,7 @@
     "typescript": "5.2.2",
     "uploadthing": "^7.7.4",
     "uuid": "10.0.0",
+    "zlib-sync": "^0.1.10",
     "zod": "3.24.0-canary.20240701T200529",
     "zustand": "5.0.0-rc.1"
   },

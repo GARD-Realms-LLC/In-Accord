@@ -29,8 +29,11 @@ export async function PATCH(req: Request) {
 
     const body = (await req.json()) as { status?: string; currentGame?: string | null };
     const hasStatus = typeof body.status === "string";
+    const hasCurrentGame = Object.prototype.hasOwnProperty.call(body, "currentGame");
     const status = hasStatus ? normalizePresenceStatus(body.status) : normalizePresenceStatus(current.presenceStatus);
-    const currentGame = normalizeCurrentGame(body.currentGame);
+    const currentGame = hasCurrentGame
+      ? normalizeCurrentGame(body.currentGame)
+      : normalizeCurrentGame(current.currentGame);
 
     await ensureUserProfileSchema();
 

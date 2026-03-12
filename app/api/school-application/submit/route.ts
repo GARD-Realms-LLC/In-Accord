@@ -12,6 +12,23 @@ import {
   updateUserPreferences,
 } from "@/lib/user-preferences";
 
+const MAX_ATTACHMENTS = 20;
+const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+const MAX_TOTAL_ATTACHMENTS_BYTES = 80 * 1024 * 1024;
+const MAX_COMPILED_PDF_BYTES = 100 * 1024 * 1024;
+const ENABLE_DEV_PERF_LOGS =
+  process.env.NODE_ENV !== "production" && process.env.INACCORD_DEV_PERF_LOGS === "1";
+
+const logPerf = (label: string, startedAtMs: number, extra?: string) => {
+  if (!ENABLE_DEV_PERF_LOGS) {
+    return;
+  }
+
+  const elapsedMs = Date.now() - startedAtMs;
+  const suffix = extra ? ` ${extra}` : "";
+  console.info(`[PERF] ${label} ${elapsedMs}ms${suffix}`);
+};
+
 const accountId = process.env.CLOUDFLARE_R2_ACCOUNT_ID;
 const accessKeyId = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID;
 const secretAccessKey = process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY;
@@ -75,6 +92,7 @@ const drawTextLines = (
 };
 
 export async function POST(req: Request) {
+  const startedAtMs = ENABLE_DEV_PERF_LOGS ? Date.now() : 0;
   try {
     const profile = await currentProfile();
 
@@ -94,7 +112,7 @@ export async function POST(req: Request) {
       .getAll("files")
       .filter((item): item is File => item instanceof File)
       .filter((file) => file.size > 0)
-      .slice(0, 20);
+      .slice(0, MAX_ATTACHMENTS);
 
     if (!schoolDesignation) {
       return NextResponse.json({ error: "School designation is required." }, { status: 400 });
@@ -102,6 +120,22 @@ export async function POST(req: Request) {
 
     if (files.length === 0) {
       return NextResponse.json({ error: "Attach at least one verification file." }, { status: 400 });
+    }
+
+    const oversizedFile = files.find((file) => !Number.isFinite(file.size) || file.size > MAX_ATTACHMENT_BYTES);
+    if (oversizedFile) {
+      return NextResponse.json(
+        { error: `Each file must be <= ${MAX_ATTACHMENT_BYTES} bytes.` },
+        { status: 413 }
+      );
+    }
+
+    const totalAttachmentBytes = files.reduce((sum, file) => sum + Math.max(0, Math.floor(file.size || 0)), 0);
+    if (totalAttachmentBytes > MAX_TOTAL_ATTACHMENTS_BYTES) {
+      return NextResponse.json(
+        { error: `Total attachment size must be <= ${MAX_TOTAL_ATTACHMENTS_BYTES} bytes.` },
+        { status: 413 }
+      );
     }
 
     const pdfDoc = await PDFDocument.create();
@@ -185,6 +219,12 @@ export async function POST(req: Request) {
     }
 
     const pdfBytes = await pdfDoc.save();
+    if (pdfBytes.byteLength > MAX_COMPILED_PDF_BYTES) {
+      return NextResponse.json(
+        { error: `Compiled PDF exceeds max size of ${MAX_COMPILED_PDF_BYTES} bytes.` },
+        { status: 413 }
+      );
+    }
     const pdfPayload = new Uint8Array(pdfBytes);
     const key = `Client/Applications/${Date.now()}-${safeFileName(profile.userId)}-school-application.pdf`;
     const appUrl = await getEffectiveSiteUrl();
@@ -234,6 +274,7 @@ export async function POST(req: Request) {
       schoolCenter: nextSchoolCenter,
     });
 
+    logPerf("school-application.submit", startedAtMs, `status=200 files=${files.length}`);
     return NextResponse.json({
       ok: true,
       pdfUrl,
@@ -241,6 +282,7 @@ export async function POST(req: Request) {
       schoolCenter: updated.schoolCenter,
     });
   } catch (error) {
+    logPerf("school-application.submit", startedAtMs, "status=500");
     console.error("[SCHOOL_APPLICATION_SUBMIT_POST]", error);
     const message = error instanceof Error ? error.message : "Internal Error";
     return NextResponse.json({ error: message }, { status: 500 });

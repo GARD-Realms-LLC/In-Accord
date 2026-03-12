@@ -7,6 +7,7 @@ type NameplatePillProps = {
   subtitle?: string | null;
   color?: string | null;
   imageUrl?: string | null;
+  size?: "compact" | "default";
   className?: string;
   labelClassName?: string;
   metaContent?: ReactNode;
@@ -40,6 +41,7 @@ export const NameplatePill = ({
   subtitle,
   color,
   imageUrl,
+  size = "default",
   className,
   labelClassName,
   metaContent,
@@ -59,8 +61,12 @@ export const NameplatePill = ({
     <span
       className={cn(
         trimmedSubtitle
-          ? "relative inline-flex min-h-10 max-w-full items-stretch overflow-hidden rounded-[4px] border text-[11px] font-medium leading-tight text-[#f2f3f5]"
-          : "relative inline-flex h-5 max-w-full items-center overflow-hidden rounded-[4px] border text-[11px] font-medium leading-tight text-[#f2f3f5]",
+          ? size === "compact"
+            ? "relative inline-flex min-h-9 max-w-full items-stretch overflow-hidden rounded-[4px] border text-[11px] font-medium leading-tight text-[#f2f3f5]"
+            : "relative inline-flex min-h-11 max-w-full items-stretch overflow-hidden rounded-[4px] border text-[11px] font-medium leading-tight text-[#f2f3f5]"
+          : size === "compact"
+            ? "relative inline-flex min-h-5 max-w-full items-center overflow-hidden rounded-[4px] border text-[11px] font-medium leading-tight text-[#f2f3f5]"
+            : "relative inline-flex min-h-7 max-w-full items-center overflow-hidden rounded-[4px] border text-[11px] font-medium leading-tight text-[#f2f3f5]",
         className
       )}
       style={{
@@ -81,7 +87,12 @@ export const NameplatePill = ({
         className="absolute inset-y-0 left-0 w-1.5"
         style={{ backgroundColor: resolvedColor }}
       />
-      <span className={cn("relative min-w-0 flex-1 px-2", trimmedSubtitle ? "py-1.5" : "py-0.5")}>
+      <span
+        className={cn(
+          "relative min-w-0 flex-1 px-2",
+          trimmedSubtitle ? (size === "compact" ? "py-1" : "py-1.5") : size === "compact" ? "py-0.5" : "py-1"
+        )}
+      >
         <span className={cn("block truncate", labelClassName)}>{trimmedLabel}</span>
         {trimmedSubtitle ? (
           <span className="mt-0.5 block truncate text-[10px] leading-tight font-medium text-[#c8ccd1]">{trimmedSubtitle}</span>

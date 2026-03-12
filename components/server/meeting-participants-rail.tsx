@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, Headphones, Mic, Video } from "lucide-react";
+import { Activity, Headphones, Mic, ScreenShare, Video } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { UserAvatar } from "@/components/user-avatar";
@@ -13,6 +13,8 @@ type ConnectedMeetingMember = {
   isMuted: boolean;
   isDeafened: boolean;
   isCameraOn: boolean;
+  isStreaming: boolean;
+  streamLabel?: string | null;
 };
 
 type MemberDetails = {
@@ -71,6 +73,11 @@ export const MeetingParticipantsRail = ({
           isMuted: Boolean(member?.isMuted),
           isDeafened: Boolean(member?.isDeafened),
           isCameraOn: Boolean(member?.isCameraOn),
+          isStreaming: Boolean(member?.isStreaming),
+          streamLabel:
+            typeof member?.streamLabel === "string" && member.streamLabel.trim().length
+              ? member.streamLabel.trim()
+              : null,
         }));
 
         if (!cancelled) {
@@ -118,9 +125,16 @@ export const MeetingParticipantsRail = ({
                       src={details?.profileImageUrl}
                       className="h-8 w-8 md:h-8 md:w-8"
                     />
-                    <p className="truncate text-xs font-semibold text-zinc-900 dark:text-zinc-100">
-                      {resolvedDisplayName}
-                    </p>
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <p className="truncate text-xs font-semibold text-zinc-900 dark:text-zinc-100">
+                        {resolvedDisplayName}
+                      </p>
+                      {item.isStreaming ? (
+                        <span className="inline-flex items-center rounded-full border border-indigo-300/50 bg-indigo-500/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-indigo-100">
+                          Live
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
                   <div className="mt-1 flex items-center gap-1.5">
                     <span
@@ -163,7 +177,38 @@ export const MeetingParticipantsRail = ({
                     >
                       <Video className="h-3.5 w-3.5" />
                     </span>
+                    <span
+                      className={`inline-flex h-6 w-6 items-center justify-center rounded-full border ${
+                        item.isStreaming
+                          ? "border-indigo-300/60 bg-indigo-500/20 text-indigo-100"
+                          : "border-zinc-500/60 bg-zinc-700/30 text-zinc-300"
+                      }`}
+                      title={
+                        item.isStreaming
+                          ? item.streamLabel
+                            ? `Streaming: ${item.streamLabel}`
+                            : "Streaming"
+                          : "Not streaming"
+                      }
+                    >
+                      <ScreenShare className="h-3.5 w-3.5" />
+                    </span>
                   </div>
+                  {item.isStreaming ? (
+                    <div className="mt-1">
+                      <span className="group relative inline-flex max-w-full items-center gap-1 rounded-full border border-indigo-300/45 bg-indigo-500/20 px-2 py-0.5 text-[10px] font-medium text-indigo-100">
+                        <ScreenShare className="h-3 w-3 shrink-0" />
+                        <span className="max-w-44 truncate">
+                          {item.streamLabel ? `Live: ${item.streamLabel}` : "Live"}
+                        </span>
+                        {item.streamLabel ? (
+                          <span className="pointer-events-none absolute bottom-full left-0 z-20 mb-1 hidden max-w-56 rounded-md border border-indigo-300/45 bg-[#151a2a] px-2 py-1 text-[10px] text-indigo-50 shadow-lg group-hover:block group-focus-within:block">
+                            {item.streamLabel}
+                          </span>
+                        ) : null}
+                      </span>
+                    </div>
+                  ) : null}
                 </div>
               );
             })}

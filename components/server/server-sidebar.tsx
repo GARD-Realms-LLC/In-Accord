@@ -332,13 +332,6 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
         {!!groupedChannels.length && (
           <div className="mb-2">
             <div className="my-4 h-px w-full bg-zinc-500 dark:bg-zinc-300" />
-            <ServerSection
-              sectionType="channels"
-              channelType={ChannelType.TEXT}
-              role={role}
-              label={`Channel Groups - ${groupedChannels.length}`}
-              server={serverWithMembers}
-            />
             <ChannelGroupsList
               serverId={serverId}
               role={role}

@@ -31,7 +31,7 @@ const SettingsPage = async () => {
             <p>
               <span className="text-[#949ba4]">Name:</span>{" "}
               <span className="text-white">
-                {profile.realName || profile.profileName || profile.email?.split("@")[0] || profile.id || "Unknown User"}
+                {profile.realName || profile.profileName || profile.email?.split("@")[0] || profile.id || "Deleted User"}
               </span>
             </p>
             <p>

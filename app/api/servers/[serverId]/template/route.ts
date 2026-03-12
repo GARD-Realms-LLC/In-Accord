@@ -9,6 +9,7 @@ import { ensureServerRolesSchema } from "@/lib/server-roles";
 import { ensureChannelTopicSchema } from "@/lib/channel-topic";
 import { ensureSystemChannelSchema } from "@/lib/system-channels";
 import { ensureChannelOtherSettingsSchema } from "@/lib/channel-discord-settings";
+import { ensureChannelPermissionSchema } from "@/lib/channel-permissions";
 import { getDecryptedOtherBotToken, getUserPreferences } from "@/lib/user-preferences";
 
 type Params = { params: Promise<{ serverId: string }> };
@@ -60,6 +61,7 @@ type ImportRequestBody = {
   OtherServerId?: string;
   notInAccordServerId?: string;
   botId?: string;
+  botToken?: string;
   replaceChannels?: boolean;
   replaceRoles?: boolean;
 };
@@ -141,14 +143,14 @@ const normalizeOtherInviteCode = (input: string) => {
     return "";
   }
 
-  const directCode = raw.match(/^([A-Za-z0-9-]{2,64})$/)?.[1];
+  const directCode = raw.match(/^([A-Za-z0-9_-]{2,128})$/)?.[1];
   if (directCode) {
     return directCode;
   }
 
   const fromUrl =
-    raw.match(/^https?:\/\/(?:www\.)?(?:discord|Other)\.gg\/([A-Za-z0-9-]{2,64})\/?/i)?.[1] ??
-    raw.match(/^https?:\/\/(?:www\.)?(?:discord|Other)(?:app)?\.com\/invite\/([A-Za-z0-9-]{2,64})\/?/i)?.[1];
+    raw.match(/^https?:\/\/(?:www\.)?(?:discord|Other)\.gg\/([A-Za-z0-9_-]{2,128})\/?/i)?.[1] ??
+    raw.match(/^https?:\/\/(?:www\.)?(?:discord|Other)(?:app)?\.com\/invite\/([A-Za-z0-9_-]{2,128})\/?/i)?.[1];
 
   return fromUrl ?? "";
 };
@@ -191,16 +193,47 @@ const resolveUniqueName = (name: string, usedLowerNames: Set<string>, fallbackPr
   return candidate;
 };
 
-const mapOtherChannelType = (type: number): ChannelType | null => {
-  if (type === 0 || type === 5 || type === 15) {
+const normalizeOtherChannelType = (type: number | string | undefined): number | null => {
+  if (typeof type === "number" && Number.isFinite(type)) {
+    return Math.floor(type);
+  }
+
+  const raw = String(type ?? "").trim();
+  if (!raw) {
+    return null;
+  }
+
+  if (/^\d+$/.test(raw)) {
+    return Number.parseInt(raw, 10);
+  }
+
+  const normalized = raw.toUpperCase();
+  const byName: Record<string, number> = {
+    GUILD_TEXT: 0,
+    GUILD_VOICE: 2,
+    GUILD_CATEGORY: 4,
+    GUILD_ANNOUNCEMENT: 5,
+    GUILD_STAGE_VOICE: 13,
+    GUILD_FORUM: 15,
+    GUILD_MEDIA: 16,
+  };
+
+  return byName[normalized] ?? null;
+};
+
+const isOtherCategoryType = (type: number | string | undefined) => normalizeOtherChannelType(type) === 4;
+
+const mapOtherChannelType = (type: number | string | undefined): ChannelType | null => {
+  const normalizedType = normalizeOtherChannelType(type);
+  if (normalizedType === 0 || normalizedType === 5 || normalizedType === 15 || normalizedType === 16) {
     return ChannelType.TEXT;
   }
 
-  if (type === 2) {
+  if (normalizedType === 2) {
     return ChannelType.AUDIO;
   }
 
-  if (type === 13) {
+  if (normalizedType === 13) {
     return ChannelType.VIDEO;
   }
 
@@ -298,6 +331,26 @@ const mapRolePermissions = (permissions: bigint) => {
   };
 };
 
+const mapOverwritePermission = ({
+  allowBits,
+  denyBits,
+  flag,
+}: {
+  allowBits: bigint;
+  denyBits: bigint;
+  flag: bigint;
+}) => {
+  if (hasPerm(denyBits, flag)) {
+    return false;
+  }
+
+  if (hasPerm(allowBits, flag)) {
+    return true;
+  }
+
+  return null;
+};
+
 const getAuthorizedOwnerServer = async (serverId: string, profileId: string) => {
   return db.query.server.findFirst({
     where: and(eq(server.id, serverId), eq(server.profileId, profileId)),
@@ -305,39 +358,35 @@ const getAuthorizedOwnerServer = async (serverId: string, profileId: string) => 
   });
 };
 
-const getOtherBotTokenFromEnv = () => {
-  const token = String(process.env.DISCORD_BOT_TOKEN ?? process.env.Other_BOT_TOKEN ?? "").trim();
-  if (!token || /^replace_me/i.test(token)) {
-    return null;
-  }
-
-  return token;
-};
-
-const resolveOtherAccessToken = async (ownerProfileId: string, preferredBotId?: string) => {
-  const envToken = getOtherBotTokenFromEnv();
-  if (envToken) {
+const resolveOtherAccessToken = async (
+  ownerProfileId: string,
+  preferredBotId?: string,
+  oneTimeBotToken?: string
+) => {
+  const transientToken = String(oneTimeBotToken ?? "").trim();
+  if (transientToken && !/^replace_me/i.test(transientToken)) {
     return {
-      token: envToken,
-      source: "env" as const,
-      botName: "DISCORD_BOT_TOKEN",
+      token: transientToken,
+      source: "one-time" as const,
+      botName: "One-time token",
     };
   }
 
+  const normalizedPreferredBotId = String(preferredBotId ?? "").trim();
+  if (!normalizedPreferredBotId) {
+    throw new Error("TEMPLATE_ME_BOT_ID_REQUIRED");
+  }
+
   const preferences = await getUserPreferences(ownerProfileId);
-  const enabledBots = preferences.OtherBots.filter((bot) => bot.enabled);
+  const selectedBot = preferences.OtherBots.find((bot) => bot.id === normalizedPreferredBotId);
 
-  const selectedBot = preferredBotId
-    ? enabledBots.find((bot) => bot.id === preferredBotId)
-    : enabledBots[0];
-
-  if (!selectedBot) {
-    throw new Error("NO_Other_IMPORT_BOT_CONFIGURED");
+  if (!selectedBot || !selectedBot.enabled) {
+    throw new Error("TEMPLATE_ME_BOT_NOT_AVAILABLE");
   }
 
   const decryptedToken = await getDecryptedOtherBotToken(ownerProfileId, selectedBot.id);
   if (!decryptedToken) {
-    throw new Error("Other_IMPORT_BOT_TOKEN_MISSING");
+    throw new Error("TEMPLATE_ME_BOT_TOKEN_MISSING");
   }
 
   return {
@@ -357,9 +406,14 @@ const resolveGuildIdFromInvite = async (inviteCode: string) => {
   const timeoutId = setTimeout(() => controller.abort(), 10000);
 
   try {
-    const response = await fetch(
+    const inviteLookups = [
+      `https://discord.com/api/v10/invites/${encodeURIComponent(inviteCode)}?with_counts=true&with_expiration=true&guild_scheduled_event_id=false`,
       `https://discord.com/api/v10/invites/${encodeURIComponent(inviteCode)}?with_counts=false&with_expiration=false&guild_scheduled_event_id=false`,
-      {
+      `https://discord.com/api/v10/invites/${encodeURIComponent(inviteCode)}`,
+    ];
+
+    for (const inviteLookupUrl of inviteLookups) {
+      const response = await fetch(inviteLookupUrl, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -367,15 +421,23 @@ const resolveGuildIdFromInvite = async (inviteCode: string) => {
         },
         signal: controller.signal,
         cache: "no-store",
-      }
-    );
+      });
 
-    if (!response.ok) {
-      return null;
+      if (!response.ok) {
+        continue;
+      }
+
+      const payload = (await response.json()) as { guild?: { id?: string }; guild_id?: string };
+      const guildId =
+        normalizeOtherGuildId(String(payload.guild?.id ?? "")) ||
+        normalizeOtherGuildId(String(payload.guild_id ?? ""));
+
+      if (guildId) {
+        return guildId;
+      }
     }
 
-    const payload = (await response.json()) as { guild?: { id?: string } };
-    return normalizeOtherGuildId(String(payload.guild?.id ?? "")) || null;
+    return null;
   } catch {
     return null;
   } finally {
@@ -440,6 +502,128 @@ const fetchOtherGuildStructure = async (guildId: string, token: string) => {
       guildName: String(guildData.name ?? "Discord Server").trim() || "Discord Server",
       roles: Array.isArray(roleData) ? roleData : [],
       channels: Array.isArray(channelData) ? channelData : [],
+    };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
+const resolveSourceGuildIdFromBot = async ({
+  token,
+  preferredGuildName,
+}: {
+  token: string;
+  preferredGuildName: string;
+}) => {
+  const discordJs = (await import("discord.js")) as {
+    Client: new (options: { intents: number[] }) => {
+      once: (event: string, listener: (...args: unknown[]) => void) => void;
+      login: (botToken: string) => Promise<string>;
+      destroy: () => void;
+      guilds?: {
+        cache?: Map<string, { id: string; name?: string }>;
+      };
+    };
+    GatewayIntentBits: { Guilds: number };
+  };
+
+  const client = new discordJs.Client({
+    intents: [discordJs.GatewayIntentBits.Guilds],
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error("SOURCE_GUILD_RESOLVE_TIMEOUT"));
+    }, 12000);
+
+    client.once("ready", () => {
+      clearTimeout(timeoutId);
+      resolve();
+    });
+
+    void client.login(token).catch((error) => {
+      clearTimeout(timeoutId);
+      reject(error);
+    });
+  });
+
+  try {
+    const guilds = Array.from(client.guilds?.cache?.values?.() ?? []);
+    if (guilds.length === 0) {
+      throw new Error("BOT_HAS_NO_GUILDS");
+    }
+
+    const normalizedPreferred = preferredGuildName.trim().toLowerCase();
+    const exactMatch = guilds.find((guild) => String(guild.name ?? "").trim().toLowerCase() === normalizedPreferred);
+    if (exactMatch?.id) {
+      return exactMatch.id;
+    }
+
+    if (guilds.length === 1 && guilds[0]?.id) {
+      return guilds[0].id;
+    }
+
+    const fallback = [...guilds]
+      .sort((left, right) => String(left.name ?? "").localeCompare(String(right.name ?? ""), undefined, { sensitivity: "base" }))[0];
+
+    if (!fallback?.id) {
+      throw new Error("BOT_GUILD_RESOLVE_FAILED");
+    }
+
+    return fallback.id;
+  } finally {
+    try {
+      client.destroy();
+    } catch {
+      // no-op
+    }
+  }
+};
+
+const fetchOtherGuildWidgetStructure = async (guildId: string) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+  try {
+    const response = await fetch(`https://discord.com/api/v10/guilds/${encodeURIComponent(guildId)}/widget.json`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent": "In-Accord/ServerTemplateImport",
+      },
+      signal: controller.signal,
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      const widgetError = await response.text().catch(() => "");
+      throw new Error(widgetError || `WIDGET_UNAVAILABLE (${response.status})`);
+    }
+
+    const payload = (await response.json()) as {
+      name?: string;
+      channels?: Array<{ id?: string; name?: string; position?: number }>;
+    };
+
+    const channels = Array.isArray(payload.channels)
+      ? payload.channels
+          .map((channel) => ({
+            id: typeof channel.id === "string" ? channel.id : undefined,
+            type: 0,
+            name: typeof channel.name === "string" ? channel.name : undefined,
+            position: typeof channel.position === "number" ? channel.position : 0,
+          }))
+          .filter((channel) => String(channel.name ?? "").trim().length > 0)
+      : [];
+
+    if (channels.length === 0) {
+      throw new Error("WIDGET_NO_CHANNELS");
+    }
+
+    return {
+      guildId,
+      guildName: String(payload.name ?? "Discord Server").trim() || "Discord Server",
+      channels,
     };
   } finally {
     clearTimeout(timeoutId);
@@ -577,6 +761,10 @@ export async function GET(_req: Request, { params }: Params) {
 }
 
 export async function POST(req: Request, { params }: Params) {
+  let diagnosticSourceServerId = "";
+  let diagnosticBotId = "";
+  let diagnosticBotName = "";
+
   try {
     const { serverId: routeServerIdRaw } = await params;
     const profile = await currentProfile();
@@ -596,99 +784,62 @@ export async function POST(req: Request, { params }: Params) {
     }
 
     const body = (await req.json().catch(() => ({}))) as ImportRequestBody;
-    const rawTemplateInput = String(body.templateInput ?? "").trim();
     const rawSourceServerInput = String(
-      body.sourceServerId ?? body.notInAccordServerId ?? body.OtherServerId ?? ""
+      body.sourceServerId ?? body.notInAccordServerId ?? body.OtherServerId ?? body.templateInput ?? ""
     ).trim();
     const preferredBotId = String(body.botId ?? "").trim();
+    const oneTimeBotToken = String(body.botToken ?? "").trim();
 
-    const autoDetectedServerId = normalizeOtherGuildId(rawTemplateInput);
-    const templateCode = normalizeTemplateCode(rawTemplateInput);
-    let OtherServerId = normalizeOtherGuildId(rawSourceServerInput) || autoDetectedServerId;
-    const inviteCode = normalizeOtherInviteCode(rawTemplateInput);
-    const replaceChannels = body.replaceChannels === true;
-    const replaceRoles = body.replaceRoles === true;
+    let OtherServerId = normalizeOtherGuildId(rawSourceServerInput);
+    const replaceChannels = true;
+    const replaceRoles = true;
 
-    if (!templateCode && !OtherServerId && !inviteCode) {
-      return new NextResponse("Paste a template URL, invite URL/code, or source server ID", { status: 400 });
-    }
-
-    let sourceCode = templateCode;
+    let sourceCode = "";
     let sourceName = "Imported Template";
     let sourceGuildName: string | null = null;
-    let sourceType: "template" | "serverId" = "template";
+    const sourceType: "serverId" = "serverId";
     let templateRoles: OtherTemplateRole[] = [];
     let templateChannels: OtherTemplateChannel[] = [];
     let importBotName: string | null = null;
+    const warnings: string[] = [];
 
-    if (!OtherServerId && inviteCode) {
-      const resolvedGuildId = await resolveGuildIdFromInvite(inviteCode);
-      if (resolvedGuildId) {
-        OtherServerId = resolvedGuildId;
-      }
+    const access = await resolveOtherAccessToken(
+      profile.id,
+      preferredBotId || undefined,
+      oneTimeBotToken || undefined
+    );
+    importBotName = access.botName;
+    diagnosticBotId = String(access.botId ?? preferredBotId ?? "").trim();
+    diagnosticBotName = String(access.botName ?? "").trim();
+
+    if (!OtherServerId) {
+      return new NextResponse("Source server ID is required for Template Me import.", { status: 400 });
     }
 
-    if (OtherServerId) {
-      sourceType = "serverId";
-      sourceCode = OtherServerId;
+    diagnosticSourceServerId = OtherServerId;
 
-      const access = await resolveOtherAccessToken(profile.id, preferredBotId || undefined);
-      importBotName = access.botName;
+    sourceCode = OtherServerId;
 
-      const guildStructure = await fetchOtherGuildStructure(OtherServerId, access.token);
-      sourceName = guildStructure.guildName;
-      sourceGuildName = guildStructure.guildName;
-      templateRoles = guildStructure.roles;
-      templateChannels = guildStructure.channels;
-    } else {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-      let templateData: OtherTemplatePayload;
-      try {
-        const response = await fetch(`https://discord.com/api/v10/guilds/templates/${encodeURIComponent(templateCode)}`, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            "User-Agent": "In-Accord/ServerTemplateImport",
-          },
-          signal: controller.signal,
-          cache: "no-store",
-        });
-
-        if (!response.ok) {
-          const responseText = await response.text().catch(() => "");
-          const message = responseText.slice(0, 180) || `Template fetch failed (${response.status})`;
-          return new NextResponse(message, { status: response.status === 404 ? 404 : 400 });
-        }
-
-        templateData = (await response.json()) as OtherTemplatePayload;
-      } finally {
-        clearTimeout(timeoutId);
-      }
-
-      const guild = templateData.serialized_source_guild;
-      if (!guild) {
-        return new NextResponse("Template payload is missing source guild data", { status: 400 });
-      }
-
-      sourceCode = templateData.code ?? templateCode;
-      sourceName = templateData.name ?? guild.name ?? "Imported Template";
-      sourceGuildName = guild.name ?? null;
-      templateRoles = Array.isArray(guild.roles) ? guild.roles : [];
-      templateChannels = Array.isArray(guild.channels) ? guild.channels : [];
-    }
+    const guildStructure = await fetchOtherGuildStructure(OtherServerId, access.token);
+    sourceName = guildStructure.guildName;
+    sourceGuildName = guildStructure.guildName;
+    templateRoles = guildStructure.roles;
+    templateChannels = guildStructure.channels;
 
     await ensureChannelGroupSchema();
     await ensureServerRolesSchema();
     await ensureSystemChannelSchema();
     await ensureChannelTopicSchema();
     await ensureChannelOtherSettingsSchema();
-
-    const warnings: string[] = [];
+    await ensureChannelPermissionSchema();
 
     const importResult = await db.transaction(async (tx) => {
       if (replaceChannels) {
+        await tx.execute(sql`
+          delete from "ChannelPermission"
+          where "serverId" = ${serverId}
+        `);
+
         await tx.execute(sql`
           delete from "Message"
           where "channelId" in (
@@ -756,42 +907,18 @@ export async function POST(req: Request, { params }: Params) {
         `);
       }
 
+      let importedRoles = 0;
+      const roleIdByTemplateRoleId = new Map<string, string>();
       const existingRoleNamesResult = await tx.execute(sql`
-        select "name" from "ServerRole" where "serverId" = ${serverId}
-      `);
-      const usedRoleNames = new Set(
-        ((existingRoleNamesResult as unknown as { rows: Array<{ name: string | null }> }).rows ?? [])
-          .map((row) => String(row.name ?? "").trim().toLowerCase())
-          .filter(Boolean)
-      );
-
-      const existingGroupNamesResult = await tx.execute(sql`
-        select "name" from "ChannelGroup" where "serverId" = ${serverId}
-      `);
-      const usedGroupNames = new Set(
-        ((existingGroupNamesResult as unknown as { rows: Array<{ name: string | null }> }).rows ?? [])
-          .map((row) => String(row.name ?? "").trim().toLowerCase())
-          .filter(Boolean)
-      );
-
-      const existingChannelNamesResult = await tx.execute(sql`
-        select "name" from "Channel" where "serverId" = ${serverId}
-      `);
-      const usedChannelNames = new Set(
-        ((existingChannelNamesResult as unknown as { rows: Array<{ name: string | null }> }).rows ?? [])
-          .map((row) => String(row.name ?? "").trim().toLowerCase())
-          .filter(Boolean)
-      );
-
-      const nextRolePositionResult = await tx.execute(sql`
-        select coalesce(max("position"), 0)::int as "maxPosition"
+        select lower(trim(coalesce("name", ''))) as "normalizedName"
         from "ServerRole"
         where "serverId" = ${serverId}
       `);
-      let rolePosition =
-        Number((nextRolePositionResult as unknown as { rows: Array<{ maxPosition: number | string | null }> }).rows?.[0]?.maxPosition ?? 0);
-
-      let importedRoles = 0;
+      const usedRoleNames = new Set(
+        ((existingRoleNamesResult as unknown as { rows?: Array<{ normalizedName?: string | null }> }).rows ?? [])
+          .map((row) => String(row.normalizedName ?? "").trim().toLowerCase())
+          .filter((name) => name.length > 0)
+      );
       const sortedTemplateRoles = [...templateRoles].sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0));
       for (const templateRole of sortedTemplateRoles) {
         const roleNameRaw = String(templateRole.name ?? "").trim();
@@ -799,8 +926,14 @@ export async function POST(req: Request, { params }: Params) {
           continue;
         }
 
-        const roleName = resolveUniqueName(roleNameRaw.slice(0, 100), usedRoleNames, "role");
-        rolePosition += 1;
+        const roleName = resolveUniqueName(roleNameRaw.slice(0, 100), usedRoleNames, "imported-role").slice(0, 100);
+        if (roleName !== roleNameRaw.slice(0, 100)) {
+          warnings.push(`Role \"${roleNameRaw.slice(0, 100)}\" already existed and was imported as \"${roleName}\".`);
+        }
+        const rolePositionValue = Number(templateRole.position ?? importedRoles + 1);
+        const rolePosition = Number.isFinite(rolePositionValue)
+          ? Math.max(1, Math.floor(rolePositionValue))
+          : importedRoles + 1;
         const roleId = uuidv4();
         const permissionsValue = asBigIntPermissions(templateRole.permissions);
         const mapped = mapRolePermissions(permissionsValue);
@@ -872,29 +1005,49 @@ export async function POST(req: Request, { params }: Params) {
           )
         `);
 
+        const templateRoleId = String(templateRole.id ?? "").trim();
+        if (templateRoleId) {
+          roleIdByTemplateRoleId.set(templateRoleId, roleId);
+        }
+
         importedRoles += 1;
       }
 
       const categories = templateChannels
-        .filter((item) => Number(item.type) === 4)
+        .filter((item) => isOtherCategoryType(item.type))
         .sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0));
 
-      const groupsMaxResult = await tx.execute(sql`
-        select coalesce(max("sortOrder"), 0)::int as "maxSortOrder"
+      const existingGroupNamesResult = await tx.execute(sql`
+        select lower(trim(coalesce("name", ''))) as "normalizedName"
         from "ChannelGroup"
         where "serverId" = ${serverId}
       `);
-      let groupSort =
-        Number((groupsMaxResult as unknown as { rows: Array<{ maxSortOrder: number | string | null }> }).rows?.[0]?.maxSortOrder ?? 0);
+      const usedGroupNames = new Set(
+        ((existingGroupNamesResult as unknown as { rows?: Array<{ normalizedName?: string | null }> }).rows ?? [])
+          .map((row) => String(row.normalizedName ?? "").trim().toLowerCase())
+          .filter((name) => name.length > 0)
+      );
 
       const groupByTemplateCategoryId = new Map<string, string>();
       let importedGroups = 0;
+      let skippedGroups = 0;
       for (const category of categories) {
         const categoryId = String(category.id ?? "").trim();
-        const categoryName = resolveUniqueName(String(category.name ?? "").slice(0, 191), usedGroupNames, "Category");
+        const categoryNameRaw = String(category.name ?? "").trim().slice(0, 191);
+        if (!categoryNameRaw) {
+          skippedGroups += 1;
+          continue;
+        }
+        const categoryName = resolveUniqueName(categoryNameRaw, usedGroupNames, "imported-group").slice(0, 191);
+        if (categoryName !== categoryNameRaw) {
+          warnings.push(`Channel group \"${categoryNameRaw}\" already existed and was imported as \"${categoryName}\".`);
+        }
         const groupId = uuidv4();
+        const groupSortValue = Number(category.position ?? importedGroups + 1);
+        const groupSort = Number.isFinite(groupSortValue)
+          ? Math.max(1, Math.floor(groupSortValue))
+          : importedGroups + 1;
 
-        groupSort += 1;
         await tx.execute(sql`
           insert into "ChannelGroup" (
             "id", "name", "icon", "serverId", "profileId", "sortOrder", "createdAt", "updatedAt"
@@ -922,14 +1075,27 @@ export async function POST(req: Request, { params }: Params) {
         .filter((item) => Number(item.type) !== 4)
         .sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0));
 
+      const existingChannelNamesResult = await tx.execute(sql`
+        select lower(trim(coalesce("name", ''))) as "normalizedName"
+        from "Channel"
+        where "serverId" = ${serverId}
+      `);
+      const usedChannelNames = new Set(
+        ((existingChannelNamesResult as unknown as { rows?: Array<{ normalizedName?: string | null }> }).rows ?? [])
+          .map((row) => String(row.normalizedName ?? "").trim().toLowerCase())
+          .filter((name) => name.length > 0)
+      );
+
       const channelSortByGroup = new Map<string, number>();
       const uncategorizedKey = "__uncategorized__";
       let importedChannels = 0;
       let skippedChannels = 0;
+      let channelsWithMissingParentGroup = 0;
       let channelsWithOverwrites = 0;
+      let importedChannelOverwrites = 0;
 
       for (const templateChannel of importableChannels) {
-        const OtherType = Number(templateChannel.type);
+        const OtherType = normalizeOtherChannelType(templateChannel.type) ?? -1;
         const mappedType = mapOtherChannelType(OtherType);
 
         if (!mappedType) {
@@ -944,13 +1110,24 @@ export async function POST(req: Request, { params }: Params) {
 
         const parentTemplateId = String(templateChannel.parent_id ?? "").trim();
         const channelGroupId = parentTemplateId ? groupByTemplateCategoryId.get(parentTemplateId) ?? null : null;
+        if (parentTemplateId && !channelGroupId) {
+          channelsWithMissingParentGroup += 1;
+        }
         const groupKey = channelGroupId ?? uncategorizedKey;
 
         const currentSort = channelSortByGroup.get(groupKey) ?? 0;
         const nextSort = currentSort + 1;
         channelSortByGroup.set(groupKey, nextSort);
 
-        const channelName = resolveUniqueName(String(templateChannel.name ?? "").slice(0, 191), usedChannelNames, "channel");
+        const channelNameRaw = String(templateChannel.name ?? "").trim().slice(0, 191);
+        if (!channelNameRaw) {
+          skippedChannels += 1;
+          continue;
+        }
+        const channelName = resolveUniqueName(channelNameRaw, usedChannelNames, "imported-channel").slice(0, 191);
+        if (channelName !== channelNameRaw) {
+          warnings.push(`Channel \"${channelNameRaw}\" already existed and was imported as \"${channelName}\".`);
+        }
 
         const createdChannelId = uuidv4();
 
@@ -1002,15 +1179,105 @@ export async function POST(req: Request, { params }: Params) {
           `);
         }
 
+        const sourceOverwrites = Array.isArray(templateChannel.permission_overwrites)
+          ? (templateChannel.permission_overwrites as Array<{
+              id?: string;
+              type?: number | string;
+              allow?: string | number;
+              deny?: string | number;
+            }>)
+          : [];
+
+        for (const overwrite of sourceOverwrites) {
+          const overwriteType = Number(overwrite.type ?? 0);
+          if (!Number.isFinite(overwriteType) || overwriteType !== 0) {
+            continue;
+          }
+
+          const sourceTargetId = String(overwrite.id ?? "").trim();
+          if (!sourceTargetId) {
+            continue;
+          }
+
+          const allowBits = asBigIntPermissions(overwrite.allow);
+          const denyBits = asBigIntPermissions(overwrite.deny);
+
+          let targetType: "EVERYONE" | "ROLE";
+          let targetId: string;
+
+          if (sourceTargetId === OtherServerId) {
+            targetType = "EVERYONE";
+            targetId = "EVERYONE";
+          } else {
+            const mappedRoleId = roleIdByTemplateRoleId.get(sourceTargetId);
+            if (!mappedRoleId) {
+              continue;
+            }
+
+            targetType = "ROLE";
+            targetId = mappedRoleId;
+          }
+
+          const allowView = mapOverwritePermission({
+            allowBits,
+            denyBits,
+            flag: Other_PERMISSION_FLAGS.VIEW_CHANNEL,
+          });
+          const allowSend = mapOverwritePermission({
+            allowBits,
+            denyBits,
+            flag: Other_PERMISSION_FLAGS.SEND_MESSAGES,
+          });
+          const allowConnect = mapOverwritePermission({
+            allowBits,
+            denyBits,
+            flag: Other_PERMISSION_FLAGS.CONNECT,
+          });
+
+          await tx.execute(sql`
+            insert into "ChannelPermission" (
+              "id", "serverId", "channelId", "targetType", "targetId", "allowView", "allowSend", "allowConnect", "createdAt", "updatedAt"
+            )
+            values (
+              ${uuidv4()},
+              ${serverId},
+              ${createdChannelId},
+              ${targetType},
+              ${targetId},
+              ${allowView},
+              ${allowSend},
+              ${allowConnect},
+              now(),
+              now()
+            )
+            on conflict ("channelId", "targetType", "targetId")
+            do update set
+              "allowView" = excluded."allowView",
+              "allowSend" = excluded."allowSend",
+              "allowConnect" = excluded."allowConnect",
+              "updatedAt" = excluded."updatedAt"
+          `);
+
+          importedChannelOverwrites += 1;
+        }
+
         importedChannels += 1;
+      }
+
+      if (skippedGroups > 0) {
+        warnings.push(`${skippedGroups} source channel group(s) with missing names were skipped.`);
       }
 
       if (skippedChannels > 0) {
         warnings.push(`${skippedChannels} unsupported source channels were skipped.`);
       }
 
+      if (channelsWithMissingParentGroup > 0) {
+        warnings.push(`${channelsWithMissingParentGroup} channel(s) referenced parent groups that were unavailable and were imported uncategorized.`);
+      }
+
       if (channelsWithOverwrites > 0) {
-        warnings.push(`${channelsWithOverwrites} channel(s) had source permission overwrites. Imported safely with stored compatibility settings; role-level permissions are applied in In-Accord.`);
+        warnings.push(`${channelsWithOverwrites} channel(s) included source permission overwrites. Synced ${importedChannelOverwrites} overwrite rule(s) into channel permissions.`);
       }
 
       return {
@@ -1036,38 +1303,106 @@ export async function POST(req: Request, { params }: Params) {
     console.error("[SERVER_TEMPLATE_POST]", error);
 
     const message = error instanceof Error ? error.message : String(error);
+    if (/TEMPLATE_ME_BOT_ID_REQUIRED/i.test(message)) {
+      return new NextResponse(
+        "Template Me bot selection is required. Pick your bot explicitly, then retry import.",
+        { status: 400 }
+      );
+    }
+    if (/TEMPLATE_ME_BOT_NOT_AVAILABLE/i.test(message)) {
+      return new NextResponse(
+        "Selected Template Me bot is not available or disabled. Re-select an enabled bot in Server Template admin menu.",
+        { status: 400 }
+      );
+    }
+
+    if (/TEMPLATE_ME_BOT_TOKEN_MISSING/i.test(message)) {
+      return new NextResponse(
+        "Selected Template Me bot is missing its token. Update that bot in Settings > Bot/App Developer, then retry import.",
+        { status: 400 }
+      );
+    }
+    if (/Missing BOT_TOKEN_ENCRYPTION_KEY|SESSION_SECRET for bot token encryption/i.test(message)) {
+      return new NextResponse(
+        "Bot token decryption is not configured on this runtime (missing BOT_TOKEN_ENCRYPTION_KEY or SESSION_SECRET).",
+        { status: 500 }
+      );
+    }
+    if (/Invalid encrypted bot token payload/i.test(message)) {
+      return new NextResponse(
+        "Stored Template Me bot token payload is invalid/corrupted. Re-save the bot token in Settings > Bot/App Developer.",
+        { status: 400 }
+      );
+    }
+
     if (/NO_Other_IMPORT_BOT_CONFIGURED/i.test(message)) {
       return new NextResponse(
-        "Super-easy setup: add one import bot in Settings > Bot/App Developer (save token once), then import again.",
+        "No usable Template Me bot is configured for this account. Configure Template Me Bot token first.",
         { status: 400 }
       );
     }
     if (/Other_IMPORT_BOT_TOKEN_MISSING/i.test(message)) {
       return new NextResponse(
-        "Your saved import bot is missing a token. Re-open Bot/App Developer, re-enter the bot token, save, then import again.",
+        "Template Me bot token is missing. Save a valid token and retry import.",
         { status: 400 }
       );
     }
     if (/(DISCORD_BOT_TOKEN|Other_BOT_TOKEN)/i.test(message)) {
       return new NextResponse(
-        "Discord server ID import uses the bot token from .env: DISCORD_BOT_TOKEN (legacy: Other_BOT_TOKEN). Set it to a real Discord bot token (not replace_me), restart the app, then invite that bot to the source server.",
-        { status: 500 }
+        "Template Me bot token is invalid or unavailable. Update token and retry import.",
+        { status: 400 }
       );
     }
-    if (/Missing Access|Unknown Guild|Unauthorized|forbidden|403/i.test(message)) {
+    if (/Missing Access|Missing Permissions|Unknown Guild|Unauthorized|forbidden|403|50001|50013|10004/i.test(message)) {
+      const botLabel = diagnosticBotName || "Template Me bot";
+      const sourceLabel = diagnosticSourceServerId || "(unknown source server)";
+      const botIdHint = diagnosticBotId ? ` [botId: ${diagnosticBotId}]` : "";
       return new NextResponse(
-        "The bot configured in DISCORD_BOT_TOKEN (or legacy Other_BOT_TOKEN) cannot access that source server. Invite that exact bot to the source server and grant: View Channels, Manage Roles, and Read Message History.",
-        { status: 403 }
+        `${botLabel} cannot access source server ID ${sourceLabel}.${botIdHint} Ensure THIS same bot is invited to that source server (not a different bot token).`,
+        { status: 400 }
       );
+    }
+    if (/BOT_HAS_NO_GUILDS/i.test(message)) {
+      return new NextResponse("Template Me bot is not in any Discord servers yet.", { status: 400 });
+    }
+    if (/SOURCE_GUILD_RESOLVE_TIMEOUT/i.test(message)) {
+      return new NextResponse("Timed out while resolving bot source server. Try again.", { status: 504 });
+    }
+    if (/BOT_GUILD_RESOLVE_FAILED/i.test(message)) {
+      return new NextResponse("Unable to resolve a source server from Template Me bot.", { status: 400 });
+    }
+    if (/Source server ID is required/i.test(message)) {
+      return new NextResponse("Source server ID is required for Template Me import.", { status: 400 });
+    }
+    if (/invalid token|token was provided|TOKEN_INVALID|401\s*:\s*Unauthorized/i.test(message)) {
+      return new NextResponse("Template Me bot token is invalid. Update token and retry import.", { status: 400 });
+    }
+    if (/Cannot find package 'discord\.js'|Cannot find module 'discord\.js'/i.test(message)) {
+      return new NextResponse("Template Me import dependency is missing on server runtime (discord.js).", { status: 500 });
+    }
+    if (/SOURCE_CHANNEL_GROUP_NAME_MISSING|SOURCE_CHANNEL_NAME_MISSING/i.test(message)) {
+      return new NextResponse("Source server contains invalid channel data (missing names).", { status: 400 });
+    }
+    if (/column .* does not exist|relation .* does not exist/i.test(message)) {
+      return new NextResponse("Template import schema is out of date. Run latest database migrations and retry.", { status: 500 });
     }
     if (/abort|timed out/i.test(message)) {
       return new NextResponse("Template request timed out. Please try again.", { status: 504 });
     }
 
     if (/duplicate key|unique/i.test(message)) {
-      return new NextResponse("Template import hit duplicate names. Please retry with replace options enabled.", { status: 409 });
+      return new NextResponse("Strict sync aborted: source data contains conflicting duplicate names that cannot be mapped uniquely.", { status: 409 });
     }
 
-    return new NextResponse("Internal Error", { status: 500 });
+    return NextResponse.json(
+      {
+        error: "Template import failed",
+        details: message,
+        sourceServerId: diagnosticSourceServerId || null,
+        botId: diagnosticBotId || null,
+        botName: diagnosticBotName || null,
+      },
+      { status: 500 }
+    );
   }
 }

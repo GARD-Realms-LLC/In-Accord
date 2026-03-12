@@ -19,6 +19,19 @@ type ListedFile = {
 
 const workspaceRoot = process.cwd();
 const excludedTopLevelEntries = new Set([".data", ".git", ".next-dev", ".vs", ".vscode"]);
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+const ENABLE_DEV_PERF_LOGS =
+  process.env.NODE_ENV !== "production" && process.env.INACCORD_DEV_PERF_LOGS === "1";
+
+const logPerf = (label: string, startedAtMs: number, extra?: string) => {
+  if (!ENABLE_DEV_PERF_LOGS) {
+    return;
+  }
+
+  const elapsedMs = Date.now() - startedAtMs;
+  const suffix = extra ? ` ${extra}` : "";
+  console.info(`[PERF] ${label} ${elapsedMs}ms${suffix}`);
+};
 
 const sanitizeSegment = (value: string) => value.replace(/[^a-zA-Z0-9._-]/g, "-");
 
@@ -133,6 +146,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const startedAtMs = ENABLE_DEV_PERF_LOGS ? Date.now() : 0;
   try {
     const profile = await currentProfile();
 
@@ -152,6 +166,14 @@ export async function POST(request: Request) {
       return new NextResponse("file is required", { status: 400 });
     }
 
+    if (!Number.isFinite(file.size) || file.size <= 0) {
+      return new NextResponse("file is empty or invalid", { status: 400 });
+    }
+
+    if (file.size > MAX_UPLOAD_BYTES) {
+      return new NextResponse(`file exceeds max size of ${MAX_UPLOAD_BYTES} bytes`, { status: 413 });
+    }
+
     const safeFolder = resolveSafeFolder(folder);
     if (!safeFolder) {
       return new NextResponse("Invalid folder path", { status: 400 });
@@ -166,14 +188,15 @@ export async function POST(request: Request) {
 
     const targetPath = path.join(safeFolder.absolute, safeFileName);
 
-    const data = await file.arrayBuffer();
-    await fs.writeFile(targetPath, Buffer.from(data));
+    const bytes = Buffer.from(await file.arrayBuffer());
+    await fs.writeFile(targetPath, bytes);
 
     const relativePath = path
       .join(safeFolder.relative, safeFileName)
       .replace(/\\/g, "/")
       .replace(/^\//, "");
 
+    logPerf("admin.file-manager.post", startedAtMs, `status=200 bytes=${file.size}`);
     return NextResponse.json({
       ok: true,
       file: {
@@ -183,6 +206,7 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
+    logPerf("admin.file-manager.post", startedAtMs, "status=500");
     console.error("[ADMIN_FILE_MANAGER_POST]", error);
     return new NextResponse("Internal Error", { status: 500 });
   }

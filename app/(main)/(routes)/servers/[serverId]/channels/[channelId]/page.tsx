@@ -258,7 +258,7 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
         row.name?.trim() ||
         mentionProfileNameMap.get(row.profileId) ||
         row.email?.trim() ||
-        "Unknown User",
+        "Deleted User",
       presenceStatus: normalizedPresence,
     };
   });
@@ -278,7 +278,7 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
       mentionProfileNameMap.get(item.profileId) ??
       item.profile.name ??
       item.profile.email ??
-      "Unknown User";
+      "Deleted User";
 
     return {
       id: item.profileId,
@@ -307,7 +307,7 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
         mentionProfileNameMap.get(item.profileId) ??
         item.profile.name ??
         item.profile.email ??
-        "Unknown User";
+        "Deleted User";
 
       return [
         item.profileId,
@@ -331,7 +331,7 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
     const safeProfile: Profile & { role?: string | null } = {
       id: sourceProfile?.id ?? fallbackProfileId,
       userId: sourceProfile?.userId ?? sourceProfile?.id ?? fallbackProfileId,
-      name: profileName ?? sourceProfile?.name ?? sourceProfile?.email ?? "Unknown User",
+      name: profileName ?? sourceProfile?.name ?? sourceProfile?.email ?? "Deleted User",
       imageUrl: sourceProfile?.imageUrl ?? "/in-accord-steampunk-logo.png",
       email: sourceProfile?.email ?? "",
       role: profileRoleMap.get(fallbackProfileId) ?? null,
@@ -454,6 +454,8 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
                     profileImageUrl: item.profileImageUrl,
                     isMuted: item.isMuted,
                     isCameraOn: item.isCameraOn,
+                    isStreaming: item.isStreaming,
+                    streamLabel: item.streamLabel,
                     isSpeaking: item.isSpeaking,
                   }))}
                   availableMembers={availableMediaMembers.map((item) => ({
@@ -632,6 +634,8 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
                 isMuted: item.isMuted,
                 isDeafened: item.isDeafened,
                 isCameraOn: item.isCameraOn,
+                isStreaming: item.isStreaming,
+                streamLabel: item.streamLabel,
               }))}
               memberDetailsByProfileId={Object.fromEntries(memberDetailsByProfileId)}
             />

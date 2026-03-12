@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Activity, ExternalLink, Loader2, Mic, Pin, PinOff, Users, Video, VideoOff } from "lucide-react";
+import { Activity, ExternalLink, Loader2, Mic, Pin, PinOff, ScreenShare, ScreenShareOff, Users, Video, VideoOff } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { UserAvatar } from "@/components/user-avatar";
 
@@ -13,6 +13,8 @@ type MeetingMember = {
   profileImageUrl?: string;
   isMuted: boolean;
   isCameraOn: boolean;
+  isStreaming: boolean;
+  streamLabel?: string | null;
   isSpeaking: boolean;
 };
 
@@ -68,10 +70,13 @@ export const VideoChannelMeetingPanel = ({
 
   const router = useRouter();
   const VOICE_STATE_SYNC_EVENT = "inaccord:voice-state-sync";
+  const VOICE_TOGGLE_STREAM_EVENT = "inaccord:voice-toggle-stream";
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
-  const [localCameraStream, setLocalCameraStream] = useState<MediaStream | null>(null);
+  const [localMediaStream, setLocalMediaStream] = useState<MediaStream | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isCameraEnabled, setIsCameraEnabled] = useState(true);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamLabel, setStreamLabel] = useState<string | null>(null);
   const [contextMenuState, setContextMenuState] = useState<{
     memberId: string;
     x: number;
@@ -118,6 +123,11 @@ export const VideoChannelMeetingPanel = ({
               : undefined,
           isMuted: Boolean(member?.isMuted),
           isCameraOn: Boolean(member?.isCameraOn),
+          isStreaming: Boolean(member?.isStreaming),
+          streamLabel:
+            typeof member?.streamLabel === "string" && member.streamLabel.trim().length
+              ? member.streamLabel.trim()
+              : null,
           isSpeaking: Boolean(member?.isSpeaking),
         }));
 
@@ -165,7 +175,14 @@ export const VideoChannelMeetingPanel = ({
       ? connectedMembersView.find((item) => item.profileId === meetingCreatorProfileId)
       : null;
 
-    return pinned ?? creatorMember ?? connectedMembersView.find((item) => item.isCameraOn) ?? connectedMembersView[0] ?? null;
+    return (
+      pinned ??
+      creatorMember ??
+      connectedMembersView.find((item) => item.isStreaming) ??
+      connectedMembersView.find((item) => item.isCameraOn) ??
+      connectedMembersView[0] ??
+      null
+    );
   }, [connectedMembersView, meetingCreatorProfileId, presentingMemberId]);
 
   useEffect(() => {
@@ -186,10 +203,28 @@ export const VideoChannelMeetingPanel = ({
     const onVoiceStateSync = (event: Event) => {
       const customEvent = event as CustomEvent<{
         isCameraOn?: boolean;
+        isStreaming?: boolean;
+        streamLabel?: string | null;
       }>;
 
       if (typeof customEvent.detail?.isCameraOn === "boolean") {
         setIsCameraEnabled(customEvent.detail.isCameraOn);
+      }
+
+      if (typeof customEvent.detail?.isStreaming === "boolean") {
+        setIsStreaming(customEvent.detail.isStreaming);
+        if (!customEvent.detail.isStreaming) {
+          setStreamLabel(null);
+        }
+      }
+
+      if (typeof customEvent.detail?.streamLabel === "string") {
+        const normalized = customEvent.detail.streamLabel.trim().slice(0, 255);
+        setStreamLabel(normalized.length ? normalized : null);
+      }
+
+      if (customEvent.detail?.streamLabel === null) {
+        setStreamLabel(null);
       }
     };
 
@@ -201,9 +236,11 @@ export const VideoChannelMeetingPanel = ({
   }, [VOICE_STATE_SYNC_EVENT]);
 
   useEffect(() => {
-    if (!isLiveSession || !canConnect || !isCameraEnabled) {
+    const wantsVideoCapture = isStreaming || isCameraEnabled;
+
+    if (!isLiveSession || !canConnect || !wantsVideoCapture) {
       setCameraError(null);
-      setLocalCameraStream((existing) => {
+      setLocalMediaStream((existing) => {
         if (existing) {
           existing.getTracks().forEach((track) => track.stop());
         }
@@ -221,27 +258,55 @@ export const VideoChannelMeetingPanel = ({
 
     const start = async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: "user",
-          },
-          audio: false,
-        });
+        const stream = isStreaming
+          ? await navigator.mediaDevices.getDisplayMedia({
+              video: true,
+              audio: false,
+            })
+          : await navigator.mediaDevices.getUserMedia({
+              video: {
+                facingMode: "user",
+              },
+              audio: false,
+            });
 
         if (cancelled) {
           stream.getTracks().forEach((track) => track.stop());
           return;
         }
 
+        if (isStreaming) {
+          const [videoTrack] = stream.getVideoTracks();
+          const detectedLabel =
+            typeof videoTrack?.label === "string" && videoTrack.label.trim().length
+              ? videoTrack.label.trim().slice(0, 255)
+              : null;
+
+          syncStreamingState(true, detectedLabel);
+
+          if (videoTrack) {
+            videoTrack.onended = () => {
+              syncStreamingState(false, null);
+            };
+          }
+        }
+
         setCameraError(null);
-        setLocalCameraStream((existing) => {
+        setLocalMediaStream((existing) => {
           if (existing) {
             existing.getTracks().forEach((track) => track.stop());
           }
           return stream;
         });
       } catch {
-        setCameraError("Camera access was blocked. Allow camera permissions to start video.");
+        if (isStreaming) {
+          syncStreamingState(false, null);
+        }
+        setCameraError(
+          isStreaming
+            ? "Screen share was blocked. Allow display capture to stream."
+            : "Camera access was blocked. Allow camera permissions to start video."
+        );
       }
     };
 
@@ -249,28 +314,28 @@ export const VideoChannelMeetingPanel = ({
 
     return () => {
       cancelled = true;
-      setLocalCameraStream((existing) => {
+      setLocalMediaStream((existing) => {
         if (existing) {
           existing.getTracks().forEach((track) => track.stop());
         }
         return null;
       });
     };
-  }, [canConnect, isCameraEnabled, isLiveSession]);
+  }, [canConnect, isCameraEnabled, isLiveSession, isStreaming, VOICE_TOGGLE_STREAM_EVENT]);
 
   useEffect(() => {
     if (!localVideoRef.current) {
       return;
     }
 
-    localVideoRef.current.srcObject = localCameraStream;
-  }, [localCameraStream]);
+    localVideoRef.current.srcObject = localMediaStream;
+  }, [localMediaStream]);
 
   const isLocalStage = stageMember?.profileId === currentProfileId;
   const shouldShowLocalPreview = isLiveSession && (!stageMember || isLocalStage);
-  const isConnectingVideo = shouldShowLocalPreview && !localCameraStream && !cameraError;
+  const isConnectingVideo = shouldShowLocalPreview && !localMediaStream && !cameraError;
   const cameraOnMembers = useMemo(
-    () => connectedMembersView.filter((item) => item.isCameraOn),
+    () => connectedMembersView.filter((item) => item.isCameraOn || item.isStreaming),
     [connectedMembersView]
   );
   const stageCameraMembers = useMemo(
@@ -509,8 +574,21 @@ export const VideoChannelMeetingPanel = ({
     window.blur();
   };
 
+  const syncStreamingState = (nextStreaming: boolean, nextStreamLabel: string | null = null) => {
+    setIsStreaming(nextStreaming);
+    setStreamLabel(nextStreaming ? nextStreamLabel : null);
+    window.dispatchEvent(
+      new CustomEvent(VOICE_TOGGLE_STREAM_EVENT, {
+        detail: {
+          isStreaming: nextStreaming,
+          streamLabel: nextStreaming ? nextStreamLabel : null,
+        },
+      })
+    );
+  };
+
   const runParticipantAction = async (
-    action: "mute" | "unmute" | "kick" | "hidevideo" | "showvideo",
+    action: "mute" | "unmute" | "kick" | "hidevideo" | "showvideo" | "hidestream" | "showstream",
     targetMemberId: string
   ) => {
     const endpoint = `/api/channels/${encodeURIComponent(channelId)}/voice-state?serverId=${encodeURIComponent(serverId)}`;
@@ -590,7 +668,7 @@ export const VideoChannelMeetingPanel = ({
 
         <div className="rounded-2xl border border-border/70 bg-[#1f232b] p-3">
           <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-xl border border-border/60 bg-linear-to-br from-[#2e323c] to-[#1b1f26]">
-            {shouldShowLocalPreview && localCameraStream ? (
+            {shouldShowLocalPreview && localMediaStream ? (
               <video
                 ref={localVideoRef}
                 autoPlay
@@ -607,6 +685,8 @@ export const VideoChannelMeetingPanel = ({
                 <p className="mt-1 text-xs text-zinc-300">
                   {isPresentingMode
                     ? "Presenting"
+                    : stageMember.isStreaming
+                      ? `Streaming${stageMember.streamLabel ? ` • ${stageMember.streamLabel}` : ""}`
                     : stageMember.isCameraOn
                       ? "Camera live"
                       : "Audio only"}
@@ -681,7 +761,11 @@ export const VideoChannelMeetingPanel = ({
 
                       <span className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-black/55 px-1.5 py-1 text-[10px] text-zinc-100">
                         <span className="max-w-[75%] truncate">{tileName}</span>
-                        <Video suppressHydrationWarning className="h-3 w-3 shrink-0 text-emerald-300" />
+                        {item.isStreaming ? (
+                          <ScreenShare suppressHydrationWarning className="h-3 w-3 shrink-0 text-indigo-200" />
+                        ) : (
+                          <Video suppressHydrationWarning className="h-3 w-3 shrink-0 text-emerald-300" />
+                        )}
                       </span>
                     </button>
                   );
@@ -740,6 +824,25 @@ export const VideoChannelMeetingPanel = ({
                 Pop out meeting
               </button>
             )}
+
+            {isLiveSession ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !isStreaming;
+                  syncStreamingState(next, next ? streamLabel : null);
+                }}
+                className={`inline-flex h-9 items-center gap-1 rounded-md border px-3 text-xs font-semibold transition ${
+                  isStreaming
+                    ? "border-indigo-300/60 bg-indigo-500/30 text-indigo-100 hover:bg-indigo-500/40"
+                    : "border-white/20 bg-black/25 text-zinc-100 hover:bg-black/35"
+                }`}
+                title={isStreaming ? "Stop streaming" : "Start screen sharing"}
+              >
+                {isStreaming ? <ScreenShareOff suppressHydrationWarning className="h-3.5 w-3.5" /> : <ScreenShare suppressHydrationWarning className="h-3.5 w-3.5" />}
+                {isStreaming ? "Stop stream" : "Go Live"}
+              </button>
+            ) : null}
 
             {isLiveSession ? (
               <button
@@ -804,6 +907,23 @@ export const VideoChannelMeetingPanel = ({
 
                 {isLiveSession ? (
                   <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = !isStreaming;
+                        syncStreamingState(next, next ? streamLabel : null);
+                      }}
+                      className={`inline-flex h-9 items-center gap-1 rounded-md border px-3 text-xs font-semibold transition ${
+                        isStreaming
+                          ? "border-indigo-300/60 bg-indigo-500/30 text-indigo-100 hover:bg-indigo-500/40"
+                          : "border-white/20 bg-black/25 text-zinc-100 hover:bg-black/35"
+                      }`}
+                      title={isStreaming ? "Stop streaming" : "Start screen sharing"}
+                    >
+                      {isStreaming ? <ScreenShareOff suppressHydrationWarning className="h-3.5 w-3.5" /> : <ScreenShare suppressHydrationWarning className="h-3.5 w-3.5" />}
+                      {isStreaming ? "Stop stream" : "Go Live"}
+                    </button>
+
                     <button
                       type="button"
                       onClick={() => {
@@ -890,6 +1010,22 @@ export const VideoChannelMeetingPanel = ({
                       <span>{item.isMuted ? "Muted" : "Mic On"}</span>
                       <span>•</span>
                       <span>{item.isCameraOn ? "Camera" : "Audio"}</span>
+                      {item.isStreaming ? (
+                        <>
+                          <span>•</span>
+                          <span className="group relative inline-flex max-w-full items-center gap-1 rounded-full border border-indigo-300/45 bg-indigo-500/20 px-1.5 py-0.5 text-[10px] font-medium text-indigo-100">
+                            <ScreenShare className="h-3 w-3 shrink-0" />
+                            <span className="max-w-36 truncate">
+                              {item.streamLabel ? `Live: ${item.streamLabel}` : "Live"}
+                            </span>
+                            {item.streamLabel ? (
+                              <span className="pointer-events-none absolute bottom-full left-0 z-20 mb-1 hidden max-w-56 rounded-md border border-indigo-300/45 bg-[#151a2a] px-2 py-1 text-[10px] text-indigo-50 shadow-lg group-hover:block group-focus-within:block">
+                                {item.streamLabel}
+                              </span>
+                            ) : null}
+                          </span>
+                        </>
+                      ) : null}
                     </div>
                     <div className="mt-2 inline-flex items-center gap-1 text-[10px] text-indigo-200">
                       {isPinned ? <PinOff suppressHydrationWarning className="h-3 w-3" /> : <Pin suppressHydrationWarning className="h-3 w-3" />}
@@ -968,8 +1104,39 @@ export const VideoChannelMeetingPanel = ({
                       >
                         <Video suppressHydrationWarning className="h-3.5 w-3.5" />
                       </span>
+                      <span
+                        className={`inline-flex h-6 w-6 items-center justify-center rounded-full border ${
+                          item.isStreaming
+                            ? "border-indigo-300/60 bg-indigo-500/20 text-indigo-100"
+                            : "border-zinc-500/60 bg-zinc-700/30 text-zinc-300"
+                        }`}
+                        title={
+                          item.isStreaming
+                            ? item.streamLabel
+                              ? `Streaming: ${item.streamLabel}`
+                              : "Streaming"
+                            : "Not streaming"
+                        }
+                      >
+                        <ScreenShare suppressHydrationWarning className="h-3.5 w-3.5" />
+                      </span>
                     </div>
                   </div>
+                  {item.isStreaming ? (
+                    <div className="mt-1">
+                      <span className="group relative inline-flex max-w-full items-center gap-1 rounded-full border border-indigo-300/45 bg-indigo-500/20 px-2 py-0.5 text-[10px] font-medium text-indigo-100">
+                        <ScreenShare className="h-3 w-3 shrink-0" />
+                        <span className="max-w-40 truncate">
+                          {item.streamLabel ? `Source: ${item.streamLabel}` : "Live"}
+                        </span>
+                        {item.streamLabel ? (
+                          <span className="pointer-events-none absolute bottom-full left-0 z-20 mb-1 hidden max-w-56 rounded-md border border-indigo-300/45 bg-[#151a2a] px-2 py-1 text-[10px] text-indigo-50 shadow-lg group-hover:block group-focus-within:block">
+                            {item.streamLabel}
+                          </span>
+                        ) : null}
+                      </span>
+                    </div>
+                  ) : null}
                 </li>
               );
             })}
@@ -1042,6 +1209,35 @@ export const VideoChannelMeetingPanel = ({
             >
               <span>{contextMenuMember.isCameraOn ? "Hide Video" : "Show Video"}</span>
               <Video suppressHydrationWarning className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (contextMenuMember.isStreaming) {
+                  const shouldHideStream = window.confirm(
+                    `Stop stream for ${contextMenuMember.displayName ?? "this participant"}?`
+                  );
+
+                  if (!shouldHideStream) {
+                    return;
+                  }
+                }
+
+                void runParticipantAction(
+                  contextMenuMember.isStreaming ? "hidestream" : "showstream",
+                  contextMenuMember.memberId
+                )
+                  .catch((error) => {
+                    window.alert(`Action failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+                  })
+                  .finally(() => {
+                    setContextMenuState(null);
+                  });
+              }}
+              className="flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-left transition hover:bg-white/10"
+            >
+              <span>{contextMenuMember.isStreaming ? "Stop Stream" : "Allow Stream"}</span>
+              <ScreenShare suppressHydrationWarning className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"

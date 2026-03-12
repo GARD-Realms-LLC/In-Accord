@@ -4,6 +4,8 @@ import { sql } from "drizzle-orm";
 import { currentProfile } from "@/lib/current-profile";
 import { db } from "@/lib/db";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
+import { ensureTemplateMeBotConfigForUser, isTemplateMeBotName } from "@/lib/template-me-bot-config";
+import { getTemplateMeBotRuntimeManager } from "@/lib/template-me-bot-runtime";
 import {
   ensureUserPreferencesSchema,
   getUserPreferences,
@@ -39,6 +41,8 @@ type AdminOtherConfigRow = {
   type: "APP" | "BOT";
   configName: string;
   applicationId: string;
+  tokenHint?: string;
+  tokenUpdatedAt?: string;
   enabled: boolean;
   createdAt: string;
 };
@@ -54,7 +58,7 @@ const ensureAdmin = async () => {
     return { ok: false as const, response: new NextResponse("Forbidden", { status: 403 }) };
   }
 
-  return { ok: true as const };
+  return { ok: true as const, profile };
 };
 
 const normalizeHumanLabel = (value: unknown, maxLength = 80) => {
@@ -106,6 +110,17 @@ const normalizeUrlLike = (value: unknown, maxLength = 512) => {
   return trimmed.slice(0, maxLength);
 };
 
+const getTokenHint = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  return `••••••••${trimmed.slice(-4)}`;
+};
+
+const isTemplateMeBotConfigName = (value: unknown) => isTemplateMeBotName(value);
+
 const createConfigId = () => `cfg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 
 export async function GET() {
@@ -114,6 +129,13 @@ export async function GET() {
     if (!auth.ok) {
       return auth.response;
     }
+
+    const currentAdminUserId = String(auth.profile.userId ?? "").trim();
+    if (!currentAdminUserId) {
+      return new NextResponse("Unable to resolve current admin user.", { status: 400 });
+    }
+
+    await ensureTemplateMeBotConfigForUser(currentAdminUserId);
 
     await ensureUserPreferencesSchema();
 
@@ -241,6 +263,8 @@ export async function GET() {
               id?: unknown;
               name?: unknown;
               applicationId?: unknown;
+              tokenHint?: unknown;
+              tokenUpdatedAt?: unknown;
               enabled?: unknown;
               createdAt?: unknown;
             };
@@ -248,6 +272,13 @@ export async function GET() {
             const id = typeof typed.id === "string" ? typed.id.trim() : "";
             const configName = typeof typed.name === "string" ? typed.name.trim() : "";
             const applicationId = typeof typed.applicationId === "string" ? typed.applicationId.trim() : "";
+            const tokenHint = typeof typed.tokenHint === "string" ? typed.tokenHint.trim().slice(0, 32) : "";
+            const tokenUpdatedAtRaw =
+              typeof typed.tokenUpdatedAt === "string" ? typed.tokenUpdatedAt.trim() : "";
+            const tokenUpdatedAt =
+              tokenUpdatedAtRaw && !Number.isNaN(new Date(tokenUpdatedAtRaw).getTime())
+                ? new Date(tokenUpdatedAtRaw).toISOString()
+                : "";
 
             if (!id || !configName || !applicationId) {
               continue;
@@ -273,6 +304,8 @@ export async function GET() {
               type: "BOT",
               configName,
               applicationId,
+              ...(tokenHint ? { tokenHint } : {}),
+              ...(tokenUpdatedAt ? { tokenUpdatedAt } : {}),
               enabled,
               createdAt,
             });
@@ -296,9 +329,27 @@ export async function GET() {
       .sort((a, b) => b.count - a.count || a.userId.localeCompare(b.userId))
       .slice(0, 15);
 
-    const recentOtherConfigs = OtherRows
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 40);
+    const sortedOtherRows = OtherRows
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    const recentOtherConfigs = sortedOtherRows.slice(0, 40);
+    const templateMeBotRows = sortedOtherRows.filter(
+      (row) =>
+        row.type === "BOT" &&
+        row.userId === currentAdminUserId &&
+        isTemplateMeBotConfigName(row.configName)
+    );
+
+    const recentOtherConfigByKey = new Map<string, AdminOtherConfigRow>();
+    for (const row of [...templateMeBotRows, ...recentOtherConfigs]) {
+      const key = `${row.type}:${row.userId}:${row.id}`;
+      if (!recentOtherConfigByKey.has(key)) {
+        recentOtherConfigByKey.set(key, row);
+      }
+    }
+
+    const mergedRecentOtherConfigs = Array.from(recentOtherConfigByKey.values())
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     return NextResponse.json({
       summary: {
@@ -308,7 +359,7 @@ export async function GET() {
       },
       providers,
       topConnectedUsers,
-      recentOtherConfigs,
+      recentOtherConfigs: mergedRecentOtherConfigs,
     });
   } catch (error) {
     console.error("[ADMIN_INTEGRATIONS_GET]", error);
@@ -489,14 +540,59 @@ export async function PATCH(req: Request) {
         Object.prototype.hasOwnProperty.call(patch, "permissions")
           ? normalizeScopes(patch.permissions)
           : current[index].permissions;
+      const nextToken =
+        typeof patch.botToken === "string" ? patch.botToken.trim() : "";
+      const tokenUpdatedAt = nextToken ? new Date().toISOString() : "";
 
       current[index] = {
         ...current[index],
         ...(nextName ? { name: nextName } : {}),
         ...(nextApplicationId ? { applicationId: nextApplicationId } : {}),
+        ...(nextToken ? { tokenHint: getTokenHint(nextToken) } : {}),
+        ...(tokenUpdatedAt ? { tokenUpdatedAt } : {}),
         botUserId: nextBotUserId,
         permissions: nextPermissions,
       } as OtherBotConfig;
+
+      const updatedBot = current[index];
+
+      await updateUserPreferences(
+        userId,
+        nextToken
+          ? {
+              OtherBots: current,
+              OtherBotTokens: {
+                [configId]: nextToken,
+              },
+            }
+          : { OtherBots: current }
+      );
+
+      if (nextToken && isTemplateMeBotConfigName(updatedBot.name)) {
+        const runtimeManager = getTemplateMeBotRuntimeManager();
+        const runtimeState = runtimeManager.getState();
+
+        if (
+          runtimeState.status === "running" &&
+          runtimeState.userId === userId &&
+          runtimeState.botId === configId
+        ) {
+          try {
+            await runtimeManager.stop("Template Me token updated from admin panel");
+            await runtimeManager.start({
+              userId,
+              botId: configId,
+              botName: updatedBot.name,
+              applicationId: updatedBot.applicationId,
+              token: nextToken,
+            });
+          } catch (runtimeError) {
+            console.error("[ADMIN_INTEGRATIONS_PATCH_TEMPLATE_ME_RUNTIME_RESTART]", runtimeError);
+          }
+        }
+      }
+
+      return NextResponse.json({ ok: true });
     }
 
     await updateUserPreferences(userId, { OtherBots: current });

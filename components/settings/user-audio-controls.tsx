@@ -1,16 +1,18 @@
 "use client";
 
-import { Headphones, Mic, MicOff, Video, VideoOff, VolumeX } from "lucide-react";
+import { Headphones, Mic, MicOff, ScreenShare, ScreenShareOff, Video, VideoOff, VolumeX } from "lucide-react";
 import { useEffect, useState } from "react";
 
 const VOICE_TOGGLE_MUTE_EVENT = "inaccord:voice-toggle-mute";
 const VOICE_TOGGLE_DEAFEN_EVENT = "inaccord:voice-toggle-deafen";
 const VOICE_TOGGLE_CAMERA_EVENT = "inaccord:voice-toggle-camera";
+const VOICE_TOGGLE_STREAM_EVENT = "inaccord:voice-toggle-stream";
 
 export const UserAudioControls = () => {
   const [isMuted, setIsMuted] = useState(false);
   const [isDeafened, setIsDeafened] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const [isVideoSession, setIsVideoSession] = useState(false);
 
   const onToggleMute = () => {
@@ -35,12 +37,23 @@ export const UserAudioControls = () => {
     window.dispatchEvent(new CustomEvent(VOICE_TOGGLE_CAMERA_EVENT, { detail: { isCameraOn: next } }));
   };
 
+  const onToggleStream = () => {
+    if (!isVideoSession) {
+      return;
+    }
+
+    const next = !isStreaming;
+    setIsStreaming(next);
+    window.dispatchEvent(new CustomEvent(VOICE_TOGGLE_STREAM_EVENT, { detail: { isStreaming: next } }));
+  };
+
   useEffect(() => {
     const syncFromSession = (event: Event) => {
       const customEvent = event as CustomEvent<{
         isMuted?: boolean;
         isDeafened?: boolean;
         isCameraOn?: boolean;
+        isStreaming?: boolean;
         isVideoChannel?: boolean;
       }>;
       if (typeof customEvent.detail?.isMuted === "boolean") {
@@ -51,6 +64,9 @@ export const UserAudioControls = () => {
       }
       if (typeof customEvent.detail?.isCameraOn === "boolean") {
         setIsCameraOn(customEvent.detail.isCameraOn);
+      }
+      if (typeof customEvent.detail?.isStreaming === "boolean") {
+        setIsStreaming(customEvent.detail.isStreaming);
       }
       if (typeof customEvent.detail?.isVideoChannel === "boolean") {
         setIsVideoSession(customEvent.detail.isVideoChannel);
@@ -99,6 +115,25 @@ export const UserAudioControls = () => {
           <Video className="h-3.5 w-3.5" suppressHydrationWarning />
         ) : (
           <VideoOff className="h-3.5 w-3.5" suppressHydrationWarning />
+        )}
+      </button>
+      <button
+        type="button"
+        title={!isVideoSession ? "Stream unavailable" : isStreaming ? "Stop stream" : "Start stream"}
+        onClick={onToggleStream}
+        disabled={!isVideoSession}
+        className={`rounded p-1 transition ${
+          !isVideoSession
+            ? "cursor-not-allowed bg-black/70 text-zinc-200 opacity-70"
+            : isStreaming
+              ? "bg-indigo-500/20 text-indigo-200"
+              : "bg-black/70 text-zinc-200"
+        }`}
+      >
+        {isStreaming ? (
+          <ScreenShare className="h-3.5 w-3.5" suppressHydrationWarning />
+        ) : (
+          <ScreenShareOff className="h-3.5 w-3.5" suppressHydrationWarning />
         )}
       </button>
       <button

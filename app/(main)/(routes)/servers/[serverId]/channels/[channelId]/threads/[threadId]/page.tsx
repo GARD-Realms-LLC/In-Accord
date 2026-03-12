@@ -246,7 +246,7 @@ const ThreadPage = async ({ params }: ThreadPageProps) => {
       mentionProfileNameMap.get(item.profileId) ??
       item.profile.name ??
       item.profile.email ??
-      "Unknown User";
+      "Deleted User";
 
     return {
       id: item.profileId,

@@ -577,10 +577,18 @@ type RegisteredConnectionGame = {
   provider: string;
   shortDescription: string;
   thumbnailUrl: string;
+  processName?: string;
+};
+
+type RunningAppEntry = {
+  id: string;
+  processName: string;
+  windowTitle: string;
+  label: string;
 };
 
 type RegisteredGamesProviderState = {
-  source: "live" | "fallback";
+  source: "live" | "fallback" | "native-installed-scan" | "unsupported-platform" | "none";
   count: number;
 };
 
@@ -1892,6 +1900,9 @@ export const SettingsModal = () => {
   const [isSavingRegisteredGamesPreferences, setIsSavingRegisteredGamesPreferences] = useState(false);
   const [registeredGamesStatus, setRegisteredGamesStatus] = useState<string | null>(null);
   const [detectedRegisteredGames, setDetectedRegisteredGames] = useState<RegisteredConnectionGame[]>([]);
+  const [runningApps, setRunningApps] = useState<RunningAppEntry[]>([]);
+  const [selectedRunningAppId, setSelectedRunningAppId] = useState("");
+  const [isLoadingRunningApps, setIsLoadingRunningApps] = useState(false);
   const [registeredGamesProviderStates, setRegisteredGamesProviderStates] = useState<
     Record<string, RegisteredGamesProviderState>
   >({});
@@ -2889,6 +2900,50 @@ export const SettingsModal = () => {
     setManualGameDescriptionInput("");
     setManualGameThumbnailInput("");
     setRegisteredGamesStatus(null);
+  };
+
+  const onAddRunningAppRegisteredGame = () => {
+    const selected = runningApps.find((entry) => entry.id === selectedRunningAppId);
+    if (!selected) {
+      setRegisteredGamesStatus("No running app selected.");
+      return;
+    }
+
+    const preferredName = selected.windowTitle.trim() || selected.label.trim() || selected.processName.trim();
+    const name = preferredName.slice(0, 120);
+    if (!name) {
+      setRegisteredGamesStatus("Selected app does not have a usable name.");
+      return;
+    }
+
+    const processName = selected.processName.trim().slice(0, 120);
+    const idSuffix = processName || name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const id = `manual:running:${idSuffix || Date.now()}`;
+
+    setRegisteredGamesPreferences((current) => ({
+      ...current,
+      manualGames: [
+        {
+          id,
+          name,
+          provider: "running-app",
+          shortDescription: processName
+            ? `Manually registered from running process: ${processName}.`
+            : "Manually registered from currently running app.",
+          thumbnailUrl: "",
+          addedAt: new Date().toISOString(),
+        },
+        ...current.manualGames.filter((entry) => entry.id !== id),
+      ].slice(0, 120),
+    }));
+
+    setManualGameNameInput(name);
+    setManualGameProviderInput("running-app");
+    setManualGameDescriptionInput(
+      processName ? `Running process detected: ${processName}` : "Running app detected"
+    );
+    setManualGameThumbnailInput("");
+    setRegisteredGamesStatus(`Added running app: ${name}.`);
   };
 
   const onSaveNotificationPreferences = async () => {
@@ -4031,6 +4086,31 @@ export const SettingsModal = () => {
     try {
       setIsLoadingDetectedRegisteredGames(true);
 
+      const electronApi = typeof window !== "undefined" ? (window as any)?.electronAPI : null;
+      if (electronApi && typeof electronApi.getInstalledGames === "function") {
+        const nativeResponse = (await electronApi.getInstalledGames()) as {
+          games?: RegisteredConnectionGame[];
+          source?: RegisteredGamesProviderState["source"];
+        };
+
+        const nativeGames = Array.isArray(nativeResponse?.games)
+          ? nativeResponse.games.filter(
+              (entry): entry is RegisteredConnectionGame => Boolean(entry && typeof entry === "object")
+            )
+          : [];
+
+        const source = nativeResponse?.source ?? "native-installed-scan";
+        setDetectedRegisteredGames(nativeGames);
+        setRegisteredGamesProviderStates({
+          local: {
+            source,
+            count: nativeGames.length,
+          },
+        });
+        return;
+      }
+
+      // Native bridge unavailable: fetch native-only local installed scan from server API.
       const response = await axios.get<{
         detectedGames?: RegisteredConnectionGame[];
         providerStates?: Record<string, RegisteredGamesProviderState>;
@@ -4039,21 +4119,71 @@ export const SettingsModal = () => {
       });
 
       if (response.status >= 400) {
+        setDetectedRegisteredGames([]);
+        setRegisteredGamesProviderStates({
+          local: {
+            source: "none",
+            count: 0,
+          },
+        });
+        setRegisteredGamesStatus("Could not load local installed games.");
         return;
       }
 
-      const games = Array.isArray(response.data?.detectedGames)
+      const nativeGames = Array.isArray(response.data?.detectedGames)
         ? response.data.detectedGames.filter(
             (entry): entry is RegisteredConnectionGame => Boolean(entry && typeof entry === "object")
           )
         : [];
 
-      setDetectedRegisteredGames(games);
-      setRegisteredGamesProviderStates(response.data?.providerStates ?? {});
+      setDetectedRegisteredGames(nativeGames);
+      setRegisteredGamesProviderStates({
+        ...(response.data?.providerStates ?? {}),
+        local: {
+          source: "native-installed-scan",
+          count: nativeGames.length,
+        },
+      });
+      setRegisteredGamesStatus(null);
     } catch {
       // best-effort load; UI still supports manual games
     } finally {
       setIsLoadingDetectedRegisteredGames(false);
+    }
+  }, []);
+
+  const loadRunningApps = useCallback(async () => {
+    try {
+      setIsLoadingRunningApps(true);
+
+      const electronApi = typeof window !== "undefined" ? (window as any)?.electronAPI : null;
+      if (!electronApi || typeof electronApi.getRunningApps !== "function") {
+        setRunningApps([]);
+        setSelectedRunningAppId("");
+        return;
+      }
+
+      const response = (await electronApi.getRunningApps()) as {
+        apps?: RunningAppEntry[];
+      };
+
+      const apps = Array.isArray(response?.apps)
+        ? response.apps.filter((entry): entry is RunningAppEntry => Boolean(entry && typeof entry === "object"))
+        : [];
+
+      setRunningApps(apps);
+      setSelectedRunningAppId((current) => {
+        if (current && apps.some((entry) => entry.id === current)) {
+          return current;
+        }
+
+        return apps[0]?.id ?? "";
+      });
+    } catch {
+      setRunningApps([]);
+      setSelectedRunningAppId("");
+    } finally {
+      setIsLoadingRunningApps(false);
     }
   }, []);
 
@@ -4233,7 +4363,8 @@ export const SettingsModal = () => {
     }
 
     void loadDetectedRegisteredGames();
-  }, [connectedAccounts, displaySection, isOpen, loadDetectedRegisteredGames, type]);
+    void loadRunningApps();
+  }, [connectedAccounts, displaySection, isOpen, loadDetectedRegisteredGames, loadRunningApps, type]);
 
   useEffect(() => {
     if (!isModalOpen || typeof window === "undefined") {
@@ -9616,8 +9747,18 @@ export const SettingsModal = () => {
         .filter((providerKey) => connectedAccounts.includes(providerKey));
 
       const detectedGames = detectedRegisteredGames
-        .filter((game) => connectedProviderKeys.includes(game.provider))
         .filter((game) => !registeredGamesPreferences.hiddenGameIds.includes(game.id));
+
+      const localInstalledCount = registeredGamesProviderStates.local?.count ?? detectedGames.length;
+      const localInstalledSource = registeredGamesProviderStates.local?.source;
+      const localInstalledSourceLabel =
+        localInstalledSource === "native-installed-scan"
+          ? "native-scan"
+          : localInstalledSource === "unsupported-platform"
+            ? "unsupported-platform"
+            : localInstalledSource === "none"
+              ? "native-unavailable"
+              : localInstalledSource;
 
       const visibleDetectedGames = registeredGamesPreferences.showDetectedGames ? detectedGames : [];
       const visibleManualGames = registeredGamesPreferences.manualGames.filter(
@@ -9635,7 +9776,7 @@ export const SettingsModal = () => {
               <div>
                 <p className="text-sm font-medium text-white">Registered Games</p>
                 <p className="mt-1 text-xs text-[#949ba4]">
-                  Manage detected and manually-added games across your connected accounts.
+                  Shows only games installed on this device, plus any manual entries you add.
                 </p>
               </div>
 
@@ -9665,24 +9806,9 @@ export const SettingsModal = () => {
             </div>
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              {connectionProviders.map((provider) => {
-                const isConnected = connectedAccounts.includes(provider.key);
-                const gameCount = registeredGamesProviderStates[provider.key]?.count ?? 0;
-                const source = registeredGamesProviderStates[provider.key]?.source;
-
-                return (
-                  <span
-                    key={`registered-games-provider-${provider.key}`}
-                    className={`rounded-full border px-2 py-1 text-[11px] ${
-                      isConnected
-                        ? "border-emerald-400/30 bg-emerald-500/20 text-emerald-200"
-                        : "border-white/10 bg-black/20 text-[#949ba4]"
-                    }`}
-                  >
-                    {provider.label}: {isConnected ? `${gameCount} detected${source ? ` (${source})` : ""}` : "not connected"}
-                  </span>
-                );
-              })}
+              <span className="rounded-full border border-emerald-400/30 bg-emerald-500/20 px-2 py-1 text-[11px] text-emerald-200">
+                Local Installed: {localInstalledCount} found{localInstalledSourceLabel ? ` (${localInstalledSourceLabel})` : ""}
+              </span>
             </div>
 
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -9723,15 +9849,50 @@ export const SettingsModal = () => {
                 ))
               ) : (
                 <p className="col-span-full rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-xs text-[#949ba4]">
-                  {connectedProviderKeys.length === 0
-                    ? "No connected providers found. Connect accounts in Connections to detect games."
-                    : "No detected games visible (either disabled or hidden)."}
+                  No installed games detected on this device (or all detected games are hidden).
                 </p>
               )}
             </div>
 
             <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
               <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">Add a game manually</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+                <select
+                  value={selectedRunningAppId}
+                  onChange={(event) => setSelectedRunningAppId(event.target.value)}
+                  className="h-9 rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
+                >
+                  {runningApps.length > 0 ? (
+                    runningApps.map((entry) => (
+                      <option key={`running-app-${entry.id}`} value={entry.id}>
+                        {entry.label} ({entry.processName})
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">
+                      {isLoadingRunningApps ? "Loading running apps..." : "No running apps available"}
+                    </option>
+                  )}
+                </select>
+
+                <Button
+                  type="button"
+                  onClick={() => void loadRunningApps()}
+                  className="h-8 bg-[#3f4248] px-3 text-xs text-white hover:bg-[#4a4e55]"
+                >
+                  {isLoadingRunningApps ? "Refreshing..." : "Refresh Running Apps"}
+                </Button>
+
+                <Button
+                  type="button"
+                  onClick={onAddRunningAppRegisteredGame}
+                  disabled={runningApps.length === 0 || !selectedRunningAppId}
+                  className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Add Running App
+                </Button>
+              </div>
+
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 <input
                   value={manualGameNameInput}
@@ -11703,7 +11864,7 @@ export const SettingsModal = () => {
                           <p>
                             <span className="text-[#949ba4]">Name:</span>{" "}
                             <span className="text-white">
-                              {realName || profileName || data.profileEmail?.split("@")[0] || resolvedProfileId || "Unknown User"}
+                              {realName || profileName || data.profileEmail?.split("@")[0] || resolvedProfileId || "Deleted User"}
                             </span>
                           </p>
                           <div className="flex flex-wrap items-center gap-2">

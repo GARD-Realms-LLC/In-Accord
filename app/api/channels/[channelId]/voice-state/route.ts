@@ -18,6 +18,15 @@ const resolveServerId = (req: Request) => {
   return searchParams.get("serverId")?.trim() ?? "";
 };
 
+const normalizeStreamLabel = (value: unknown) => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim().slice(0, 255);
+  return normalized.length ? normalized : null;
+};
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ channelId: string }> }
@@ -163,6 +172,8 @@ export async function POST(
       isMuted: Boolean(body?.isMuted),
       isDeafened: Boolean(body?.isDeafened),
       isCameraOn: Boolean(body?.isCameraOn),
+      isStreaming: Boolean(body?.isStreaming),
+      streamLabel: normalizeStreamLabel(body?.streamLabel),
       isSpeaking: Boolean(body?.isSpeaking),
     });
     await pruneStaleVoiceStates();
@@ -275,7 +286,7 @@ export async function PATCH(
       return new NextResponse("targetMemberId is required", { status: 400 });
     }
 
-    if (!["mute", "unmute", "kick", "hidevideo", "showvideo"].includes(action)) {
+    if (!["mute", "unmute", "kick", "hidevideo", "showvideo", "hidestream", "showstream"].includes(action)) {
       return new NextResponse("Invalid action", { status: 400 });
     }
 
@@ -324,6 +335,8 @@ export async function PATCH(
       isMuted: action === "mute" ? true : action === "unmute" ? false : targetVoiceState.isMuted,
       isDeafened: targetVoiceState.isDeafened,
       isCameraOn: action === "hidevideo" ? false : action === "showvideo" ? true : targetVoiceState.isCameraOn,
+      isStreaming: action === "hidestream" ? false : action === "showstream" ? true : targetVoiceState.isStreaming,
+      streamLabel: action === "hidestream" ? null : targetVoiceState.streamLabel,
       isSpeaking: action === "mute" ? false : targetVoiceState.isSpeaking,
     });
 

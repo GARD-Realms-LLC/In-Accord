@@ -13,6 +13,8 @@ type DetectedActivity = {
   type: ActivityType;
   title: string;
   subtitle: string;
+  details?: string;
+  startedAt?: string;
 };
 
 const PROFILE_REFRESH_INTERVAL_MS = 45_000;
@@ -21,7 +23,35 @@ const MEDIA_POLL_INTERVAL_MS = 5_000;
 type RuntimeActivity = {
   type?: "game" | "video" | "music";
   title?: string;
+  details?: string | null;
+  state?: string | null;
+  startedAt?: string;
+  detectedAt?: string;
 } | null;
+
+const formatElapsed = (startedAt?: string) => {
+  const normalized = String(startedAt ?? "").trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const startTime = new Date(normalized).getTime();
+  if (Number.isNaN(startTime)) {
+    return null;
+  }
+
+  const elapsedMs = Math.max(0, Date.now() - startTime);
+  const totalSeconds = Math.floor(elapsedMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+};
 
 const classifyTextActivity = (value: string): DetectedActivity => {
   const normalized = value.trim();
@@ -109,6 +139,7 @@ export const UserActivityPopup = ({ initialCurrentGame }: UserActivityPopupProps
   const [currentGame, setCurrentGame] = useState<string>(String(initialCurrentGame ?? "").trim());
   const [mediaActivity, setMediaActivity] = useState<DetectedActivity | null>(null);
   const [runtimeActivity, setRuntimeActivity] = useState<DetectedActivity | null>(null);
+  const [, setTimerTick] = useState(0);
 
   useEffect(() => {
     setIsClientReady(true);
@@ -157,6 +188,10 @@ export const UserActivityPopup = ({ initialCurrentGame }: UserActivityPopupProps
       setRuntimeActivity({
         type: runtimeType as ActivityType,
         title: runtimeTitle,
+        details: [String(runtime?.details ?? "").trim(), String(runtime?.state ?? "").trim()]
+          .filter((value) => value.length > 0)
+          .join(" • "),
+        startedAt: String(runtime?.startedAt ?? "").trim() || undefined,
         subtitle:
           runtimeType === "music"
             ? "Listening now"
@@ -182,12 +217,12 @@ export const UserActivityPopup = ({ initialCurrentGame }: UserActivityPopupProps
     const loadRuntimeActivity = async () => {
       try {
         const electronApi = (window as any)?.electronAPI;
-        if (!electronApi || typeof electronApi.getRuntimeActivity !== "function") {
-          setRuntimeActivity(null);
-          return;
-        }
-
-        const payload = (await electronApi.getRuntimeActivity()) as RuntimeActivity;
+        const payload =
+          electronApi && typeof electronApi.getRuntimeActivity === "function"
+            ? ((await electronApi.getRuntimeActivity()) as RuntimeActivity)
+            : ((await fetch("/api/profile/runtime-activity", { cache: "no-store" }).then((response) =>
+                response.ok ? response.json() : null
+              )) as RuntimeActivity);
         const runtimeType = String(payload?.type ?? "").trim().toLowerCase();
         const runtimeTitle = String(payload?.title ?? "").trim();
 
@@ -199,6 +234,10 @@ export const UserActivityPopup = ({ initialCurrentGame }: UserActivityPopupProps
         setRuntimeActivity({
           type: runtimeType as ActivityType,
           title: runtimeTitle,
+          details: [String(payload?.details ?? "").trim(), String(payload?.state ?? "").trim()]
+            .filter((value) => value.length > 0)
+            .join(" • "),
+          startedAt: String(payload?.startedAt ?? "").trim() || undefined,
           subtitle:
             runtimeType === "music"
               ? "Listening now"
@@ -216,6 +255,16 @@ export const UserActivityPopup = ({ initialCurrentGame }: UserActivityPopupProps
     const interval = window.setInterval(() => {
       void loadRuntimeActivity();
     }, MEDIA_POLL_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setTimerTick((value) => value + 1);
+    }, 1000);
 
     return () => {
       window.clearInterval(interval);
@@ -275,6 +324,7 @@ export const UserActivityPopup = ({ initialCurrentGame }: UserActivityPopupProps
       : resolvedActivity.type === "video"
       ? "border-sky-400/35 bg-linear-to-r from-sky-500/20 to-cyan-500/15"
       : "border-emerald-400/35 bg-linear-to-r from-emerald-500/20 to-green-500/15";
+  const elapsed = formatElapsed(resolvedActivity.startedAt);
 
   return (
     <div
@@ -286,12 +336,24 @@ export const UserActivityPopup = ({ initialCurrentGame }: UserActivityPopupProps
           <Icon className="h-3.5 w-3.5 text-white" suppressHydrationWarning />
         </span>
         <div className="min-w-0">
-          <p className="truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-white/80">
-            {resolvedActivity.subtitle}
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-white/80">
+              {resolvedActivity.subtitle}
+            </p>
+            {elapsed ? (
+              <span className="shrink-0 rounded border border-white/20 bg-black/25 px-1.5 py-0.5 text-[10px] font-semibold text-white/80">
+                {elapsed}
+              </span>
+            ) : null}
+          </div>
           <p className="truncate text-sm font-semibold text-white" title={resolvedActivity.title}>
             {resolvedActivity.title}
           </p>
+          {resolvedActivity.details ? (
+            <p className="truncate text-[11px] text-white/75" title={resolvedActivity.details}>
+              {resolvedActivity.details}
+            </p>
+          ) : null}
         </div>
       </div>
     </div>

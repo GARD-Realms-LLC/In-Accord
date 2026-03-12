@@ -141,6 +141,19 @@ const parseStoredChannelSettings = (rawSettingsJson: string | null | undefined) 
   }
 };
 
+const parseStoredSettingsObject = (rawSettingsJson: string | null | undefined) => {
+  if (!rawSettingsJson || typeof rawSettingsJson !== "string") {
+    return {} as Record<string, unknown>;
+  }
+
+  try {
+    const parsed = JSON.parse(rawSettingsJson) as unknown;
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {} as Record<string, unknown>;
+  }
+};
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ channelId: string }> }
@@ -488,6 +501,12 @@ export async function PATCH(
         ? normalizeChannelSettingsPayload(settings)
         : parseStoredChannelSettings(existingSettingsRow?.rawSettingsJson);
 
+    const existingSettingsObject = parseStoredSettingsObject(existingSettingsRow?.rawSettingsJson);
+    const mergedSettings = {
+      ...existingSettingsObject,
+      ...normalizedSettings,
+    };
+
     await db.execute(sql`
       update "Channel"
       set
@@ -518,7 +537,7 @@ export async function PATCH(
         ${channelId},
         ${serverId},
         ${null},
-        ${JSON.stringify(normalizedSettings)},
+        ${JSON.stringify(mergedSettings)},
         now(),
         now()
       )

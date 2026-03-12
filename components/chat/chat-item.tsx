@@ -1734,7 +1734,7 @@ export const ChatItem = ({
   ]);
 
   if (deleted) {
-    const deletedByName = String(displayName ?? "").trim() || "Unknown User";
+    const deletedByName = String(displayName ?? "").trim() || "Deleted User";
     const canHardDeleteDeletedMessage = canPurgeDeletedMessage && reactionScope === "channel";
 
     return (
@@ -1818,18 +1818,17 @@ export const ChatItem = ({
 
               <div className="min-w-0">
                 <ProfileIconRow icons={effectiveProfileIcons} className="mb-1" />
-                <div className="flex w-full min-w-0 items-center gap-1.5">
+                <div className="flex w-full min-w-0 items-start gap-1.5">
                   <ProfileNameWithServerTag
-                    name={displayName || "Unknown User"}
+                    name={displayName || "Deleted User"}
                     profileId={member.profile.id}
                     memberId={member.id}
                     pronouns={profileCard?.pronouns?.trim() || null}
                     containerClassName="w-full min-w-0"
                     nameClassName="text-base font-bold text-white"
                     showNameplate
-                    nameplateClassName="mb-0 h-20 w-full max-w-full"
+                    nameplateClassName="mb-0 w-full max-w-full"
                     plateMetaIcons={roleAndMetaIcons}
-                    stretchTagUnderPlate
                   />
                 </div>
               </div>
@@ -1845,7 +1844,7 @@ export const ChatItem = ({
               <div className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] p-3 text-xs">
                 <div className="space-y-1 text-[#dbdee1]">
                   <p>
-                    Name: {profileCard?.effectiveProfileName || profileCard?.realName || profileCard?.profileName || displayName || member.profile.email?.split("@")[0] || member.profile.id || "Unknown User"}
+                    Name: {profileCard?.effectiveProfileName || profileCard?.realName || profileCard?.profileName || displayName || member.profile.email?.split("@")[0] || member.profile.id || "Deleted User"}
                   </p>
                   <p>Pronouns: {profileCard?.pronouns || "Not set"}</p>
                   <p>Comment: {profileCard?.comment || "Not set"}</p>
@@ -1960,8 +1959,8 @@ export const ChatItem = ({
                     runtimeAccessibilityPreferences.largerChatFont ? "text-base" : "text-sm"
                   )}
                   showNameplate
+                  nameplateSize="compact"
                   plateMetaIcons={roleAndMetaIcons}
-                  stretchTagUnderPlate
                 />
               </button>
             </div>

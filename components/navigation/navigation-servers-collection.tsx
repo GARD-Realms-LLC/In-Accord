@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Folder, FolderOpen, Pencil, Trash2 } from "lucide-react";
+import { Folder, FolderOpen, Trash2 } from "lucide-react";
 
 import { NavigationItem } from "@/components/navigation/navigation-item";
+import { NavigationOpenTabsButton } from "@/components/navigation/navigation-open-tabs-button";
 import {
   Dialog,
   DialogContent,
@@ -14,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useModal } from "@/hooks/use-modal-store";
 
 type ServerEntry = {
   id: string;
@@ -31,6 +33,7 @@ type ServerFolder = {
 type NavigationServersCollectionProps = {
   myServers: ServerEntry[];
   joinedServers: ServerEntry[];
+  fallbackServerId?: string;
 };
 
 const safeParseFolders = (raw: string | null): ServerFolder[] => {
@@ -107,7 +110,9 @@ const resolveDraggedServerId = (
 export const NavigationServersCollection = ({
   myServers,
   joinedServers,
+  fallbackServerId,
 }: NavigationServersCollectionProps) => {
+  const { onOpen } = useModal();
   const [folders, setFolders] = useState<ServerFolder[]>([]);
   const [isFoldersLoaded, setIsFoldersLoaded] = useState(false);
   const [isSyncingFolders, setIsSyncingFolders] = useState(false);
@@ -474,7 +479,7 @@ export const NavigationServersCollection = ({
         setDraggedServerId(null);
         setDragOverFolderId(null);
       }}
-      className={`rounded-2xl transition ${
+      className={`rounded-md transition ${
         dragOverServerId === server.id ? "scale-[1.02] ring-2 ring-emerald-400/80" : ""
       }`}
     >
@@ -523,7 +528,7 @@ export const NavigationServersCollection = ({
           }
         }}
       >
-        <DialogContent className="border-zinc-300 bg-zinc-100 text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 sm:max-w-[430px]">
+        <DialogContent className="border-zinc-300 bg-zinc-100 text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 sm:max-w-107.5">
           <DialogHeader>
             <DialogTitle>Edit Folder</DialogTitle>
             <DialogDescription>
@@ -595,6 +600,8 @@ export const NavigationServersCollection = ({
         </div>
       ) : null}
 
+      <NavigationOpenTabsButton fallbackServerId={fallbackServerId} />
+
       {folders.length > 0 || recentlyUngroupedServers.length > 0 ? (
         <div className="mb-4 flex w-full flex-col items-center gap-2 px-2">
           {visibleFolders.map((folder) => {
@@ -609,6 +616,11 @@ export const NavigationServersCollection = ({
                 <button
                   type="button"
                   onClick={() => setExpandedFolderId((prev) => (prev === folder.id ? null : folder.id))}
+                  onDoubleClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    openEditFolderPopup(folder);
+                  }}
                   onDragOver={(event) => {
                     const activeDraggedServerId = resolveDraggedServerId(event, draggedServerId);
                     if (!activeDraggedServerId) {
@@ -632,16 +644,16 @@ export const NavigationServersCollection = ({
                     setDragOverFolderId(null);
                     setDragOverServerId(null);
                   }}
-                  className={`mx-auto flex h-11 w-11 items-center justify-center rounded-2xl border transition-all ${
+                  className={`relative mx-auto flex h-14 w-20 items-center justify-center overflow-hidden rounded-[10px] border transition-all ${
                     dragOverFolderId === folder.id
-                      ? "border-emerald-400 bg-emerald-500/20"
-                      : "border-zinc-300 bg-zinc-200 hover:bg-zinc-300 dark:border-zinc-600 dark:bg-zinc-700 dark:hover:bg-zinc-600"
+                      ? "border-emerald-400 bg-emerald-500/20 ring-2 ring-emerald-400/40"
+                      : "border-zinc-300 bg-zinc-200 hover:border-primary/50 hover:ring-2 hover:ring-primary/25 dark:border-zinc-600 dark:bg-zinc-700"
                   }`}
                   title={`${folder.name} (${folder.serverIds.length})`}
                   aria-label={`${folder.name} folder`}
                 >
                   {previewServers.length > 0 ? (
-                    <div className="grid h-8 w-8 grid-cols-2 gap-0.5 overflow-hidden rounded-lg">
+                    <div className="grid h-full w-full grid-cols-2 gap-0.5 overflow-hidden p-1 pb-4">
                       {previewServers.map((server) => {
                         const normalizedImageUrl = String(server.imageUrl ?? "").trim();
                         const showImage =
@@ -668,26 +680,23 @@ export const NavigationServersCollection = ({
                       })}
                     </div>
                   ) : isExpanded ? (
-                    <FolderOpen className="h-5 w-5 text-zinc-700 dark:text-zinc-100" />
+                    <FolderOpen className="mb-3 h-5 w-5 text-zinc-700 dark:text-zinc-100" />
                   ) : (
-                    <Folder className="h-5 w-5 text-zinc-700 dark:text-zinc-100" />
+                    <Folder className="mb-3 h-5 w-5 text-zinc-700 dark:text-zinc-100" />
                   )}
-                </button>
-                <p className="mt-1 truncate px-1 text-center text-[9px] font-semibold uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-300">
-                  <button
-                    type="button"
-                    className="inline-flex max-w-full items-center gap-1 rounded px-1 text-inherit transition hover:text-zinc-800 dark:hover:text-zinc-100"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      openEditFolderPopup(folder);
-                    }}
-                    title={`Edit ${folder.name}`}
-                    aria-label={`Edit ${folder.name} folder`}
+
+                  <div
+                    className={`absolute inset-x-0 bottom-0 flex h-[5%] min-h-3.5 items-center justify-center border-t px-1 backdrop-blur-[1px] ${
+                      dragOverFolderId === folder.id
+                        ? "border-emerald-300/50 bg-emerald-500/20"
+                        : "border-zinc-500/20 bg-zinc-900/40"
+                    }`}
                   >
-                    <span className="truncate">{folder.name}</span>
-                    <Pencil className="h-3 w-3 shrink-0" />
-                  </button>
-                </p>
+                    <span className="truncate text-[9px] font-semibold uppercase tracking-[0.05em] text-zinc-100">
+                      {folder.name}
+                    </span>
+                  </div>
+                </button>
 
                 {isExpanded && containedServers.length > 0 ? (
                   <div className="mt-2 flex flex-col items-center gap-3">
@@ -714,10 +723,6 @@ export const NavigationServersCollection = ({
         </div>
       ) : null}
 
-      <div className="text-center text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-700 dark:text-zinc-300">
-        My Servers
-      </div>
-
       {ungroupedMyServers.map((server) => (
         <div key={server.id} className="mb-4 flex justify-center">
           {renderServerItem(server)}
@@ -726,17 +731,9 @@ export const NavigationServersCollection = ({
 
       {myServers.length === 0 ? (
         <div className="mb-2 text-center text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-          None
+          OWNED - 0
         </div>
       ) : null}
-
-      <div className="mt-1 mb-2 flex justify-center">
-        <div className="h-0.5 w-10 rounded-md bg-zinc-300 dark:bg-zinc-700" />
-      </div>
-
-      <div className="mb-2 text-center text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-700 dark:text-zinc-300">
-        Joined Servers
-      </div>
 
       {ungroupedJoinedServers.map((server) => (
         <div key={`joined-${server.id}`} className="mb-4 flex justify-center">
@@ -746,7 +743,7 @@ export const NavigationServersCollection = ({
 
       {joinedServers.length === 0 ? (
         <div className="mb-2 text-center text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-          None
+          JOINED - 0
         </div>
       ) : null}
     </div>

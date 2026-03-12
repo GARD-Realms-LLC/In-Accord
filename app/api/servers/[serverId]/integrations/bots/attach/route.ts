@@ -6,7 +6,7 @@ import { currentProfile } from "@/lib/current-profile";
 import { db, member, MemberRole, server } from "@/lib/db";
 import { importOtherBotCommandsForOwner } from "@/lib/discord-bot-commands";
 import { makeIntegrationBotProfileId } from "@/lib/integration-bot-profile";
-import { getUserPreferences } from "@/lib/user-preferences";
+import { getUserPreferences, updateOtherBotTemplateStats } from "@/lib/user-preferences";
 
 export async function POST(
   request: Request,
@@ -87,8 +87,18 @@ export async function POST(
         botId,
       });
       importedCount = imported.importedCount;
+
+      await updateOtherBotTemplateStats(profile.id, botId, {
+        importsMadeDelta: 1,
+        templatesImportedDelta: imported.importedCount,
+        serverId,
+      });
     } catch (error) {
       importWarning = error instanceof Error ? error.message : "Command import failed.";
+
+      await updateOtherBotTemplateStats(profile.id, botId, {
+        serverId,
+      });
     }
 
     const attachMessage = existingMembership

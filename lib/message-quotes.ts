@@ -51,7 +51,7 @@ export const buildQuotedContent = (body: string, quote?: QuotedMessageMeta | nul
 
   const normalizedQuote: QuotedMessageMeta = {
     messageId: String(quote.messageId ?? "").trim(),
-    authorName: String(quote.authorName ?? "Unknown User").trim() || "Unknown User",
+    authorName: String(quote.authorName ?? "Deleted User").trim() || "Deleted User",
     authorProfileId: String(quote.authorProfileId ?? "").trim() || undefined,
     snippet: sanitizeSnippet(String(quote.snippet ?? "")),
   };
@@ -85,7 +85,7 @@ export const extractQuotedContent = (
     const parsed = JSON.parse(fromBase64(encoded)) as Partial<QuotedMessageMeta>;
     const quote: QuotedMessageMeta = {
       messageId: String(parsed.messageId ?? "").trim(),
-      authorName: String(parsed.authorName ?? "Unknown User").trim() || "Unknown User",
+      authorName: String(parsed.authorName ?? "Deleted User").trim() || "Deleted User",
       authorProfileId: String(parsed.authorProfileId ?? "").trim() || undefined,
       snippet: sanitizeSnippet(String(parsed.snippet ?? "")),
     };

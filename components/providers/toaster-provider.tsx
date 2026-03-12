@@ -69,5 +69,14 @@ export const ToasterProvider = () => {
     };
   }, []);
 
-  return <Toaster position="top-center" closeButton={false} />;
+  return (
+    <Toaster
+      position="top-center"
+      closeButton
+      toastOptions={{
+        duration: Infinity,
+        closeButton: true,
+      }}
+    />
+  );
 };

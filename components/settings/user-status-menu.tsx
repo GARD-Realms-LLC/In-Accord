@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, Crown, LogOut, RefreshCw, Settings, ShieldAlert, Video, VideoOff, Wrench } from "lucide-react";
+import { Copy, Crown, Headphones, LogOut, Mic, MicOff, RefreshCw, Settings, ShieldAlert, Video, VideoOff, VolumeX, Wrench } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import axios from "axios";
@@ -18,6 +18,8 @@ import { hasInAccordAdministrativeAccess, isInAccordAdministrator, isInAccordDev
 import { resolveProfileIcons, type ProfileIcon } from "@/lib/profile-icons";
 import { PresenceStatus, formatPresenceStatusLabel, normalizePresenceStatus, presenceStatusLabelMap, presenceStatusValues } from "@/lib/presence-status";
 
+const VOICE_TOGGLE_MUTE_EVENT = "inaccord:voice-toggle-mute";
+const VOICE_TOGGLE_DEAFEN_EVENT = "inaccord:voice-toggle-deafen";
 const VOICE_TOGGLE_CAMERA_EVENT = "inaccord:voice-toggle-camera";
 const VOICE_STATE_SYNC_EVENT = "inaccord:voice-state-sync";
 const PM_TOGGLE_CAMERA_EVENT = "inaccord:pm-toggle-camera";
@@ -71,6 +73,8 @@ export const UserStatusMenu = ({
   const [isSwitchingAccounts, setIsSwitchingAccounts] = useState(false);
   const [isSavingStatus, setIsSavingStatus] = useState(false);
   const [isVoiceSessionActive, setIsVoiceSessionActive] = useState(false);
+  const [isVoiceMuted, setIsVoiceMuted] = useState(false);
+  const [isVoiceDeafened, setIsVoiceDeafened] = useState(false);
   const [isVideoSession, setIsVideoSession] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [isPmVideoSessionActive, setIsPmVideoSessionActive] = useState(false);
@@ -97,6 +101,36 @@ export const UserStatusMenu = ({
     normalizePresenceStatus(profilePresenceStatus)
   );
   const [menuCurrentGame, setMenuCurrentGame] = useState<string | null>(profileCurrentGame?.trim() || null);
+  const [runtimeCurrentGame, setRuntimeCurrentGame] = useState<string | null>(null);
+
+  const buildMenuProfileIcons = (
+    incomingIcons?: ProfileIcon[] | null,
+    roleOverride?: string | null,
+  ) => {
+    const resolvedIcons = resolveProfileIcons({
+      userId: profileId,
+      role: roleOverride ?? profileRole,
+      email: profileEmail,
+      createdAt: profileJoinedAt,
+    });
+
+    if (!Array.isArray(incomingIcons) || incomingIcons.length === 0) {
+      return resolvedIcons;
+    }
+
+    const seen = new Set<string>();
+    const merged = [...incomingIcons, ...resolvedIcons].filter((icon) => {
+      const key = String(icon?.key ?? "").trim().toLowerCase();
+      if (!key || seen.has(key)) {
+        return false;
+      }
+
+      seen.add(key);
+      return true;
+    });
+
+    return merged;
+  };
 
   useEffect(() => {
     setMenuRealName(profileRealName ?? null);
@@ -163,16 +197,7 @@ export const UserStatusMenu = ({
           setMenuNameplateLabel(payload.nameplateLabel ?? null);
           setMenuNameplateColor(payload.nameplateColor ?? null);
           setMenuNameplateImageUrl(payload.nameplateImageUrl ?? null);
-          setMenuProfileIcons(
-            Array.isArray(payload.profileIcons)
-              ? payload.profileIcons
-              : resolveProfileIcons({
-                  userId: profileId,
-                  role: payload.role ?? profileRole,
-                  email: profileEmail,
-                  createdAt: profileJoinedAt,
-                })
-          );
+          setMenuProfileIcons(buildMenuProfileIcons(payload.profileIcons, payload.role ?? profileRole));
           setMenuAvatarDecorationUrl(payload.avatarDecorationUrl ?? null);
           setMenuBannerUrl(payload.bannerUrl ?? null);
           setMenuProfileRole(payload.role ?? profileRole ?? null);
@@ -236,14 +261,7 @@ export const UserStatusMenu = ({
 
       if (customEvent.detail?.profileRole === null || typeof customEvent.detail?.profileRole === "string") {
         setMenuProfileRole(customEvent.detail.profileRole ?? null);
-        setMenuProfileIcons(
-          resolveProfileIcons({
-            userId: profileId,
-            role: customEvent.detail.profileRole ?? null,
-            email: profileEmail,
-            createdAt: profileJoinedAt,
-          })
-        );
+        setMenuProfileIcons(buildMenuProfileIcons(undefined, customEvent.detail.profileRole ?? null));
       }
 
       if (typeof customEvent.detail?.presenceStatus === "string") {
@@ -259,6 +277,49 @@ export const UserStatusMenu = ({
 
     return () => {
       window.removeEventListener("inaccord:profile-updated", handleProfileUpdated);
+    };
+  }, []);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadRuntimeActivity = async () => {
+      try {
+        const electronApi = (window as any)?.electronAPI;
+        const payload =
+          electronApi && typeof electronApi.getRuntimeActivity === "function"
+            ? ((await electronApi.getRuntimeActivity()) as { type?: string; title?: string } | null)
+            : ((await fetch("/api/profile/runtime-activity", { cache: "no-store" }).then((response) =>
+                response.ok ? response.json() : null
+              )) as { type?: string; title?: string } | null);
+
+        if (isCancelled) {
+          return;
+        }
+
+        const runtimeType = String(payload?.type ?? "").trim().toLowerCase();
+        const runtimeTitle = String(payload?.title ?? "").trim();
+        if (runtimeType === "game" && runtimeTitle) {
+          setRuntimeCurrentGame(runtimeTitle);
+          return;
+        }
+
+        setRuntimeCurrentGame(null);
+      } catch {
+        if (!isCancelled) {
+          setRuntimeCurrentGame(null);
+        }
+      }
+    };
+
+    void loadRuntimeActivity();
+    const interval = window.setInterval(() => {
+      void loadRuntimeActivity();
+    }, 3000);
+
+    return () => {
+      isCancelled = true;
+      window.clearInterval(interval);
     };
   }, []);
 
@@ -363,6 +424,8 @@ export const UserStatusMenu = ({
     const onVoiceStateSync = (event: Event) => {
       const customEvent = event as CustomEvent<{
         active?: boolean;
+        isMuted?: boolean;
+        isDeafened?: boolean;
         isVideoChannel?: boolean;
         isCameraOn?: boolean;
       }>;
@@ -371,12 +434,23 @@ export const UserStatusMenu = ({
         setIsVoiceSessionActive(customEvent.detail.active);
       }
 
+      if (typeof customEvent.detail?.isMuted === "boolean") {
+        setIsVoiceMuted(customEvent.detail.isMuted);
+      }
+
+      if (typeof customEvent.detail?.isDeafened === "boolean") {
+        setIsVoiceDeafened(customEvent.detail.isDeafened);
+      }
+
       if (typeof customEvent.detail?.isVideoChannel === "boolean") {
         setIsVideoSession(customEvent.detail.isVideoChannel);
       }
 
       if (typeof customEvent.detail?.isCameraOn === "boolean") {
         setIsCameraOn(customEvent.detail.isCameraOn);
+        if (customEvent.detail.isCameraOn) {
+          setIsVideoSession(true);
+        }
       }
     };
 
@@ -430,6 +504,28 @@ export const UserStatusMenu = ({
       setIsPmCameraOn(next);
       window.dispatchEvent(new CustomEvent(PM_TOGGLE_CAMERA_EVENT, { detail: { isCameraOn: next } }));
     }
+  };
+
+  const onToggleMute = () => {
+    if (!isVoiceSessionActive) {
+      window.alert("Join a voice channel to use mute.");
+      return;
+    }
+
+    const next = !isVoiceMuted;
+    setIsVoiceMuted(next);
+    window.dispatchEvent(new CustomEvent(VOICE_TOGGLE_MUTE_EVENT, { detail: { isMuted: next } }));
+  };
+
+  const onToggleDeafen = () => {
+    if (!isVoiceSessionActive) {
+      window.alert("Join a voice channel to use deafen.");
+      return;
+    }
+
+    const next = !isVoiceDeafened;
+    setIsVoiceDeafened(next);
+    window.dispatchEvent(new CustomEvent(VOICE_TOGGLE_DEAFEN_EVENT, { detail: { isDeafened: next } }));
   };
 
   const statusDotClassMap: Record<PresenceStatus, string> = {
@@ -548,17 +644,18 @@ export const UserStatusMenu = ({
     menuRealName?.trim() ||
     fallbackNameFromEmail ||
     profileId ||
-    "Unknown User";
+    "Deleted User";
   const displayNameForProfileCard =
     menuRealName?.trim() ||
     menuProfileName?.trim() ||
     fallbackNameFromEmail ||
     profileId ||
-    "Unknown User";
+    "Deleted User";
   const canControlVoiceCamera = isVoiceSessionActive && isVideoSession;
   const canUseCameraControls = canControlVoiceCamera || isPmVideoSessionActive;
   const effectiveCameraOn = canControlVoiceCamera ? isCameraOn : isPmCameraOn;
-  const showCurrentGameIcon = Boolean(menuCurrentGame?.trim());
+  const effectiveCurrentGame = runtimeCurrentGame?.trim() || menuCurrentGame?.trim() || null;
+  const showCurrentGameIcon = Boolean(effectiveCurrentGame);
 
   return (
     <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
@@ -615,7 +712,7 @@ export const UserStatusMenu = ({
           </div>
 
           <ProfileIconRow icons={menuProfileIcons} />
-          <div className="flex w-full min-w-0 items-center gap-1.5">
+          <div className="flex w-full min-w-0 items-start gap-1.5">
             <ProfileNameWithServerTag
               name={displayStatusName}
               profileId={profileId}
@@ -623,9 +720,8 @@ export const UserStatusMenu = ({
               containerClassName="w-full min-w-0"
               nameClassName="text-base font-bold text-white"
               showNameplate
-              nameplateClassName="mb-0 h-20 w-full max-w-full"
+              nameplateClassName="mb-0 w-full max-w-full"
               plateMetaIcons={roleMetaOnPlate}
-              stretchTagUnderPlate
             />
           </div>
           <div className="mt-2 min-h-36 w-full max-w-55 resize-y overflow-auto rounded-md border border-white/10 bg-[#1a1b1e] px-2.5 py-2">
@@ -643,7 +739,7 @@ export const UserStatusMenu = ({
               <p>Profile Name: {menuProfileName || "Not set"}</p>
               <p>Email: {profileEmail || ""}</p>
               <p>Status: {formatPresenceStatusLabel(menuPresenceStatus, { showGameIcon: showCurrentGameIcon })}</p>
-              <p>Current Game: {menuCurrentGame || "Not in game"}</p>
+              <p>Current Game: {effectiveCurrentGame || "Not in game"}</p>
               <p>Last logon: {lastLogon}</p>
               <p>Created: {created}</p>
             </div>
@@ -651,11 +747,50 @@ export const UserStatusMenu = ({
             <div className="mt-3 rounded-md border border-white/10 bg-[#15161a] p-2">
               <div className="mb-1 flex items-center justify-between gap-2">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">User Status</p>
+              </div>
+              <p className="mb-2 text-[10px] text-[#949ba4]">
+                {!canUseCameraControls
+                  ? "Camera control unavailable"
+                  : canControlVoiceCamera
+                    ? "Voice video camera control active"
+                    : "PM camera control active"}
+              </p>
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onToggleMute}
+                  disabled={!isVoiceSessionActive}
+                  className={`inline-flex h-8 w-8 items-center justify-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                    isVoiceMuted
+                      ? "border-rose-400/45 bg-rose-500/20 text-rose-200 hover:bg-rose-500/30"
+                      : "border-emerald-400/45 bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30"
+                  }`}
+                  title={!isVoiceSessionActive ? "Join a voice channel to use mute" : isVoiceMuted ? "Unmute" : "Mute"}
+                  aria-label={isVoiceMuted ? "Unmute" : "Mute"}
+                >
+                  {isVoiceMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={onToggleDeafen}
+                  disabled={!isVoiceSessionActive}
+                  className={`inline-flex h-8 w-8 items-center justify-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                    isVoiceDeafened
+                      ? "border-rose-400/45 bg-rose-500/20 text-rose-200 hover:bg-rose-500/30"
+                      : "border-emerald-400/45 bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30"
+                  }`}
+                  title={!isVoiceSessionActive ? "Join a voice channel to use deafen" : isVoiceDeafened ? "Undeafen" : "Deafen"}
+                  aria-label={isVoiceDeafened ? "Undeafen" : "Deafen"}
+                >
+                  {isVoiceDeafened ? <VolumeX className="h-4 w-4" /> : <Headphones className="h-4 w-4" />}
+                </button>
+
                 <button
                   type="button"
                   onClick={onToggleCamera}
                   disabled={!canUseCameraControls}
-                  className={`inline-flex h-6 w-6 items-center justify-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                  className={`inline-flex h-8 w-8 items-center justify-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-50 ${
                     effectiveCameraOn
                       ? "border-emerald-400/45 bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30"
                       : "border-zinc-600 bg-zinc-700/70 text-zinc-300 hover:bg-zinc-600"
@@ -669,16 +804,10 @@ export const UserStatusMenu = ({
                         : "Turn camera on"
                   }
                 >
-                  {effectiveCameraOn ? <Video className="h-3.5 w-3.5" /> : <VideoOff className="h-3.5 w-3.5" />}
+                  {effectiveCameraOn ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
                 </button>
+
               </div>
-              <p className="mb-2 text-[10px] text-[#949ba4]">
-                {!canUseCameraControls
-                  ? "Camera control unavailable"
-                  : canControlVoiceCamera
-                    ? "Voice video camera control active"
-                    : "PM camera control active"}
-              </p>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button

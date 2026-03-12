@@ -424,7 +424,7 @@ export const ChatInput = ({
 
       setActiveQuote({
         messageId,
-        authorName: String(customEvent.detail?.authorName ?? "Unknown User").trim() || "Unknown User",
+        authorName: String(customEvent.detail?.authorName ?? "Deleted User").trim() || "Deleted User",
         authorProfileId: String(customEvent.detail?.authorProfileId ?? "").trim() || undefined,
         snippet: String(customEvent.detail?.snippet ?? "").trim(),
       });

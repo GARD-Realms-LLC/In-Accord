@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ComponentType, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type MouseEvent as ReactMouseEvent } from "react";
 import { Baby, Bot, Briefcase, Bug, ChevronDown, ChevronRight, Cloud, Crown, Database, ExternalLink, Eye, EyeOff, Flag, Heart, Link2, Mail, MessageCircle, School, ScrollText, Server, Settings2, ShieldAlert, ShieldCheck, Smile, Trash2, Users, Webhook, Wrench } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -50,6 +50,7 @@ type AdminSection =
   | "cloudflareManagement"
   | "integrations"
   | "patronage"
+  | "templateMeBot"
   | "OtherAppsBots";
 
 const adminSections = [
@@ -73,6 +74,7 @@ const adminSections = [
   "databaseManagement",
   "cloudflareManagement",
   "integrations",
+  "templateMeBot",
   "OtherAppsBots",
 ] as const;
 
@@ -159,6 +161,10 @@ const adminSectionMeta: Record<AdminSection, { label: string; description: strin
     label: "Integrations",
     description: "Manage third-party connections and integration health.",
   },
+  templateMeBot: {
+    label: "Template Me Bot",
+    description: "Manage Template Me bot configs used for real Discord template imports.",
+  },
   patronage: {
     label: "Patronage",
     description: "Review support activity and patronage-related account insights.",
@@ -179,22 +185,22 @@ type AdminMenuGroupId =
 const adminMenuGroups: Array<{ id: AdminMenuGroupId; label: string; sections: AdminSection[] }> = [
   {
     id: "workspace",
-    label: "Workspace",
+    label: "Operations",
     sections: ["general", "members", "roles", "iaServerMenu", "databaseManagement", "cloudflareManagement", "integrations"],
   },
   {
     id: "serverOperations",
-    label: "Server Operations",
-    sections: ["servers", "serverTags", "invites", "emojiStickers", "OtherAppsBots", "webhooks"],
+    label: "Server Ops",
+    sections: ["servers", "serverTags", "invites", "emojiStickers", "templateMeBot", "OtherAppsBots", "webhooks"],
   },
   {
     id: "moderationSafety",
-    label: "Moderation & Safety",
+    label: "Moderation",
     sections: ["moderation", "reported", "issuesBugs", "security"],
   },
   {
     id: "communityPrograms",
-    label: "Community Programs",
+    label: "Programs",
     sections: ["familyCenter", "businessCenter", "schoolCenter"],
   },
   {
@@ -225,6 +231,7 @@ const adminMenuItemMeta: Record<AdminSection, { label: string; icon: ComponentTy
   databaseManagement: { label: "I-A DB", icon: Database },
   cloudflareManagement: { label: "Cloudflare", icon: Cloud },
   integrations: { label: "Integrations", icon: ExternalLink },
+  templateMeBot: { label: "Template Me", icon: Bot },
   patronage: { label: "Patronage", icon: Heart },
   OtherAppsBots: { label: "Apps & Bots", icon: Bot },
 };
@@ -328,8 +335,35 @@ type AdminOtherConfig = {
   type: "APP" | "BOT";
   configName: string;
   applicationId: string;
+  tokenHint?: string;
+  tokenUpdatedAt?: string;
   enabled: boolean;
   createdAt: string;
+};
+
+type TemplateMeRuntimeState = {
+  status: "stopped" | "starting" | "running" | "stopping" | "error";
+  startedAt: string | null;
+  stoppedAt: string | null;
+  userId: string | null;
+  botId: string | null;
+  botName: string | null;
+  applicationId: string | null;
+  botUserId: string | null;
+  botTag: string | null;
+  guildCount: number;
+  controlPort: number | null;
+  controlUrl: string | null;
+  lastError: string | null;
+  updatedAt: string;
+};
+
+type TemplateMeBotStats = {
+  importsMadeCount: number;
+  templatesImportedCount: number;
+  serversUsingTemplatesCount: number;
+  serversUsingTemplates: Array<{ id: string; name: string }>;
+  statsUpdatedAt: string | null;
 };
 
 type OtherConfigSortKey = "createdAt" | "status" | "type";
@@ -683,6 +717,20 @@ const isInAccordOtherConfig = (row: Pick<AdminOtherConfig, "configName" | "appli
   );
 };
 
+const isTemplateMeBotConfig = (row: Pick<AdminOtherConfig, "type" | "configName" | "applicationId">) => {
+  if (row.type !== "BOT") {
+    return false;
+  }
+
+  const normalizedName = row.configName
+    .trim()
+    .toLowerCase()
+    .replace(/["'`]+/g, "")
+    .replace(/\s+/g, " ");
+
+  return normalizedName === "template me bot";
+};
+
 export const InAccordAdminModal = () => {
   const { isOpen, onClose, type, data } = useModal();
   const router = useRouter();
@@ -761,8 +809,10 @@ export const InAccordAdminModal = () => {
   const [OtherConfigTypeFilter, setOtherConfigTypeFilter] = useState<"ALL" | "APP" | "BOT">("ALL");
   const [OtherConfigStatusFilter, setOtherConfigStatusFilter] = useState<"ALL" | "ENABLED" | "DISABLED">("ALL");
   const [editingOtherConfigKey, setEditingOtherConfigKey] = useState<string | null>(null);
-  const [OtherConfigDrafts, setOtherConfigDrafts] = useState<Record<string, { configName: string; applicationId: string }>>({});
+  const [OtherConfigDrafts, setOtherConfigDrafts] = useState<Record<string, { configName: string; applicationId: string; botToken: string }>>({});
+  const [OtherBotTokenDrafts, setOtherBotTokenDrafts] = useState<Record<string, string>>({});
   const [OtherConfigActionPendingKey, setOtherConfigActionPendingKey] = useState<string | null>(null);
+  const [OtherBotTokenActionPendingKey, setOtherBotTokenActionPendingKey] = useState<string | null>(null);
   const [OtherConfigActionError, setOtherConfigActionError] = useState<string | null>(null);
   const [OtherConfigActionSuccess, setOtherConfigActionSuccess] = useState<string | null>(null);
   const [newIntegrationUserId, setNewIntegrationUserId] = useState("");
@@ -775,6 +825,23 @@ export const InAccordAdminModal = () => {
   const [OtherConfigSortDirection, setOtherConfigSortDirection] = useState<OtherSortDirection>("desc");
   const [isLoadingIntegrations, setIsLoadingIntegrations] = useState(false);
   const [integrationsError, setIntegrationsError] = useState<string | null>(null);
+  const [templateMeRuntimeState, setTemplateMeRuntimeState] = useState<TemplateMeRuntimeState | null>(null);
+  const [templateMeRuntimeInviteUrl, setTemplateMeRuntimeInviteUrl] = useState<string | null>(null);
+  const [isLoadingTemplateMeRuntime, setIsLoadingTemplateMeRuntime] = useState(false);
+  const [templateMeRuntimeActionPending, setTemplateMeRuntimeActionPending] = useState<"start" | "stop" | "restart" | null>(null);
+  const [templateMeRuntimeError, setTemplateMeRuntimeError] = useState<string | null>(null);
+  const [templateMeRuntimeSuccess, setTemplateMeRuntimeSuccess] = useState<string | null>(null);
+  const [templateMeStats, setTemplateMeStats] = useState<TemplateMeBotStats | null>(null);
+  const [isLoadingTemplateMeStats, setIsLoadingTemplateMeStats] = useState(false);
+  const [templateMeStatsError, setTemplateMeStatsError] = useState<string | null>(null);
+  const [templateMeTerminalOutput, setTemplateMeTerminalOutput] = useState<string>("");
+  const [templateMeTerminalStatus, setTemplateMeTerminalStatus] = useState<"connecting" | "connected" | "running" | "stopped" | "error" | "disconnected">("disconnected");
+  const [templateMeTerminalStartedAt, setTemplateMeTerminalStartedAt] = useState<string | null>(null);
+  const [templateMeTerminalUpdatedAt, setTemplateMeTerminalUpdatedAt] = useState<string | null>(null);
+  const [templateMeTerminalLastExitCode, setTemplateMeTerminalLastExitCode] = useState<number | null>(null);
+  const [templateMeTerminalLastError, setTemplateMeTerminalLastError] = useState<string | null>(null);
+  const templateMeTerminalScrollRef = useRef<HTMLPreElement | null>(null);
+  const [selectedTemplateMeRuntimeTarget, setSelectedTemplateMeRuntimeTarget] = useState("");
   const [reports, setReports] = useState<AdminReport[]>([]);
   const [isLoadingReports, setIsLoadingReports] = useState(false);
   const [reportsError, setReportsError] = useState<string | null>(null);
@@ -1223,6 +1290,114 @@ export const InAccordAdminModal = () => {
       );
     } finally {
       setIsLoadingIntegrations(false);
+    }
+  }, []);
+
+  const loadTemplateMeRuntime = useCallback(async () => {
+    try {
+      setIsLoadingTemplateMeRuntime(true);
+      setTemplateMeRuntimeError(null);
+
+      const response = await fetch("/api/admin/template-me-runtime", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load Template Me runtime (${response.status})`);
+      }
+
+      const payload = (await response.json()) as {
+        state?: TemplateMeRuntimeState;
+        inviteUrl?: string | null;
+      };
+
+      setTemplateMeRuntimeState(payload.state ?? null);
+      setTemplateMeRuntimeInviteUrl(payload.inviteUrl ?? null);
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_TEMPLATE_ME_RUNTIME_LOAD]", error);
+      setTemplateMeRuntimeState(null);
+      setTemplateMeRuntimeInviteUrl(null);
+      setTemplateMeRuntimeError("Unable to load Template Me runtime status right now.");
+    } finally {
+      setIsLoadingTemplateMeRuntime(false);
+    }
+  }, []);
+
+  const loadTemplateMeStats = useCallback(async (userId: string, botId: string) => {
+    try {
+      setIsLoadingTemplateMeStats(true);
+      setTemplateMeStatsError(null);
+
+      const query = new URLSearchParams({ userId, botId });
+      const response = await fetch(`/api/admin/template-me-stats?${query.toString()}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Failed to load Template Me stats (${response.status})`;
+        throw new Error(message);
+      }
+
+      const payload = (await response.json()) as TemplateMeBotStats;
+      setTemplateMeStats(payload);
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_TEMPLATE_ME_STATS_LOAD]", error);
+      setTemplateMeStats(null);
+      setTemplateMeStatsError(error instanceof Error ? error.message : "Unable to load Template Me stats right now.");
+    } finally {
+      setIsLoadingTemplateMeStats(false);
+    }
+  }, []);
+
+  const onTemplateMeRuntimeAction = useCallback(async (action: "start" | "stop" | "restart") => {
+    try {
+      setTemplateMeRuntimeActionPending(action);
+      setTemplateMeRuntimeError(null);
+      setTemplateMeRuntimeSuccess(null);
+
+      const response = await fetch("/api/admin/template-me-runtime", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ action }),
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Template Me runtime ${action} failed (${response.status})`;
+        setTemplateMeRuntimeError(message);
+        return;
+      }
+
+      const payload = (await response.json()) as {
+        state?: TemplateMeRuntimeState;
+        inviteUrl?: string | null;
+      };
+
+      setTemplateMeRuntimeState(payload.state ?? null);
+      setTemplateMeRuntimeInviteUrl(payload.inviteUrl ?? null);
+      setTemplateMeRuntimeSuccess(
+        action === "start"
+          ? "Template Me bot runtime started."
+          : action === "restart"
+            ? "Template Me bot runtime restarted."
+            : "Template Me bot runtime stopped."
+      );
+    } catch (error) {
+      if (!isNetworkFetchFailure(error)) {
+        console.error("[IN_ACCORD_ADMIN_TEMPLATE_ME_RUNTIME_ACTION]", error);
+      }
+      setTemplateMeRuntimeError(error instanceof Error ? error.message : "Unable to control Template Me runtime.");
+    } finally {
+      setTemplateMeRuntimeActionPending(null);
     }
   }, []);
 
@@ -2287,7 +2462,7 @@ export const InAccordAdminModal = () => {
   }, [activeSection, isModalOpen, loadSecurity]);
 
   useEffect(() => {
-    if (!isModalOpen || (activeSection !== "integrations" && activeSection !== "OtherAppsBots")) {
+    if (!isModalOpen || (activeSection !== "integrations" && activeSection !== "OtherAppsBots" && activeSection !== "templateMeBot")) {
       return;
     }
 
@@ -2304,6 +2479,96 @@ export const InAccordAdminModal = () => {
       isCancelled = true;
     };
   }, [activeSection, isModalOpen, loadIntegrations]);
+
+  useEffect(() => {
+    if (!isModalOpen || activeSection !== "templateMeBot") {
+      return;
+    }
+
+    void loadTemplateMeRuntime();
+
+    const intervalId = window.setInterval(() => {
+      void loadTemplateMeRuntime();
+    }, 10000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [activeSection, isModalOpen, loadTemplateMeRuntime]);
+
+  useEffect(() => {
+    if (!isModalOpen || activeSection !== "templateMeBot") {
+      setTemplateMeTerminalStatus("disconnected");
+      return;
+    }
+
+    setTemplateMeTerminalStatus("connecting");
+    const source = new EventSource("/api/admin/template-me-npm");
+
+    source.onopen = () => {
+      setTemplateMeTerminalStatus((current) =>
+        current === "running" || current === "stopped" || current === "error"
+          ? current
+          : "connected"
+      );
+    };
+
+    source.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(String(event.data ?? "{}")) as {
+          output?: unknown;
+          status?: unknown;
+          startedAt?: unknown;
+          updatedAt?: unknown;
+          lastExitCode?: unknown;
+          lastError?: unknown;
+        };
+
+        setTemplateMeTerminalOutput(typeof payload.output === "string" ? payload.output : "");
+        setTemplateMeTerminalStatus(
+          payload.status === "running" || payload.status === "starting"
+            ? "running"
+            : payload.status === "stopped"
+              ? "stopped"
+              : payload.status === "error"
+                ? "error"
+                : "connected"
+        );
+        setTemplateMeTerminalStartedAt(typeof payload.startedAt === "string" ? payload.startedAt : null);
+        setTemplateMeTerminalUpdatedAt(typeof payload.updatedAt === "string" ? payload.updatedAt : new Date().toISOString());
+        setTemplateMeTerminalLastExitCode(
+          typeof payload.lastExitCode === "number" && Number.isFinite(payload.lastExitCode)
+            ? payload.lastExitCode
+            : null
+        );
+        setTemplateMeTerminalLastError(typeof payload.lastError === "string" ? payload.lastError : null);
+      } catch {
+        setTemplateMeTerminalStatus("error");
+      }
+    };
+
+    source.onerror = () => {
+      setTemplateMeTerminalStatus((current) =>
+        current === "running" || current === "stopped" || current === "error"
+          ? current
+          : "connecting"
+      );
+    };
+
+    return () => {
+      source.close();
+      setTemplateMeTerminalStatus("disconnected");
+    };
+  }, [activeSection, isModalOpen]);
+
+  useEffect(() => {
+    const element = templateMeTerminalScrollRef.current;
+    if (!element) {
+      return;
+    }
+
+    element.scrollTop = element.scrollHeight;
+  }, [templateMeTerminalOutput]);
 
   useEffect(() => {
     if (!isModalOpen || activeSection !== "integrations") {
@@ -2522,6 +2787,19 @@ export const InAccordAdminModal = () => {
       setOtherConfigSortDirection("desc");
       setIsLoadingIntegrations(false);
       setIntegrationsError(null);
+      setTemplateMeRuntimeState(null);
+      setTemplateMeRuntimeInviteUrl(null);
+      setIsLoadingTemplateMeRuntime(false);
+      setTemplateMeRuntimeActionPending(null);
+      setTemplateMeRuntimeError(null);
+      setTemplateMeRuntimeSuccess(null);
+      setTemplateMeTerminalOutput("");
+      setTemplateMeTerminalStatus("disconnected");
+      setTemplateMeTerminalStartedAt(null);
+      setTemplateMeTerminalUpdatedAt(null);
+      setTemplateMeTerminalLastExitCode(null);
+      setTemplateMeTerminalLastError(null);
+      setSelectedTemplateMeRuntimeTarget("");
       setReports([]);
       setIsLoadingReports(false);
       setReportsError(null);
@@ -4188,6 +4466,51 @@ export const InAccordAdminModal = () => {
     recentOtherConfigs,
   ]);
 
+  const templateMeBotConfigs = useMemo(
+    () => recentOtherConfigs.filter((row) => isTemplateMeBotConfig(row)),
+    [recentOtherConfigs]
+  );
+
+  const templateMeBotConfigConflict = templateMeBotConfigs.length > 1;
+
+  const primaryTemplateMeBotConfig = useMemo(() => {
+    return templateMeBotConfigs.length === 1 ? templateMeBotConfigs[0] : null;
+  }, [templateMeBotConfigs]);
+
+  const templateMeRuntimeTargetValue = primaryTemplateMeBotConfig
+    ? `${primaryTemplateMeBotConfig.userId}:${primaryTemplateMeBotConfig.id}`
+    : "";
+
+  const selectedTemplateMeRuntimeTargetLabel = useMemo(() => {
+    if (!primaryTemplateMeBotConfig) {
+      return "";
+    }
+
+    const configLabel = String(primaryTemplateMeBotConfig.configName ?? "").trim() || "Template Me Bot";
+    const ownerLabel =
+      String(primaryTemplateMeBotConfig.name ?? "").trim() ||
+      String(primaryTemplateMeBotConfig.userId ?? "").trim() ||
+      "Unassigned Owner";
+
+    return `${configLabel} (${ownerLabel})`;
+  }, [primaryTemplateMeBotConfig]);
+
+  const resolvedTemplateMeInviteUrl = useMemo(() => {
+    if (templateMeRuntimeInviteUrl) {
+      return templateMeRuntimeInviteUrl;
+    }
+
+    const candidateApplicationId = String(
+      templateMeRuntimeState?.applicationId || primaryTemplateMeBotConfig?.applicationId || ""
+    ).trim();
+
+    if (!/^\d{17,20}$/.test(candidateApplicationId) || /^0+$/.test(candidateApplicationId)) {
+      return null;
+    }
+
+    return `https://discord.com/oauth2/authorize?client_id=${encodeURIComponent(candidateApplicationId)}&scope=bot%20applications.commands&permissions=8`;
+  }, [primaryTemplateMeBotConfig?.applicationId, templateMeRuntimeInviteUrl, templateMeRuntimeState?.applicationId]);
+
   const separatedOtherConfigs = useMemo(() => {
     const inAccord: AdminOtherConfig[] = [];
     const Other: AdminOtherConfig[] = [];
@@ -4205,6 +4528,26 @@ export const InAccordAdminModal = () => {
       Other,
     };
   }, [filteredRecentOtherConfigs]);
+
+  useEffect(() => {
+    if (selectedTemplateMeRuntimeTarget !== templateMeRuntimeTargetValue) {
+      setSelectedTemplateMeRuntimeTarget(templateMeRuntimeTargetValue);
+    }
+  }, [selectedTemplateMeRuntimeTarget, templateMeRuntimeTargetValue]);
+
+  useEffect(() => {
+    if (!isModalOpen || activeSection !== "templateMeBot") {
+      return;
+    }
+
+    if (!primaryTemplateMeBotConfig) {
+      setTemplateMeStats(null);
+      setTemplateMeStatsError(null);
+      return;
+    }
+
+    void loadTemplateMeStats(primaryTemplateMeBotConfig.userId, primaryTemplateMeBotConfig.id);
+  }, [activeSection, isModalOpen, loadTemplateMeStats, primaryTemplateMeBotConfig]);
 
   const onOtherConfigSort = (key: OtherConfigSortKey) => {
     if (OtherConfigSortKey === key) {
@@ -4232,6 +4575,7 @@ export const InAccordAdminModal = () => {
       [key]: {
         configName: row.configName,
         applicationId: row.applicationId,
+        botToken: "",
       },
     }));
     setEditingOtherConfigKey(key);
@@ -4291,6 +4635,9 @@ export const InAccordAdminModal = () => {
         payload.patch = {
           name: draft.configName,
           applicationId: draft.applicationId,
+          ...(row.type === "BOT" && draft.botToken.trim().length > 0
+            ? { botToken: draft.botToken.trim() }
+            : {}),
         };
       }
 
@@ -4319,11 +4666,18 @@ export const InAccordAdminModal = () => {
           ? "Other config deleted."
           : action === "toggle"
             ? `Other config ${row.enabled ? "disabled" : "enabled"}.`
-            : "Other config updated."
+            : row.type === "BOT" && OtherConfigDrafts[key]?.botToken.trim().length
+              ? "Other config and bot token updated."
+              : "Other config updated."
       );
 
       if (action === "update") {
         setEditingOtherConfigKey(null);
+        setOtherConfigDrafts((current) => {
+          const next = { ...current };
+          delete next[key];
+          return next;
+        });
       }
 
       await loadIntegrations();
@@ -4382,6 +4736,59 @@ export const InAccordAdminModal = () => {
       setOtherConfigActionError(error instanceof Error ? error.message : "Unable to create integration config.");
     } finally {
       setIsCreatingIntegrationConfig(false);
+    }
+  };
+
+  const onAdminOtherBotTokenSave = async (row: AdminOtherConfig) => {
+    const key = OtherConfigKey(row);
+    const token = (OtherBotTokenDrafts[key] ?? "").trim();
+
+    setOtherConfigActionError(null);
+    setOtherConfigActionSuccess(null);
+
+    if (!token) {
+      setOtherConfigActionError("Enter a bot token before saving.");
+      return;
+    }
+
+    try {
+      setOtherBotTokenActionPendingKey(key);
+
+      const response = await fetch("/api/admin/integrations", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          type: "BOT",
+          userId: row.userId,
+          configId: row.id,
+          action: "update",
+          patch: {
+            botToken: token,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Failed to update bot token (${response.status})`;
+        throw new Error(message);
+      }
+
+      setOtherConfigActionSuccess("Bot token updated.");
+      setOtherBotTokenDrafts((current) => ({
+        ...current,
+        [key]: "",
+      }));
+
+      await loadIntegrations();
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_Other_BOT_TOKEN_SAVE]", error);
+      setOtherConfigActionError(
+        error instanceof Error ? error.message : "Unable to update bot token."
+      );
+    } finally {
+      setOtherBotTokenActionPendingKey(null);
     }
   };
 
@@ -4496,58 +4903,77 @@ export const InAccordAdminModal = () => {
 
   const renderOtherConfigTable = (
     rows: AdminOtherConfig[],
-    emptyMessage: string
+    emptyMessage: string,
+    options?: {
+      mode?: "default" | "templateMe";
+    }
   ) => (
     <div className="overflow-hidden rounded-lg border border-zinc-300 dark:border-zinc-700">
-      <div className="border-b border-zinc-300/70 bg-white/70 px-3 py-2 dark:border-zinc-700/70 dark:bg-zinc-900/35">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Rows</span>
-          {(["COMPACT", "COMFORTABLE", "SPACIOUS"] as const).map((density) => (
-            <button
-              key={`Other-config-row-density-${density}`}
-              type="button"
-              onClick={() => setListRowDensity(density)}
-              className={cn(
-                "h-7 rounded-md border px-2.5 text-[11px] font-semibold transition",
-                listRowDensity === density
-                  ? "border-indigo-500/45 bg-indigo-500/15 text-indigo-700 dark:text-indigo-200"
-                  : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-              )}
-            >
-              {density === "COMPACT" ? "Compact" : density === "SPACIOUS" ? "Spacious" : "Comfortable"}
-            </button>
-          ))}
+      {options?.mode !== "templateMe" ? (
+        <div className="border-b border-zinc-300/70 bg-white/70 px-3 py-2 dark:border-zinc-700/70 dark:bg-zinc-900/35">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Rows</span>
+            {(["COMPACT", "COMFORTABLE", "SPACIOUS"] as const).map((density) => (
+              <button
+                key={`Other-config-row-density-${density}`}
+                type="button"
+                onClick={() => setListRowDensity(density)}
+                className={cn(
+                  "h-7 rounded-md border px-2.5 text-[11px] font-semibold transition",
+                  listRowDensity === density
+                    ? "border-indigo-500/45 bg-indigo-500/15 text-indigo-700 dark:text-indigo-200"
+                    : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                )}
+              >
+                {density === "COMPACT" ? "Compact" : density === "SPACIOUS" ? "Spacious" : "Comfortable"}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
-      <div className="grid grid-cols-[1fr_1fr_0.55fr_1fr_0.8fr_1fr_1.3fr] gap-2 bg-zinc-200/80 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-        <p>User</p>
-        <p>Name</p>
-        <button
-          type="button"
-          onClick={() => onOtherConfigSort("type")}
-          className="inline-flex items-center gap-1 text-left hover:text-zinc-900 dark:hover:text-white"
-          title="Sort by type"
-        >
-          Type <span>{getSortGlyph("type")}</span>
-        </button>
-        <p>Application ID</p>
-        <button
-          type="button"
-          onClick={() => onOtherConfigSort("status")}
-          className="inline-flex items-center gap-1 text-left hover:text-zinc-900 dark:hover:text-white"
-          title="Sort by status"
-        >
-          Status <span>{getSortGlyph("status")}</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => onOtherConfigSort("createdAt")}
-          className="inline-flex items-center gap-1 text-left hover:text-zinc-900 dark:hover:text-white"
-          title="Sort by created date"
-        >
-          Created <span>{getSortGlyph("createdAt")}</span>
-        </button>
-        <p>Actions</p>
+      ) : null}
+      <div
+        className={cn(
+          "grid gap-2 bg-zinc-200/80 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
+          options?.mode === "templateMe"
+            ? "grid-cols-1"
+            : "grid-cols-[1fr_1fr_0.55fr_1fr_1fr_0.8fr_1fr_1.3fr]"
+        )}
+      >
+        {options?.mode === "templateMe" ? (
+          <p>Template Me Bot Entry</p>
+        ) : (
+          <>
+            <p>User</p>
+            <p>Name</p>
+            <button
+              type="button"
+              onClick={() => onOtherConfigSort("type")}
+              className="inline-flex items-center gap-1 text-left hover:text-zinc-900 dark:hover:text-white"
+              title="Sort by type"
+            >
+              Type <span>{getSortGlyph("type")}</span>
+            </button>
+            <p>Application ID</p>
+            <p>Token / Rotation</p>
+            <button
+              type="button"
+              onClick={() => onOtherConfigSort("status")}
+              className="inline-flex items-center gap-1 text-left hover:text-zinc-900 dark:hover:text-white"
+              title="Sort by status"
+            >
+              Status <span>{getSortGlyph("status")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onOtherConfigSort("createdAt")}
+              className="inline-flex items-center gap-1 text-left hover:text-zinc-900 dark:hover:text-white"
+              title="Sort by created date"
+            >
+              Created <span>{getSortGlyph("createdAt")}</span>
+            </button>
+            <p>Actions</p>
+          </>
+        )}
       </div>
       <div className="max-h-80 overflow-y-auto bg-white/80 text-xs text-zinc-800 dark:bg-zinc-950/30 dark:text-zinc-200">
         {rows.length === 0 ? (
@@ -4557,48 +4983,111 @@ export const InAccordAdminModal = () => {
             const key = OtherConfigKey(row);
             const isEditing = editingOtherConfigKey === key;
             const isPending = OtherConfigActionPendingKey === key;
+            const isTokenPending = OtherBotTokenActionPendingKey === key;
+            const tokenDraft = OtherBotTokenDrafts[key] ?? "";
             const draft = OtherConfigDrafts[key];
             const hasChanges =
               !!draft &&
               (draft.configName.trim() !== row.configName ||
-                draft.applicationId.trim() !== row.applicationId);
+                draft.applicationId.trim() !== row.applicationId ||
+                (row.type === "BOT" && draft.botToken.trim().length > 0));
+
+            if (options?.mode === "templateMe") {
+              return (
+                <div
+                  key={`Other-config-${row.userId}-${row.type}-${row.id}-${index}`}
+                  className={cn(
+                    "space-y-2 px-3 py-2",
+                    index % 2 === 0
+                      ? "bg-white/70 dark:bg-zinc-950/25"
+                      : "bg-zinc-100/70 dark:bg-zinc-900/35"
+                  )}
+                >
+                  <div>
+                    <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Application ID</p>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <input
+                        type="text"
+                        value={draft?.applicationId ?? row.applicationId}
+                        onChange={(event) =>
+                          setOtherConfigDrafts((current) => ({
+                            ...current,
+                            [key]: {
+                              configName: current[key]?.configName ?? row.configName,
+                              applicationId: event.target.value,
+                              botToken: current[key]?.botToken ?? "",
+                            },
+                          }))
+                        }
+                        className="h-8 w-full max-w-[280px] rounded-md border border-zinc-300 bg-white px-2 font-mono text-xs text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                      />
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!draft) {
+                            setOtherConfigDraft(row);
+                            return;
+                          }
+
+                          await onAdminOtherConfigAction(row, "update");
+                        }}
+                        disabled={isPending || !hasChanges}
+                        className="h-8 shrink-0 whitespace-nowrap rounded-md bg-indigo-600 px-2 text-[10px] font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Save App ID
+                      </button>
+                    </div>
+                  </div>
+
+                  {row.type === "BOT" ? (
+                    <div>
+                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Token / Rotation</p>
+                      <p className="truncate text-[11px] text-zinc-500 dark:text-zinc-400" title={`Token hint: ${row.tokenHint || "Not set"}`}>
+                        {row.tokenHint || "Token not set"}
+                      </p>
+                      <p className="truncate text-[10px] text-zinc-500 dark:text-zinc-400" title={`Token updated: ${formatDateTime(row.tokenUpdatedAt ?? null)}`}>
+                        Token updated: {formatDateTime(row.tokenUpdatedAt ?? null)}
+                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        <input
+                          type="password"
+                          value={tokenDraft}
+                          onChange={(event) =>
+                            setOtherBotTokenDrafts((current) => ({
+                              ...current,
+                              [key]: event.target.value,
+                            }))
+                          }
+                          placeholder="New token"
+                          className="h-8 min-w-[220px] flex-1 rounded-md border border-zinc-300 bg-white px-2 text-xs text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void onAdminOtherBotTokenSave(row)}
+                          disabled={isPending || isTokenPending || tokenDraft.trim().length === 0}
+                          className="h-8 shrink-0 whitespace-nowrap rounded-md bg-indigo-600 px-2 text-[10px] font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isTokenPending ? "Saving..." : "Save Token"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                </div>
+              );
+            }
 
             return (
               <div
                 key={`Other-config-${row.userId}-${row.type}-${row.id}-${index}`}
                 className={cn(
-                  "grid grid-cols-[1fr_1fr_0.55fr_1fr_0.8fr_1fr_1.3fr] gap-2 px-3",
+                  "grid grid-cols-[1fr_1fr_0.55fr_1fr_1fr_0.8fr_1fr_1.3fr] gap-2 px-3",
                   listRowDensityClass,
                   index % 2 === 0
                     ? "bg-white/70 dark:bg-zinc-950/25"
                     : "bg-zinc-100/70 dark:bg-zinc-900/35"
                 )}
               >
-                <p className="truncate" title={`${row.name} (${row.userId})`}>
-                  {row.name || row.userId}
-                </p>
-
-                {isEditing ? (
-                  <input
-                    type="text"
-                    value={draft?.configName ?? row.configName}
-                    onChange={(event) =>
-                      setOtherConfigDrafts((current) => ({
-                        ...current,
-                        [key]: {
-                          configName: event.target.value,
-                          applicationId: current[key]?.applicationId ?? row.applicationId,
-                        },
-                      }))
-                    }
-                    className="h-7 rounded-md border border-zinc-300 bg-white px-2 text-xs text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-                  />
-                ) : (
-                  <p className="truncate" title={row.configName}>{row.configName}</p>
-                )}
-
-                <p>{row.type}</p>
-
                 {isEditing ? (
                   <input
                     type="text"
@@ -4609,14 +5098,48 @@ export const InAccordAdminModal = () => {
                         [key]: {
                           configName: current[key]?.configName ?? row.configName,
                           applicationId: event.target.value,
+                          botToken: current[key]?.botToken ?? "",
                         },
                       }))
                     }
-                    className="h-7 rounded-md border border-zinc-300 bg-white px-2 font-mono text-xs text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                    className="h-7 w-full rounded-md border border-zinc-300 bg-white px-2 font-mono text-xs text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                   />
                 ) : (
                   <p className="truncate font-mono" title={row.applicationId}>{row.applicationId}</p>
                 )}
+
+                {row.type === "BOT" ? (
+                  <div className="space-y-1">
+                    <p className="truncate text-[11px] text-zinc-500 dark:text-zinc-400" title={`Token hint: ${row.tokenHint || "Not set"}`}>
+                      {row.tokenHint || "Token not set"}
+                    </p>
+                    <p className="truncate text-[10px] text-zinc-500 dark:text-zinc-400" title={`Token updated: ${formatDateTime(row.tokenUpdatedAt ?? null)}`}>
+                      Token updated: {formatDateTime(row.tokenUpdatedAt ?? null)}
+                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="password"
+                        value={tokenDraft}
+                        onChange={(event) =>
+                          setOtherBotTokenDrafts((current) => ({
+                            ...current,
+                            [key]: event.target.value,
+                          }))
+                        }
+                        placeholder="New token"
+                        className="h-7 w-full rounded-md border border-zinc-300 bg-white px-2 text-xs text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void onAdminOtherBotTokenSave(row)}
+                        disabled={isPending || isTokenPending || tokenDraft.trim().length === 0}
+                        className="h-7 shrink-0 whitespace-nowrap rounded-md bg-indigo-600 px-2 text-[10px] font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isTokenPending ? "Saving..." : "Save Token"}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
 
                 <p className={row.enabled ? "text-emerald-600 dark:text-emerald-300" : "text-zinc-500 dark:text-zinc-400"}>
                   {row.enabled ? "Enabled" : "Disabled"}
@@ -4662,37 +5185,39 @@ export const InAccordAdminModal = () => {
                     </button>
                   )}
 
-                  <button
-                    type="button"
-                    onClick={() => void onAdminOtherConfigAction(row, "toggle")}
-                    disabled={isPending}
-                    className={cn(
-                      "h-7 rounded-md px-2 text-[10px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-60",
-                      row.enabled
-                        ? "border border-zinc-500/35 bg-zinc-500/15 text-zinc-200 hover:bg-zinc-500/25"
-                        : "border border-emerald-500/35 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
-                    )}
-                  >
-                    {row.enabled ? "Disable" : "Enable"}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void onAdminOtherConfigAction(row, "toggle")}
+                      disabled={isPending}
+                      className={cn(
+                        "h-7 rounded-md px-2 text-[10px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-60",
+                        row.enabled
+                          ? "border border-zinc-500/35 bg-zinc-500/15 text-zinc-200 hover:bg-zinc-500/25"
+                          : "border border-emerald-500/35 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
+                      )}
+                    >
+                      {row.enabled ? "Disable" : "Enable"}
+                    </button>
 
-                  <button
-                    type="button"
-                    onClick={() => void onAdminOtherConfigAction(row, "delete")}
-                    disabled={isPending}
-                    className="h-7 rounded-md border border-rose-500/35 bg-rose-500/15 px-2 text-[10px] font-semibold text-rose-200 transition hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    Delete
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void onAdminOtherConfigAction(row, "purge")}
-                    disabled={isPending}
-                    className="h-7 rounded-md border border-rose-500/55 bg-rose-600/20 px-2 text-[10px] font-semibold text-rose-100 transition hover:bg-rose-600/30 disabled:cursor-not-allowed disabled:opacity-60"
-                    title="Remove this app/bot from all users in the system"
-                  >
-                    Remove System
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => void onAdminOtherConfigAction(row, "delete")}
+                      disabled={isPending}
+                      className="h-7 rounded-md border border-rose-500/35 bg-rose-500/15 px-2 text-[10px] font-semibold text-rose-200 transition hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Delete
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void onAdminOtherConfigAction(row, "purge")}
+                      disabled={isPending}
+                      className="h-7 rounded-md border border-rose-500/55 bg-rose-600/20 px-2 text-[10px] font-semibold text-rose-100 transition hover:bg-rose-600/30 disabled:cursor-not-allowed disabled:opacity-60"
+                      title="Remove this app/bot from all users in the system"
+                    >
+                      Remove System
+                    </button>
+                  </>
                 </div>
               </div>
             );
@@ -9430,6 +9955,243 @@ export const InAccordAdminModal = () => {
                       })}
                     </div>
                   </div>
+                )}
+              </div>
+            )}
+
+            {activeSection === "templateMeBot" && (
+              <div className="rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Template Me Bot</p>
+                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                      Real bot configs only. No scaffolded or generated fallback data is used.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void loadIntegrations();
+                      void loadTemplateMeRuntime();
+                      if (primaryTemplateMeBotConfig) {
+                        void loadTemplateMeStats(primaryTemplateMeBotConfig.userId, primaryTemplateMeBotConfig.id);
+                      }
+                    }}
+                    className="h-8 rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                  >
+                    Refresh
+                  </button>
+                </div>
+
+                {isLoadingIntegrations ? (
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading Template Me bot configs...</p>
+                ) : integrationsError ? (
+                  <p className="text-sm text-rose-500">{integrationsError}</p>
+                ) : (
+                  <>
+                    <div className="mb-4 grid grid-cols-[35%_minmax(0,1fr)] items-stretch gap-3">
+                      <div className="flex min-h-0 flex-col gap-3">
+                      <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                      <div className="mb-3 flex flex-wrap items-center gap-2">
+                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-700 dark:text-zinc-200">Runtime Control</p>
+                        <span
+                          className={cn(
+                            "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]",
+                            templateMeRuntimeState?.status === "running"
+                              ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-700 dark:text-emerald-200"
+                              : templateMeRuntimeState?.status === "starting" || templateMeRuntimeState?.status === "stopping"
+                                ? "border-amber-500/35 bg-amber-500/15 text-amber-700 dark:text-amber-200"
+                                : templateMeRuntimeState?.status === "error"
+                                  ? "border-rose-500/35 bg-rose-500/15 text-rose-700 dark:text-rose-200"
+                                  : "border-zinc-500/35 bg-zinc-500/15 text-zinc-700 dark:text-zinc-200"
+                          )}
+                        >
+                          {templateMeRuntimeState?.status ?? "stopped"}
+                        </span>
+                      </div>
+
+                      <div className="mb-3 grid grid-cols-3 gap-1">
+
+                        <button
+                          type="button"
+                          onClick={() => void onTemplateMeRuntimeAction("start")}
+                          disabled={templateMeRuntimeActionPending !== null}
+                          className="h-7 rounded-md border border-emerald-500/35 bg-emerald-500/15 px-1.5 text-[11px] font-semibold text-emerald-700 transition hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-50 dark:text-emerald-200"
+                        >
+                          {templateMeRuntimeActionPending === "start" ? "Starting..." : "Start Bot"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => void onTemplateMeRuntimeAction("restart")}
+                          disabled={templateMeRuntimeActionPending !== null}
+                          className="h-7 rounded-md border border-amber-500/35 bg-amber-500/15 px-1.5 text-[11px] font-semibold text-amber-700 transition hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-50 dark:text-amber-200"
+                        >
+                          {templateMeRuntimeActionPending === "restart" ? "Restarting..." : "Restart Bot"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => void onTemplateMeRuntimeAction("stop")}
+                          disabled={templateMeRuntimeActionPending !== null || templateMeRuntimeState?.status === "stopped"}
+                          className="h-7 rounded-md border border-rose-500/35 bg-rose-500/15 px-1.5 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-50 dark:text-rose-200"
+                        >
+                          {templateMeRuntimeActionPending === "stop" ? "Stopping..." : "Stop Bot"}
+                        </button>
+                      </div>
+
+                      <div className="grid gap-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                        <p>Bot: {templateMeRuntimeState?.botTag || templateMeRuntimeState?.botName || selectedTemplateMeRuntimeTargetLabel || "Template Me Bot"}</p>
+                        <p>Application ID: {templateMeRuntimeState?.applicationId || primaryTemplateMeBotConfig?.applicationId || "Not set"}</p>
+                        <p>Guilds connected: {templateMeRuntimeState?.guildCount ?? 0}</p>
+                        <p>Control port: {templateMeRuntimeState?.controlPort ?? 3030}</p>
+                        <p>Control endpoint: {templateMeRuntimeState?.controlUrl || "Not active"}</p>
+                        <p>Started: {formatDateTime(templateMeRuntimeState?.startedAt ?? null)}</p>
+                        <p>Updated: {formatDateTime(templateMeRuntimeState?.updatedAt ?? null)}</p>
+                      </div>
+
+                      {isLoadingTemplateMeRuntime ? (
+                        <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">Loading runtime status...</p>
+                      ) : null}
+                      {templateMeRuntimeError ? (
+                        <p className="mt-2 text-xs text-rose-500">{templateMeRuntimeError}</p>
+                      ) : null}
+                      {templateMeRuntimeState?.lastError ? (
+                        <p className="mt-2 text-xs text-rose-500">Runtime error: {templateMeRuntimeState.lastError}</p>
+                      ) : null}
+                      {templateMeRuntimeSuccess ? (
+                        <p className="mt-2 text-xs text-emerald-500">{templateMeRuntimeSuccess}</p>
+                      ) : null}
+                      {templateMeBotConfigConflict ? (
+                        <p className="mt-2 text-xs text-rose-500">Multiple "Template Me Bot" entries found. Keep exactly one.</p>
+                      ) : null}
+                      </div>
+
+                      {OtherConfigActionError ? (
+                        <p className="text-xs text-rose-500">{OtherConfigActionError}</p>
+                      ) : null}
+                      {OtherConfigActionSuccess ? (
+                        <p className="text-xs text-emerald-500">{OtherConfigActionSuccess}</p>
+                      ) : null}
+
+                      <div className="min-h-0 rounded-lg border border-zinc-300 bg-zinc-100/60 p-3 dark:border-zinc-700 dark:bg-zinc-900/35">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-700 dark:text-zinc-200">In-Accord Template Bot Entry</p>
+                          <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                            {templateMeBotConfigConflict ? `${templateMeBotConfigs.length} items` : primaryTemplateMeBotConfig ? "1 item" : "0 items"}
+                          </span>
+                        </div>
+                        {renderOtherConfigTable(
+                          primaryTemplateMeBotConfig ? [primaryTemplateMeBotConfig] : templateMeBotConfigs,
+                          "No Template Me Bot entry found. Create one BOT entry named exactly \"Template Me Bot\" in Apps & Bots.",
+                          { mode: "templateMe" }
+                        )}
+                      </div>
+                      </div>
+
+                      <div className="flex min-h-0 flex-col rounded-lg border border-zinc-300 bg-zinc-950 p-3 font-mono text-[11px] text-zinc-100 dark:border-zinc-700">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-emerald-300">
+                            NPM Terminal · Template Me Bot Only
+                          </p>
+                          <span className="rounded border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-200">
+                            bot-only
+                          </span>
+                        </div>
+
+                        <div className="mt-1 flex-1 overflow-hidden rounded border border-zinc-700 bg-black/35 p-2">
+                          <pre
+                            ref={templateMeTerminalScrollRef}
+                            className="h-full overflow-auto whitespace-pre-wrap text-[10px] leading-relaxed text-zinc-100"
+                          >
+                            {templateMeTerminalOutput || (templateMeTerminalStatus === "disconnected" || templateMeTerminalStatus === "connecting"
+                              ? "Connecting to live Template Me npm terminal stream..."
+                              : "Live Template Me npm stream connected. Waiting for output...")}
+                          </pre>
+                        </div>
+
+                        <p className="mt-2 text-[10px] text-zinc-400">
+                          Stream: <span className="text-zinc-200">{templateMeTerminalStatus}</span> · Runtime: <span className="text-zinc-200">{templateMeRuntimeState?.status ?? "stopped"}</span> · Control port: <span className="text-zinc-200">{templateMeRuntimeState?.controlPort ?? 3030}</span>
+                          {templateMeTerminalLastExitCode !== null ? (
+                            <>
+                              {" "}· Exit: <span className="text-zinc-200">{templateMeTerminalLastExitCode}</span>
+                            </>
+                          ) : null}
+                          {templateMeTerminalStartedAt ? (
+                            <>
+                              {" "}· Started: <span className="text-zinc-200">{formatDateTime(templateMeTerminalStartedAt)}</span>
+                            </>
+                          ) : null}
+                          {templateMeTerminalUpdatedAt ? (
+                            <>
+                              {" "}· Updated: <span className="text-zinc-200">{formatDateTime(templateMeTerminalUpdatedAt)}</span>
+                            </>
+                          ) : null}
+                        </p>
+                        {templateMeTerminalLastError ? (
+                          <p className="mt-1 text-[10px] text-rose-300">{templateMeTerminalLastError}</p>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="mb-4 grid gap-2 md:grid-cols-5">
+                      <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Template Me Bot</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{primaryTemplateMeBotConfig ? 1 : 0}</p>
+                      </div>
+                      <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Enabled</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
+                          {primaryTemplateMeBotConfig?.enabled ? 1 : 0}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Imports Made</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{templateMeStats?.importsMadeCount ?? 0}</p>
+                      </div>
+                      <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Templates Imported</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{templateMeStats?.templatesImportedCount ?? 0}</p>
+                      </div>
+                      <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Servers Using Templates</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{templateMeStats?.serversUsingTemplatesCount ?? 0}</p>
+                      </div>
+                    </div>
+
+                    <div className="mb-4 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Servers Using Template Me Bot</p>
+                        <span className="text-[11px] text-zinc-500 dark:text-zinc-400">Updated: {formatDateTime(templateMeStats?.statsUpdatedAt ?? null)}</span>
+                      </div>
+
+                      {isLoadingTemplateMeStats ? (
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400">Loading bot template stats...</p>
+                      ) : templateMeStatsError ? (
+                        <p className="text-xs text-rose-500">{templateMeStatsError}</p>
+                      ) : (templateMeStats?.serversUsingTemplates?.length ?? 0) === 0 ? (
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400">No servers recorded yet.</p>
+                      ) : (
+                        <div className="max-h-40 overflow-y-auto rounded-md border border-zinc-300 dark:border-zinc-700">
+                          {templateMeStats?.serversUsingTemplates.map((entry, index) => (
+                            <div
+                              key={`template-me-server-${entry.id}-${index}`}
+                              className={cn(
+                                "flex items-center justify-between px-3 py-2 text-xs",
+                                index % 2 === 0
+                                  ? "bg-white/70 dark:bg-zinc-950/25"
+                                  : "bg-zinc-100/70 dark:bg-zinc-900/35"
+                              )}
+                            >
+                              <p className="truncate text-zinc-900 dark:text-zinc-100" title={entry.name}>{entry.name}</p>
+                              <p className="ml-3 truncate font-mono text-zinc-500 dark:text-zinc-400" title={entry.id}>{entry.id}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                  </>
                 )}
               </div>
             )}

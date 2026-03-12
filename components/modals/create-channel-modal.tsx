@@ -33,7 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const formSchema = z.object({
   name: z
@@ -85,6 +85,29 @@ export const CreateChannelModal = () => {
   const [channelGroups, setChannelGroups] = useState<ChannelGroupItem[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  const resolvedServerId = useMemo(() => {
+    const modalServerId = String(data.server?.id ?? "").trim();
+    if (modalServerId) {
+      return modalServerId;
+    }
+
+    const routeServerParam = params?.serverId;
+
+    const routeServerId =
+      typeof routeServerParam === "string"
+        ? routeServerParam
+        : Array.isArray(routeServerParam)
+          ? (routeServerParam[0] ?? "")
+          : "";
+
+    const normalizedRouteServerId = String(routeServerId ?? "").trim();
+    if (normalizedRouteServerId) {
+      return normalizedRouteServerId;
+    }
+
+    return "";
+  }, [data.server?.id, params?.serverId]);
+
   const form = useForm({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -105,7 +128,10 @@ export const CreateChannelModal = () => {
   }, [channelType, form]);
 
   useEffect(() => {
-    if (!isModalOpen || !params?.serverId) {
+    if (!isModalOpen || !resolvedServerId) {
+      if (isModalOpen) {
+        setChannelGroups([]);
+      }
       return;
     }
 
@@ -114,16 +140,26 @@ export const CreateChannelModal = () => {
     const loadGroups = async () => {
       try {
         const response = await axios.get<{ groups?: ChannelGroupItem[] }>("/api/channel-groups", {
-          params: { serverId: params.serverId },
+          params: { serverId: resolvedServerId },
         });
 
         if (!cancelled) {
           setChannelGroups(response.data.groups ?? []);
+          setSubmitError(null);
         }
       } catch (error) {
         if (!cancelled) {
           setChannelGroups([]);
         }
+
+        const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+        if (status === 401 || status === 403) {
+          if (!cancelled) {
+            setSubmitError("You are not authorized to load channel groups for this server.");
+          }
+          return;
+        }
+
         console.error("[CREATE_CHANNEL_MODAL_GROUPS]", error);
       }
     };
@@ -133,22 +169,23 @@ export const CreateChannelModal = () => {
     return () => {
       cancelled = true;
     };
-  }, [isModalOpen, params?.serverId]);
+  }, [isModalOpen, resolvedServerId]);
 
   const isLoading = form.formState.isSubmitting;
+
+  useEffect(() => {
+    if (!isModalOpen) {
+      return;
+    }
+
+    setSubmitError(null);
+  }, [isModalOpen]);
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
       setSubmitError(null);
 
-      const routeServerId =
-        typeof params?.serverId === "string"
-          ? params.serverId
-          : Array.isArray(params?.serverId)
-            ? (params?.serverId[0] ?? "")
-            : "";
-
-      if (!routeServerId) {
+      if (!resolvedServerId) {
         setSubmitError("Unable to determine server context.");
         return;
       }
@@ -156,7 +193,7 @@ export const CreateChannelModal = () => {
       const url = qs.stringifyUrl({
         url: "/api/channels",
         query: {
-          serverId: routeServerId,
+          serverId: resolvedServerId,
         },
       });
       await axios.post(url, {

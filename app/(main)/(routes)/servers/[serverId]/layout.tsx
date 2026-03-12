@@ -8,7 +8,7 @@ import { ServerUserRolesRail } from "@/components/server/server-user-roles-rail"
 import { ServerRouteShell } from "@/components/server/server-route-shell";
 import { ChannelType, MemberRole } from "@/lib/db/types";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
-import { ensureChannelGroupSchema, ensureDefaultMediaChannelGroups } from "@/lib/channel-groups";
+import { ensureChannelGroupSchema } from "@/lib/channel-groups";
 import { resolveServerRouteContext } from "@/lib/route-slug-resolver";
 import { buildRouteSegment } from "@/lib/route-slugs";
 
@@ -54,7 +54,7 @@ const ServerIdLayout = async ({
   const serverId = resolvedServer.id;
 
   const hasAccess = await db
-    .select({ id: server.id, name: server.name })
+    .select({ id: server.id, name: server.name, ownerProfileId: server.profileId })
     .from(server)
     .innerJoin(
       member,
@@ -71,12 +71,9 @@ const ServerIdLayout = async ({
   }
 
   const currentServerName = hasAccess[0].name;
+  const isServerOwner = hasAccess[0].ownerProfileId === profile.id;
 
   await ensureChannelGroupSchema();
-  await ensureDefaultMediaChannelGroups({
-    serverId,
-    profileId: profile.id,
-  });
 
   const channelsResult = await db.execute(sql`
     select
@@ -119,6 +116,10 @@ const ServerIdLayout = async ({
 
   const currentMemberRole = memberRows.find((row) => row.profileId === profile.id)?.role;
   const canSeeInvisibleMembers = hasInAccordAdministrativeAccess(profile.role) || currentMemberRole === MemberRole.ADMIN;
+  const canSeeInvisibleBoxes =
+    hasInAccordAdministrativeAccess(profile.role) ||
+    currentMemberRole === MemberRole.ADMIN ||
+    isServerOwner;
 
   const onlineUsers = memberRows
     .filter((row) => canSeeInvisibleMembers || String(row.presenceStatus ?? "ONLINE").toUpperCase() !== "INVISIBLE")
@@ -143,6 +144,7 @@ const ServerIdLayout = async ({
       leftSidebar={<ServerSidebar serverId={serverId} />}
       rightSidebar={<ServerUserRolesRail serverId={serverId} />}
       rightFooter={null}
+      showInvisibleBoxes={canSeeInvisibleBoxes}
     >
       {children}
     </ServerRouteShell>

@@ -7,7 +7,6 @@ import {
   Bell,
   Bug,
   CheckCircle2,
-  GripVertical,
   Hash,
   Loader2,
   Mic,
@@ -104,6 +103,7 @@ interface ServerRouteShellProps {
   leftSidebar: React.ReactNode;
   rightSidebar: React.ReactNode;
   rightFooter: React.ReactNode;
+  showInvisibleBoxes?: boolean;
   children: React.ReactNode;
 }
 
@@ -118,6 +118,7 @@ export const ServerRouteShell = ({
   leftSidebar,
   rightSidebar,
   rightFooter,
+  showInvisibleBoxes = false,
   children,
 }: ServerRouteShellProps) => {
   const SERVER_TAB_DRAG_MIME = "application/x-inaccord-server-tab";
@@ -211,7 +212,9 @@ export const ServerRouteShell = ({
     },
   ];
   const GLOBAL_SERVERS_RAIL_WIDTH = 108;
-  const CHANNELS_RAIL_WIDTH = 240;
+  const CHANNELS_RAIL_DEFAULT_WIDTH = 300;
+  const CHANNELS_RAIL_MIN_WIDTH = 180;
+  const CHANNELS_RAIL_MAX_WIDTH = 420;
   const TOPBAR_LEFT_GAP = 8;
   const CHANNELS_TO_CHAT_GAP = 8;
   const RIGHT_RAIL_WIDTH = 288;
@@ -224,8 +227,10 @@ export const ServerRouteShell = ({
   const CHANNELS_TO_USERBOX_GAP = 10;
   const MAX_PERSISTED_TABS = 30;
   const MAX_SERVER_NAME_LENGTH = 80;
+  const [channelsRailWidth, setChannelsRailWidth] = useState(CHANNELS_RAIL_DEFAULT_WIDTH);
+  const [isResizingChannelsRail, setIsResizingChannelsRail] = useState(false);
   const CHANNELS_RAIL_LEFT = GLOBAL_SERVERS_RAIL_WIDTH + TOPBAR_LEFT_GAP;
-  const CONTENT_LEFT_PADDING = CHANNELS_RAIL_WIDTH + TOPBAR_LEFT_GAP + CHANNELS_TO_CHAT_GAP;
+  const CONTENT_LEFT_PADDING = channelsRailWidth + TOPBAR_LEFT_GAP + CHANNELS_TO_CHAT_GAP;
   const CONTENT_TOP = TOPBAR_HEIGHT + TABBAR_HEIGHT;
   const LEFT_SIDEBAR_TOP = CONTENT_TOP + TOP_TO_CONTENT_GAP;
   const MAIN_TOP_PADDING = CONTENT_TOP + TOP_TO_CONTENT_GAP;
@@ -672,6 +677,40 @@ export const ServerRouteShell = ({
     }
   };
 
+  const onStartChannelsRailResize = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+
+    const startX = event.clientX;
+    const startWidth = channelsRailWidth;
+
+    setIsResizingChannelsRail(true);
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const delta = moveEvent.clientX - startX;
+      const nextWidth = Math.min(
+        CHANNELS_RAIL_MAX_WIDTH,
+        Math.max(CHANNELS_RAIL_MIN_WIDTH, startWidth + delta)
+      );
+
+      setChannelsRailWidth(nextWidth);
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+      setIsResizingChannelsRail(false);
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  };
+
   if (!isHydrated) {
     return <div className="h-full overflow-hidden" suppressHydrationWarning />;
   }
@@ -690,7 +729,10 @@ export const ServerRouteShell = ({
         className="theme-server-topbar fixed right-0 top-0 z-40 flex h-12 items-center overflow-hidden rounded-b-xl border-b border-border bg-background"
         style={{ left: `${CHANNELS_RAIL_LEFT}px` }}
       >
-        <SupportHelpControls panelTop={TOPBAR_HEIGHT + TOP_TO_CONTENT_GAP} />
+        <SupportHelpControls
+          panelTop={TOPBAR_HEIGHT + TOP_TO_CONTENT_GAP}
+          showInvisibleBoxes={showInvisibleBoxes}
+        />
 
         {isProductionRuntime ? (
           <div className="absolute left-48 top-1/2 z-20 -translate-y-1/2">
@@ -879,6 +921,20 @@ export const ServerRouteShell = ({
             return (
               <div
                 key={tab.serverId}
+                draggable
+                onDragStart={(event) => {
+                  setDraggedTabId(tab.serverId);
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData(
+                    SERVER_TAB_DRAG_MIME,
+                    JSON.stringify({
+                      serverId: tab.serverId,
+                      serverName: tab.serverName,
+                      source: "tab",
+                    })
+                  );
+                }}
+                onDragEnd={() => setDraggedTabId(null)}
                 onDragOver={(event) => {
                   event.preventDefault();
                 }}
@@ -966,32 +1022,6 @@ export const ServerRouteShell = ({
                   }`}
                 >
                   <X className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  draggable
-                  onDragStart={(event) => {
-                    setDraggedTabId(tab.serverId);
-                    event.dataTransfer.effectAllowed = "move";
-                    event.dataTransfer.setData(
-                      SERVER_TAB_DRAG_MIME,
-                      JSON.stringify({
-                        serverId: tab.serverId,
-                        serverName: tab.serverName,
-                        source: "tab",
-                      })
-                    );
-                  }}
-                  onDragEnd={() => setDraggedTabId(null)}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                  }}
-                  className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-300 transition hover:bg-black/25 hover:text-white"
-                  title="Drag to reorder tab"
-                  aria-label={`Drag ${tab.serverName} tab to reorder`}
-                >
-                  <GripVertical className="h-3.5 w-3.5" />
                 </button>
               </div>
             );
@@ -1253,11 +1283,22 @@ export const ServerRouteShell = ({
         style={{
           top: `${LEFT_SIDEBAR_TOP}px`,
           left: `${CHANNELS_RAIL_LEFT}px`,
-          width: `${CHANNELS_RAIL_WIDTH}px`,
+          width: `${channelsRailWidth}px`,
           bottom: `${USER_BOX_HEIGHT + CHANNELS_TO_USERBOX_GAP}px`,
         }}
       >
-        {leftSidebar}
+        <div className="relative h-full w-full">
+          {leftSidebar}
+          <button
+            type="button"
+            aria-label="Resize channels rail"
+            title="Resize channels rail"
+            onMouseDown={onStartChannelsRailResize}
+            className={`absolute inset-y-0 -right-1 z-40 w-2 cursor-col-resize transition ${
+              isResizingChannelsRail ? "bg-teal-500/50" : "bg-teal-500/20 hover:bg-teal-500/40"
+            }`}
+          />
+        </div>
       </aside>
 
       {!isMembersCollapsed ? (

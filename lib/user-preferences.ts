@@ -382,6 +382,11 @@ export type OtherBotConfig = {
   applicationId: string;
   botUserId: string;
   tokenHint: string;
+  tokenUpdatedAt?: string;
+  templateImportsMade?: number;
+  templatesImportedCount?: number;
+  templateServerIds?: string[];
+  templateStatsUpdatedAt?: string;
   commands: string[];
   permissions: string[];
   enabled: boolean;
@@ -1526,6 +1531,30 @@ const normalizeOtherBots = (value: unknown): OtherBotConfig[] => {
     const id = normalizeIdLike(source.id, 80);
     const name = normalizeLabel(source.name, 80);
     const applicationId = normalizeIdLike(source.applicationId, 64);
+    const tokenUpdatedAtRaw = typeof source.tokenUpdatedAt === "string" ? source.tokenUpdatedAt.trim() : "";
+    const tokenUpdatedAt =
+      tokenUpdatedAtRaw && !Number.isNaN(new Date(tokenUpdatedAtRaw).getTime())
+        ? new Date(tokenUpdatedAtRaw).toISOString()
+        : "";
+    const templateImportsMadeRaw =
+      typeof source.templateImportsMade === "number" && Number.isFinite(source.templateImportsMade)
+        ? source.templateImportsMade
+        : 0;
+    const templatesImportedCountRaw =
+      typeof source.templatesImportedCount === "number" && Number.isFinite(source.templatesImportedCount)
+        ? source.templatesImportedCount
+        : 0;
+    const templateImportsMade = Math.max(0, Math.floor(templateImportsMadeRaw));
+    const templatesImportedCount = Math.max(0, Math.floor(templatesImportedCountRaw));
+    const templateServerIds = normalizeStringArray(source.templateServerIds, 500)
+      .map((entry) => normalizeIdLike(entry, 191))
+      .filter((entry) => entry.length > 0);
+    const templateStatsUpdatedAtRaw =
+      typeof source.templateStatsUpdatedAt === "string" ? source.templateStatsUpdatedAt.trim() : "";
+    const templateStatsUpdatedAt =
+      templateStatsUpdatedAtRaw && !Number.isNaN(new Date(templateStatsUpdatedAtRaw).getTime())
+        ? new Date(templateStatsUpdatedAtRaw).toISOString()
+        : "";
 
     if (!id || !name || !applicationId) {
       continue;
@@ -1537,6 +1566,11 @@ const normalizeOtherBots = (value: unknown): OtherBotConfig[] => {
       applicationId,
       botUserId: normalizeIdLike(source.botUserId, 64),
       tokenHint: normalizeTokenHint(source.tokenHint),
+      ...(tokenUpdatedAt ? { tokenUpdatedAt } : {}),
+      ...(templateImportsMade > 0 ? { templateImportsMade } : {}),
+      ...(templatesImportedCount > 0 ? { templatesImportedCount } : {}),
+      ...(templateServerIds.length > 0 ? { templateServerIds } : {}),
+      ...(templateStatsUpdatedAt ? { templateStatsUpdatedAt } : {}),
       commands: (() => {
         const fromCommands = normalizeSlashCommandNames(source.commands);
         if (fromCommands.length > 0) {
@@ -2258,6 +2292,57 @@ export const updateOtherBotCommands = async (
   nextBots[botIndex] = {
     ...nextBots[botIndex],
     commands: normalizedCommands,
+  };
+
+  const updated = await updateUserPreferences(userId, { OtherBots: nextBots });
+  return updated.OtherBots.find((bot) => bot.id === normalizedBotId) ?? null;
+};
+
+export const updateOtherBotTemplateStats = async (
+  userId: string,
+  botId: string,
+  updates: {
+    importsMadeDelta?: number;
+    templatesImportedDelta?: number;
+    serverId?: string;
+  }
+): Promise<OtherBotConfig | null> => {
+  const normalizedBotId = normalizeIdLike(botId, 80);
+  if (!normalizedBotId) {
+    return null;
+  }
+
+  const preferences = await getUserPreferences(userId);
+  const botIndex = preferences.OtherBots.findIndex((bot) => bot.id === normalizedBotId);
+  if (botIndex < 0) {
+    return null;
+  }
+
+  const importsMadeDelta =
+    typeof updates.importsMadeDelta === "number" && Number.isFinite(updates.importsMadeDelta)
+      ? Math.max(0, Math.floor(updates.importsMadeDelta))
+      : 0;
+  const templatesImportedDelta =
+    typeof updates.templatesImportedDelta === "number" && Number.isFinite(updates.templatesImportedDelta)
+      ? Math.max(0, Math.floor(updates.templatesImportedDelta))
+      : 0;
+  const normalizedServerId = normalizeIdLike(updates.serverId, 191);
+
+  const nextBots = [...preferences.OtherBots];
+  const currentBot = nextBots[botIndex];
+  const currentServerIds = Array.isArray(currentBot.templateServerIds)
+    ? currentBot.templateServerIds.map((entry) => normalizeIdLike(entry, 191)).filter((entry) => entry.length > 0)
+    : [];
+  const nextServerIds = normalizedServerId
+    ? Array.from(new Set([...currentServerIds, normalizedServerId]))
+    : currentServerIds;
+
+  nextBots[botIndex] = {
+    ...currentBot,
+    templateImportsMade: Math.max(0, Math.floor(currentBot.templateImportsMade ?? 0) + importsMadeDelta),
+    templatesImportedCount: Math.max(0, Math.floor(currentBot.templatesImportedCount ?? 0) + templatesImportedDelta),
+    templateServerIds: nextServerIds,
+    templateStatsUpdatedAt: new Date().toISOString(),
   };
 
   const updated = await updateUserPreferences(userId, { OtherBots: nextBots });

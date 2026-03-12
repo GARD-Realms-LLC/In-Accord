@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Camera, ChevronDown, ChevronRight, GripVertical, Loader2, Pause, Pencil, Play, Plus, Trash2, X } from "lucide-react";
+import { Camera, ChevronDown, ChevronRight, Loader2, Pause, Play, Plus, Trash2, X } from "lucide-react";
 
 import {
   Dialog,
@@ -377,6 +377,7 @@ type ServerRoleItem = {
   color: string;
   iconUrl: string | null;
   isMentionable: boolean;
+  showInOnlineMembers: boolean;
   position: number;
   isManaged: boolean;
   memberCount?: number;
@@ -732,6 +733,14 @@ type ServerTemplateExportPayload = {
   }>;
 };
 
+type TemplateMeBotOption = {
+  id: string;
+  name: string;
+  applicationId: string;
+  botUserId: string;
+  enabled: boolean;
+};
+
 const DEFAULT_ONBOARDING_CONFIG: OnboardingConfig = {
   enabled: false,
   welcomeMessage: "Welcome to the server! Complete onboarding to unlock your best channels.",
@@ -773,6 +782,7 @@ export const EditServerModal = () => {
   const [isCreatingRole, setIsCreatingRole] = useState(false);
   const [isUploadingNewRoleIcon, setIsUploadingNewRoleIcon] = useState(false);
   const [isSavingRole, setIsSavingRole] = useState(false);
+  const [savingRoleGroupId, setSavingRoleGroupId] = useState<string | null>(null);
   const [isDeletingRole, setIsDeletingRole] = useState(false);
   const [isSavingRoleOrder, setIsSavingRoleOrder] = useState(false);
   const [draggedRoleId, setDraggedRoleId] = useState<string | null>(null);
@@ -782,6 +792,7 @@ export const EditServerModal = () => {
   const [editRoleColor, setEditRoleColor] = useState("#99aab5");
   const [editRoleIconUrl, setEditRoleIconUrl] = useState("");
   const [editRoleIsMentionable, setEditRoleIsMentionable] = useState(true);
+  const [editRoleShowInOnlineMembers, setEditRoleShowInOnlineMembers] = useState(false);
   const [isUploadingEditRoleIcon, setIsUploadingEditRoleIcon] = useState(false);
   const [roleMembers, setRoleMembers] = useState<RoleMemberItem[]>([]);
   const [isLoadingRoleMembers, setIsLoadingRoleMembers] = useState(false);
@@ -855,10 +866,11 @@ export const EditServerModal = () => {
   const [serverTemplateSuccess, setServerTemplateSuccess] = useState<string | null>(null);
   const [serverTemplateSummary, setServerTemplateSummary] = useState<ServerTemplateSummary | null>(null);
   const [serverTemplateExport, setServerTemplateExport] = useState<ServerTemplateExportPayload | null>(null);
-  const [OtherTemplateInput, setOtherTemplateInput] = useState("");
-  const [OtherServerIdInput, setOtherServerIdInput] = useState("");
-  const [replaceChannelsOnImport, setReplaceChannelsOnImport] = useState(true);
-  const [replaceRolesOnImport, setReplaceRolesOnImport] = useState(false);
+  const [templateMeBots, setTemplateMeBots] = useState<TemplateMeBotOption[]>([]);
+  const [selectedTemplateMeBotId, setSelectedTemplateMeBotId] = useState("");
+  const [isTemplateImportModalOpen, setIsTemplateImportModalOpen] = useState(false);
+  const [templateImportSourceServerId, setTemplateImportSourceServerId] = useState("");
+  const [isLoadingTemplateMeBots, setIsLoadingTemplateMeBots] = useState(false);
   const [serverGuideQuery, setServerGuideQuery] = useState("");
   const [serverGuideScrollTop, setServerGuideScrollTop] = useState(0);
   const [serverGuideViewportHeight, setServerGuideViewportHeight] = useState(460);
@@ -942,6 +954,7 @@ export const EditServerModal = () => {
       setShowRoleGroupsInList(true);
       setIsCreateRolePopupOpen(false);
       setIsSavingRoleOrder(false);
+      setSavingRoleGroupId(null);
       setDraggedRoleId(null);
       setDragOverRoleId(null);
       setRoleEditorTab("display");
@@ -949,6 +962,7 @@ export const EditServerModal = () => {
       setEditRoleColor("#99aab5");
       setEditRoleIconUrl("");
       setEditRoleIsMentionable(true);
+      setEditRoleShowInOnlineMembers(false);
       setRoleMembers([]);
       setRoleMembersError(null);
       setCanManageRoleMembers(false);
@@ -1020,10 +1034,11 @@ export const EditServerModal = () => {
       setServerTemplateSuccess(null);
       setServerTemplateSummary(null);
       setServerTemplateExport(null);
-      setOtherTemplateInput("");
-      setOtherServerIdInput("");
-      setReplaceChannelsOnImport(true);
-      setReplaceRolesOnImport(false);
+      setTemplateMeBots([]);
+      setSelectedTemplateMeBotId("");
+      setIsTemplateImportModalOpen(false);
+      setTemplateImportSourceServerId("");
+      setIsLoadingTemplateMeBots(false);
       setServerGuideQuery("");
       setServerGuideScrollTop(0);
       setGenericSectionSettings(createDefaultGenericSectionSettings());
@@ -1197,6 +1212,7 @@ export const EditServerModal = () => {
         setEditRoleColor(initialRole?.color ?? "#99aab5");
         setEditRoleIconUrl(initialRole?.iconUrl ?? "");
         setEditRoleIsMentionable(initialRole?.isMentionable ?? true);
+        setEditRoleShowInOnlineMembers(Boolean(initialRole?.showInOnlineMembers));
       } catch (error) {
         if (cancelled) {
           return;
@@ -1456,22 +1472,94 @@ export const EditServerModal = () => {
     }
   }, [server?.id]);
 
+  const loadTemplateMeBots = useCallback(async () => {
+    try {
+      setIsLoadingTemplateMeBots(true);
+
+      const response = await axios.get<{ OtherBots?: unknown }>("/api/profile/preferences", {
+        params: { _t: Date.now() },
+        headers: {
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        },
+      });
+
+      const parsedBots = Array.isArray(response.data?.OtherBots)
+        ? (response.data.OtherBots as Array<Partial<TemplateMeBotOption>>)
+            .map((bot) => ({
+              id: String(bot.id ?? "").trim(),
+              name: String(bot.name ?? "").trim() || "Unnamed bot",
+              applicationId: String(bot.applicationId ?? "").trim(),
+              botUserId: String(bot.botUserId ?? "").trim(),
+              enabled: bot.enabled !== false,
+            }))
+            .filter((bot) => bot.id.length > 0 && bot.enabled)
+        : [];
+
+      setTemplateMeBots(parsedBots);
+
+      if (parsedBots.length === 0) {
+        setSelectedTemplateMeBotId("");
+        return;
+      }
+
+      setSelectedTemplateMeBotId((previous) => {
+        const currentSelectionStillValid = parsedBots.some((bot) => bot.id === previous);
+        if (currentSelectionStillValid) {
+          return previous;
+        }
+
+        const preferredTemplateMeBot =
+          parsedBots.find((bot) => /template\s*me/i.test(bot.name)) ?? parsedBots[0];
+
+        return preferredTemplateMeBot.id;
+      });
+    } catch {
+      setTemplateMeBots([]);
+      setSelectedTemplateMeBotId("");
+    } finally {
+      setIsLoadingTemplateMeBots(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!isModalOpen || activeSection !== "serverTemplate") {
       return;
     }
 
     void loadServerTemplate();
-  }, [activeSection, isModalOpen, loadServerTemplate]);
+    void loadTemplateMeBots();
+  }, [activeSection, isModalOpen, loadServerTemplate, loadTemplateMeBots]);
 
-  const onImportOtherTemplate = async () => {
+  const onImportOtherTemplate = () => {
     if (!server?.id || isImportingOtherTemplate) {
       return;
     }
 
-    const normalizedInput = OtherTemplateInput.trim();
-    if (!normalizedInput) {
-      setServerTemplateError("Paste a Other template link, invite link/code, or server ID first.");
+    if (!selectedTemplateMeBotId) {
+      setServerTemplateError("No enabled Template Me bot found in Settings > Bot/App Developer.");
+      return;
+    }
+
+    setTemplateImportSourceServerId("");
+    setIsTemplateImportModalOpen(true);
+    setServerTemplateError(null);
+  };
+
+  const onConfirmImportOtherTemplate = async () => {
+    if (!server?.id || isImportingOtherTemplate) {
+      return;
+    }
+
+    if (!selectedTemplateMeBotId) {
+      setServerTemplateError("No enabled Template Me bot found in Settings > Bot/App Developer.");
+      setIsTemplateImportModalOpen(false);
+      return;
+    }
+
+    const normalizedSourceServerId = String(templateImportSourceServerId).trim().replace(/\D/g, "");
+    if (!/^\d{15,22}$/.test(normalizedSourceServerId)) {
+      setServerTemplateError("Enter a valid Discord source server ID (15-22 digits).");
       return;
     }
 
@@ -1492,9 +1580,8 @@ export const EditServerModal = () => {
         };
         warnings?: string[];
       }>(`/api/servers/${server.id}/template`, {
-        templateInput: normalizedInput,
-        replaceChannels: replaceChannelsOnImport,
-        replaceRoles: replaceRolesOnImport,
+        botId: selectedTemplateMeBotId,
+        sourceServerId: normalizedSourceServerId,
       });
 
       const importedRoles = Number(response.data.result?.importedRoles ?? 0);
@@ -1509,14 +1596,22 @@ export const EditServerModal = () => {
       setServerTemplateSuccess(
         `Imported ${sourceLabel}${viaBot}: ${response.data.templateName || response.data.code || "source"}. Added ${importedRoles} roles, ${importedGroups} channel groups, and ${importedChannels} channels.${warningText}`
       );
+      setIsTemplateImportModalOpen(false);
+      setTemplateImportSourceServerId("");
 
       await loadServerTemplate();
       router.refresh();
     } catch (error) {
       if (axios.isAxiosError(error)) {
+        const responseData = error.response?.data as
+          | { error?: string; message?: string; details?: string }
+          | string
+          | undefined;
         const message =
-          (error.response?.data as { error?: string })?.error ||
-          (typeof error.response?.data === "string" ? error.response.data : "") ||
+          (typeof responseData === "object" && responseData !== null
+            ? responseData.details || responseData.message || responseData.error
+            : "") ||
+          (typeof responseData === "string" ? responseData : "") ||
           error.message;
         setServerTemplateError(message || "Other template import failed.");
       } else {
@@ -1527,66 +1622,23 @@ export const EditServerModal = () => {
     }
   };
 
-  const onImportOtherServerId = async () => {
-    if (!server?.id || isImportingOtherTemplate) {
+  const onInviteTemplateMeBot = () => {
+    if (!selectedTemplateMeBotId || typeof window === "undefined") {
+      setServerTemplateError("No enabled Template Me bot found in Settings > Bot/App Developer.");
       return;
     }
 
-    const normalizedServerId = OtherServerIdInput.trim();
-    if (!normalizedServerId) {
-      setServerTemplateError("Paste a Other server ID first.");
+    const selectedBot = templateMeBots.find((bot) => bot.id === selectedTemplateMeBotId);
+    const clientIdCandidate = String(selectedBot?.applicationId || selectedBot?.botUserId || "").trim();
+    const clientId = clientIdCandidate.replace(/\D/g, "");
+
+    if (!/^\d{15,22}$/.test(clientId)) {
+      setServerTemplateError("Selected Template Me bot is missing a valid Application ID. Update it in Settings > Bot/App Developer.");
       return;
     }
 
-    try {
-      setIsImportingOtherTemplate(true);
-      setServerTemplateError(null);
-      setServerTemplateSuccess(null);
-
-      const response = await axios.post<{
-        importSource?: string;
-        importBotName?: string | null;
-        templateName?: string;
-        code?: string;
-        result?: {
-          importedRoles: number;
-          importedGroups: number;
-          importedChannels: number;
-        };
-        warnings?: string[];
-      }>(`/api/servers/${server.id}/template`, {
-        OtherServerId: normalizedServerId,
-        replaceChannels: replaceChannelsOnImport,
-        replaceRoles: replaceRolesOnImport,
-      });
-
-      const importedRoles = Number(response.data.result?.importedRoles ?? 0);
-      const importedGroups = Number(response.data.result?.importedGroups ?? 0);
-      const importedChannels = Number(response.data.result?.importedChannels ?? 0);
-      const warningText = Array.isArray(response.data.warnings) && response.data.warnings.length > 0
-        ? ` ${response.data.warnings.slice(0, 3).join(" ")}${response.data.warnings.length > 3 ? " …" : ""}`
-        : "";
-      const viaBot = response.data.importBotName ? ` via ${response.data.importBotName}` : "";
-
-      setServerTemplateSuccess(
-        `Imported from Other server ID ${response.data.code || normalizedServerId}${viaBot}. Added ${importedRoles} roles, ${importedGroups} channel groups, and ${importedChannels} channels.${warningText}`
-      );
-
-      await loadServerTemplate();
-      router.refresh();
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        const message =
-          (error.response?.data as { error?: string })?.error ||
-          (typeof error.response?.data === "string" ? error.response.data : "") ||
-          error.message;
-        setServerTemplateError(message || "Other server ID import failed.");
-      } else {
-        setServerTemplateError("Other server ID import failed.");
-      }
-    } finally {
-      setIsImportingOtherTemplate(false);
-    }
+    const inviteUrl = `https://discord.com/oauth2/authorize?client_id=${encodeURIComponent(clientId)}&permissions=8&scope=bot%20applications.commands`;
+    window.open(inviteUrl, "_blank", "noopener,noreferrer");
   };
 
   const onCopyServerTemplateJson = async () => {
@@ -2046,6 +2098,7 @@ export const EditServerModal = () => {
     setEditRoleColor(role.color);
     setEditRoleIconUrl(role.iconUrl ?? "");
     setEditRoleIsMentionable(role.isMentionable ?? true);
+    setEditRoleShowInOnlineMembers(Boolean(role.showInOnlineMembers));
     setRoleEditorTab("display");
   };
 
@@ -2213,6 +2266,8 @@ export const EditServerModal = () => {
       setEditRoleName(createdRole.name);
       setEditRoleColor(createdRole.color);
       setEditRoleIconUrl(createdRole.iconUrl ?? "");
+      setEditRoleIsMentionable(Boolean(createdRole.isMentionable));
+      setEditRoleShowInOnlineMembers(Boolean(createdRole.showInOnlineMembers));
 
       try {
         const channelGroupsResponse = await axios.get<{
@@ -2291,6 +2346,7 @@ export const EditServerModal = () => {
           color: editRoleColor,
           iconUrl: editRoleIconUrl || null,
           isMentionable: editRoleIsMentionable,
+          showInOnlineMembers: editRoleShowInOnlineMembers,
         }
       );
 
@@ -2305,6 +2361,7 @@ export const EditServerModal = () => {
       setEditRoleColor(role.color);
       setEditRoleIconUrl(role.iconUrl ?? "");
       setEditRoleIsMentionable(role.isMentionable ?? true);
+      setEditRoleShowInOnlineMembers(Boolean(role.showInOnlineMembers));
     } catch (error) {
       if (axios.isAxiosError(error)) {
         const message =
@@ -2317,6 +2374,51 @@ export const EditServerModal = () => {
       }
     } finally {
       setIsSavingRole(false);
+    }
+  };
+
+  const onSaveRoleGroupVisibility = async (roleItem: ServerRoleItem, nextShowInOnlineMembers: boolean) => {
+    if (!server?.id || !canManageRoles || savingRoleGroupId) {
+      return;
+    }
+
+    if (nextShowInOnlineMembers === Boolean(roleItem.showInOnlineMembers)) {
+      return;
+    }
+
+    try {
+      setRolesError(null);
+      setSavingRoleGroupId(roleItem.id);
+
+      const response = await axios.patch<{ role?: ServerRoleItem }>(
+        `/api/servers/${server.id}/roles/${roleItem.id}`,
+        {
+          showInOnlineMembers: nextShowInOnlineMembers,
+        }
+      );
+
+      const savedRole = response.data.role;
+      if (!savedRole) {
+        throw new Error("Failed to save role group visibility.");
+      }
+
+      setRoles((prev) => prev.map((item) => (item.id === savedRole.id ? savedRole : item)));
+      if (selectedRoleId === savedRole.id) {
+        setEditRoleShowInOnlineMembers(Boolean(savedRole.showInOnlineMembers));
+      }
+      router.refresh();
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          (typeof error.response?.data === "string" ? error.response.data : "") ||
+          error.message;
+        setRolesError(message || "Failed to save role group visibility.");
+      } else {
+        setRolesError("Failed to save role group visibility.");
+      }
+    } finally {
+      setSavingRoleGroupId(null);
     }
   };
 
@@ -2350,6 +2452,8 @@ export const EditServerModal = () => {
         setEditRoleName(fallbackRole?.name ?? "");
         setEditRoleColor(fallbackRole?.color ?? "#99aab5");
         setEditRoleIconUrl(fallbackRole?.iconUrl ?? "");
+        setEditRoleIsMentionable(Boolean(fallbackRole?.isMentionable));
+        setEditRoleShowInOnlineMembers(Boolean(fallbackRole?.showInOnlineMembers));
       }
     } catch (error) {
       if (axios.isAxiosError(error)) {
@@ -2422,8 +2526,7 @@ export const EditServerModal = () => {
   };
 
   const onRoleDragOver = (event: React.DragEvent<HTMLElement>, targetRoleId: string) => {
-    const hasRoleType = event.dataTransfer.types.includes("inaccord/server-role-id");
-    if (!hasRoleType || !canManageRoles || isSavingRoleOrder) {
+    if (!canManageRoles || isSavingRoleOrder) {
       return;
     }
 
@@ -2496,7 +2599,8 @@ export const EditServerModal = () => {
       normalizedEditRoleName !== selectedRole.name.trim() ||
       editRoleColor.trim().toLowerCase() !== selectedRole.color.trim().toLowerCase() ||
       normalizedEditRoleIconUrl !== String(selectedRole.iconUrl ?? "").trim() ||
-      editRoleIsMentionable !== Boolean(selectedRole.isMentionable)
+      editRoleIsMentionable !== Boolean(selectedRole.isMentionable) ||
+      editRoleShowInOnlineMembers !== Boolean(selectedRole.showInOnlineMembers)
     )
   );
   const hasRolePermissionsUnsavedChanges =
@@ -3225,10 +3329,10 @@ export const EditServerModal = () => {
 
                         <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
                           <div className="rounded-lg border border-zinc-700 bg-[#1e1f22] p-2">
-                            <div className="mb-2 grid grid-cols-[1fr_88px_84px] items-center px-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-zinc-400">
+                            <div className="mb-2 grid grid-cols-[1fr_72px_110px] items-center gap-2 px-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-zinc-400">
                               <span className="text-left">Roles</span>
                               <span className="text-center">Members</span>
-                              <span className="text-right">Actions</span>
+                              <span className="text-center">Hide Group</span>
                             </div>
 
                             <div className="max-h-80 space-y-1 overflow-y-auto overflow-x-hidden pr-1">
@@ -3249,6 +3353,9 @@ export const EditServerModal = () => {
                                     key={role.id}
                                     role="button"
                                     tabIndex={0}
+                                    draggable={canManageRoles && !isSavingRoleOrder}
+                                    onDragStart={(event) => onRoleDragStart(event, role.id)}
+                                    onDragEnd={onRoleDragEnd}
                                     onDragOver={(event) => onRoleDragOver(event, role.id)}
                                     onDrop={(event) => void onRoleDrop(event, role.id)}
                                     onClick={() => onSelectRole(role)}
@@ -3259,7 +3366,8 @@ export const EditServerModal = () => {
                                       }
                                     }}
                                     className={cn(
-                                      "grid w-full cursor-pointer grid-cols-[1fr_88px_84px] items-center gap-2 rounded-md px-2 py-2 text-left transition",
+                                      "grid w-full cursor-pointer grid-cols-[1fr_72px_110px] items-center gap-2 rounded-md px-2 py-2 text-left transition",
+                                      canManageRoles ? "cursor-grab active:cursor-grabbing" : "",
                                       draggedRoleId && dragOverRoleId === role.id ? "ring-1 ring-indigo-500/50" : "",
                                       selectedRoleId === role.id
                                         ? "bg-[#404249] text-white"
@@ -3281,33 +3389,26 @@ export const EditServerModal = () => {
                                       {role.isManaged ? (
                                         <span className="rounded bg-black/25 px-1.5 py-0.5 text-[10px] text-zinc-300">System</span>
                                       ) : null}
-                                      {!role.isMentionable ? (
-                                        <span className="rounded border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-200">
-                                          No @mention
-                                        </span>
-                                      ) : null}
                                     </span>
                                     <span className="text-center text-xs text-zinc-300">
                                       {(role.memberCount ?? 0) === 0 ? "N/N" : role.memberCount}
                                     </span>
-                                    <span className="inline-flex items-center justify-end gap-1">
-                                      {canManageRoles ? (
-                                        <span
-                                          draggable={!isSavingRoleOrder}
-                                          onDragStart={(event) => onRoleDragStart(event, role.id)}
-                                          onDragEnd={onRoleDragEnd}
-                                          onClick={(event) => {
-                                            event.preventDefault();
-                                            event.stopPropagation();
-                                          }}
-                                          className="inline-flex h-6 w-6 cursor-grab items-center justify-center rounded border border-zinc-600/70 bg-[#1e1f22] text-zinc-300 transition hover:bg-[#2a2b30] active:cursor-grabbing"
-                                          title="Drag to reorder role"
-                                          aria-label="Drag to reorder role"
-                                        >
-                                          <GripVertical className="h-3.5 w-3.5" />
-                                        </span>
-                                      ) : null}
-                                      <Pencil className="h-4 w-4 shrink-0 text-zinc-300" aria-label="Edit role" />
+                                    <span
+                                      className="inline-flex items-center justify-center"
+                                      onClick={(event) => event.stopPropagation()}
+                                      onMouseDown={(event) => event.stopPropagation()}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={!Boolean(role.showInOnlineMembers)}
+                                        onChange={(event) => {
+                                          const nextShow = !event.target.checked;
+                                          void onSaveRoleGroupVisibility(role, nextShow);
+                                        }}
+                                        disabled={!canManageRoles || savingRoleGroupId === role.id}
+                                        aria-label={`Hide ${role.name} group from Online Members`}
+                                        title="Hide this role group from Online Members"
+                                      />
                                     </span>
                                   </div>
                                 ))
@@ -3490,6 +3591,22 @@ export const EditServerModal = () => {
                                       </label>
                                       <p className="mt-1 text-[11px] text-zinc-500">
                                         Turn this off to block role pings from @mention tokens (for example: @{editRoleName || "RoleName"}).
+                                      </p>
+                                    </div>
+
+                                    <div>
+                                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Online Members</p>
+                                      <label className="inline-flex items-center gap-2 rounded-md border border-zinc-700 bg-[#15161a] px-3 py-2 text-xs text-zinc-200">
+                                        <input
+                                          type="checkbox"
+                                          checked={editRoleShowInOnlineMembers}
+                                          onChange={(event) => setEditRoleShowInOnlineMembers(event.target.checked)}
+                                          disabled={!canManageRoles || isSavingRole}
+                                        />
+                                        Show Role Groups in Online Members
+                                      </label>
+                                      <p className="mt-1 text-[11px] text-zinc-500">
+                                        Enabled roles create grouped sections in the Online Members rail.
                                       </p>
                                     </div>
                                   </>
@@ -3741,6 +3858,7 @@ export const EditServerModal = () => {
                                           setEditRoleColor(selectedRole.color);
                                           setEditRoleIconUrl(selectedRole.iconUrl ?? "");
                                           setEditRoleIsMentionable(Boolean(selectedRole.isMentionable));
+                                          setEditRoleShowInOnlineMembers(Boolean(selectedRole.showInOnlineMembers));
                                         }}
                                         disabled={isSavingRole}
                                         className="h-7 bg-transparent px-2 text-[11px] text-zinc-200 hover:bg-white/10"
@@ -3896,6 +4014,74 @@ export const EditServerModal = () => {
                               className="bg-[#5865f2] text-white hover:bg-[#4752c4]"
                             >
                               {isCreatingRole ? "Creating..." : "Create Role"}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {activeSection === "serverTemplate" && isTemplateImportModalOpen ? (
+                      <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/65 px-4">
+                        <div className="w-full max-w-lg rounded-xl border border-zinc-700 bg-[#2B2D31] p-4 shadow-2xl shadow-black/60">
+                          <div className="mb-3 flex items-center justify-between">
+                            <p className="text-sm font-semibold text-white">Import from Template Me Bot</p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (isImportingOtherTemplate) {
+                                  return;
+                                }
+
+                                setIsTemplateImportModalOpen(false);
+                                setTemplateImportSourceServerId("");
+                              }}
+                              className="rounded p-1 text-zinc-300 transition hover:bg-white/10 hover:text-white"
+                              aria-label="Close import modal"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+
+                          <div className="space-y-3">
+                            <div>
+                              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Enter the source server ID to import from:</p>
+                              <input
+                                value={templateImportSourceServerId}
+                                onChange={(event) => setTemplateImportSourceServerId(event.target.value)}
+                                placeholder="Enter source server ID"
+                                className="h-10 w-full rounded-md border border-zinc-700 bg-[#15161a] px-3 text-sm text-white outline-none focus:border-indigo-500"
+                                disabled={isImportingOtherTemplate}
+                                autoFocus
+                              />
+                              <p className="mt-2 text-[11px] text-zinc-400">
+                                Right Click on your servers banner or server name and click " Copy Server ID"!
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 flex items-center justify-end gap-2">
+                            <Button
+                              type="button"
+                              onClick={() => {
+                                if (isImportingOtherTemplate) {
+                                  return;
+                                }
+
+                                setIsTemplateImportModalOpen(false);
+                                setTemplateImportSourceServerId("");
+                              }}
+                              className="bg-transparent text-zinc-300 hover:bg-white/10"
+                              disabled={isImportingOtherTemplate}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={() => void onConfirmImportOtherTemplate()}
+                              disabled={isImportingOtherTemplate}
+                              className="bg-[#5865f2] text-white hover:bg-[#4752c4]"
+                            >
+                              {isImportingOtherTemplate ? "Importing..." : "Import"}
                             </Button>
                           </div>
                         </div>
@@ -4589,34 +4775,10 @@ export const EditServerModal = () => {
                         </div>
 
                         <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-4 space-y-3">
-                          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-300">Easy Import (Other)</p>
-                          <input
-                            value={OtherTemplateInput}
-                            onChange={(event) => setOtherTemplateInput(event.target.value)}
-                            placeholder="Paste Other template URL, invite URL/code, or server ID"
-                            disabled={isImportingOtherTemplate}
-                            className="h-10 w-full rounded-md border border-zinc-700 bg-[#15161a] px-3 text-sm text-white outline-none focus:border-indigo-500"
-                          />
+                          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-300">Import from Template Me Bot</p>
 
-                          <div className="grid gap-2 sm:grid-cols-2">
-                            <label className="flex items-center gap-2 rounded-md border border-zinc-700 bg-[#1e1f22] px-3 py-2 text-xs text-zinc-300">
-                              <input
-                                type="checkbox"
-                                checked={replaceChannelsOnImport}
-                                onChange={(event) => setReplaceChannelsOnImport(event.target.checked)}
-                                disabled={isImportingOtherTemplate}
-                              />
-                              Replace existing non-system channels/groups (recommended)
-                            </label>
-                            <label className="flex items-center gap-2 rounded-md border border-zinc-700 bg-[#1e1f22] px-3 py-2 text-xs text-zinc-300">
-                              <input
-                                type="checkbox"
-                                checked={replaceRolesOnImport}
-                                onChange={(event) => setReplaceRolesOnImport(event.target.checked)}
-                                disabled={isImportingOtherTemplate}
-                              />
-                              Replace existing custom roles
-                            </label>
+                          <div className="rounded-md border border-zinc-700 bg-[#1e1f22] px-3 py-2 text-xs text-zinc-300">
+                            Full sync mode is always ON: roles, permissions, channel groups, channels, and channel permissions are overwritten from the source bot data. No duplicate entries are generated.
                           </div>
 
                           <div className="flex items-center gap-2">
@@ -4632,41 +4794,15 @@ export const EditServerModal = () => {
                             <Button
                               type="button"
                               className="bg-transparent text-zinc-300 hover:bg-white/10"
-                              onClick={() => void loadServerTemplate()}
-                              disabled={isImportingOtherTemplate || isLoadingServerTemplate}
+                              onClick={onInviteTemplateMeBot}
+                              disabled={isImportingOtherTemplate || isLoadingTemplateMeBots}
                             >
-                              Refresh
+                              Invite
                             </Button>
                           </div>
 
                           <p className="text-xs text-zinc-400">
-                            Super easy: paste one thing and click Import. We auto-detect template, invite, or server ID.
-                          </p>
-                        </div>
-
-                        <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-4 space-y-3">
-                          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-300">Import by Other Server ID</p>
-                          <input
-                            value={OtherServerIdInput}
-                            onChange={(event) => setOtherServerIdInput(event.target.value)}
-                            placeholder="Paste Other server ID (e.g. 123456789012345678)"
-                            disabled={isImportingOtherTemplate}
-                            className="h-10 w-full rounded-md border border-zinc-700 bg-[#15161a] px-3 text-sm text-white outline-none focus:border-indigo-500"
-                          />
-
-                          <div className="flex items-center gap-2">
-                            <Button
-                              type="button"
-                              onClick={() => void onImportOtherServerId()}
-                              disabled={isImportingOtherTemplate || isLoadingServerTemplate}
-                              className="bg-[#5865f2] text-white hover:bg-[#4752c4]"
-                            >
-                              {isImportingOtherTemplate ? "Importing..." : "Import From Server ID"}
-                            </Button>
-                          </div>
-
-                          <p className="text-xs text-zinc-400">
-                            Advanced option. Usually you only need the Easy Import box above.
+                            Click Import Now, enter the source server ID in the modal, and Template Me Bot will sync everything.
                           </p>
                         </div>
 

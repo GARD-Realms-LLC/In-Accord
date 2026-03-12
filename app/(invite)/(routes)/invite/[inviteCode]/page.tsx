@@ -6,7 +6,12 @@ import { db, member, MemberRole, server } from "@/lib/db";
 import { currentProfile } from "@/lib/current-profile";
 import { recordServerInviteUse } from "@/lib/server-invite-store";
 import { isServerIntegrationBotBanned } from "@/lib/server-integration-bot-store";
-import { buildServerPath } from "@/lib/route-slugs";
+import {
+  isChannelInviteUsable,
+  recordChannelInviteUse,
+  resolveChannelInviteByCode,
+} from "@/lib/channel-invite-store";
+import { buildChannelPath, buildServerPath } from "@/lib/route-slugs";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +30,7 @@ const InviteCodePage = async ({ params }: InviteCodeProps) => {
   }
 
   if (!inviteCode) {
-    return redirect("/");
+    return redirect("/invite/invalid?reason=invalid");
   }
 
   const existingServer = await db
@@ -42,6 +47,51 @@ const InviteCodePage = async ({ params }: InviteCodeProps) => {
     return redirect(buildServerPath(existingServer[0]));
   }
 
+  const channelInviteMatch = await resolveChannelInviteByCode(inviteCode);
+  if (channelInviteMatch) {
+    const isBanned = await isServerIntegrationBotBanned(channelInviteMatch.serverId, profile.id);
+    if (isBanned) {
+      return redirect(`/invite/invalid?reason=banned&code=${encodeURIComponent(inviteCode)}`);
+    }
+
+    const inviteState = isChannelInviteUsable(channelInviteMatch.invite);
+    if (!inviteState.ok) {
+      return redirect(
+        `/invite/invalid?reason=${encodeURIComponent(inviteState.reason)}&code=${encodeURIComponent(inviteCode)}`
+      );
+    }
+
+    const existingChannelServerMembership = await db.query.member.findFirst({
+      where: and(eq(member.serverId, channelInviteMatch.serverId), eq(member.profileId, profile.id)),
+      columns: { id: true },
+    });
+
+    if (!existingChannelServerMembership) {
+      const now = new Date();
+      await db.insert(member).values({
+        id: uuidv4(),
+        profileId: profile.id,
+        serverId: channelInviteMatch.serverId,
+        role: MemberRole.GUEST,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    await recordChannelInviteUse({
+      channelId: channelInviteMatch.channelId,
+      serverId: channelInviteMatch.serverId,
+      code: inviteCode,
+    });
+
+    return redirect(
+      buildChannelPath({
+        server: { id: channelInviteMatch.serverId, name: channelInviteMatch.serverName },
+        channel: { id: channelInviteMatch.channelId, name: channelInviteMatch.channelName },
+      })
+    );
+  }
+
   const inviteServer = await db.query.server.findFirst({
     where: eq(server.inviteCode, inviteCode),
   });
@@ -49,7 +99,7 @@ const InviteCodePage = async ({ params }: InviteCodeProps) => {
   if (inviteServer) {
     const isBanned = await isServerIntegrationBotBanned(inviteServer.id, profile.id);
     if (isBanned) {
-      return redirect("/");
+      return redirect(`/invite/invalid?reason=banned&code=${encodeURIComponent(inviteCode)}`);
     }
 
     const now = new Date();
@@ -69,7 +119,7 @@ const InviteCodePage = async ({ params }: InviteCodeProps) => {
     return redirect(buildServerPath({ id: inviteServer.id, name: inviteServer.name }));
   }
 
-  return redirect("/");
+  return redirect(`/invite/invalid?reason=invalid&code=${encodeURIComponent(inviteCode)}`);
 };
 
 export default InviteCodePage;

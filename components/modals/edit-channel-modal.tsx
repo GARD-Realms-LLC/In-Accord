@@ -61,6 +61,44 @@ type ChannelAdvancedSettings = {
   defaultThreadRateLimitPerUser: number | null;
 };
 
+type ChannelFeatureSettings = {
+  integrations: {
+    enabled: boolean;
+    provider: string;
+    syncMentions: boolean;
+  };
+  webhooks: {
+    items: Array<{
+      id: string;
+      name: string;
+      url: string;
+      enabled: boolean;
+    }>;
+  };
+  apps: {
+    allowedAppIds: string[];
+    allowPinnedApps: boolean;
+  };
+  moderation: {
+    requireVerifiedEmail: boolean;
+    blockedWords: string[];
+    slowmodeSeconds: number;
+    flaggedWordsAction: "warn" | "block";
+  };
+};
+
+type ChannelInvitePanelItem = {
+  code: string;
+  createdAt: string;
+  source: "created" | "regenerated";
+  createdByProfileId?: string;
+  createdByName?: string | null;
+  createdByEmail?: string | null;
+  maxUses?: number | null;
+  usedCount?: number;
+  expiresAt?: string | null;
+};
+
 const DEFAULT_ADVANCED_SETTINGS: ChannelAdvancedSettings = {
   nsfw: false,
   rateLimitPerUser: 0,
@@ -70,6 +108,27 @@ const DEFAULT_ADVANCED_SETTINGS: ChannelAdvancedSettings = {
   videoQualityMode: null,
   defaultAutoArchiveDuration: null,
   defaultThreadRateLimitPerUser: null,
+};
+
+const DEFAULT_FEATURE_SETTINGS: ChannelFeatureSettings = {
+  integrations: {
+    enabled: false,
+    provider: "",
+    syncMentions: false,
+  },
+  webhooks: {
+    items: [],
+  },
+  apps: {
+    allowedAppIds: [],
+    allowPinnedApps: true,
+  },
+  moderation: {
+    requireVerifiedEmail: false,
+    blockedWords: [],
+    slowmodeSeconds: 0,
+    flaggedWordsAction: "warn",
+  },
 };
 
 type ChannelSettingsTab =
@@ -142,6 +201,18 @@ export const EditChannelModal = () => {
   const [isSavingPermissions, setIsSavingPermissions] = useState(false);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [permissionOverwrites, setPermissionOverwrites] = useState<ChannelPermissionOverwrite[]>([]);
+  const [featureSettings, setFeatureSettings] = useState<ChannelFeatureSettings>(DEFAULT_FEATURE_SETTINGS);
+  const [featureSaveError, setFeatureSaveError] = useState<string | null>(null);
+  const [featureSaveSuccess, setFeatureSaveSuccess] = useState<string | null>(null);
+  const [isLoadingFeatures, setIsLoadingFeatures] = useState(false);
+  const [isSavingFeatures, setIsSavingFeatures] = useState(false);
+  const [invitePanelItems, setInvitePanelItems] = useState<ChannelInvitePanelItem[]>([]);
+  const [isLoadingInvitePanel, setIsLoadingInvitePanel] = useState(false);
+  const [invitePanelError, setInvitePanelError] = useState<string | null>(null);
+  const [invitePanelSuccess, setInvitePanelSuccess] = useState<string | null>(null);
+  const [invitePanelActionCode, setInvitePanelActionCode] = useState<string | null>(null);
+  const [newInviteMaxUses, setNewInviteMaxUses] = useState<string>("");
+  const [newInviteExpiresInHours, setNewInviteExpiresInHours] = useState<string>("");
 
   const isModalOpen = isOpen && type === "editChannel";
   const { channel, server } = data;
@@ -190,6 +261,15 @@ export const EditChannelModal = () => {
     form.setValue("type", channel.type);
     form.setValue("channelGroupId", ((channel as { channelGroupId?: string | null })?.channelGroupId ?? null));
     applyAdvancedSettingsToForm(DEFAULT_ADVANCED_SETTINGS);
+    setFeatureSettings(DEFAULT_FEATURE_SETTINGS);
+    setFeatureSaveError(null);
+    setFeatureSaveSuccess(null);
+    setInvitePanelItems([]);
+    setInvitePanelError(null);
+    setInvitePanelSuccess(null);
+    setInvitePanelActionCode(null);
+    setNewInviteMaxUses("");
+    setNewInviteExpiresInHours("");
   }, [channel, form]);
 
   useEffect(() => {
@@ -267,6 +347,43 @@ export const EditChannelModal = () => {
   }, [isModalOpen, server?.id, channel?.id]);
 
   useEffect(() => {
+    if (!isModalOpen || !server?.id || !channel?.id) return;
+
+    let cancelled = false;
+
+    const loadFeatures = async () => {
+      try {
+        setIsLoadingFeatures(true);
+        setFeatureSaveError(null);
+        setFeatureSaveSuccess(null);
+
+        const response = await axios.get<{ settings?: ChannelFeatureSettings }>(
+          `/api/channels/${channel.id}/features`,
+          {
+            params: { serverId: server.id },
+          }
+        );
+
+        if (!cancelled) {
+          setFeatureSettings(response.data.settings ?? DEFAULT_FEATURE_SETTINGS);
+        }
+      } catch {
+        if (!cancelled) {
+          setFeatureSaveError("Failed to load channel feature settings.");
+          setFeatureSettings(DEFAULT_FEATURE_SETTINGS);
+        }
+      } finally {
+        if (!cancelled) setIsLoadingFeatures(false);
+      }
+    };
+
+    void loadFeatures();
+    return () => {
+      cancelled = true;
+    };
+  }, [isModalOpen, server?.id, channel?.id]);
+
+  useEffect(() => {
     if (!isModalOpen || !server?.id) return;
 
     let cancelled = false;
@@ -289,6 +406,48 @@ export const EditChannelModal = () => {
       cancelled = true;
     };
   }, [isModalOpen, server?.id]);
+
+  const loadInvitePanel = async () => {
+    if (!server?.id || !channel?.id) {
+      return;
+    }
+
+    try {
+      setIsLoadingInvitePanel(true);
+      setInvitePanelError(null);
+
+      const response = await axios.get<{ invites?: ChannelInvitePanelItem[] }>(
+        `/api/channels/${channel.id}/invites`,
+        {
+          params: { serverId: server.id },
+        }
+      );
+
+      setInvitePanelItems(response.data.invites ?? []);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          (typeof error.response?.data === "string" ? error.response.data : "") ||
+          error.message;
+        setInvitePanelError(message || "Failed to load channel invites.");
+      } else {
+        setInvitePanelError("Failed to load channel invites.");
+      }
+
+      setInvitePanelItems([]);
+    } finally {
+      setIsLoadingInvitePanel(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isModalOpen || activeTab !== "invites") {
+      return;
+    }
+
+    void loadInvitePanel();
+  }, [activeTab, isModalOpen, server?.id, channel?.id]);
 
   const sections = useMemo(() => sectionGroups, []);
   const isLoading = form.formState.isSubmitting;
@@ -342,9 +501,649 @@ export const EditChannelModal = () => {
   const handleClose = () => {
     form.reset();
     setSubmitError(null);
+    setFeatureSaveError(null);
+    setFeatureSaveSuccess(null);
+    setInvitePanelError(null);
+    setInvitePanelSuccess(null);
+    setInvitePanelActionCode(null);
+    setNewInviteMaxUses("");
+    setNewInviteExpiresInHours("");
     setActiveTab("overview");
     onClose();
   };
+
+  const onCreateInvite = async () => {
+    if (!server?.id || !channel?.id || invitePanelActionCode) {
+      return;
+    }
+
+    try {
+      setInvitePanelError(null);
+      setInvitePanelSuccess(null);
+      setInvitePanelActionCode("__create__");
+
+      const response = await axios.post<{ invite?: ChannelInvitePanelItem }>(
+        `/api/channels/${channel.id}/invites`,
+        {
+          serverId: server.id,
+          maxUses: newInviteMaxUses.trim().length > 0 ? Number(newInviteMaxUses) : null,
+          expiresInHours:
+            newInviteExpiresInHours.trim().length > 0 ? Number(newInviteExpiresInHours) : null,
+        }
+      );
+
+      const createdCode = response.data.invite?.code;
+      setInvitePanelSuccess(createdCode ? `Invite created: ${createdCode}` : "Invite created.");
+      setNewInviteMaxUses("");
+      setNewInviteExpiresInHours("");
+      await loadInvitePanel();
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          (typeof error.response?.data === "string" ? error.response.data : "") ||
+          error.message;
+        setInvitePanelError(message || "Failed to create invite.");
+      } else {
+        setInvitePanelError("Failed to create invite.");
+      }
+    } finally {
+      setInvitePanelActionCode(null);
+    }
+  };
+
+  const onDeleteInvite = async (code: string) => {
+    if (!server?.id || !channel?.id || !code || invitePanelActionCode) {
+      return;
+    }
+
+    try {
+      setInvitePanelError(null);
+      setInvitePanelSuccess(null);
+      setInvitePanelActionCode(code);
+
+      await axios.delete(`/api/channels/${channel.id}/invites`, {
+        data: {
+          serverId: server.id,
+          code,
+        },
+      });
+
+      setInvitePanelSuccess("Invite deleted.");
+      await loadInvitePanel();
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          (typeof error.response?.data === "string" ? error.response.data : "") ||
+          error.message;
+        setInvitePanelError(message || "Failed to delete invite.");
+      } else {
+        setInvitePanelError("Failed to delete invite.");
+      }
+    } finally {
+      setInvitePanelActionCode(null);
+    }
+  };
+
+  const onCopyInviteLink = async (code: string) => {
+    if (!code) {
+      return;
+    }
+
+    const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+    const inviteUrl = baseUrl ? `${baseUrl}/invite/${encodeURIComponent(code)}` : code;
+
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setInvitePanelError(null);
+      setInvitePanelSuccess("Invite link copied.");
+    } catch {
+      setInvitePanelSuccess(null);
+      setInvitePanelError("Could not copy automatically. Copy the code manually.");
+    }
+  };
+
+  const onSaveFeatureSettings = async () => {
+    if (!server?.id || !channel?.id) {
+      setFeatureSaveError("Missing server or channel context.");
+      return;
+    }
+
+    try {
+      setIsSavingFeatures(true);
+      setFeatureSaveError(null);
+      setFeatureSaveSuccess(null);
+
+      await axios.patch(`/api/channels/${channel.id}/features`, {
+        serverId: server.id,
+        settings: featureSettings,
+      });
+
+      setFeatureSaveSuccess("Saved channel feature settings.");
+      router.refresh();
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (typeof error.response?.data === "string" ? error.response.data : "") ||
+          (error.response?.data as { error?: string } | undefined)?.error ||
+          error.message ||
+          "Failed to save channel feature settings.";
+        setFeatureSaveError(message);
+      } else {
+        setFeatureSaveError("Failed to save channel feature settings.");
+      }
+    } finally {
+      setIsSavingFeatures(false);
+    }
+  };
+
+  const renderFeatureFeedback = () => (
+    <>
+      {featureSaveError ? (
+        <p className="mt-3 rounded border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+          {featureSaveError}
+        </p>
+      ) : null}
+      {featureSaveSuccess ? (
+        <p className="mt-3 rounded border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+          {featureSaveSuccess}
+        </p>
+      ) : null}
+    </>
+  );
+
+  const renderIntegrationsSection = () => (
+    <div className="flex-1 space-y-4 px-6 py-5">
+      <div className="rounded-lg border border-black/30 bg-[#232428] p-4">
+        <p className="text-sm font-semibold text-white">Channel Integrations</p>
+        <p className="mt-1 text-xs text-zinc-400">Wire external services to this channel and choose basic sync behavior.</p>
+
+        <div className="mt-4 space-y-3">
+          <div className="flex items-center justify-between rounded-md border border-black/25 bg-[#1e1f22] px-3 py-2">
+            <p className="text-xs text-zinc-300">Enable integrations in this channel</p>
+            <Button
+              type="button"
+              size="sm"
+              variant={featureSettings.integrations.enabled ? "primary" : "secondary"}
+              onClick={() =>
+                setFeatureSettings((prev) => ({
+                  ...prev,
+                  integrations: { ...prev.integrations, enabled: !prev.integrations.enabled },
+                }))
+              }
+              disabled={isLoadingFeatures || isSavingFeatures}
+            >
+              {featureSettings.integrations.enabled ? "Enabled" : "Disabled"}
+            </Button>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Primary Provider</p>
+              <Input
+                value={featureSettings.integrations.provider}
+                onChange={(event) =>
+                  setFeatureSettings((prev) => ({
+                    ...prev,
+                    integrations: { ...prev.integrations, provider: event.target.value.slice(0, 80) },
+                  }))
+                }
+                disabled={isLoadingFeatures || isSavingFeatures}
+                className="border-0 bg-zinc-700/50 text-zinc-100 focus-visible:ring-0 focus-visible:ring-offset-0"
+                placeholder="e.g. Zapier"
+              />
+            </div>
+
+            <div className="flex items-end justify-between rounded-md border border-black/25 bg-[#1e1f22] px-3 py-2">
+              <p className="text-xs text-zinc-300">Sync @mentions to integrations</p>
+              <Button
+                type="button"
+                size="sm"
+                variant={featureSettings.integrations.syncMentions ? "primary" : "secondary"}
+                onClick={() =>
+                  setFeatureSettings((prev) => ({
+                    ...prev,
+                    integrations: { ...prev.integrations, syncMentions: !prev.integrations.syncMentions },
+                  }))
+                }
+                disabled={isLoadingFeatures || isSavingFeatures}
+              >
+                {featureSettings.integrations.syncMentions ? "On" : "Off"}
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {renderFeatureFeedback()}
+
+        <div className="mt-4 flex justify-end">
+          <Button type="button" onClick={() => void onSaveFeatureSettings()} disabled={isLoadingFeatures || isSavingFeatures}>
+            {isLoadingFeatures ? "Loading..." : isSavingFeatures ? "Saving..." : "Save Integrations"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderWebhooksSection = () => (
+    <div className="flex-1 space-y-4 px-6 py-5">
+      <div className="rounded-lg border border-black/30 bg-[#232428] p-4">
+        <p className="text-sm font-semibold text-white">Channel Webhooks</p>
+        <p className="mt-1 text-xs text-zinc-400">Manage outbound webhook endpoints for channel events.</p>
+
+        <div className="mt-4 space-y-2">
+          {featureSettings.webhooks.items.length === 0 ? (
+            <p className="rounded-md border border-dashed border-zinc-600/60 bg-black/20 px-3 py-3 text-xs text-zinc-400">
+              No channel webhooks configured yet.
+            </p>
+          ) : null}
+
+          {featureSettings.webhooks.items.map((hook) => (
+            <div key={hook.id} className="space-y-2 rounded-md border border-black/25 bg-[#1e1f22] p-3">
+              <div className="grid gap-2 sm:grid-cols-[1fr_2fr_auto_auto]">
+                <Input
+                  value={hook.name}
+                  onChange={(event) =>
+                    setFeatureSettings((prev) => ({
+                      ...prev,
+                      webhooks: {
+                        items: prev.webhooks.items.map((item) =>
+                          item.id === hook.id ? { ...item, name: event.target.value.slice(0, 80) } : item
+                        ),
+                      },
+                    }))
+                  }
+                  disabled={isLoadingFeatures || isSavingFeatures}
+                  className="border-0 bg-zinc-700/50 text-zinc-100 focus-visible:ring-0 focus-visible:ring-offset-0"
+                  placeholder="Webhook name"
+                />
+                <Input
+                  value={hook.url}
+                  onChange={(event) =>
+                    setFeatureSettings((prev) => ({
+                      ...prev,
+                      webhooks: {
+                        items: prev.webhooks.items.map((item) =>
+                          item.id === hook.id ? { ...item, url: event.target.value.slice(0, 512) } : item
+                        ),
+                      },
+                    }))
+                  }
+                  disabled={isLoadingFeatures || isSavingFeatures}
+                  className="border-0 bg-zinc-700/50 text-zinc-100 focus-visible:ring-0 focus-visible:ring-offset-0"
+                  placeholder="https://example.com/hook"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={hook.enabled ? "primary" : "secondary"}
+                  onClick={() =>
+                    setFeatureSettings((prev) => ({
+                      ...prev,
+                      webhooks: {
+                        items: prev.webhooks.items.map((item) =>
+                          item.id === hook.id ? { ...item, enabled: !item.enabled } : item
+                        ),
+                      },
+                    }))
+                  }
+                  disabled={isLoadingFeatures || isSavingFeatures}
+                >
+                  {hook.enabled ? "Enabled" : "Disabled"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="destructive"
+                  onClick={() =>
+                    setFeatureSettings((prev) => ({
+                      ...prev,
+                      webhooks: {
+                        items: prev.webhooks.items.filter((item) => item.id !== hook.id),
+                      },
+                    }))
+                  }
+                  disabled={isLoadingFeatures || isSavingFeatures}
+                >
+                  Remove
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-3">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() =>
+              setFeatureSettings((prev) => ({
+                ...prev,
+                webhooks: {
+                  items: [
+                    ...prev.webhooks.items,
+                    {
+                      id: crypto.randomUUID(),
+                      name: "",
+                      url: "",
+                      enabled: true,
+                    },
+                  ],
+                },
+              }))
+            }
+            disabled={isLoadingFeatures || isSavingFeatures || featureSettings.webhooks.items.length >= 25}
+          >
+            Add Webhook
+          </Button>
+        </div>
+
+        {renderFeatureFeedback()}
+
+        <div className="mt-4 flex justify-end">
+          <Button type="button" onClick={() => void onSaveFeatureSettings()} disabled={isLoadingFeatures || isSavingFeatures}>
+            {isLoadingFeatures ? "Loading..." : isSavingFeatures ? "Saving..." : "Save Webhooks"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderAppsSection = () => {
+    const appIdsText = featureSettings.apps.allowedAppIds.join(", ");
+
+    return (
+      <div className="flex-1 space-y-4 px-6 py-5">
+        <div className="rounded-lg border border-black/30 bg-[#232428] p-4">
+          <p className="text-sm font-semibold text-white">Channel Apps</p>
+          <p className="mt-1 text-xs text-zinc-400">Choose which app IDs can run inside this channel.</p>
+
+          <div className="mt-4 space-y-3">
+            <div>
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Allowed app IDs (comma separated)</p>
+              <Input
+                value={appIdsText}
+                onChange={(event) => {
+                  const parsed = event.target.value
+                    .split(",")
+                    .map((entry) => entry.trim())
+                    .filter(Boolean)
+                    .slice(0, 100);
+
+                  setFeatureSettings((prev) => ({
+                    ...prev,
+                    apps: {
+                      ...prev.apps,
+                      allowedAppIds: parsed,
+                    },
+                  }));
+                }}
+                disabled={isLoadingFeatures || isSavingFeatures}
+                className="border-0 bg-zinc-700/50 text-zinc-100 focus-visible:ring-0 focus-visible:ring-offset-0"
+                placeholder="poll-bot, music-bot"
+              />
+            </div>
+
+            <div className="flex items-center justify-between rounded-md border border-black/25 bg-[#1e1f22] px-3 py-2">
+              <p className="text-xs text-zinc-300">Allow pinned app surfaces in this channel</p>
+              <Button
+                type="button"
+                size="sm"
+                variant={featureSettings.apps.allowPinnedApps ? "primary" : "secondary"}
+                onClick={() =>
+                  setFeatureSettings((prev) => ({
+                    ...prev,
+                    apps: { ...prev.apps, allowPinnedApps: !prev.apps.allowPinnedApps },
+                  }))
+                }
+                disabled={isLoadingFeatures || isSavingFeatures}
+              >
+                {featureSettings.apps.allowPinnedApps ? "Allowed" : "Blocked"}
+              </Button>
+            </div>
+          </div>
+
+          {renderFeatureFeedback()}
+
+          <div className="mt-4 flex justify-end">
+            <Button type="button" onClick={() => void onSaveFeatureSettings()} disabled={isLoadingFeatures || isSavingFeatures}>
+              {isLoadingFeatures ? "Loading..." : isSavingFeatures ? "Saving..." : "Save App Settings"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderModerationSection = () => {
+    const blockedWordsText = featureSettings.moderation.blockedWords.join(", ");
+
+    return (
+      <div className="flex-1 space-y-4 px-6 py-5">
+        <div className="rounded-lg border border-black/30 bg-[#232428] p-4">
+          <p className="text-sm font-semibold text-white">Channel Moderation</p>
+          <p className="mt-1 text-xs text-zinc-400">Set moderation controls and language safeguards for this channel.</p>
+
+          <div className="mt-4 space-y-3">
+            <div className="flex items-center justify-between rounded-md border border-black/25 bg-[#1e1f22] px-3 py-2">
+              <p className="text-xs text-zinc-300">Require verified email for participation</p>
+              <Button
+                type="button"
+                size="sm"
+                variant={featureSettings.moderation.requireVerifiedEmail ? "primary" : "secondary"}
+                onClick={() =>
+                  setFeatureSettings((prev) => ({
+                    ...prev,
+                    moderation: {
+                      ...prev.moderation,
+                      requireVerifiedEmail: !prev.moderation.requireVerifiedEmail,
+                    },
+                  }))
+                }
+                disabled={isLoadingFeatures || isSavingFeatures}
+              >
+                {featureSettings.moderation.requireVerifiedEmail ? "Required" : "Not required"}
+              </Button>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Slowmode (seconds)</p>
+                <Input
+                  type="number"
+                  min={0}
+                  max={21600}
+                  value={String(featureSettings.moderation.slowmodeSeconds)}
+                  onChange={(event) => {
+                    const parsed = Number(event.target.value);
+                    const safe = Number.isFinite(parsed) ? Math.max(0, Math.min(21600, Math.floor(parsed))) : 0;
+                    setFeatureSettings((prev) => ({
+                      ...prev,
+                      moderation: { ...prev.moderation, slowmodeSeconds: safe },
+                    }));
+                  }}
+                  disabled={isLoadingFeatures || isSavingFeatures}
+                  className="border-0 bg-zinc-700/50 text-zinc-100 focus-visible:ring-0 focus-visible:ring-offset-0"
+                />
+              </div>
+              <div>
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Flagged words action</p>
+                <Select
+                  value={featureSettings.moderation.flaggedWordsAction}
+                  onValueChange={(value) =>
+                    setFeatureSettings((prev) => ({
+                      ...prev,
+                      moderation: {
+                        ...prev.moderation,
+                        flaggedWordsAction: value === "block" ? "block" : "warn",
+                      },
+                    }))
+                  }
+                  disabled={isLoadingFeatures || isSavingFeatures}
+                >
+                  <SelectTrigger className="border-0 bg-zinc-700/50 text-zinc-100 outline-none ring-offset-0 focus:ring-0 focus:ring-offset-0">
+                    <SelectValue placeholder="Choose action" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="warn">Warn</SelectItem>
+                    <SelectItem value="block">Block</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Blocked words (comma separated)</p>
+              <Input
+                value={blockedWordsText}
+                onChange={(event) => {
+                  const words = event.target.value
+                    .split(",")
+                    .map((entry) => entry.trim())
+                    .filter(Boolean)
+                    .slice(0, 100);
+
+                  setFeatureSettings((prev) => ({
+                    ...prev,
+                    moderation: {
+                      ...prev.moderation,
+                      blockedWords: words,
+                    },
+                  }));
+                }}
+                disabled={isLoadingFeatures || isSavingFeatures}
+                className="border-0 bg-zinc-700/50 text-zinc-100 focus-visible:ring-0 focus-visible:ring-offset-0"
+                placeholder="spam, slur, scam"
+              />
+            </div>
+          </div>
+
+          {renderFeatureFeedback()}
+
+          <div className="mt-4 flex justify-end">
+            <Button type="button" onClick={() => void onSaveFeatureSettings()} disabled={isLoadingFeatures || isSavingFeatures}>
+              {isLoadingFeatures ? "Loading..." : isSavingFeatures ? "Saving..." : "Save Moderation"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderInvitesSection = () => (
+    <div className="flex-1 space-y-4 px-6 py-5">
+      <div className="rounded-lg border border-black/30 bg-[#232428] p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-white">Channel Invites</p>
+            <p className="mt-1 text-xs text-zinc-400">Create and revoke channel-scoped invite codes.</p>
+          </div>
+        </div>
+
+        <div className="mt-3 grid gap-2 rounded-md border border-black/25 bg-[#1e1f22] p-3 sm:grid-cols-[1fr_1fr_auto]">
+          <Input
+            type="number"
+            min={1}
+            max={100000}
+            value={newInviteMaxUses}
+            onChange={(event) => setNewInviteMaxUses(event.target.value)}
+            placeholder="Max uses (optional)"
+            className="border-0 bg-zinc-700/50 text-zinc-100 focus-visible:ring-0 focus-visible:ring-offset-0"
+            disabled={isLoadingInvitePanel || Boolean(invitePanelActionCode)}
+          />
+          <Input
+            type="number"
+            min={1}
+            max={24 * 365}
+            value={newInviteExpiresInHours}
+            onChange={(event) => setNewInviteExpiresInHours(event.target.value)}
+            placeholder="Expires in hours (optional)"
+            className="border-0 bg-zinc-700/50 text-zinc-100 focus-visible:ring-0 focus-visible:ring-offset-0"
+            disabled={isLoadingInvitePanel || Boolean(invitePanelActionCode)}
+          />
+          <Button
+            type="button"
+            onClick={() => void onCreateInvite()}
+            disabled={isLoadingInvitePanel || Boolean(invitePanelActionCode)}
+          >
+            {invitePanelActionCode === "__create__" ? "Creating..." : "Create Invite"}
+          </Button>
+        </div>
+
+        <div className="mt-4 space-y-2">
+          {isLoadingInvitePanel ? (
+            <p className="rounded-md border border-dashed border-zinc-600/60 bg-black/20 px-3 py-3 text-xs text-zinc-400">
+              Loading invites...
+            </p>
+          ) : invitePanelItems.length === 0 ? (
+            <p className="rounded-md border border-dashed border-zinc-600/60 bg-black/20 px-3 py-3 text-xs text-zinc-400">
+              No invites yet. Create one to share channel access.
+            </p>
+          ) : (
+            invitePanelItems.map((inviteItem) => {
+              const createdAt = new Date(inviteItem.createdAt);
+              const createdLabel = Number.isFinite(createdAt.getTime())
+                ? createdAt.toLocaleString()
+                : "Unknown";
+              const expiresAt = inviteItem.expiresAt ? new Date(inviteItem.expiresAt) : null;
+              const expiresLabel =
+                expiresAt && Number.isFinite(expiresAt.getTime()) ? expiresAt.toLocaleString() : null;
+
+              return (
+                <div key={inviteItem.code} className="rounded-md border border-black/25 bg-[#1e1f22] p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-zinc-100">{inviteItem.code}</p>
+                      <p className="text-xs text-zinc-400">
+                        Created {createdLabel}
+                        {inviteItem.createdByName ? ` by ${inviteItem.createdByName}` : ""}
+                        {typeof inviteItem.usedCount === "number" ? ` · Uses: ${inviteItem.usedCount}` : ""}
+                        {typeof inviteItem.maxUses === "number" ? `/${inviteItem.maxUses}` : ""}
+                        {expiresLabel ? ` · Expires: ${expiresLabel}` : ""}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => void onCopyInviteLink(inviteItem.code)}
+                        disabled={Boolean(invitePanelActionCode)}
+                      >
+                        Copy Link
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => void onDeleteInvite(inviteItem.code)}
+                        disabled={Boolean(invitePanelActionCode)}
+                      >
+                        {invitePanelActionCode === inviteItem.code ? "Deleting..." : "Delete"}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {invitePanelError ? (
+          <p className="mt-3 rounded border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+            {invitePanelError}
+          </p>
+        ) : null}
+        {invitePanelSuccess ? (
+          <p className="mt-3 rounded border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+            {invitePanelSuccess}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
 
   const onSetPermission = (
     targetType: ChannelPermissionOverwrite["targetType"],
@@ -408,7 +1207,7 @@ export const EditChannelModal = () => {
     }
   };
 
-  const renderPlaceholderSection = (tab: Exclude<ChannelSettingsTab, "overview" | "permissions" | "danger">) => (
+  const renderPlaceholderSection = (tab: Exclude<ChannelSettingsTab, "overview" | "permissions" | "danger" | "integrations" | "webhooks" | "apps" | "moderation">) => (
     <div className="flex-1 space-y-4 px-6 py-5">
       <div className="rounded-lg border border-black/30 bg-[#232428] p-4">
         <p className="text-sm font-semibold text-white">{tabLabelMap[tab]}</p>
@@ -531,6 +1330,16 @@ export const EditChannelModal = () => {
               </div>
             ) : activeTab === "permissions" ? (
               renderPermissionsSection()
+            ) : activeTab === "invites" ? (
+              renderInvitesSection()
+            ) : activeTab === "integrations" ? (
+              renderIntegrationsSection()
+            ) : activeTab === "webhooks" ? (
+              renderWebhooksSection()
+            ) : activeTab === "apps" ? (
+              renderAppsSection()
+            ) : activeTab === "moderation" ? (
+              renderModerationSection()
             ) : activeTab !== "overview" ? (
               renderPlaceholderSection(activeTab)
             ) : (

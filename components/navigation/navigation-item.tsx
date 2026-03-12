@@ -177,7 +177,7 @@ export const NavigationItem = ({
           }}
           onMouseEnter={openPopover}
           onMouseLeave={scheduleClosePopover}
-          className="group relative flex items-center shadow-none ring-0 outline-none border-0 bg-transparent"
+          className="group relative flex flex-col items-center gap-1 rounded-md shadow-none ring-0 outline-none border-0 bg-transparent"
           style={{ boxShadow: "none", filter: "none", WebkitAppearance: "none", appearance: "none" }}
           suppressHydrationWarning
           title={name}
@@ -185,15 +185,8 @@ export const NavigationItem = ({
         >
           <div
             className={cn(
-              "absolute left-0 bg-primary rounded-r-full transition-all w-[4px]",
-              !isActiveServer && "group-hover:h-[20px]",
-              isActiveServer ? "h-[36px]" : "h-[8px]"
-            )}
-          />
-          <div
-            className={cn(
-              "relative group flex mx-3 h-[48px] w-[48px] rounded-[24px] group-hover:rounded-[16px] transition-all overflow-hidden",
-              isActiveServer && "bg-primary/10 text-primary rounded-[16px]"
+              "relative group mx-3 flex h-14 w-20 overflow-hidden rounded-[10px] border border-zinc-500/20 transition-all group-hover:rounded-[8px] group-hover:border-primary/50 group-hover:ring-2 group-hover:ring-primary/25",
+              isActiveServer && "rounded-[8px] border-primary/60 bg-primary/10 text-primary ring-2 ring-primary/35"
             )}
           >
             {showImage ? (
@@ -208,6 +201,16 @@ export const NavigationItem = ({
                 {initials}
               </div>
             )}
+            <div
+              className={cn(
+                "absolute inset-x-0 bottom-0 flex h-[5%] min-h-3.5 items-center justify-center border-t border-zinc-500/20 bg-zinc-900/40 px-1 backdrop-blur-[1px]",
+                isActiveServer && "border-primary/40 bg-primary/20"
+              )}
+            >
+              <span className="truncate text-[9px] font-semibold uppercase tracking-[0.05em] text-zinc-100">
+                {name}
+              </span>
+            </div>
           </div>
         </button>
       </PopoverTrigger>
@@ -216,7 +219,7 @@ export const NavigationItem = ({
         side="right"
         align="start"
         sideOffset={10}
-        className="w-[340px] overflow-hidden rounded-xl border border-black/30 bg-[#111214] p-0 text-[#dbdee1] shadow-2xl shadow-black/50"
+        className="w-85 overflow-hidden rounded-xl border border-black/30 bg-[#111214] p-0 text-[#dbdee1] shadow-2xl shadow-black/50"
         onMouseEnter={openPopover}
         onMouseLeave={scheduleClosePopover}
       >
@@ -226,7 +229,7 @@ export const NavigationItem = ({
           <div className="p-4 text-sm text-rose-300">{profileError}</div>
         ) : serverProfile ? (
           <>
-            <div className="relative h-24 bg-gradient-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
+            <div className="relative h-24 bg-linear-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
               {serverProfile.bannerUrl ? (
                 <Image
                   src={serverProfile.bannerUrl}

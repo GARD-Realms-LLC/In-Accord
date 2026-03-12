@@ -20,12 +20,17 @@ export async function GET(req: Request) {
       return new NextResponse("Server ID missing", { status: 400 });
     }
 
+    const isServerOwner = await db.query.server.findFirst({
+      where: and(eq(server.id, serverId), eq(server.profileId, profile.id)),
+      columns: { id: true },
+    });
+
     const authorizedMember = await db.query.member.findFirst({
       where: and(eq(member.serverId, serverId), eq(member.profileId, profile.id)),
     });
 
-    if (!authorizedMember) {
-      return new NextResponse("Unauthorized", { status: 401 });
+    if (!isServerOwner && !authorizedMember) {
+      return new NextResponse("Forbidden", { status: 403 });
     }
 
     await ensureChannelGroupSchema();

@@ -9,6 +9,9 @@ const https = require("node:https");
 const UPDATE_MANIFEST_URL = process.env.INACCORD_UPDATE_MANIFEST_URL;
 const UPDATE_CHECK_INTERVAL_MS = Number(process.env.INACCORD_UPDATE_CHECK_INTERVAL_MS || 30 * 60 * 1000);
 const UPDATE_REQUEST_TIMEOUT_MS = Number(process.env.INACCORD_UPDATE_REQUEST_TIMEOUT_MS || 15_000);
+const UPDATE_MAX_MANIFEST_BYTES = Number(process.env.INACCORD_UPDATE_MAX_MANIFEST_BYTES || 1024 * 1024);
+const UPDATE_MAX_INSTALLER_BYTES = Number(process.env.INACCORD_UPDATE_MAX_INSTALLER_BYTES || 1024 * 1024 * 1024);
+const UPDATE_MAX_REDIRECTS = 5;
 
 let updateCheckInFlight = false;
 let updateDownloadInFlight = false;
@@ -70,13 +73,18 @@ const isVersionNewer = (candidate, current) => {
 
 const getHttpClient = (url) => (url.startsWith("https:") ? https : http);
 
-const fetchJson = (url) =>
+const fetchJson = (url, redirectCount = 0) =>
   new Promise((resolve, reject) => {
+    if (redirectCount > UPDATE_MAX_REDIRECTS) {
+      reject(new Error("Manifest request exceeded redirect limit"));
+      return;
+    }
+
     const client = getHttpClient(url);
     const request = client.get(url, { timeout: UPDATE_REQUEST_TIMEOUT_MS }, (response) => {
       if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
         response.resume();
-        resolve(fetchJson(response.headers.location));
+        resolve(fetchJson(response.headers.location, redirectCount + 1));
         return;
       }
 
@@ -86,8 +94,26 @@ const fetchJson = (url) =>
         return;
       }
 
+      const declaredLength = Number(response.headers["content-length"] || 0);
+      if (Number.isFinite(declaredLength) && declaredLength > UPDATE_MAX_MANIFEST_BYTES) {
+        response.resume();
+        reject(new Error(`Manifest exceeds max size (${UPDATE_MAX_MANIFEST_BYTES} bytes)`));
+        return;
+      }
+
       const chunks = [];
-      response.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+      let totalBytes = 0;
+      response.on("data", (chunk) => {
+        const bufferChunk = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        totalBytes += bufferChunk.length;
+
+        if (totalBytes > UPDATE_MAX_MANIFEST_BYTES) {
+          response.destroy(new Error(`Manifest exceeds max size (${UPDATE_MAX_MANIFEST_BYTES} bytes)`));
+          return;
+        }
+
+        chunks.push(bufferChunk);
+      });
       response.on("end", () => {
         try {
           const raw = Buffer.concat(chunks).toString("utf8");
@@ -120,14 +146,37 @@ const sha256File = (filePath) =>
     stream.on("error", reject);
   });
 
-const downloadFile = (url, destinationPath, onProgress) =>
+const downloadFile = (url, destinationPath, onProgress, redirectCount = 0) =>
   new Promise((resolve, reject) => {
+    if (redirectCount > UPDATE_MAX_REDIRECTS) {
+      reject(new Error("Download exceeded redirect limit"));
+      return;
+    }
+
     const client = getHttpClient(url);
+    let settled = false;
+
+    const finishError = (error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      void fsp.rm(destinationPath, { force: true }).catch(() => undefined);
+      reject(error);
+    };
+
+    const finishSuccess = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve(destinationPath);
+    };
 
     const request = client.get(url, { timeout: UPDATE_REQUEST_TIMEOUT_MS }, (response) => {
       if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
         response.resume();
-        resolve(downloadFile(response.headers.location, destinationPath, onProgress));
+        resolve(downloadFile(response.headers.location, destinationPath, onProgress, redirectCount + 1));
         return;
       }
 
@@ -139,10 +188,24 @@ const downloadFile = (url, destinationPath, onProgress) =>
 
       const output = fs.createWriteStream(destinationPath);
       const totalBytes = Number(response.headers["content-length"] || 0);
+
+      if (Number.isFinite(totalBytes) && totalBytes > UPDATE_MAX_INSTALLER_BYTES) {
+        response.destroy(new Error(`Installer exceeds max size (${UPDATE_MAX_INSTALLER_BYTES} bytes)`));
+        output.destroy();
+        return;
+      }
+
       let receivedBytes = 0;
 
       response.on("data", (chunk) => {
         receivedBytes += Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(chunk);
+
+        if (receivedBytes > UPDATE_MAX_INSTALLER_BYTES) {
+          response.destroy(new Error(`Installer exceeds max size (${UPDATE_MAX_INSTALLER_BYTES} bytes)`));
+          output.destroy(new Error(`Installer exceeds max size (${UPDATE_MAX_INSTALLER_BYTES} bytes)`));
+          return;
+        }
+
         if (typeof onProgress === "function" && totalBytes > 0) {
           const ratio = Math.min(1, receivedBytes / totalBytes);
           onProgress(Math.round(ratio * 100));
@@ -152,16 +215,16 @@ const downloadFile = (url, destinationPath, onProgress) =>
       response.pipe(output);
 
       output.on("finish", () => {
-        output.close(() => resolve(destinationPath));
+        output.close(() => finishSuccess());
       });
-      output.on("error", reject);
-      response.on("error", reject);
+      output.on("error", finishError);
+      response.on("error", finishError);
     });
 
     request.on("timeout", () => {
       request.destroy(new Error("Download timed out"));
     });
-    request.on("error", reject);
+    request.on("error", finishError);
   });
 
 const getManifestFields = (manifest) => {

@@ -13,6 +13,8 @@ type VoiceStateRow = {
   isMuted: boolean;
   isDeafened: boolean;
   isCameraOn: boolean;
+  isStreaming: boolean;
+  streamLabel: string | null;
   isSpeaking: boolean;
 };
 
@@ -27,6 +29,8 @@ export type ActiveVoiceMember = {
   isMuted: boolean;
   isDeafened: boolean;
   isCameraOn: boolean;
+  isStreaming: boolean;
+  streamLabel: string | null;
   isSpeaking: boolean;
 };
 
@@ -48,6 +52,8 @@ export const ensureVoiceStateSchema = async () => {
       "isMuted" boolean not null default false,
       "isDeafened" boolean not null default false,
       "isCameraOn" boolean not null default false,
+      "isStreaming" boolean not null default false,
+      "streamLabel" varchar(255),
       "isSpeaking" boolean not null default false,
       "connectedAt" timestamp not null,
       "updatedAt" timestamp not null
@@ -67,6 +73,16 @@ export const ensureVoiceStateSchema = async () => {
   await db.execute(sql`
     alter table "VoiceState"
     add column if not exists "isCameraOn" boolean not null default false
+  `);
+
+  await db.execute(sql`
+    alter table "VoiceState"
+    add column if not exists "isStreaming" boolean not null default false
+  `);
+
+  await db.execute(sql`
+    alter table "VoiceState"
+    add column if not exists "streamLabel" varchar(255)
   `);
 
   await db.execute(sql`
@@ -123,6 +139,8 @@ export const upsertVoiceState = async ({
   isMuted = false,
   isDeafened = false,
   isCameraOn = false,
+  isStreaming = false,
+  streamLabel = null,
   isSpeaking = false,
 }: {
   serverId: string;
@@ -131,6 +149,8 @@ export const upsertVoiceState = async ({
   isMuted?: boolean;
   isDeafened?: boolean;
   isCameraOn?: boolean;
+  isStreaming?: boolean;
+  streamLabel?: string | null;
   isSpeaking?: boolean;
 }) => {
   await ensureVoiceStateSchema();
@@ -146,6 +166,8 @@ export const upsertVoiceState = async ({
       "isMuted",
       "isDeafened",
       "isCameraOn",
+      "isStreaming",
+      "streamLabel",
       "isSpeaking",
       "connectedAt",
       "updatedAt"
@@ -158,6 +180,8 @@ export const upsertVoiceState = async ({
       ${isMuted},
       ${isDeafened},
       ${isCameraOn},
+      ${isStreaming},
+      ${streamLabel},
       ${isSpeaking},
       ${now},
       ${now}
@@ -168,6 +192,8 @@ export const upsertVoiceState = async ({
       "isMuted" = excluded."isMuted",
       "isDeafened" = excluded."isDeafened",
       "isCameraOn" = excluded."isCameraOn",
+      "isStreaming" = excluded."isStreaming",
+        "streamLabel" = excluded."streamLabel",
       "isSpeaking" = excluded."isSpeaking",
       "updatedAt" = excluded."updatedAt"
   `);
@@ -209,6 +235,8 @@ export const getMemberVoiceState = async ({
       vs."isMuted" as "isMuted",
       vs."isDeafened" as "isDeafened",
       vs."isCameraOn" as "isCameraOn",
+      vs."isStreaming" as "isStreaming",
+      vs."streamLabel" as "streamLabel",
       vs."isSpeaking" as "isSpeaking",
       vs."connectedAt" as "connectedAt",
       vs."updatedAt" as "updatedAt"
@@ -243,6 +271,8 @@ export const listActiveVoiceMembersForChannel = async ({
       vs."isMuted" as "isMuted",
       vs."isDeafened" as "isDeafened",
       vs."isCameraOn" as "isCameraOn",
+      vs."isStreaming" as "isStreaming",
+      vs."streamLabel" as "streamLabel",
       vs."isSpeaking" as "isSpeaking",
       vs."connectedAt" as "connectedAt",
       vs."updatedAt" as "updatedAt"
@@ -256,14 +286,23 @@ export const listActiveVoiceMembersForChannel = async ({
     order by vs."connectedAt" asc
   `);
 
-  return (((result as unknown as { rows?: ActiveVoiceMember[] }).rows ?? []) as ActiveVoiceMember[]).map((row) => ({
-    ...row,
-    presenceStatus: String(row.presenceStatus ?? "OFFLINE").toUpperCase(),
-    isMuted: Boolean((row as ActiveVoiceMember).isMuted),
-    isDeafened: Boolean((row as ActiveVoiceMember).isDeafened),
-    isCameraOn: Boolean((row as ActiveVoiceMember).isCameraOn),
-    isSpeaking: Boolean((row as ActiveVoiceMember).isSpeaking),
-  }));
+  return (((result as unknown as { rows?: ActiveVoiceMember[] }).rows ?? []) as ActiveVoiceMember[]).map((row) => {
+    const streamLabelRaw = (row as ActiveVoiceMember).streamLabel;
+
+    return {
+      ...row,
+      presenceStatus: String(row.presenceStatus ?? "OFFLINE").toUpperCase(),
+      isMuted: Boolean((row as ActiveVoiceMember).isMuted),
+      isDeafened: Boolean((row as ActiveVoiceMember).isDeafened),
+      isCameraOn: Boolean((row as ActiveVoiceMember).isCameraOn),
+      isStreaming: Boolean((row as ActiveVoiceMember).isStreaming),
+      streamLabel:
+        typeof streamLabelRaw === "string" && streamLabelRaw.trim().length
+          ? streamLabelRaw.trim()
+          : null,
+      isSpeaking: Boolean((row as ActiveVoiceMember).isSpeaking),
+    };
+  });
 };
 
 export const listActiveVoiceCountsForServer = async ({

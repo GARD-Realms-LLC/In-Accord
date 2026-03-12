@@ -40,6 +40,7 @@ export async function PATCH(req: Request, { params }: Params) {
 			color?: string;
 			iconUrl?: string | null;
 			isMentionable?: boolean;
+			showInOnlineMembers?: boolean;
 			position?: number;
 		};
 
@@ -70,17 +71,24 @@ export async function PATCH(req: Request, { params }: Params) {
 				? body.isMentionable
 				: undefined;
 
+		const nextShowInOnlineMembers =
+			typeof body.showInOnlineMembers === "boolean"
+				? body.showInOnlineMembers
+				: undefined;
+
 		const shouldKeepName = nextName === undefined;
 		const shouldKeepColor = nextColor === undefined;
 		const shouldKeepPosition = nextPosition === undefined;
 		const shouldKeepIcon = nextIconUrl === undefined;
 		const shouldKeepIsMentionable = nextIsMentionable === undefined;
+		const shouldKeepShowInOnlineMembers = nextShowInOnlineMembers === undefined;
 
 		const nextNameParam = nextName ?? "";
 		const nextColorParam = nextColor ?? "#99aab5";
 		const nextPositionParam = nextPosition ?? 0;
 		const nextIconParam = nextIconUrl ?? null;
 		const nextIsMentionableParam = nextIsMentionable ?? true;
+		const nextShowInOnlineMembersParam = nextShowInOnlineMembers ?? false;
 
 		if (nextName !== undefined && !nextName) {
 			return new NextResponse("Role name cannot be empty", { status: 400 });
@@ -113,6 +121,10 @@ export async function PATCH(req: Request, { params }: Params) {
 					when ${shouldKeepIsMentionable} then "isMentionable"
 					else ${nextIsMentionableParam}
 				end,
+				"showInOnlineMembers" = case
+					when ${shouldKeepShowInOnlineMembers} then "showInOnlineMembers"
+					else ${nextShowInOnlineMembersParam}
+				end,
 				"position" = case
 					when ${shouldKeepPosition} then "position"
 					else ${nextPositionParam}
@@ -120,7 +132,7 @@ export async function PATCH(req: Request, { params }: Params) {
 				"updatedAt" = now()
 			where "id" = ${roleId}
 				and "serverId" = ${serverId}
-			returning "id", "name", "color", "iconUrl", "isMentionable", "position", "isManaged"
+			returning "id", "name", "color", "iconUrl", "isMentionable", "showInOnlineMembers", "position", "isManaged"
 		`);
 
 		const role = (updateResult as unknown as {
@@ -130,6 +142,7 @@ export async function PATCH(req: Request, { params }: Params) {
 				color: string;
 				iconUrl: string | null;
 				isMentionable: boolean;
+				showInOnlineMembers: boolean;
 				position: number;
 				isManaged: boolean;
 			}>;

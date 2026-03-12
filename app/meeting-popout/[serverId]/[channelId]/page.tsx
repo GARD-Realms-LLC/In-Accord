@@ -136,6 +136,8 @@ const MeetingPopoutPage = async ({ params, searchParams }: MeetingPopoutPageProp
           profileImageUrl: item.profileImageUrl,
           isMuted: item.isMuted,
           isCameraOn: item.isCameraOn,
+          isStreaming: item.isStreaming,
+          streamLabel: item.streamLabel,
           isSpeaking: item.isSpeaking,
         }))}
         availableMembers={[]}

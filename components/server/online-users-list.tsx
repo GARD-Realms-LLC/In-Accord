@@ -2,7 +2,7 @@
 
 import { Ban, Crown, Flag, MessageCircle, UserPlus, Wrench } from "lucide-react";
 import Image from "next/image";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import axios from "axios";
 
@@ -25,6 +25,7 @@ type OnlineRailUser = {
   id: string;
   profileId: string;
   role: MemberRole;
+  assignedRoleId?: string | null;
   assignedRoleName?: string | null;
   globalRole: string | null;
   displayName: string;
@@ -42,6 +43,8 @@ type OnlineRailUser = {
 interface OnlineUsersListProps {
   users: OnlineRailUser[];
   roleGroups?: Array<{ id: string; name: string; position?: number }>;
+  serverId?: string;
+  canReorderRoleGroups?: boolean;
 }
 
 const PROFILE_CARD_CACHE_LIMIT = 600;
@@ -60,7 +63,12 @@ const formatDate = (value: string | null) => {
   return parsed.toLocaleString();
 };
 
-export const OnlineUsersList = ({ users, roleGroups = [] }: OnlineUsersListProps) => {
+export const OnlineUsersList = ({
+  users,
+  roleGroups = [],
+  serverId,
+  canReorderRoleGroups = false,
+}: OnlineUsersListProps) => {
   const params = useParams();
   const router = useRouter();
   const [profileCardCache, setProfileCardCache] = useState<
@@ -95,6 +103,11 @@ export const OnlineUsersList = ({ users, roleGroups = [] }: OnlineUsersListProps
   const [loadingBotCommandsProfileId, setLoadingBotCommandsProfileId] = useState<string | null>(null);
   const [commandsDialogProfileId, setCommandsDialogProfileId] = useState<string | null>(null);
   const [collapsedByGroup, setCollapsedByGroup] = useState<Record<string, boolean>>({});
+  const [orderedRoleGroups, setOrderedRoleGroups] = useState<Array<{ id: string; name: string; position?: number }>>([]);
+  const [draggedGroupId, setDraggedGroupId] = useState<string | null>(null);
+  const [dragOverGroupId, setDragOverGroupId] = useState<string | null>(null);
+  const [isSavingGroupOrder, setIsSavingGroupOrder] = useState(false);
+  const isDraggingGroupRef = useRef(false);
   const loadingProfileCardIdsRef = useRef(new Set<string>());
   const loadingBotCommandIdsRef = useRef(new Set<string>());
 
@@ -297,6 +310,145 @@ export const OnlineUsersList = ({ users, roleGroups = [] }: OnlineUsersListProps
     });
   }, [users]);
 
+  useEffect(() => {
+    setOrderedRoleGroups(roleGroups);
+  }, [roleGroups]);
+
+  const reorderRoleGroups = (
+    groups: Array<{ id: string; name: string; position?: number }>,
+    sourceId: string,
+    targetId: string
+  ) => {
+    if (!sourceId || !targetId || sourceId === targetId) {
+      return groups;
+    }
+
+    const fromIndex = groups.findIndex((group) => group.id === sourceId);
+    const toIndex = groups.findIndex((group) => group.id === targetId);
+
+    if (fromIndex < 0 || toIndex < 0) {
+      return groups;
+    }
+
+    const next = [...groups];
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, moved);
+    return next;
+  };
+
+  const persistRoleGroupOrder = async (nextGroups: Array<{ id: string; name: string; position?: number }>) => {
+    if (!serverId || !canReorderRoleGroups) {
+      return;
+    }
+
+    const rolesResponse = await axios.get<{
+      roles?: Array<{ id: string; position: number; showInOnlineMembers: boolean }>;
+    }>(`/api/servers/${serverId}/roles`, {
+      params: { _t: Date.now() },
+      headers: {
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
+      },
+    });
+
+    const allRoles = [...(rolesResponse.data.roles ?? [])].sort(
+      (a, b) => Number(a.position ?? 0) - Number(b.position ?? 0)
+    );
+    if (allRoles.length === 0) {
+      return;
+    }
+
+    const visibleRoleIdQueue = nextGroups.map((group) => group.id);
+    let visibleIndex = 0;
+
+    const orderedRoleIds = allRoles.map((role) => {
+      if (!role.showInOnlineMembers) {
+        return role.id;
+      }
+
+      const queuedId = visibleRoleIdQueue[visibleIndex];
+      visibleIndex += 1;
+      return queuedId || role.id;
+    });
+
+    await axios.patch(`/api/servers/${serverId}/roles/reorder`, {
+      orderedRoleIds,
+    });
+  };
+
+  const onGroupDragStart = (event: React.DragEvent<HTMLElement>, groupId: string) => {
+    if (!canReorderRoleGroups || isSavingGroupOrder) {
+      return;
+    }
+
+    isDraggingGroupRef.current = true;
+    setDraggedGroupId(groupId);
+    event.dataTransfer.setData("inaccord/online-role-group-id", groupId);
+    event.dataTransfer.setData("text/plain", groupId);
+    event.dataTransfer.effectAllowed = "move";
+  };
+
+  const onGroupDragEnd = () => {
+    setDraggedGroupId(null);
+    setDragOverGroupId(null);
+    window.setTimeout(() => {
+      isDraggingGroupRef.current = false;
+    }, 0);
+  };
+
+  const onGroupDragOver = (event: React.DragEvent<HTMLElement>, targetGroupId: string) => {
+    if (!canReorderRoleGroups || isSavingGroupOrder) {
+      return;
+    }
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    if (dragOverGroupId !== targetGroupId) {
+      setDragOverGroupId(targetGroupId);
+    }
+  };
+
+  const onGroupDrop = async (event: React.DragEvent<HTMLElement>, targetGroupId: string) => {
+    event.preventDefault();
+
+    if (!canReorderRoleGroups || isSavingGroupOrder) {
+      return;
+    }
+
+    const draggedId =
+      event.dataTransfer.getData("inaccord/online-role-group-id")?.trim() ||
+      event.dataTransfer.getData("text/plain")?.trim() ||
+      draggedGroupId ||
+      "";
+
+    setDraggedGroupId(null);
+    setDragOverGroupId(null);
+
+    if (!draggedId || draggedId === targetGroupId) {
+      return;
+    }
+
+    const previous = orderedRoleGroups;
+    const next = reorderRoleGroups(previous, draggedId, targetGroupId);
+
+    if (next === previous) {
+      return;
+    }
+
+    setOrderedRoleGroups(next);
+
+    try {
+      setIsSavingGroupOrder(true);
+      await persistRoleGroupOrder(next);
+      router.refresh();
+    } catch {
+      setOrderedRoleGroups(previous);
+      window.alert("Failed to reorder Online Members role groups.");
+    } finally {
+      setIsSavingGroupOrder(false);
+    }
+  };
+
   const renderMemberRoleIcon = (role: unknown) => {
     if (isInAccordAdministrator(String(role ?? ""))) {
       return <Crown className="h-4 w-4 mr-2 text-rose-500" aria-label="Administrator" />;
@@ -460,6 +612,7 @@ export const OnlineUsersList = ({ users, roleGroups = [] }: OnlineUsersListProps
                 containerClassName="w-full min-w-0"
                 nameClassName="min-w-0 truncate text-xs text-[#dbdee1]"
                 showNameplate
+                nameplateSize="compact"
                 plateMetaIcons={roleAndMetaIcons}
                 stretchTagUnderPlate
               />
@@ -495,7 +648,7 @@ export const OnlineUsersList = ({ users, roleGroups = [] }: OnlineUsersListProps
 
             <div className="min-w-0">
               <ProfileIconRow icons={effectiveProfileIcons} className="mb-1" />
-              <div className="flex w-full min-w-0 items-center gap-1.5">
+              <div className="flex w-full min-w-0 items-start gap-1.5">
                 <ProfileNameWithServerTag
                   name={member.profileName || member.realName || member.displayName || "Unknown User"}
                   profileId={member.profileId}
@@ -504,7 +657,7 @@ export const OnlineUsersList = ({ users, roleGroups = [] }: OnlineUsersListProps
                   containerClassName="w-full min-w-0"
                   nameClassName="text-base font-bold text-white"
                   showNameplate
-                  nameplateClassName="mb-0 h-20 w-full max-w-full"
+                  nameplateClassName="mb-0 w-full max-w-full"
                   plateMetaIcons={roleAndMetaIcons}
                   stretchTagUnderPlate
                 />
@@ -645,7 +798,7 @@ export const OnlineUsersList = ({ users, roleGroups = [] }: OnlineUsersListProps
   };
 
   const orderedGroups = useMemo(() => {
-    return [...roleGroups].sort((a, b) => {
+    return [...orderedRoleGroups].sort((a, b) => {
       const byPosition = Number(a.position ?? 0) - Number(b.position ?? 0);
       if (byPosition !== 0) {
         return byPosition;
@@ -653,12 +806,17 @@ export const OnlineUsersList = ({ users, roleGroups = [] }: OnlineUsersListProps
 
       return a.name.localeCompare(b.name);
     });
-  }, [roleGroups]);
+  }, [orderedRoleGroups]);
 
   const { usersByRoleGroup, unassignedUsers } = useMemo(() => {
     const groupedUsers = new Map<string, OnlineRailUser[]>();
     for (const group of orderedGroups) {
       groupedUsers.set(group.id, []);
+    }
+
+    const groupIdSet = new Set<string>();
+    for (const group of orderedGroups) {
+      groupIdSet.add(group.id);
     }
 
     const groupIdByNormalizedName = new Map<string, string>();
@@ -669,6 +827,12 @@ export const OnlineUsersList = ({ users, roleGroups = [] }: OnlineUsersListProps
     const usersWithoutGroup: OnlineRailUser[] = [];
 
     for (const member of sortedUsers) {
+      const assignedRoleId = String(member.assignedRoleId ?? "").trim();
+      if (assignedRoleId && groupIdSet.has(assignedRoleId)) {
+        groupedUsers.get(assignedRoleId)?.push(member);
+        continue;
+      }
+
       const assignedRoleName = String(member.assignedRoleName ?? "").trim().toLowerCase();
       if (!assignedRoleName) {
         usersWithoutGroup.push(member);
@@ -697,16 +861,27 @@ export const OnlineUsersList = ({ users, roleGroups = [] }: OnlineUsersListProps
         const isCollapsed = Boolean(collapsedByGroup[group.id]);
 
         return (
-          <div key={group.id} className="space-y-1.5">
+          <div
+            key={group.id}
+            className={`space-y-1.5 ${draggedGroupId && dragOverGroupId === group.id ? "rounded ring-1 ring-indigo-500/50" : ""}`}
+            onDragOver={(event) => onGroupDragOver(event, group.id)}
+            onDrop={(event) => void onGroupDrop(event, group.id)}
+          >
             <button
               type="button"
+              draggable={canReorderRoleGroups && !isSavingGroupOrder}
+              onDragStart={(event) => onGroupDragStart(event, group.id)}
+              onDragEnd={onGroupDragEnd}
               onClick={() =>
+                isDraggingGroupRef.current
+                  ? undefined
+                  :
                 setCollapsedByGroup((prev) => ({
                   ...prev,
                   [group.id]: !prev[group.id],
                 }))
               }
-              className="flex w-full items-center justify-between rounded px-1 py-1 text-left hover:bg-[#2a2b2f]"
+              className={`flex w-full items-center justify-between rounded px-1 py-1 text-left hover:bg-[#2a2b2f] ${canReorderRoleGroups ? "cursor-grab active:cursor-grabbing" : ""}`}
               aria-expanded={!isCollapsed}
             >
               <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">

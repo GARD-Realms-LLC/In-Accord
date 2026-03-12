@@ -7,7 +7,6 @@ import { channel, ChannelType, db, MemberRole, member, server } from "@/lib/db";
 import { getServerBannerConfig, setServerBannerConfig } from "@/lib/server-banner-store";
 import { appendServerInviteHistory } from "@/lib/server-invite-store";
 import { ensureRulesChannelForServer, ensureSystemChannelSchema } from "@/lib/system-channels";
-import { ensureDefaultMediaChannelGroups } from "@/lib/channel-groups";
 
 export async function POST(req: Request) {
   try {
@@ -101,11 +100,6 @@ export async function POST(req: Request) {
         createdByProfileId: profile.id,
         createdAt: now.toISOString(),
       });
-    });
-
-    await ensureDefaultMediaChannelGroups({
-      serverId,
-      profileId: profile.id,
     });
 
     const createdServer = await db.query.server.findFirst({

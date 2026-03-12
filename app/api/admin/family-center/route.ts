@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { Readable } from "node:stream";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db } from "@/lib/db";
@@ -54,34 +53,6 @@ const r2Client = hasR2Config
       },
     })
   : null;
-
-const streamToBuffer = async (stream: Readable): Promise<Uint8Array> => {
-  const chunks: Uint8Array[] = [];
-  for await (const chunk of stream) {
-    if (chunk instanceof Uint8Array) {
-      chunks.push(chunk);
-      continue;
-    }
-
-    if (typeof chunk === "string") {
-      chunks.push(new TextEncoder().encode(chunk));
-      continue;
-    }
-
-    chunks.push(new Uint8Array(chunk as ArrayBuffer));
-  }
-
-  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
-  const merged = new Uint8Array(totalLength);
-  let offset = 0;
-
-  chunks.forEach((chunk) => {
-    merged.set(chunk, offset);
-    offset += chunk.byteLength;
-  });
-
-  return merged;
-};
 
 const extractR2ObjectKey = async (url: string): Promise<string | null> => {
   const trimmed = String(url ?? "").trim();
@@ -366,13 +337,16 @@ export async function PATCH(req: Request) {
         );
 
         if (sourceObject.Body) {
-          const bytes = await streamToBuffer(sourceObject.Body as Readable);
+          const copiedSize =
+            typeof sourceObject.ContentLength === "number" && Number.isFinite(sourceObject.ContentLength)
+              ? Math.max(0, Math.floor(sourceObject.ContentLength))
+              : Math.max(0, Math.floor(Number(primaryFile.size) || 0));
 
           await r2Client.send(
             new PutObjectCommand({
               Bucket: r2BucketName,
               Key: targetKey,
-              Body: bytes,
+              Body: sourceObject.Body,
               ContentType: "application/pdf",
             })
           );
@@ -395,7 +369,7 @@ export async function PATCH(req: Request) {
               name: targetFileName,
               url: targetUrl,
               mimeType: "application/pdf",
-              size: bytes.byteLength,
+              size: copiedSize,
               uploadedAt: new Date().toISOString(),
             },
             ...nextApplicationFiles.slice(1),

@@ -11,6 +11,7 @@ export const ensureServerRolesSchema = async () => {
       "color" varchar(32) not null default '#99aab5',
       "iconUrl" text,
       "isMentionable" boolean not null default true,
+      "showInOnlineMembers" boolean not null default false,
       "position" integer not null default 0,
       "isManaged" boolean not null default false,
       "createdAt" timestamp not null,
@@ -26,6 +27,11 @@ export const ensureServerRolesSchema = async () => {
   await db.execute(sql`
     alter table "ServerRole"
     add column if not exists "isMentionable" boolean not null default true
+  `);
+
+  await db.execute(sql`
+    alter table "ServerRole"
+    add column if not exists "showInOnlineMembers" boolean not null default false
   `);
 
   await db.execute(sql`

@@ -11,7 +11,7 @@ export const NavigationOpenTabsButton = ({ fallbackServerId }: NavigationOpenTab
   const pathname = usePathname();
 
   return (
-    <div className="mb-2 mt-2 flex w-full justify-center px-2">
+    <div className="mb-2 mt-0 flex w-full justify-center px-2">
       <button
         type="button"
         onClick={() => {

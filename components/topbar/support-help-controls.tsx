@@ -2,15 +2,30 @@
 
 import { useMemo, useState } from "react";
 import { CircleHelp, ExternalLink, LifeBuoy, X } from "lucide-react";
+import { NavigationBetaBugRow } from "@/components/navigation/navigation-beta-bug-row";
 
 type SupportHelpControlsProps = {
   supportUrl?: string;
   panelTop?: number;
+  openBugCount?: number;
+  profileId?: string;
+  profileName?: string;
+  profileRole?: string;
+  profileEmail?: string;
+  profileImageUrl?: string;
+  showInvisibleBoxes?: boolean;
 };
 
 export const SupportHelpControls = ({
   supportUrl,
   panelTop = 56,
+  openBugCount = 0,
+  profileId,
+  profileName,
+  profileRole,
+  profileEmail,
+  profileImageUrl,
+  showInvisibleBoxes = false,
 }: SupportHelpControlsProps) => {
   const [isHelpOpen, setIsHelpOpen] = useState(false);
 
@@ -38,12 +53,11 @@ export const SupportHelpControls = ({
         <button
           type="button"
           onClick={openSupport}
-          className="inline-flex h-8 items-center gap-1 rounded-md border border-border/70 bg-background/70 px-2 text-xs font-semibold text-zinc-200 transition hover:bg-background/95"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border/70 bg-background/70 text-zinc-200 transition hover:bg-background/95"
           title="Open In-Accord support server"
           aria-label="Open In-Accord support server"
         >
           <LifeBuoy className="h-3.5 w-3.5" suppressHydrationWarning />
-          Support
         </button>
 
         <button
@@ -55,6 +69,19 @@ export const SupportHelpControls = ({
         >
           <CircleHelp className="h-4 w-4" suppressHydrationWarning />
         </button>
+
+        {showInvisibleBoxes ? (
+          <NavigationBetaBugRow
+            showBugReportsIcon={true}
+            openBugCount={openBugCount}
+            profileId={profileId}
+            profileName={profileName}
+            profileRole={profileRole}
+            profileEmail={profileEmail}
+            profileImageUrl={profileImageUrl}
+            className="mt-0"
+          />
+        ) : null}
       </div>
 
       {isHelpOpen ? (
@@ -83,7 +110,7 @@ export const SupportHelpControls = ({
                 onClick={openSupport}
                 className="mt-2 inline-flex items-center gap-1 rounded-md border border-border/70 bg-background/70 px-2 py-1.5 text-[11px] font-semibold text-zinc-200 transition hover:bg-background/95"
               >
-                Open Support Server
+                Open Server
                 <ExternalLink className="h-3 w-3" suppressHydrationWarning />
               </button>
             </div>

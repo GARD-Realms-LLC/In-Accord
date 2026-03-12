@@ -66,7 +66,7 @@ export const PendingRequestItem = ({
         <UserAvatar src={imageUrl ?? undefined} className="h-8 w-8" />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-foreground">
-            <ProfileNameWithServerTag name={displayName} profileId={profileId} showNameplate />
+            <ProfileNameWithServerTag name={displayName} profileId={profileId} showNameplate nameplateSize="compact" />
           </p>
           <p className="truncate text-xs text-muted-foreground">
             {email ?? "No email"} • {isIncoming ? "Incoming" : "Outgoing"}

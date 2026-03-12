@@ -137,28 +137,28 @@ export const AdminTotalsButtons = ({
         <button
           type="button"
           onClick={() => openAdminSection("members")}
-          className="w-full rounded-md border border-emerald-700/50 bg-emerald-500/90 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.04em] text-emerald-950 transition hover:bg-emerald-400 dark:border-emerald-400/50 dark:bg-emerald-400 dark:text-emerald-950 dark:hover:bg-emerald-300"
+          className="w-full rounded-md border border-emerald-900/70 bg-emerald-700 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.04em] text-white transition hover:bg-emerald-600 dark:border-emerald-900/80 dark:bg-emerald-800 dark:text-white dark:hover:bg-emerald-700"
         >
           Members: {liveTotals.totalMembers}
         </button>
         <button
           type="button"
           onClick={() => openAdminSection("servers")}
-          className="w-full rounded-md border border-blue-700/50 bg-blue-500 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.04em] text-blue-50 transition hover:bg-blue-400 dark:border-blue-300/60 dark:bg-blue-400 dark:text-blue-950 dark:hover:bg-blue-300"
+          className="w-full rounded-md border border-blue-900/70 bg-blue-700 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.04em] text-white transition hover:bg-blue-600 dark:border-blue-900/80 dark:bg-blue-800 dark:text-white dark:hover:bg-blue-700"
         >
           Servers: {liveTotals.totalServers}
         </button>
         <button
           type="button"
           onClick={() => openAdminSection("issuesBugs")}
-          className="w-full rounded-md border border-yellow-700/55 bg-yellow-400 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.04em] text-yellow-950 transition hover:bg-yellow-300 dark:border-yellow-300/60 dark:bg-yellow-300 dark:text-yellow-950 dark:hover:bg-yellow-200"
+          className="w-full rounded-md border border-amber-900/70 bg-amber-600 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.04em] text-white transition hover:bg-amber-500 dark:border-amber-900/80 dark:bg-amber-700 dark:text-white dark:hover:bg-amber-600"
         >
           Bugs: {liveTotals.openBugCount}
         </button>
         <button
           type="button"
           onClick={() => openAdminSection("reported")}
-          className="w-full rounded-md border border-rose-700/55 bg-rose-500 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.04em] text-rose-50 transition hover:bg-rose-400 dark:border-rose-300/60 dark:bg-rose-400 dark:text-rose-950 dark:hover:bg-rose-300"
+          className="w-full rounded-md border border-rose-900/70 bg-rose-700 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.04em] text-white transition hover:bg-rose-600 dark:border-rose-900/80 dark:bg-rose-800 dark:text-white dark:hover:bg-rose-700"
         >
           Reports: {liveTotals.openReportCount}
         </button>

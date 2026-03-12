@@ -18,6 +18,7 @@ interface ServerUserRolesRailProps {
 type RoleRow = {
   id: string;
   role: MemberRole;
+  assignedRoleId: string | null;
   assignedRoleName: string | null;
   assignedRolePosition: number | null;
   profileId: string;
@@ -68,6 +69,7 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
     select
       m."id" as "id",
       m."role" as "role",
+      top_role."id" as "assignedRoleId",
       top_role."name" as "assignedRoleName",
       top_role."position" as "assignedRolePosition",
       m."profileId" as "profileId",
@@ -84,12 +86,14 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
     from "Member" m
     left join lateral (
       select
+        sr."id" as "id",
         sr."name" as "name",
         sr."position" as "position"
       from "ServerRoleAssignment" sra
       inner join "ServerRole" sr on sr."id" = sra."roleId"
       where sra."memberId" = m."id"
         and sra."serverId" = ${serverId}
+        and coalesce(sr."showInOnlineMembers", false) = true
       order by sr."position" asc, sr."name" asc
       limit 1
     ) top_role on true
@@ -112,6 +116,7 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
       r."position" as "position"
     from "ServerRole" r
     where r."serverId" = ${serverId}
+      and coalesce(r."showInOnlineMembers", false) = true
     order by r."position" asc, r."name" asc
   `);
 
@@ -239,7 +244,12 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
           {onlineUsers.length === 0 ? (
             <p className="text-xs text-[#6f7680]">N/A</p>
           ) : (
-            <OnlineUsersList users={onlineUsers} roleGroups={roleGroups} />
+            <OnlineUsersList
+              users={onlineUsers}
+              roleGroups={roleGroups}
+              serverId={serverId}
+              canReorderRoleGroups={Boolean(ownerRecord)}
+            />
           )}
 
           <div className="mt-4">
@@ -250,7 +260,12 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
             {offlineUsers.length === 0 ? (
               <p className="text-xs text-[#6f7680]">N/A</p>
             ) : (
-              <OnlineUsersList users={offlineUsers} roleGroups={roleGroups} />
+              <OnlineUsersList
+                users={offlineUsers}
+                roleGroups={roleGroups}
+                serverId={serverId}
+                canReorderRoleGroups={Boolean(ownerRecord)}
+              />
             )}
           </div>
         </div>

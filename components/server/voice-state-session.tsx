@@ -14,6 +14,7 @@ const HEARTBEAT_MS = 20_000;
 const VOICE_TOGGLE_MUTE_EVENT = "inaccord:voice-toggle-mute";
 const VOICE_TOGGLE_DEAFEN_EVENT = "inaccord:voice-toggle-deafen";
 const VOICE_TOGGLE_CAMERA_EVENT = "inaccord:voice-toggle-camera";
+const VOICE_TOGGLE_STREAM_EVENT = "inaccord:voice-toggle-stream";
 
 export const VoiceStateSession = ({
   serverId,
@@ -25,6 +26,8 @@ export const VoiceStateSession = ({
   const [isMuted, setIsMuted] = useState(false);
   const [isDeafened, setIsDeafened] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(isVideoChannel);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamLabel, setStreamLabel] = useState<string | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
 
   const payload = useMemo(
@@ -32,9 +35,11 @@ export const VoiceStateSession = ({
       isMuted,
       isDeafened,
       isCameraOn: isVideoChannel ? isCameraOn : false,
+      isStreaming: isVideoChannel ? isStreaming : false,
+      streamLabel: isVideoChannel && isStreaming ? streamLabel : null,
       isSpeaking,
     }),
-    [isCameraOn, isDeafened, isMuted, isSpeaking, isVideoChannel]
+    [isCameraOn, isDeafened, isMuted, isSpeaking, isStreaming, isVideoChannel, streamLabel]
   );
   const payloadRef = useRef(payload);
 
@@ -64,14 +69,35 @@ export const VoiceStateSession = ({
       }
     };
 
+    const onStreamToggle = (event: Event) => {
+      const customEvent = event as CustomEvent<{ isStreaming?: boolean; streamLabel?: string | null }>;
+      if (typeof customEvent.detail?.isStreaming === "boolean") {
+        setIsStreaming(customEvent.detail.isStreaming);
+        if (!customEvent.detail.isStreaming) {
+          setStreamLabel(null);
+        }
+      }
+
+      if (typeof customEvent.detail?.streamLabel === "string") {
+        const nextLabel = customEvent.detail.streamLabel.trim().slice(0, 255);
+        setStreamLabel(nextLabel.length ? nextLabel : null);
+      }
+
+      if (customEvent.detail?.streamLabel === null) {
+        setStreamLabel(null);
+      }
+    };
+
     window.addEventListener(VOICE_TOGGLE_MUTE_EVENT, onMuteToggle as EventListener);
     window.addEventListener(VOICE_TOGGLE_DEAFEN_EVENT, onDeafenToggle as EventListener);
     window.addEventListener(VOICE_TOGGLE_CAMERA_EVENT, onCameraToggle as EventListener);
+    window.addEventListener(VOICE_TOGGLE_STREAM_EVENT, onStreamToggle as EventListener);
 
     return () => {
       window.removeEventListener(VOICE_TOGGLE_MUTE_EVENT, onMuteToggle as EventListener);
       window.removeEventListener(VOICE_TOGGLE_DEAFEN_EVENT, onDeafenToggle as EventListener);
       window.removeEventListener(VOICE_TOGGLE_CAMERA_EVENT, onCameraToggle as EventListener);
+      window.removeEventListener(VOICE_TOGGLE_STREAM_EVENT, onStreamToggle as EventListener);
     };
   }, []);
 
@@ -82,12 +108,14 @@ export const VoiceStateSession = ({
           isMuted,
           isDeafened,
           isCameraOn: isVideoChannel ? isCameraOn : false,
+          isStreaming: isVideoChannel ? isStreaming : false,
+          streamLabel: isVideoChannel && isStreaming ? streamLabel : null,
           isVideoChannel,
           active,
         },
       })
     );
-  }, [active, isCameraOn, isDeafened, isMuted, isVideoChannel]);
+  }, [active, isCameraOn, isDeafened, isMuted, isStreaming, isVideoChannel, streamLabel]);
 
   useEffect(() => {
     if (!active || isMuted || isDeafened) {
@@ -276,9 +304,20 @@ export const VoiceStateSession = ({
         {isDeafened ? "Deafened" : "Audio On"}
       </span>
       {isVideoChannel ? (
-        <span className="inline-flex items-center gap-1 rounded-full border border-zinc-500/40 bg-zinc-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-300">
-          {isCameraOn ? "Camera On" : "Camera Off"}
-        </span>
+        <>
+          <span className="inline-flex items-center gap-1 rounded-full border border-zinc-500/40 bg-zinc-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-300">
+            {isCameraOn ? "Camera On" : "Camera Off"}
+          </span>
+          <span
+            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+              isStreaming
+                ? "border-indigo-400/45 bg-indigo-500/20 text-indigo-100"
+                : "border-zinc-500/40 bg-zinc-500/10 text-zinc-300"
+            }`}
+          >
+            {isStreaming ? `Streaming${streamLabel ? ` • ${streamLabel}` : ""}` : "Not Streaming"}
+          </span>
+        </>
       ) : null}
     </div>
   );

@@ -4,6 +4,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
   platform: process.platform,
   getRuntimeMeta: () => ipcRenderer.invoke("inaccord:runtime-meta-get"),
   getRuntimeActivity: () => ipcRenderer.invoke("inaccord:runtime-activity-get"),
+  getInstalledGames: () => ipcRenderer.invoke("inaccord:runtime-installed-games-get"),
+  getRunningApps: () => ipcRenderer.invoke("inaccord:runtime-running-apps-get"),
+  setRuntimeRichPresence: (activity) =>
+    ipcRenderer.invoke("inaccord:runtime-rich-presence-set", { activity }),
+  setRuntimeGameCatalog: (games) => ipcRenderer.invoke("inaccord:runtime-game-catalog-set", { games }),
   getUpdaterStatus: () => ipcRenderer.invoke("inaccord:updater-status-get"),
   checkForUpdatesNow: () => ipcRenderer.invoke("inaccord:updater-check-now"),
   upgradeNow: () => ipcRenderer.invoke("inaccord:updater-upgrade-now"),

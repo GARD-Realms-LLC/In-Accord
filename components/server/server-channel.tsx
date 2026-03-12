@@ -2,7 +2,7 @@
 
 import axios from "axios";
 import { type Channel, ChannelType, MemberRole, type Server } from "@/lib/db/types";
-import { GripVertical, Hash, Mic, Settings, Video } from "lucide-react";
+import { Hash, Mic, Settings, Video } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
@@ -195,17 +195,6 @@ export const ServerChannel = ({
             />
           </ActionTooltip>
         )}
-        {canReorder ? (
-          <ActionTooltip label="Drag to reorder" side="top" align="center">
-            <span
-              className="inline-flex items-center rounded-sm p-0.5 text-zinc-500 hover:bg-black/10 dark:text-zinc-400 dark:hover:bg-zinc-700/30"
-              title="Drag to reorder channel"
-              aria-label="Drag to reorder channel"
-            >
-              <GripVertical className="h-3.5 w-3.5" />
-            </span>
-          </ActionTooltip>
-        ) : null}
       </div>
     </button>
   );

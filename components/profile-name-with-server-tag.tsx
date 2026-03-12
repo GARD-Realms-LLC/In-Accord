@@ -70,6 +70,7 @@ type ProfileNameWithServerTagProps = {
   nameClassName?: string;
   badgeClassName?: string;
   showNameplate?: boolean;
+  nameplateSize?: "compact" | "default";
   nameplateClassName?: string;
   hideNameWhenNameplate?: boolean;
   plateMetaIcons?: ReactNode;
@@ -221,6 +222,7 @@ export const ProfileNameWithServerTag = ({
   nameClassName,
   badgeClassName,
   showNameplate = false,
+  nameplateSize = "default",
   nameplateClassName,
   hideNameWhenNameplate = true,
   plateMetaIcons,
@@ -393,6 +395,7 @@ export const ProfileNameWithServerTag = ({
           subtitle={resolvedPronouns}
           color={resolvedNameplateColor}
           imageUrl={resolvedNameplateImageUrl}
+          size={nameplateSize}
           className={cn(stretchTagUnderPlate ? "min-w-0 flex-1 max-w-none" : "max-w-fit", nameplateClassName)}
           labelClassName={nameStyleClass}
           metaContent={plateMetaContent}
@@ -454,6 +457,7 @@ export const ProfileNameWithServerTag = ({
           subtitle={resolvedPronouns}
           color={resolvedNameplateColor}
           imageUrl={resolvedNameplateImageUrl}
+          size={nameplateSize}
           className={cn(stretchTagUnderPlate ? "mt-1 w-full max-w-full" : "mt-1 max-w-fit", nameplateClassName)}
           labelClassName={nameStyleClass}
           metaContent={plateMetaContent}
