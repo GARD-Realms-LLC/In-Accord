@@ -56,6 +56,7 @@ export const EditChannelGroupModal = () => {
   const { isOpen, onClose, type, data } = useModal();
   const router = useRouter();
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const isModalOpen = isOpen && type === "editChannelGroup";
   const group = data.channelGroup;
@@ -74,6 +75,7 @@ export const EditChannelGroupModal = () => {
   }, [form, group?.icon, group?.name]);
 
   const isLoading = form.formState.isSubmitting;
+  const isBusy = isLoading || isDeleting;
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     if (!group?.id) {
@@ -107,9 +109,49 @@ export const EditChannelGroupModal = () => {
   };
 
   const handleClose = () => {
+    if (isBusy) {
+      return;
+    }
+
     form.reset();
     setSubmitError(null);
     onClose();
+  };
+
+  const onDeleteGroup = async () => {
+    if (!group?.id || isBusy) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete channel group "${group.name}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setSubmitError(null);
+      setIsDeleting(true);
+
+      await axios.delete(`/api/channel-groups/${group.id}`);
+
+      form.reset();
+      router.refresh();
+      onClose();
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          (typeof error.response?.data === "string" ? error.response.data : "") ||
+          error.message ||
+          "Failed to delete group.";
+        setSubmitError(message);
+      } else {
+        setSubmitError("Failed to delete group.");
+      }
+      console.error("[DELETE_CHANNEL_GROUP_MODAL]", error);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -131,7 +173,7 @@ export const EditChannelGroupModal = () => {
                     </FormLabel>
                     <FormControl>
                       <Input
-                        disabled={isLoading}
+                        disabled={isBusy}
                         className="border-0 bg-zinc-200/70 text-black focus-visible:ring-0 focus-visible:ring-offset-0 dark:bg-zinc-700/50 dark:text-zinc-100"
                         placeholder="Enter channel group name"
                         {...field}
@@ -151,7 +193,7 @@ export const EditChannelGroupModal = () => {
                     </FormLabel>
                     <FormControl>
                       <Input
-                        disabled={isLoading}
+                        disabled={isBusy}
                         maxLength={16}
                         className="border-0 bg-zinc-200/70 text-black focus-visible:ring-0 focus-visible:ring-offset-0 dark:bg-zinc-700/50 dark:text-zinc-100"
                         placeholder="e.g. 📂"
@@ -169,6 +211,7 @@ export const EditChannelGroupModal = () => {
                             key={icon}
                             type="button"
                             onClick={() => form.setValue("icon", icon, { shouldDirty: true, shouldValidate: true })}
+                            disabled={isBusy}
                             className={`inline-flex h-8 w-8 items-center justify-center rounded text-base transition hover:bg-zinc-700/20 dark:hover:bg-zinc-700/50 ${
                               (field.value ?? "") === icon ? "bg-zinc-700/30 ring-1 ring-indigo-400/80 dark:bg-zinc-700/70" : ""
                             }`}
@@ -189,10 +232,18 @@ export const EditChannelGroupModal = () => {
               ) : null}
             </div>
             <DialogFooter className="bg-gray-100 px-6 py-4 dark:bg-zinc-800/60">
-              <Button type="button" variant="ghost" onClick={handleClose} disabled={isLoading}>
+              <Button
+                type="button"
+                onClick={() => void onDeleteGroup()}
+                disabled={isBusy}
+                className="mr-auto bg-rose-600 text-white hover:bg-rose-500"
+              >
+                {isDeleting ? "Deleting..." : "Delete Group"}
+              </Button>
+              <Button type="button" variant="ghost" onClick={handleClose} disabled={isBusy}>
                 Cancel
               </Button>
-              <Button variant="primary" disabled={isLoading}>Save Group</Button>
+              <Button variant="primary" disabled={isBusy}>{isLoading ? "Saving..." : "Save Group"}</Button>
             </DialogFooter>
           </form>
         </Form>

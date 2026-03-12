@@ -5,7 +5,6 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowUpCircle,
   Bell,
-  Bug,
   CheckCircle2,
   Hash,
   Loader2,
@@ -782,9 +781,6 @@ export const ServerRouteShell = ({
           </button>
           <button type="button" title="Notifications" className="inline-flex h-8 w-8 items-center justify-center rounded hover:bg-[#3f4248] hover:text-white transition-colors">
             <Bell className="h-4 w-4" />
-          </button>
-          <button type="button" title="Bug Reports" className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-[#3f4248] hover:text-white transition-colors">
-            <Bug className="h-3 w-3" suppressHydrationWarning />
           </button>
         </div>
 

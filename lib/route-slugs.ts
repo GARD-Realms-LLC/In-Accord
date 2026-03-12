@@ -42,8 +42,8 @@ const shortStableToken = (value: string): string => {
 
 export const buildRouteSegment = (name: string, id: string): string => {
   const slug = slugifyRouteName(name);
-  const token = shortStableToken(id);
-  return `${slug}${ROUTE_SLUG_SEPARATOR}${token}`;
+  void id;
+  return slug;
 };
 
 export const parseRouteSegment = (segment: string): { slug: string; token: string | null } => {

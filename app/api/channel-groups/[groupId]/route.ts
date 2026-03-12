@@ -92,3 +92,81 @@ export async function PATCH(
     return new NextResponse("Internal Error", { status: 500 });
   }
 }
+
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ groupId: string }> }
+) {
+  try {
+    const { groupId: rawGroupId } = await params;
+
+    const profile = await currentProfile();
+
+    if (!profile) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
+
+    const groupId = String(rawGroupId ?? "").trim();
+
+    if (!groupId) {
+      return new NextResponse("Group ID missing", { status: 400 });
+    }
+
+    await ensureChannelGroupSchema();
+
+    const groupResult = await db.execute(sql`
+      select "id", "serverId"
+      from "ChannelGroup"
+      where "id" = ${groupId}
+      limit 1
+    `);
+
+    const groupRow = (groupResult as unknown as {
+      rows: Array<{ id: string; serverId: string }>;
+    }).rows?.[0];
+
+    if (!groupRow) {
+      return new NextResponse("Group not found", { status: 404 });
+    }
+
+    const serverId = groupRow.serverId;
+
+    const isServerOwner = await db.query.server.findFirst({
+      where: and(eq(server.id, serverId), eq(server.profileId, profile.id)),
+      columns: { id: true },
+    });
+
+    const authorizedMember = await db.query.member.findFirst({
+      where: and(
+        eq(member.serverId, serverId),
+        eq(member.profileId, profile.id),
+        inArray(member.role, [MemberRole.ADMIN, MemberRole.MODERATOR])
+      ),
+      columns: { id: true },
+    });
+
+    if (!isServerOwner && !authorizedMember) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
+
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`
+        update "Channel"
+        set
+          "channelGroupId" = null,
+          "updatedAt" = now()
+        where "channelGroupId" = ${groupId}
+      `);
+
+      await tx.execute(sql`
+        delete from "ChannelGroup"
+        where "id" = ${groupId}
+      `);
+    });
+
+    return NextResponse.json({ ok: true, deletedGroupId: groupId });
+  } catch (error) {
+    console.error("[CHANNEL_GROUP_DELETE]", error);
+    return new NextResponse("Internal Error", { status: 500 });
+  }
+}

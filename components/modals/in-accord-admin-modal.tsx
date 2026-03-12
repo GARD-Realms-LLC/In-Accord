@@ -967,6 +967,9 @@ export const InAccordAdminModal = () => {
   const [metaInfo, setMetaInfo] = useState<AdminMetaInfo | null>(null);
   const [isLoadingMetaInfo, setIsLoadingMetaInfo] = useState(false);
   const [metaInfoError, setMetaInfoError] = useState<string | null>(null);
+  const [isForcePushingMain, setIsForcePushingMain] = useState(false);
+  const [forcePushMainError, setForcePushMainError] = useState<string | null>(null);
+  const [forcePushMainSuccess, setForcePushMainSuccess] = useState<string | null>(null);
   const [webhooks, setWebhooks] = useState<AdminWebhook[]>([]);
   const [isLoadingWebhooks, setIsLoadingWebhooks] = useState(false);
   const [webhooksError, setWebhooksError] = useState<string | null>(null);
@@ -1086,6 +1089,46 @@ export const InAccordAdminModal = () => {
       setIsLoadingMetaInfo(false);
     }
   }, []);
+
+  const onForcePushMain = useCallback(async () => {
+    try {
+      setIsForcePushingMain(true);
+      setForcePushMainError(null);
+      setForcePushMainSuccess(null);
+
+      const response = await fetch("/api/admin/git-push-main", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+      });
+
+      const payload = (await response.json().catch(() => ({}))) as {
+        ok?: boolean;
+        message?: string;
+        branch?: string;
+        remoteBefore?: string;
+        remoteAfter?: string;
+      };
+
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.message || `Failed to force push main (${response.status})`);
+      }
+
+      setForcePushMainSuccess(
+        payload.remoteBefore && payload.remoteAfter && payload.remoteBefore !== payload.remoteAfter
+          ? `Force pushed main (${payload.remoteBefore.slice(0, 7)} → ${payload.remoteAfter.slice(0, 7)}).`
+          : payload.message || "Force push to main completed."
+      );
+      await loadMetaInfo();
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_FORCE_PUSH_MAIN]", error);
+      setForcePushMainError(error instanceof Error ? error.message : "Unable to force push main.");
+    } finally {
+      setIsForcePushingMain(false);
+    }
+  }, [loadMetaInfo]);
 
   const loadManagedRoles = async () => {
     try {
@@ -5769,7 +5812,18 @@ export const InAccordAdminModal = () => {
                     <div className="mt-2 flex min-h-0 flex-1 flex-col gap-3">
                       <div className="grid gap-3 md:grid-cols-2">
                         <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                          <p className="mb-1 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Build</p>
+                          <div className="mb-1 flex items-center justify-between gap-2">
+                            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Build</p>
+                            <button
+                              type="button"
+                              onClick={() => void onForcePushMain()}
+                              disabled={isForcePushingMain}
+                              className="h-7 rounded-md border border-emerald-500/45 bg-emerald-500/15 px-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-emerald-700 transition hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-200"
+                              title="Force push current server git main to origin/main"
+                            >
+                              {isForcePushingMain ? "Pushing..." : "PUSH"}
+                            </button>
+                          </div>
                           <p>App: {metaInfo.build.appName}</p>
                           <p>Version: {metaInfo.build.appVersion}</p>
                           <p>In-Accord SDK: {metaInfo.build.sdkVersion || "1.0.0.1"}</p>
@@ -5816,6 +5870,12 @@ export const InAccordAdminModal = () => {
                               "N/A"
                             )}
                           </p>
+                          {forcePushMainError ? (
+                            <p className="mt-2 text-xs text-rose-500">{forcePushMainError}</p>
+                          ) : null}
+                          {forcePushMainSuccess ? (
+                            <p className="mt-2 text-xs text-emerald-600 dark:text-emerald-300">{forcePushMainSuccess}</p>
+                          ) : null}
                         </div>
 
                         <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
