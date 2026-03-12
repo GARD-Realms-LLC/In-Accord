@@ -56,7 +56,7 @@ export const ChatHeader = ({
           : `/servers/${serverId}`;
 
   return (
-    <div className="pl-0 pr-3 border-neutral-200 dark:border-neutral-800 border-b-2">
+    <div className="border-b border-black/20 bg-[#313338] pl-0 pr-3">
       <div className="text-md font-semibold flex items-center h-12">
         {type === "conversation" && <MobileToggle serverId={serverId} />}
         {type === "channel" && (
@@ -92,7 +92,7 @@ export const ChatHeader = ({
             <>
               <Link
                 href={`${resolvedChannelPath}/threads`}
-                className="mr-2 inline-flex items-center rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                className="mr-2 inline-flex items-center rounded-md border border-white/10 bg-[#2b2d31] px-2 py-1 text-xs font-medium text-[#dbdee1] transition hover:bg-[#3a3d44]"
               >
                 Threads
               </Link>

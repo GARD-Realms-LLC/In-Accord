@@ -3,6 +3,7 @@ import { eq, sql } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db, server } from "@/lib/db";
+import { emitInAccordSystemEvent } from "@/lib/in-accord-event-system";
 import { makeIntegrationBotProfileId } from "@/lib/integration-bot-profile";
 import { clearServerIntegrationBotFlags } from "@/lib/server-integration-bot-store";
 import {
@@ -220,6 +221,7 @@ export async function PATCH(req: Request) {
       updates.OtherBotAutoImportOnSave = body.OtherBotAutoImportOnSave;
     }
 
+    const updatedKeys = Object.keys(updates);
     const preferences = await updateUserPreferences(profile.id, updates);
 
     if (removedOtherBotIds.length > 0) {
@@ -245,6 +247,18 @@ export async function PATCH(req: Request) {
         `);
       }
     }
+
+    await emitInAccordSystemEvent({
+      eventType: "USER_SETTINGS_UPDATED",
+      scope: "user-settings",
+      actorProfileId: profile.id,
+      actorUserId: (profile as { userId?: string }).userId ?? null,
+      targetId: profile.id,
+      metadata: {
+        updatedKeys,
+        removedOtherBotIds,
+      },
+    });
 
     return NextResponse.json(preferences);
   } catch (error) {

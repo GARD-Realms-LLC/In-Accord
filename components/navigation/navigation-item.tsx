@@ -177,16 +177,23 @@ export const NavigationItem = ({
           }}
           onMouseEnter={openPopover}
           onMouseLeave={scheduleClosePopover}
-          className="group relative flex flex-col items-center gap-1 rounded-md shadow-none ring-0 outline-none border-0 bg-transparent"
+          className="group relative flex items-center justify-center rounded-md border-0 bg-transparent p-0 shadow-none outline-none ring-0"
           style={{ boxShadow: "none", filter: "none", WebkitAppearance: "none", appearance: "none" }}
           suppressHydrationWarning
           title={name}
           aria-label={`Open ${name} server`}
         >
+          <span
+            className={cn(
+              "absolute -left-2 h-2 w-1 rounded-r-full bg-white transition-all duration-150",
+              isActiveServer ? "h-8 opacity-100" : "h-2 opacity-0 group-hover:h-5 group-hover:opacity-100"
+            )}
+            aria-hidden
+          />
           <div
             className={cn(
-              "relative group mx-3 flex h-14 w-20 overflow-hidden rounded-[10px] border border-zinc-500/20 transition-all group-hover:rounded-[8px] group-hover:border-primary/50 group-hover:ring-2 group-hover:ring-primary/25",
-              isActiveServer && "rounded-[8px] border-primary/60 bg-primary/10 text-primary ring-2 ring-primary/35"
+              "relative mx-3 flex h-12 w-12 overflow-hidden rounded-3xl border border-zinc-500/20 bg-[#2b2d31] transition-all duration-150 group-hover:rounded-2xl group-hover:border-[#5865f2]/55",
+              isActiveServer && "rounded-2xl border-[#5865f2]/70 bg-[#5865f2]/20"
             )}
           >
             {showImage ? (
@@ -197,20 +204,10 @@ export const NavigationItem = ({
                 onError={() => setImageFailed(true)}
               />
             ) : (
-              <div className="h-full w-full bg-zinc-700 text-white flex items-center justify-center text-sm font-bold">
+              <div className="flex h-full w-full items-center justify-center bg-[#313338] text-sm font-bold text-[#dbdee1]">
                 {initials}
               </div>
             )}
-            <div
-              className={cn(
-                "absolute inset-x-0 bottom-0 flex h-[5%] min-h-3.5 items-center justify-center border-t border-zinc-500/20 bg-zinc-900/40 px-1 backdrop-blur-[1px]",
-                isActiveServer && "border-primary/40 bg-primary/20"
-              )}
-            >
-              <span className="truncate text-[9px] font-semibold uppercase tracking-[0.05em] text-zinc-100">
-                {name}
-              </span>
-            </div>
           </div>
         </button>
       </PopoverTrigger>

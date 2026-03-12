@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  CalendarPlus,
   ChevronDown,
   Flag,
   FolderPlus,
@@ -148,6 +149,13 @@ export const ServerHeader = ({ server, role, isServerOwner = false }: ServerHead
               >
                 Add Group
                 <FolderPlus className="h-4 w-4 ml-auto" />
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => onOpen("createEvent", { server })}
+                className="px-3 py-2 text-sm cursor-pointer"
+              >
+                Create Event
+                <CalendarPlus className="h-4 w-4 ml-auto" />
               </DropdownMenuItem>
               </>
             )}

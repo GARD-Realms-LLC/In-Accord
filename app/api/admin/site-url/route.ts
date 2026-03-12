@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { currentProfile } from "@/lib/current-profile";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
+import { emitInAccordSystemEvent } from "@/lib/in-accord-event-system";
 import {
   getEffectiveSiteUrl,
   getRuntimeSiteUrlConfig,
@@ -112,6 +113,22 @@ export async function PATCH(req: Request) {
       body.databasePassword !== undefined ||
       body.databaseCost !== undefined;
 
+    const updatedFields = [
+      ...(body.appBaseUrl !== undefined ? ["appBaseUrl"] : []),
+      ...(body.hostingServiceName !== undefined ? ["hostingServiceName"] : []),
+      ...(body.hostingHostName !== undefined ? ["hostingHostName"] : []),
+      ...(body.hostingHostUrl !== undefined ? ["hostingHostUrl"] : []),
+      ...(body.hostingLogin !== undefined ? ["hostingLogin"] : []),
+      ...(body.hostingPassword !== undefined ? ["hostingPassword"] : []),
+      ...(body.hostingCost !== undefined ? ["hostingCost"] : []),
+      ...(body.databaseServiceName !== undefined ? ["databaseServiceName"] : []),
+      ...(body.databaseHostName !== undefined ? ["databaseHostName"] : []),
+      ...(body.databaseHostUrl !== undefined ? ["databaseHostUrl"] : []),
+      ...(body.databaseLogin !== undefined ? ["databaseLogin"] : []),
+      ...(body.databasePassword !== undefined ? ["databasePassword"] : []),
+      ...(body.databaseCost !== undefined ? ["databaseCost"] : []),
+    ];
+
     if (!hasAnyUpdateField) {
       return new NextResponse("No update fields provided", { status: 400 });
     }
@@ -138,6 +155,17 @@ export async function PATCH(req: Request) {
     });
     const effectiveAppBaseUrl = await getEffectiveSiteUrl();
     const envAppBaseUrl = normalizeSiteUrl(process.env.NEXT_PUBLIC_SITE_URL);
+
+    await emitInAccordSystemEvent({
+      eventType: "ADMIN_SETTINGS_UPDATED",
+      scope: "admin-controls",
+      actorProfileId: profile.id,
+      actorUserId: (profile as { userId?: string }).userId ?? null,
+      targetId: "site-url-config",
+      metadata: {
+        updatedFields,
+      },
+    });
 
     return NextResponse.json({
       ok: true,

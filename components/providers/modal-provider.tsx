@@ -20,6 +20,8 @@ import { EditChannelGroupModal } from "@/components/modals/edit-channel-group-mo
 import { MessageFileModal } from "@/components/modals/message-file-modal";
 import { DeleteMessageModal } from "@/components/modals/delete-message-modal";
 import { BulkDeleteMessagesModal } from "@/components/modals/bulk-delete-messages-modal";
+import { CreateEventModal } from "@/components/modals/create-event-modal";
+import { ServerEventsModal } from "@/components/modals/server-events-modal";
 
 export const ModalProvider = () => {
   const [isMounted, setIsMounted] = useState(false);
@@ -40,6 +42,8 @@ export const ModalProvider = () => {
       <EditServerModal />
       <MembersModal />
       <CreateChannelModal />
+      <CreateEventModal />
+      <ServerEventsModal />
       <CreateFormModal />
       <CreateChannelGroupModal />
       <EditChannelGroupModal />

@@ -52,33 +52,33 @@ body,
   }
  
   .dark {
-    --background: 220 10% 4%;
+    --background: 220 7% 18%;
     --foreground: 210 20% 98%;
  
-    --card: 220 9% 9%;
+    --card: 220 7% 20%;
     --card-foreground: 210 20% 98%;
  
-    --popover: 220 9% 8%;
+    --popover: 220 7% 20%;
     --popover-foreground: 210 20% 98%;
  
     --primary: 210 20% 98%;
     --primary-foreground: 220 10% 4%;
  
-    --secondary: 220 8% 14%;
+    --secondary: 223 6% 23%;
     --secondary-foreground: 210 20% 98%;
  
-    --muted: 220 8% 16%;
+    --muted: 223 6% 23%;
     --muted-foreground: 220 10% 78%;
  
-    --accent: 220 8% 20%;
+    --accent: 223 6% 27%;
     --accent-foreground: 210 20% 98%;
  
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 20% 98%;
  
-    --border: 220 8% 30%;
-    --input: 220 8% 30%;
-    --ring: 220 12% 84%;
+    --border: 220 6% 30%;
+    --input: 220 6% 30%;
+    --ring: 235 86% 65%;
   }
 
   :root.dark-blue {
@@ -344,59 +344,10 @@ body,
   filter: none !important;
 }
 
-/* Global 3D-style text shadow for all themes. */
-body,
-p,
-span,
-a,
-label,
-small,
-strong,
-em,
-li,
-dt,
-dd,
-blockquote,
-code,
-pre,
-h1,
-h2,
-h3,
-h4,
-h5,
-h6,
-button,
-input,
-textarea,
-select,
-[class*="text-"] {
-  text-shadow:
-    0 1px 0 rgba(0, 0, 0, 0.55),
-    0 2px 4px rgba(0, 0, 0, 0.35);
-}
-
-/* Floating 3D text treatment for button labels. */
-:is(button, [role="button"], a[role="button"]),
-:is(button, [role="button"], a[role="button"]) :is(span, p, small, strong, em, b, i, label) {
-  text-shadow:
-    0 -1px 0 rgba(255, 255, 255, 0.28),
-    0 1px 0 rgba(0, 0, 0, 0.48),
-    0 2px 0 rgba(0, 0, 0, 0.4),
-    0 3px 0 rgba(0, 0, 0, 0.32),
-    0 6px 10px rgba(0, 0, 0, 0.5),
-    0 0 8px rgba(255, 255, 255, 0.16) !important;
-  -webkit-text-stroke: 0.24px rgba(0, 0, 0, 0.3);
-}
-
+/* Keep text rendering crisp and Discord-like (no global 3D shadow treatment). */
 .floating-3d-text {
-  text-shadow:
-    0 -1px 0 rgba(255, 255, 255, 0.28),
-    0 1px 0 rgba(0, 0, 0, 0.48),
-    0 2px 0 rgba(0, 0, 0, 0.4),
-    0 3px 0 rgba(0, 0, 0, 0.32),
-    0 6px 10px rgba(0, 0, 0, 0.5),
-    0 0 8px rgba(255, 255, 255, 0.16) !important;
-  -webkit-text-stroke: 0.24px rgba(0, 0, 0, 0.3);
+  text-shadow: none !important;
+  -webkit-text-stroke: 0 !important;
 }
 
 /* Only chat message content is allowed to wrap. */
@@ -723,18 +674,13 @@ select,
   background-color: hsl(var(--card));
 }
 
-/* 3D drop-shadow treatment for servers rail controls and labels. */
+/* Keep server rail controls flat like Discord. */
 .theme-servers-rail :is(button, a, [role="button"]) {
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.08) inset,
-    0 2px 0 rgba(0, 0, 0, 0.32),
-    0 6px 12px rgba(0, 0, 0, 0.35) !important;
+  box-shadow: none !important;
 }
 
 .theme-servers-rail :is(span, p, label) {
-  text-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.1),
-    0 2px 3px rgba(0, 0, 0, 0.55) !important;
+  text-shadow: none !important;
 }
 
 :root.light .theme-servers-rail,

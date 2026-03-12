@@ -17,6 +17,9 @@ import { ServerSection } from "./server-section";
 import { ServerChannel } from "./server-channel";
 import { ChannelDropZone } from "./channel-drop-zone";
 import { ChannelGroupsList } from "./channel-groups-list";
+import { ServerScheduledEventsPanel } from "./server-scheduled-events-panel";
+import { ServerEventsMenu } from "./server-events-menu";
+import { listServerScheduledEvents } from "@/lib/server-scheduled-events-store";
 
 interface ServerSidebarProps {
   serverId: string;
@@ -253,10 +256,14 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
     bannerScale: bannerConfig?.scale ?? 1,
   };
 
+  const events = await listServerScheduledEvents(serverId);
+  const eventsCount = events.length;
+
   return (
     <div className="theme-channels-rail flex h-full w-full flex-col overflow-hidden rounded-2xl border border-border bg-card text-primary">
       <div className="px-3 pt-2 pb-2">
         <ServerHeader server={serverWithBanner} role={role} isServerOwner={isServerOwner} />
+        <ServerEventsMenu server={currentServer} eventsCount={eventsCount} />
       </div>
       <ScrollArea className="settings-scrollbar min-h-0 flex-1 px-3 pt-3">
         {!!textChannelsUngrouped?.length && (
@@ -341,6 +348,11 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
             />
           </div>
         )}
+
+        <ServerScheduledEventsPanel
+          serverId={serverId}
+          canManage={Boolean(isServerOwner)}
+        />
       </ScrollArea>
 
     </div>

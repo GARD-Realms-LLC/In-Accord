@@ -1770,10 +1770,10 @@ export const ChatItem = ({
           ? "outline-1 outline-white/25 dark:outline-white/40"
           : null,
         isMentioningCurrentUser
-          ? "bg-zinc-400 hover:bg-zinc-400 dark:bg-zinc-700 dark:hover:bg-zinc-700 border-l-4 border-amber-500/80"
+          ? "border-l-4 border-amber-400/80 bg-amber-500/10 hover:bg-amber-500/15 dark:bg-amber-500/10 dark:hover:bg-amber-500/15"
           : hasMention
-            ? "bg-zinc-300 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-800 border-l-4 border-zinc-500/70"
-            : "hover:bg-black/5"
+            ? "border-l-4 border-zinc-500/70 bg-zinc-500/5 hover:bg-zinc-500/10 dark:bg-zinc-500/5 dark:hover:bg-zinc-500/10"
+            : "hover:bg-[#2e3035]"
       )}
     >
       <div className="group flex w-full min-w-0 items-start gap-x-2">
@@ -1964,7 +1964,7 @@ export const ChatItem = ({
                 />
               </button>
             </div>
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+            <span className="invisible text-xs text-[#949ba4] group-hover:visible">
               {timestamp}
             </span>
           </div>
@@ -2085,7 +2085,7 @@ export const ChatItem = ({
 
               <p
                 className={cn(
-                  "chat-wrap-text max-w-full text-zinc-600 dark:text-zinc-300",
+                  "chat-wrap-text max-w-full text-[#2e3338] dark:text-[#dbdee1]",
                   runtimeAccessibilityPreferences.largerChatFont ? "text-base leading-7" : "text-sm",
                   runtimeAccessibilityPreferences.highContrastMode
                     ? "text-zinc-900 dark:text-zinc-100"
@@ -2266,7 +2266,7 @@ export const ChatItem = ({
         </div>
       </div>
       {!deleted && (
-        <div className="flex items-center gap-x-2 absolute p-1 -top-2 right-5 bg-white/95 dark:bg-zinc-800/95 border rounded-sm shadow-sm">
+        <div className="absolute -top-3 right-5 flex items-center gap-x-2 rounded-md border border-black/25 bg-[#1e1f22] p-1 opacity-0 shadow-lg transition group-hover:opacity-100">
           <ActionTooltip label={threadActionLabel} align="center">
             <MessageCircle
               suppressHydrationWarning

@@ -205,19 +205,19 @@ export const NavigationSidebar = async () => {
         <div className="mx-auto w-full max-w-[120px] text-center text-[8px] font-semibold uppercase tracking-[0.04em] text-zinc-700 dark:text-zinc-300">
           <div className="flex flex-col items-center gap-1">
             <div className="mb-1 h-0.5 w-full rounded-none bg-blue-900 dark:bg-blue-200" />
-            <div className="floating-3d-text w-full rounded-md border border-blue-900/70 bg-blue-700 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.04em] text-white dark:border-blue-900/80 dark:bg-blue-800 dark:text-white">
+            <div className="w-full rounded-md border border-zinc-700/70 bg-zinc-700 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.04em] text-zinc-100 dark:border-zinc-600 dark:bg-zinc-700 dark:text-zinc-100">
               Owned: {myServers.length}
             </div>
-            <div className="floating-3d-text mb-2 w-full rounded-md border border-blue-900/70 bg-blue-700 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.04em] text-white dark:border-blue-900/80 dark:bg-blue-800 dark:text-white">
+            <div className="mb-2 w-full rounded-md border border-zinc-700/70 bg-zinc-700 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.04em] text-zinc-100 dark:border-zinc-600 dark:bg-zinc-700 dark:text-zinc-100">
               Joined: {joinedServers.length}
             </div>
-            <div className="floating-3d-text w-full rounded-md border border-emerald-900/70 bg-emerald-700 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.04em] text-white dark:border-emerald-900/80 dark:bg-emerald-800 dark:text-white">
+            <div className="w-full rounded-md border border-zinc-700/70 bg-zinc-700 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.04em] text-zinc-100 dark:border-zinc-600 dark:bg-zinc-700 dark:text-zinc-100">
               Friended: {friendedCount}
             </div>
-            <div className="floating-3d-text w-full rounded-md border border-emerald-900/70 bg-emerald-700 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.04em] text-white dark:border-emerald-900/80 dark:bg-emerald-800 dark:text-white">
+            <div className="w-full rounded-md border border-zinc-700/70 bg-zinc-700 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.04em] text-zinc-100 dark:border-zinc-600 dark:bg-zinc-700 dark:text-zinc-100">
               Online: {onlineFriendedCount}
             </div>
-            <div className="floating-3d-text w-full rounded-md border border-emerald-900/70 bg-emerald-700 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.04em] text-white dark:border-emerald-900/80 dark:bg-emerald-800 dark:text-white">
+            <div className="w-full rounded-md border border-zinc-700/70 bg-zinc-700 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.04em] text-zinc-100 dark:border-zinc-600 dark:bg-zinc-700 dark:text-zinc-100">
               Offline: {offlineFriendedCount}
             </div>
           </div>

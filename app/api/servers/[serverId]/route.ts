@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db, server } from "@/lib/db";
+import { emitInAccordSystemEvent } from "@/lib/in-accord-event-system";
 import { getServerBannerConfig, setServerBannerConfig } from "@/lib/server-banner-store";
 import { isInAccordProtectedServer } from "@/lib/server-security";
 
@@ -38,6 +39,18 @@ export async function DELETE(
     await db.delete(server).where(
       and(eq(server.id, serverId), eq(server.profileId, profile.id))
     );
+
+    await emitInAccordSystemEvent({
+      eventType: "SERVER_SETTINGS_DELETED",
+      scope: "server-settings",
+      actorProfileId: profile.id,
+      actorUserId: (profile as { userId?: string }).userId ?? null,
+      serverId,
+      targetId: serverId,
+      metadata: {
+        serverName: target.name,
+      },
+    });
 
     return NextResponse.json(target);
   } catch (error) {
@@ -96,6 +109,22 @@ export async function PATCH(
     });
 
     const resolvedBanner = await getServerBannerConfig(serverId);
+
+    await emitInAccordSystemEvent({
+      eventType: "SERVER_SETTINGS_UPDATED",
+      scope: "server-settings",
+      actorProfileId: profile.id,
+      actorUserId: (profile as { userId?: string }).userId ?? null,
+      serverId,
+      targetId: serverId,
+      metadata: {
+        name,
+        imageUrl,
+        bannerUrl,
+        bannerFit,
+        bannerScale,
+      },
+    });
 
     return NextResponse.json(
       updatedServer

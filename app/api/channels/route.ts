@@ -58,6 +58,54 @@ const mapChannelMutationError = (error: unknown) => {
   return { status: 500, text: "Unable to create channel right now. Please try again." };
 };
 
+export async function GET(req: Request) {
+  try {
+    const profile = await currentProfile();
+    if (!profile) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const serverId = String(searchParams.get("serverId") ?? "").trim();
+
+    if (!serverId) {
+      return new NextResponse("Server ID missing", { status: 400 });
+    }
+
+    const ownerServer = await db.query.server.findFirst({
+      where: and(eq(server.id, serverId), eq(server.profileId, profile.id)),
+      columns: { id: true },
+    });
+
+    const membership = await db.query.member.findFirst({
+      where: and(eq(member.serverId, serverId), eq(member.profileId, profile.id)),
+      columns: { id: true },
+    });
+
+    if (!ownerServer && !membership) {
+      return new NextResponse("Forbidden", { status: 403 });
+    }
+
+    const channels = await db.query.channel.findMany({
+      where: eq(channel.serverId, serverId),
+      columns: {
+        id: true,
+        name: true,
+        type: true,
+      },
+    });
+
+    const ordered = [...channels].sort((a, b) => a.name.localeCompare(b.name));
+
+    return NextResponse.json({
+      channels: ordered,
+    });
+  } catch (error) {
+    console.log("[CHANNEL_GET]", error);
+    return new NextResponse("Internal Error", { status: 500 });
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const profile = await currentProfile();

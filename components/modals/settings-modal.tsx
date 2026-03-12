@@ -11738,14 +11738,14 @@ export const SettingsModal = () => {
 
   return (
     <Dialog open={isModalOpen} onOpenChange={onClose}>
-      <DialogContent className="settings-theme-scope settings-scrollbar theme-settings-shell flex h-[85vh] max-h-[85vh] w-[85vw] max-w-[85vw] flex-col overflow-hidden rounded-3xl border-black/30 bg-[#2b2d31] p-0 text-[#dbdee1] [&_input]:max-w-full [&_input]:min-w-0 [&_textarea]:max-w-full [&_textarea]:min-w-0 [&_button]:max-w-full [&_button]:min-w-0">
+      <DialogContent className="settings-theme-scope settings-scrollbar theme-settings-shell flex h-[85vh] max-h-[85vh] w-[85vw] max-w-[85vw] flex-col overflow-hidden rounded-xl border-black/30 bg-[#2b2d31] p-0 text-[#dbdee1] [&_input]:max-w-full [&_input]:min-w-0 [&_textarea]:max-w-full [&_textarea]:min-w-0 [&_button]:max-w-full [&_button]:min-w-0">
         <DialogTitle className="sr-only">User Settings</DialogTitle>
         <DialogDescription className="sr-only">
           Edit account, appearance, notification, and privacy settings.
         </DialogDescription>
 
         <div className="grid min-h-0 flex-1 grid-cols-[1fr_260px] overflow-hidden">
-          <aside className="theme-settings-rail settings-scrollbar order-2 flex h-full min-h-0 flex-col overflow-y-auto rounded-r-3xl border-l border-black/20 bg-[#232428] p-4 pt-2 shadow-2xl shadow-black/40">
+          <aside className="theme-settings-rail settings-scrollbar order-2 flex h-full min-h-0 flex-col overflow-y-auto border-l border-black/20 bg-[#2b2d31] p-4 pt-2">
             <nav className="settings-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
               {visibleSectionGroups.map((group) => (
                 <div key={group.label} className="space-y-1">
@@ -11761,7 +11761,7 @@ export const SettingsModal = () => {
                             [group.label]: !current[group.label],
                           }))
                         }
-                        className="flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left text-[11px] font-bold uppercase tracking-[0.08em] text-[#949ba4] transition hover:bg-[#2a2b30] hover:text-[#c8ccd1]"
+                        className="flex w-full items-center justify-between rounded-md px-3 py-1.5 text-left text-[11px] font-bold uppercase tracking-[0.08em] text-[#949ba4] transition hover:bg-[#35373c] hover:text-[#c8ccd1]"
                         aria-expanded={!isCollapsed}
                         aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${group.label}`}
                       >
@@ -11784,10 +11784,10 @@ export const SettingsModal = () => {
                         key={section}
                         type="button"
                         onClick={() => setActiveSection(section)}
-                        className={`flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-left text-sm transition-colors ${
+                        className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${
                           isActive
                             ? "bg-[#404249] font-semibold text-white"
-                            : "text-[#b5bac1] hover:bg-[#3f4248] hover:text-[#f2f3f5]"
+                            : "text-[#b5bac1] hover:bg-[#35373c] hover:text-[#f2f3f5]"
                         }`}
                       >
                         <SectionIcon className="h-4 w-4 shrink-0" />
@@ -11799,7 +11799,7 @@ export const SettingsModal = () => {
               ))}
             </nav>
 
-            <p className="mt-4 rounded-2xl border border-black/20 bg-[#1e1f22] px-3 py-2 text-xs leading-5 text-[#949ba4] whitespace-normal break-words shadow-lg shadow-black/35">
+            <p className="mt-4 rounded-md border border-black/20 bg-[#232428] px-3 py-2 text-xs leading-5 text-[#949ba4] whitespace-normal break-words">
               Choose a category on the right
               <br />
               and edit details on the left.
@@ -11809,7 +11809,7 @@ export const SettingsModal = () => {
               type="button"
               onClick={onLogout}
               disabled={isLoggingOut}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-rose-500/30 bg-rose-600/15 px-3 py-2 text-sm font-semibold text-rose-200 shadow-lg shadow-black/35 transition hover:bg-rose-600/25 disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-md border border-rose-500/30 bg-rose-600/15 px-3 py-2 text-sm font-semibold text-rose-200 transition hover:bg-rose-600/25 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isLoggingOut ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -11826,7 +11826,7 @@ export const SettingsModal = () => {
                 isSectionVisible ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0"
               }`}
             >
-              <div className="theme-settings-content-header sticky top-0 z-10 border-b border-black/20 bg-[#2b2d31]/95 px-6 py-4 shadow-lg shadow-black/35 backdrop-blur">
+              <div className="theme-settings-content-header sticky top-0 z-10 border-b border-black/20 bg-[#2b2d31]/95 px-6 py-4 backdrop-blur">
                 <h3 className={`text-xl font-bold text-white ${displaySection === "myAccount" ? "text-center" : ""}`}>
                   {sectionLabelMap[displaySection]}
                 </h3>

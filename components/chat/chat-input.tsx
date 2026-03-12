@@ -9,7 +9,6 @@ import { Plus, Reply, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
 import { useModal } from "@/hooks/use-modal-store";
 import { EmojiPicker } from "@/components/emoji-picker";
 import { GifPicker } from "@/components/gif-picker";
@@ -130,7 +129,7 @@ export const ChatInput = ({
   });
   const [activeQuote, setActiveQuote] = useState<QuotedMessageMeta | null>(null);
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const mentionOptions = useMemo<MentionOption[]>(() => {
     const userOptions = mentionUsers
@@ -975,9 +974,9 @@ export const ChatInput = ({
                       <Trash2 className="h-4 w-4" suppressHydrationWarning />
                     </button>
                   ) : null}
-                  <Input
+                  <textarea
                     disabled={isLoading}
-                    className={`py-6 bg-zinc-200/90 dark:bg-zinc-700/75 border-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-zinc-600 dark:text-zinc-200 ${canBulkDeleteMessages ? "px-14 pr-20" : "px-14"}`}
+                    className={`min-h-[44px] max-h-44 w-full resize-none overflow-y-auto rounded-lg border-0 bg-[#ebedef] py-3 text-sm text-[#2e3338] shadow-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0 dark:bg-[#383a40] dark:text-[#dbdee1] ${canBulkDeleteMessages ? "px-14 pr-20" : "px-14"}`}
                     placeholder={`Message ${
                       type === "conversation" ? name : "#" + name
                     }`}
@@ -985,6 +984,7 @@ export const ChatInput = ({
                     autoCorrect="off"
                     autoCapitalize="none"
                     spellCheck={false}
+                    rows={1}
                     {...field}
                     ref={(element) => {
                       field.ref(element);
@@ -995,7 +995,11 @@ export const ChatInput = ({
                       field.onChange(nextValue);
                       onTypingHeartbeat(nextValue);
                       detectMentionState(nextValue, event.target.selectionStart);
-                        detectSlashState(nextValue, event.target.selectionStart);
+                      detectSlashState(nextValue, event.target.selectionStart);
+
+                      const area = event.target;
+                      area.style.height = "auto";
+                      area.style.height = `${Math.min(area.scrollHeight, 176)}px`;
                     }}
                     onKeyDown={(event) => {
                       if (isMentionMenuOpen) {
@@ -1029,36 +1033,46 @@ export const ChatInput = ({
                         }
                       }
 
-                      if (!isSlashMenuOpen) {
-                        return;
-                      }
-
-                      if (event.key === "ArrowDown") {
-                        event.preventDefault();
-                        setActiveSlashIndex((prev) => (prev + 1) % filteredSlashCommands.length);
-                        return;
-                      }
-
-                      if (event.key === "ArrowUp") {
-                        event.preventDefault();
-                        setActiveSlashIndex((prev) =>
-                          prev <= 0 ? filteredSlashCommands.length - 1 : prev - 1
-                        );
-                        return;
-                      }
-
-                      if (event.key === "Enter" || event.key === "Tab") {
-                        event.preventDefault();
-                        const selected = filteredSlashCommands[activeSlashIndex] ?? filteredSlashCommands[0];
-                        if (selected) {
-                          insertSlashCommand(selected);
+                      if (isSlashMenuOpen) {
+                        if (event.key === "ArrowDown") {
+                          event.preventDefault();
+                          setActiveSlashIndex((prev) => (prev + 1) % filteredSlashCommands.length);
+                          return;
                         }
+
+                        if (event.key === "ArrowUp") {
+                          event.preventDefault();
+                          setActiveSlashIndex((prev) =>
+                            prev <= 0 ? filteredSlashCommands.length - 1 : prev - 1
+                          );
+                          return;
+                        }
+
+                        if (event.key === "Enter" || event.key === "Tab") {
+                          event.preventDefault();
+                          const selected = filteredSlashCommands[activeSlashIndex] ?? filteredSlashCommands[0];
+                          if (selected) {
+                            insertSlashCommand(selected);
+                          }
+                          return;
+                        }
+
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          clearSlashState();
+                          return;
+                        }
+                      }
+
+                      if (event.key === "Escape" && activeQuote) {
+                        event.preventDefault();
+                        setActiveQuote(null);
                         return;
                       }
 
-                      if (event.key === "Escape") {
+                      if (event.key === "Enter" && !event.shiftKey) {
                         event.preventDefault();
-                        clearSlashState();
+                        void form.handleSubmit(onSubmit)();
                       }
                     }}
                   />

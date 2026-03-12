@@ -159,10 +159,10 @@ export const ServerChannel = ({
       onDragLeave={onDragLeave}
       onDrop={onDrop}
       className={cn(
-        "group px-2 py-2 rounded-md flex items-center gap-x-2 w-full text-left hover:bg-zinc-700/10 dark:hover:bg-zinc-700/50 transition mb-1",
+        "group mb-0.5 flex w-full items-center gap-x-2 rounded px-2 py-1.5 text-left transition hover:bg-[#3a3c43]",
         canReorder && "cursor-grab active:cursor-grabbing",
-        isDragOver && "ring-1 ring-indigo-400/70 bg-indigo-500/10",
-        isActiveChannel && "bg-zinc-700/20 dark:bg-zinc-700"
+        isDragOver && "bg-[#5865f2]/20 ring-1 ring-[#5865f2]/70",
+        isActiveChannel && "bg-[#404249]"
       )}
     >
       {customIcon ? (
@@ -170,13 +170,13 @@ export const ServerChannel = ({
           {customIcon}
         </span>
       ) : (
-        <Icon className="h-5 w-5 shrink-0 text-zinc-500 dark:text-zinc-400" />
+        <Icon className="h-4 w-4 shrink-0 text-[#949ba4]" />
       )}
       <p
         className={cn(
-          "line-clamp-1 min-w-0 flex-1 text-left text-sm font-semibold text-zinc-500 transition group-hover:text-zinc-600 dark:text-zinc-400 dark:group-hover:text-zinc-300",
+          "line-clamp-1 min-w-0 flex-1 text-left text-[15px] font-medium text-[#949ba4] transition group-hover:text-[#dbdee1]",
           isActiveChannel &&
-            "text-primary dark:text-zinc-200 dark:group-hover:text-white"
+            "text-[#f2f3f5]"
         )}
       >
         {channel.name}
@@ -191,7 +191,7 @@ export const ServerChannel = ({
           <ActionTooltip label="Channel Settings" align="center">
             <Settings
               onClick={(e) => onAction(e, "editChannel")}
-              className="w-4 h-4 text-zinc-500 hover:text-zinc-600 dark:text-zinc-400 dark:hover:text-zinc-300 transition"
+              className="h-4 w-4 text-[#949ba4] transition hover:text-[#dbdee1]"
             />
           </ActionTooltip>
         )}
