@@ -22,6 +22,7 @@ export async function POST(
 
     const body = (await request.json().catch(() => null)) as { botId?: string } | null;
     const botId = String(body?.botId ?? "").trim();
+    const ownerUserId = String(profile.userId ?? profile.id ?? "").trim();
 
     if (!serverId) {
       return new NextResponse("Server ID missing", { status: 400 });
@@ -31,15 +32,19 @@ export async function POST(
       return new NextResponse("botId is required", { status: 400 });
     }
 
+    if (!ownerUserId) {
+      return new NextResponse("Unable to resolve owner user id", { status: 400 });
+    }
+
     const ownerServer = await db.query.server.findFirst({
-      where: and(eq(server.id, serverId), eq(server.profileId, profile.id)),
+      where: and(eq(server.id, serverId), eq(server.profileId, ownerUserId)),
     });
 
     if (!ownerServer) {
       return new NextResponse("Only server owners can attach integration bots.", { status: 403 });
     }
 
-    const preferences = await getUserPreferences(profile.id);
+    const preferences = await getUserPreferences(ownerUserId);
     const targetBot = preferences.OtherBots.find((item) => item.id === botId);
 
     if (!targetBot) {
@@ -50,7 +55,7 @@ export async function POST(
       return new NextResponse("Bot configuration is disabled. Enable it first.", { status: 400 });
     }
 
-    const botProfileId = makeIntegrationBotProfileId(profile.id, targetBot.id);
+    const botProfileId = makeIntegrationBotProfileId(ownerUserId, targetBot.id);
     const botName = targetBot.name.slice(0, 191);
     const fallbackEmail = `${botProfileId}@bots.in-accord.local`.slice(0, 191);
     const now = new Date();
@@ -83,12 +88,12 @@ export async function POST(
 
     try {
       const imported = await importOtherBotCommandsForOwner({
-        ownerProfileId: profile.id,
+        ownerProfileId: ownerUserId,
         botId,
       });
       importedCount = imported.importedCount;
 
-      await updateOtherBotTemplateStats(profile.id, botId, {
+      await updateOtherBotTemplateStats(ownerUserId, botId, {
         importsMadeDelta: 1,
         templatesImportedDelta: imported.importedCount,
         serverId,
@@ -96,7 +101,7 @@ export async function POST(
     } catch (error) {
       importWarning = error instanceof Error ? error.message : "Command import failed.";
 
-      await updateOtherBotTemplateStats(profile.id, botId, {
+      await updateOtherBotTemplateStats(ownerUserId, botId, {
         serverId,
       });
     }

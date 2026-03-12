@@ -22,12 +22,17 @@ export async function POST(
       return NextResponse.json({ error: "Missing bot id." }, { status: 400 });
     }
 
+    const ownerUserId = String(profile.userId ?? profile.id ?? "").trim();
+    if (!ownerUserId) {
+      return NextResponse.json({ error: "Unable to resolve owner user id." }, { status: 400 });
+    }
+
     const imported = await importOtherBotCommandsForOwner({
-      ownerProfileId: profile.id,
+      ownerProfileId: ownerUserId,
       botId,
     });
 
-    await updateOtherBotTemplateStats(profile.id, botId, {
+    await updateOtherBotTemplateStats(ownerUserId, botId, {
       importsMadeDelta: 1,
       templatesImportedDelta: imported.importedCount,
     });

@@ -364,6 +364,16 @@ type TemplateMeBotStats = {
   serversUsingTemplatesCount: number;
   serversUsingTemplates: Array<{ id: string; name: string }>;
   statsUpdatedAt: string | null;
+  debug?: {
+    requestedUserId?: string | null;
+    requestedBotId?: string | null;
+    templateBotIds?: string[];
+    botProfileIds?: string[];
+    statsServerIds?: string[];
+    attachedServerIds?: string[];
+    globalServerIds?: string[];
+    mergedServerIds?: string[];
+  };
 };
 
 type OtherConfigSortKey = "createdAt" | "status" | "type";
@@ -1370,12 +1380,35 @@ export const InAccordAdminModal = () => {
     }
   }, []);
 
-  const loadTemplateMeStats = useCallback(async (userId: string, botId: string) => {
+  const loadTemplateMeStats = useCallback(async (targets: Array<{ userId: string; botId?: string }>) => {
     try {
       setIsLoadingTemplateMeStats(true);
       setTemplateMeStatsError(null);
 
-      const query = new URLSearchParams({ userId, botId });
+      const normalizedTargets = Array.from(
+        new Map(
+          targets
+            .map((target) => ({
+              userId: String(target.userId ?? "").trim(),
+              botId: String(target.botId ?? "").trim() || undefined,
+            }))
+            .filter((target) => target.userId.length > 0)
+            .map((target) => [`${target.userId}:${target.botId ?? ""}`, target])
+        ).values()
+      );
+
+      if (normalizedTargets.length === 0) {
+        setTemplateMeStats(null);
+        setTemplateMeStatsError(null);
+        return;
+      }
+
+      const target = normalizedTargets[0];
+      const query = new URLSearchParams({ userId: target.userId });
+      if (target.botId) {
+        query.set("botId", target.botId);
+      }
+
       const response = await fetch(`/api/admin/template-me-stats?${query.toString()}`, {
         method: "GET",
         headers: {
@@ -4524,6 +4557,22 @@ export const InAccordAdminModal = () => {
     ? `${primaryTemplateMeBotConfig.userId}:${primaryTemplateMeBotConfig.id}`
     : "";
 
+  const templateMeStatsTargets = useMemo(() => {
+    const targetsFromConfigs = templateMeBotConfigs
+      .map((entry) => ({
+        userId: String(entry.userId ?? "").trim(),
+        botId: String(entry.id ?? "").trim() || undefined,
+      }))
+      .filter((entry) => entry.userId.length > 0);
+
+    if (targetsFromConfigs.length > 0) {
+      return targetsFromConfigs;
+    }
+
+    const fallbackUserId = String(data.profileId ?? "").trim();
+    return fallbackUserId.length > 0 ? [{ userId: fallbackUserId }] : [];
+  }, [data.profileId, templateMeBotConfigs]);
+
   const selectedTemplateMeRuntimeTargetLabel = useMemo(() => {
     if (!primaryTemplateMeBotConfig) {
       return "";
@@ -4583,14 +4632,22 @@ export const InAccordAdminModal = () => {
       return;
     }
 
-    if (!primaryTemplateMeBotConfig) {
+    if (templateMeStatsTargets.length === 0) {
       setTemplateMeStats(null);
       setTemplateMeStatsError(null);
       return;
     }
 
-    void loadTemplateMeStats(primaryTemplateMeBotConfig.userId, primaryTemplateMeBotConfig.id);
-  }, [activeSection, isModalOpen, loadTemplateMeStats, primaryTemplateMeBotConfig]);
+    void loadTemplateMeStats(templateMeStatsTargets);
+
+    const intervalId = window.setInterval(() => {
+      void loadTemplateMeStats(templateMeStatsTargets);
+    }, 10000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [activeSection, isModalOpen, loadTemplateMeStats, templateMeStatsTargets]);
 
   const onOtherConfigSort = (key: OtherConfigSortKey) => {
     if (OtherConfigSortKey === key) {
@@ -10033,8 +10090,8 @@ export const InAccordAdminModal = () => {
                     onClick={() => {
                       void loadIntegrations();
                       void loadTemplateMeRuntime();
-                      if (primaryTemplateMeBotConfig) {
-                        void loadTemplateMeStats(primaryTemplateMeBotConfig.userId, primaryTemplateMeBotConfig.id);
+                      if (templateMeStatsTargets.length > 0) {
+                        void loadTemplateMeStats(templateMeStatsTargets);
                       }
                     }}
                     className="h-8 rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
@@ -10249,6 +10306,25 @@ export const InAccordAdminModal = () => {
                           ))}
                         </div>
                       )}
+
+                      {templateMeStats?.debug ? (
+                        <details className="mt-3 rounded-md border border-zinc-300/80 bg-zinc-50/70 p-2 text-[11px] text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
+                          <summary className="cursor-pointer font-semibold uppercase tracking-[0.08em]">Template Me Debug</summary>
+                          <div className="mt-2 space-y-1 font-mono text-[10px] leading-relaxed">
+                            {Object.entries(templateMeStats.debug).map(([key, value]) => {
+                              const displayValue = Array.isArray(value)
+                                ? (value.length > 0 ? value.join(", ") : "[]")
+                                : (value ?? "n/a");
+
+                              return (
+                                <p key={`template-me-debug-${key}`}>
+                                  {key}: {String(displayValue)}
+                                </p>
+                              );
+                            })}
+                          </div>
+                        </details>
+                      ) : null}
                     </div>
 
                   </>
