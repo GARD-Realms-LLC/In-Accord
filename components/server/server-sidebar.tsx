@@ -5,6 +5,7 @@ import { asc, eq, sql } from "drizzle-orm";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { currentProfile } from "@/lib/current-profile";
 import { channel, db, server } from "@/lib/db";
+import { ensureChannelGroupSchema } from "@/lib/channel-groups";
 import { visibleChannelIdsForRole } from "@/lib/channel-permissions";
 import { getServerBannerConfig } from "@/lib/server-banner-store";
 import { listActiveVoiceCountsForServer } from "@/lib/voice-states";
@@ -149,6 +150,21 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
     return normalizedName !== "stage" && normalizedName !== "rules";
   });
 
+  await ensureChannelGroupSchema();
+  const channelGroupsCountResult = await db.execute(sql`
+    select count(*)::int as "count"
+    from "ChannelGroup"
+    where "serverId" = ${serverId}
+  `);
+  const channelGroupsCount = Number(
+    (
+      channelGroupsCountResult as unknown as {
+        rows?: Array<{ count?: number | string | null }>;
+      }
+    ).rows?.[0]?.count ?? 0
+  );
+  const channelsCount = visibleChannelsWithoutSpecial.length;
+
   const ungroupedChannels = visibleChannelsWithoutSpecial;
   const serverWithMembers = {
     ...currentServer,
@@ -211,6 +227,23 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
 
         {false ? <div /> : null}
       </ScrollArea>
+
+      <div className="border-t border-border/70 px-3 py-2">
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-md border border-border/70 bg-background/50 px-2 py-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <p className="truncate text-[clamp(0.5rem,1.2vw,0.625rem)] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Channels</p>
+              <p className="shrink-0 text-[clamp(0.625rem,1.4vw,0.75rem)] font-semibold text-primary">{channelsCount}</p>
+            </div>
+          </div>
+          <div className="rounded-md border border-border/70 bg-background/50 px-2 py-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <p className="truncate text-[clamp(0.5rem,1.2vw,0.625rem)] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Groups</p>
+              <p className="shrink-0 text-[clamp(0.625rem,1.4vw,0.75rem)] font-semibold text-primary">{channelGroupsCount}</p>
+            </div>
+          </div>
+        </div>
+      </div>
 
     </div>
   );

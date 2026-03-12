@@ -126,6 +126,21 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
     position: Number(row.position ?? 0),
   }));
 
+  const rolesCountResult = await db.execute(sql`
+    select count(*)::int as "count"
+    from "ServerRole" r
+    where r."serverId" = ${serverId}
+      and coalesce(r."isManaged", false) = false
+  `);
+  const rolesCount = Number(
+    (
+      rolesCountResult as unknown as {
+        rows?: Array<{ count?: number | string | null }>;
+      }
+    ).rows?.[0]?.count ?? 0
+  );
+  const roleGroupsCount = roleGroups.length;
+
   const rows = ((membersResult as unknown as { rows: RoleRow[] }).rows ?? []).filter((row) => {
     if (!row.profileId.startsWith(ownerBotPrefix)) {
       return true;
@@ -267,6 +282,23 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
                 canReorderRoleGroups={Boolean(ownerRecord)}
               />
             )}
+          </div>
+        </div>
+      </div>
+
+      <div className="border-t border-black/20 px-3 py-2">
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded bg-[#1e1f22] px-2 py-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <p className="truncate text-[clamp(0.5rem,1.2vw,0.625rem)] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">Roles</p>
+              <p className="shrink-0 text-[clamp(0.625rem,1.4vw,0.75rem)] font-semibold text-[#dbdee1]">{rolesCount}</p>
+            </div>
+          </div>
+          <div className="rounded bg-[#1e1f22] px-2 py-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <p className="truncate text-[clamp(0.5rem,1.2vw,0.625rem)] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">Groups</p>
+              <p className="shrink-0 text-[clamp(0.625rem,1.4vw,0.75rem)] font-semibold text-[#dbdee1]">{roleGroupsCount}</p>
+            </div>
           </div>
         </div>
       </div>

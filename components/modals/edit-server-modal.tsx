@@ -704,6 +704,16 @@ type ServerMembersPanelItem = {
   };
 };
 
+type TemplateReimportSelection = {
+  roles: boolean;
+  channelGroups: boolean;
+  channels: boolean;
+  roleGroups: boolean;
+  roleIcons: boolean;
+  serverBanner: boolean;
+  serverIcon: boolean;
+};
+
 type ServerInvitePanelItem = {
   code: string;
   createdAt: string;
@@ -836,6 +846,16 @@ const DEFAULT_ONBOARDING_CONFIG: OnboardingConfig = {
   updatedAt: new Date(0).toISOString(),
 };
 
+const DEFAULT_TEMPLATE_REIMPORT_SELECTION: TemplateReimportSelection = {
+  roles: true,
+  channelGroups: true,
+  channels: true,
+  roleGroups: true,
+  roleIcons: true,
+  serverBanner: true,
+  serverIcon: true,
+};
+
 const ONBOARDING_BANNER_PRESETS = [
   { key: "aurora", label: "Aurora", value: "linear-gradient(135deg, #4f46e5 0%, #0ea5e9 45%, #22d3ee 100%)" },
   { key: "sunset", label: "Sunset", value: "linear-gradient(135deg, #f97316 0%, #ef4444 45%, #ec4899 100%)" },
@@ -954,6 +974,9 @@ export const EditServerModal = () => {
   const [selectedTemplateMeBotId, setSelectedTemplateMeBotId] = useState("");
   const [isTemplateImportModalOpen, setIsTemplateImportModalOpen] = useState(false);
   const [templateImportSourceServerId, setTemplateImportSourceServerId] = useState("");
+  const [templateReimportSelection, setTemplateReimportSelection] = useState<TemplateReimportSelection>(
+    DEFAULT_TEMPLATE_REIMPORT_SELECTION
+  );
   const [isLoadingTemplateMeBots, setIsLoadingTemplateMeBots] = useState(false);
   const [serverGuideQuery, setServerGuideQuery] = useState("");
   const [serverGuideScrollTop, setServerGuideScrollTop] = useState(0);
@@ -1204,6 +1227,7 @@ export const EditServerModal = () => {
       setSelectedTemplateMeBotId("");
       setIsTemplateImportModalOpen(false);
       setTemplateImportSourceServerId("");
+      setTemplateReimportSelection(DEFAULT_TEMPLATE_REIMPORT_SELECTION);
       setIsLoadingTemplateMeBots(false);
       setServerGuideQuery("");
       setServerGuideScrollTop(0);
@@ -1716,6 +1740,7 @@ export const EditServerModal = () => {
     }
 
     setTemplateImportSourceServerId("");
+    setTemplateReimportSelection(DEFAULT_TEMPLATE_REIMPORT_SELECTION);
     setIsTemplateImportModalOpen(true);
     setServerTemplateError(null);
   };
@@ -1728,12 +1753,27 @@ export const EditServerModal = () => {
     if (!selectedTemplateMeBotId) {
       setServerTemplateError("No enabled Template Me bot found in Settings > Bot/App Developer.");
       setIsTemplateImportModalOpen(false);
+      setTemplateReimportSelection(DEFAULT_TEMPLATE_REIMPORT_SELECTION);
       return;
     }
 
     const normalizedSourceServerId = String(templateImportSourceServerId).trim().replace(/\D/g, "");
     if (!/^\d{15,22}$/.test(normalizedSourceServerId)) {
       setServerTemplateError("Enter a valid Discord source server ID (15-22 digits).");
+      return;
+    }
+
+    const hasAnySelectedReimportTarget =
+      templateReimportSelection.roles ||
+      templateReimportSelection.channelGroups ||
+      templateReimportSelection.channels ||
+      templateReimportSelection.roleGroups ||
+      templateReimportSelection.roleIcons ||
+      templateReimportSelection.serverBanner ||
+      templateReimportSelection.serverIcon;
+
+    if (!hasAnySelectedReimportTarget) {
+      setServerTemplateError("Select at least one section to re-import.");
       return;
     }
 
@@ -1756,6 +1796,7 @@ export const EditServerModal = () => {
       }>(`/api/servers/${server.id}/template`, {
         botId: selectedTemplateMeBotId,
         sourceServerId: normalizedSourceServerId,
+        importSelection: templateReimportSelection,
       });
 
       const importedRoles = Number(response.data.result?.importedRoles ?? 0);
@@ -1772,6 +1813,7 @@ export const EditServerModal = () => {
       );
       setIsTemplateImportModalOpen(false);
       setTemplateImportSourceServerId("");
+      setTemplateReimportSelection(DEFAULT_TEMPLATE_REIMPORT_SELECTION);
 
       await loadServerTemplate();
       router.refresh();
@@ -4339,6 +4381,7 @@ export const EditServerModal = () => {
 
                                 setIsTemplateImportModalOpen(false);
                                 setTemplateImportSourceServerId("");
+                                setTemplateReimportSelection(DEFAULT_TEMPLATE_REIMPORT_SELECTION);
                               }}
                               className="rounded p-1 text-zinc-300 transition hover:bg-white/10 hover:text-white"
                               aria-label="Close import modal"
@@ -4362,6 +4405,121 @@ export const EditServerModal = () => {
                                 Right Click on your servers banner or server name and click " Copy Server ID"!
                               </p>
                             </div>
+
+                            <div>
+                              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Select what to re-import</p>
+                              <div className="grid gap-2 sm:grid-cols-2">
+                                <label className="flex items-center gap-2 rounded border border-zinc-700 bg-[#15161a] px-2.5 py-2 text-xs text-zinc-200">
+                                  <input
+                                    type="checkbox"
+                                    checked={templateReimportSelection.roles}
+                                    onChange={(event) =>
+                                      setTemplateReimportSelection((previous) => ({
+                                        ...previous,
+                                        roles: event.target.checked,
+                                      }))
+                                    }
+                                    disabled={isImportingOtherTemplate}
+                                  />
+                                  Roles
+                                </label>
+
+                                <label className="flex items-center gap-2 rounded border border-zinc-700 bg-[#15161a] px-2.5 py-2 text-xs text-zinc-200">
+                                  <input
+                                    type="checkbox"
+                                    checked={templateReimportSelection.channelGroups}
+                                    onChange={(event) =>
+                                      setTemplateReimportSelection((previous) => ({
+                                        ...previous,
+                                        channelGroups: event.target.checked,
+                                      }))
+                                    }
+                                    disabled={isImportingOtherTemplate}
+                                  />
+                                  Channel Groups
+                                </label>
+
+                                <label className="flex items-center gap-2 rounded border border-zinc-700 bg-[#15161a] px-2.5 py-2 text-xs text-zinc-200">
+                                  <input
+                                    type="checkbox"
+                                    checked={templateReimportSelection.channels}
+                                    onChange={(event) =>
+                                      setTemplateReimportSelection((previous) => ({
+                                        ...previous,
+                                        channels: event.target.checked,
+                                      }))
+                                    }
+                                    disabled={isImportingOtherTemplate}
+                                  />
+                                  Channels
+                                </label>
+
+                                <div className="hidden sm:block" />
+
+                                <label className="flex items-center gap-2 rounded border border-zinc-700 bg-[#15161a] px-2.5 py-2 text-xs text-zinc-200">
+                                  <input
+                                    type="checkbox"
+                                    checked={templateReimportSelection.roleGroups}
+                                    onChange={(event) =>
+                                      setTemplateReimportSelection((previous) => ({
+                                        ...previous,
+                                        roleGroups: event.target.checked,
+                                      }))
+                                    }
+                                    disabled={isImportingOtherTemplate}
+                                  />
+                                  Role Groups
+                                </label>
+
+                                <label className="flex items-center gap-2 rounded border border-zinc-700 bg-[#15161a] px-2.5 py-2 text-xs text-zinc-200">
+                                  <input
+                                    type="checkbox"
+                                    checked={templateReimportSelection.roleIcons}
+                                    onChange={(event) =>
+                                      setTemplateReimportSelection((previous) => ({
+                                        ...previous,
+                                        roleIcons: event.target.checked,
+                                      }))
+                                    }
+                                    disabled={isImportingOtherTemplate}
+                                  />
+                                  Role Icons
+                                </label>
+
+                                <label className="flex items-center gap-2 rounded border border-zinc-700 bg-[#15161a] px-2.5 py-2 text-xs text-zinc-200">
+                                  <input
+                                    type="checkbox"
+                                    checked={templateReimportSelection.serverBanner}
+                                    onChange={(event) =>
+                                      setTemplateReimportSelection((previous) => ({
+                                        ...previous,
+                                        serverBanner: event.target.checked,
+                                      }))
+                                    }
+                                    disabled={isImportingOtherTemplate}
+                                  />
+                                  Server Banner
+                                </label>
+
+                                <label className="flex items-center gap-2 rounded border border-zinc-700 bg-[#15161a] px-2.5 py-2 text-xs text-zinc-200">
+                                  <input
+                                    type="checkbox"
+                                    checked={templateReimportSelection.serverIcon}
+                                    onChange={(event) =>
+                                      setTemplateReimportSelection((previous) => ({
+                                        ...previous,
+                                        serverIcon: event.target.checked,
+                                      }))
+                                    }
+                                    disabled={isImportingOtherTemplate}
+                                  />
+                                  Server Icon
+                                </label>
+                              </div>
+                              <p className="mt-2 text-[11px] text-zinc-500">
+                                Re-import runs in merge mode: existing matching entries are kept (no overwrite) and duplicates are skipped.
+                              </p>
+                            </div>
                           </div>
 
                           <div className="mt-4 flex items-center justify-end gap-2">
@@ -4374,6 +4532,7 @@ export const EditServerModal = () => {
 
                                 setIsTemplateImportModalOpen(false);
                                 setTemplateImportSourceServerId("");
+                                setTemplateReimportSelection(DEFAULT_TEMPLATE_REIMPORT_SELECTION);
                               }}
                               className="bg-transparent text-zinc-300 hover:bg-white/10"
                               disabled={isImportingOtherTemplate}
@@ -5190,7 +5349,7 @@ export const EditServerModal = () => {
                           <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-300">Import from Template Me Bot</p>
 
                           <div className="rounded-md border border-zinc-700 bg-[#1e1f22] px-3 py-2 text-xs text-zinc-300">
-                            Full sync mode is always ON: roles, permissions, channel groups, channels, and channel permissions are overwritten from the source bot data. No duplicate entries are generated.
+                            Choose what to re-import in the modal. Template Me Bot will import the selected sections from the source server.
                           </div>
 
                           <div className="flex items-center gap-2">
@@ -5214,7 +5373,7 @@ export const EditServerModal = () => {
                           </div>
 
                           <p className="text-xs text-zinc-400">
-                            Click Import Now, enter the source server ID in the modal, and Template Me Bot will sync everything.
+                            Click Import Now, enter the source server ID, then select sections to re-import.
                           </p>
                         </div>
 
