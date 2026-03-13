@@ -11,6 +11,7 @@ export type ServerProfileSettings = {
   gamesPlayed: string[];
   bannerColor: string | null;
   inviteMode: ServerInviteMode;
+  showChannelGroups: boolean;
 };
 
 type SettingsMap = Record<string, Partial<ServerProfileSettings> | undefined>;
@@ -24,6 +25,7 @@ const DEFAULT_SETTINGS: ServerProfileSettings = {
   gamesPlayed: [],
   bannerColor: null,
   inviteMode: "normal",
+  showChannelGroups: true,
 };
 
 const normalizeHexColor = (value: unknown) => {
@@ -80,6 +82,19 @@ const normalizeDescription = (value: unknown) => {
   return raw.length > 0 ? raw.slice(0, 800) : null;
 };
 
+const normalizeShowChannelGroups = (value: unknown) => {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (normalized === "false" || normalized === "0" || normalized === "no" || normalized === "off") {
+    return false;
+  }
+
+  return true;
+};
+
 const normalizeSettings = (value: Partial<ServerProfileSettings> | undefined): ServerProfileSettings => {
   return {
     description: normalizeDescription(value?.description),
@@ -87,6 +102,7 @@ const normalizeSettings = (value: Partial<ServerProfileSettings> | undefined): S
     gamesPlayed: normalizeStringList(value?.gamesPlayed, 24, 48),
     bannerColor: normalizeHexColor(value?.bannerColor),
     inviteMode: normalizeInviteMode(value?.inviteMode),
+    showChannelGroups: normalizeShowChannelGroups(value?.showChannelGroups),
   };
 };
 

@@ -255,3 +255,42 @@ export const updateProfileServerTabsState = async (
 
   return getProfileServerTabsState(profileId);
 };
+
+export const removeServerFromAllProfileServerTabs = async (serverId: string) => {
+  const normalizedServerId = String(serverId ?? "").trim();
+  if (!normalizedServerId) {
+    return;
+  }
+
+  await ensureProfileServerTabsSchema();
+
+  const result = await db.execute(sql`
+    select "profileId", "tabsJson"
+    from "ProfileServerTabs"
+  `);
+
+  const rows = (result as unknown as {
+    rows: Array<{ profileId: string | null; tabsJson: string | null }>;
+  }).rows ?? [];
+
+  for (const row of rows) {
+    const profileId = String(row.profileId ?? "").trim();
+    if (!profileId) {
+      continue;
+    }
+
+    const currentTabs = normalizeProfileServerTabs(parseJsonSafely(row.tabsJson));
+    const nextTabs = currentTabs.filter((tab) => tab.serverId !== normalizedServerId);
+
+    if (nextTabs.length === currentTabs.length) {
+      continue;
+    }
+
+    await db.execute(sql`
+      update "ProfileServerTabs"
+      set "tabsJson" = ${JSON.stringify(nextTabs)},
+          "updatedAt" = now()
+      where "profileId" = ${profileId}
+    `);
+  }
+};

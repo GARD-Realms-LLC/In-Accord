@@ -86,10 +86,6 @@ export async function PATCH(req: Request) {
       return new NextResponse("Channel not found", { status: 404 });
     }
 
-    if (String(dragged.name ?? "").trim().toLowerCase() === "general") {
-      return new NextResponse("Cannot move default channel", { status: 400 });
-    }
-
     const draggedName = String(dragged.name ?? "").trim().toLowerCase();
     const fromGroupId = dragged.channelGroupId ?? null;
     const toGroupIdRaw = target.channelGroupId ?? null;

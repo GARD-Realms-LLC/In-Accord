@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { ChannelType, MemberRole, type Channel, type Server } from "@/lib/db/types";
+import { cn } from "@/lib/utils";
 
 import { ChannelDropZone } from "./channel-drop-zone";
 import { ChannelGroupSettingsButton } from "./channel-group-settings-button";
@@ -249,12 +250,15 @@ export const ChannelGroupsList = ({
             key={group.id}
             onDragOver={(event) => onGroupDragOver(event, group.id)}
             onDrop={(event) => onGroupDrop(event, group.id)}
-            className={isActiveDragTarget ? "rounded-md ring-1 ring-indigo-500/50" : undefined}
+            className={cn(
+              "transition-all duration-150",
+              isActiveDragTarget ? "mb-10" : "mb-0"
+            )}
           >
             <ChannelDropZone
               serverId={serverId}
               targetGroupId={group.id}
-              className="rounded-md bg-black/5 px-2 py-1.5 dark:bg-zinc-900/40"
+              className="rounded-md px-2 py-1.5"
             >
               <details open className="group/details">
                 <summary
@@ -295,6 +299,8 @@ export const ChannelGroupsList = ({
                 )}
               </details>
             </ChannelDropZone>
+
+            {isActiveDragTarget ? <div className="mt-1 h-9 w-full" /> : null}
           </div>
         );
       })}

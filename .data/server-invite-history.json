@@ -38,5 +38,15 @@
       "usedCount": 0,
       "usedByProfileIds": []
     }
+  ],
+  "14a54a8a-8f52-4565-a045-9cc862fef912": [
+    {
+      "code": "4a0ae1fb-7393-4379-b2da-df793f83bc72",
+      "source": "created",
+      "createdByProfileId": "00000001",
+      "createdAt": "2026-03-13T00:36:45.865Z",
+      "usedCount": 0,
+      "usedByProfileIds": []
+    }
   ]
 }

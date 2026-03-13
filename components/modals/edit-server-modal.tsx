@@ -43,6 +43,7 @@ const formSchema = z.object({
   traits: z.array(z.string()).optional(),
   gamesPlayed: z.array(z.string()).optional(),
   inviteMode: z.enum(["normal", "approval"]).optional(),
+  showChannelGroups: z.boolean().optional(),
 });
 
 type ServerSettingsSection =
@@ -450,7 +451,12 @@ type ServerRoleItem = {
   memberCount?: number;
 };
 
-const reorderRoles = (items: ServerRoleItem[], draggedId: string, targetId: string) => {
+const reorderRoles = (
+  items: ServerRoleItem[],
+  draggedId: string,
+  targetId: string,
+  placement: "before" | "after" = "before"
+) => {
   if (!draggedId || !targetId || draggedId === targetId) {
     return items;
   }
@@ -464,7 +470,14 @@ const reorderRoles = (items: ServerRoleItem[], draggedId: string, targetId: stri
 
   const next = [...items];
   const [moved] = next.splice(fromIndex, 1);
-  next.splice(toIndex, 0, moved);
+  const targetIndexInNext = next.findIndex((item) => item.id === targetId);
+
+  if (targetIndexInNext === -1) {
+    return items;
+  }
+
+  const insertionIndex = placement === "after" ? targetIndexInNext + 1 : targetIndexInNext;
+  next.splice(insertionIndex, 0, moved);
 
   return next.map((item, index) => ({
     ...item,
@@ -704,16 +717,6 @@ type ServerMembersPanelItem = {
   };
 };
 
-type TemplateReimportSelection = {
-  roles: boolean;
-  channelGroups: boolean;
-  channels: boolean;
-  roleGroups: boolean;
-  roleIcons: boolean;
-  serverBanner: boolean;
-  serverIcon: boolean;
-};
-
 type ServerInvitePanelItem = {
   code: string;
   createdAt: string;
@@ -846,16 +849,6 @@ const DEFAULT_ONBOARDING_CONFIG: OnboardingConfig = {
   updatedAt: new Date(0).toISOString(),
 };
 
-const DEFAULT_TEMPLATE_REIMPORT_SELECTION: TemplateReimportSelection = {
-  roles: true,
-  channelGroups: true,
-  channels: true,
-  roleGroups: true,
-  roleIcons: true,
-  serverBanner: true,
-  serverIcon: true,
-};
-
 const ONBOARDING_BANNER_PRESETS = [
   { key: "aurora", label: "Aurora", value: "linear-gradient(135deg, #4f46e5 0%, #0ea5e9 45%, #22d3ee 100%)" },
   { key: "sunset", label: "Sunset", value: "linear-gradient(135deg, #f97316 0%, #ef4444 45%, #ec4899 100%)" },
@@ -974,9 +967,6 @@ export const EditServerModal = () => {
   const [selectedTemplateMeBotId, setSelectedTemplateMeBotId] = useState("");
   const [isTemplateImportModalOpen, setIsTemplateImportModalOpen] = useState(false);
   const [templateImportSourceServerId, setTemplateImportSourceServerId] = useState("");
-  const [templateReimportSelection, setTemplateReimportSelection] = useState<TemplateReimportSelection>(
-    DEFAULT_TEMPLATE_REIMPORT_SELECTION
-  );
   const [isLoadingTemplateMeBots, setIsLoadingTemplateMeBots] = useState(false);
   const [serverGuideQuery, setServerGuideQuery] = useState("");
   const [serverGuideScrollTop, setServerGuideScrollTop] = useState(0);
@@ -1024,6 +1014,7 @@ export const EditServerModal = () => {
       traits: [],
       gamesPlayed: [],
       inviteMode: "normal",
+      showChannelGroups: true,
     },
   });
 
@@ -1056,6 +1047,7 @@ export const EditServerModal = () => {
           | "normal"
           | "approval"
       );
+      form.setValue("showChannelGroups", (server as { showChannelGroups?: boolean | null }).showChannelGroups ?? true);
     }
   }, [server, form]);
 
@@ -1079,6 +1071,7 @@ export const EditServerModal = () => {
           traits?: string[];
           gamesPlayed?: string[];
           inviteMode?: "normal" | "approval";
+          showChannelGroups?: boolean;
         }>(`/api/servers/${server.id}`);
 
         if (cancelled) {
@@ -1098,6 +1091,7 @@ export const EditServerModal = () => {
           "inviteMode",
           (response.data?.inviteMode ?? "normal") as "normal" | "approval"
         );
+        form.setValue("showChannelGroups", Boolean(response.data?.showChannelGroups ?? true));
 
         const normalizedBannerUrl = String(response.data?.bannerUrl ?? "").trim();
         if (normalizedBannerUrl) {
@@ -1227,7 +1221,6 @@ export const EditServerModal = () => {
       setSelectedTemplateMeBotId("");
       setIsTemplateImportModalOpen(false);
       setTemplateImportSourceServerId("");
-      setTemplateReimportSelection(DEFAULT_TEMPLATE_REIMPORT_SELECTION);
       setIsLoadingTemplateMeBots(false);
       setServerGuideQuery("");
       setServerGuideScrollTop(0);
@@ -1740,7 +1733,6 @@ export const EditServerModal = () => {
     }
 
     setTemplateImportSourceServerId("");
-    setTemplateReimportSelection(DEFAULT_TEMPLATE_REIMPORT_SELECTION);
     setIsTemplateImportModalOpen(true);
     setServerTemplateError(null);
   };
@@ -1753,27 +1745,12 @@ export const EditServerModal = () => {
     if (!selectedTemplateMeBotId) {
       setServerTemplateError("No enabled Template Me bot found in Settings > Bot/App Developer.");
       setIsTemplateImportModalOpen(false);
-      setTemplateReimportSelection(DEFAULT_TEMPLATE_REIMPORT_SELECTION);
       return;
     }
 
     const normalizedSourceServerId = String(templateImportSourceServerId).trim().replace(/\D/g, "");
     if (!/^\d{15,22}$/.test(normalizedSourceServerId)) {
       setServerTemplateError("Enter a valid Discord source server ID (15-22 digits).");
-      return;
-    }
-
-    const hasAnySelectedReimportTarget =
-      templateReimportSelection.roles ||
-      templateReimportSelection.channelGroups ||
-      templateReimportSelection.channels ||
-      templateReimportSelection.roleGroups ||
-      templateReimportSelection.roleIcons ||
-      templateReimportSelection.serverBanner ||
-      templateReimportSelection.serverIcon;
-
-    if (!hasAnySelectedReimportTarget) {
-      setServerTemplateError("Select at least one section to re-import.");
       return;
     }
 
@@ -1796,7 +1773,6 @@ export const EditServerModal = () => {
       }>(`/api/servers/${server.id}/template`, {
         botId: selectedTemplateMeBotId,
         sourceServerId: normalizedSourceServerId,
-        importSelection: templateReimportSelection,
       });
 
       const importedRoles = Number(response.data.result?.importedRoles ?? 0);
@@ -1813,7 +1789,6 @@ export const EditServerModal = () => {
       );
       setIsTemplateImportModalOpen(false);
       setTemplateImportSourceServerId("");
-      setTemplateReimportSelection(DEFAULT_TEMPLATE_REIMPORT_SELECTION);
 
       await loadServerTemplate();
       router.refresh();
@@ -2164,6 +2139,7 @@ export const EditServerModal = () => {
   const traits = form.watch("traits") || [];
   const gamesPlayed = form.watch("gamesPlayed") || [];
   const inviteMode = form.watch("inviteMode") || "normal";
+  const showChannelGroups = form.watch("showChannelGroups") ?? true;
   const [traitDraft, setTraitDraft] = useState("");
   const [gameSearchQuery, setGameSearchQuery] = useState("");
 
@@ -2772,7 +2748,11 @@ export const EditServerModal = () => {
     }
   };
 
-  const onRoleDrop = async (event: React.DragEvent<HTMLElement>, targetRoleId: string) => {
+  const onRoleDrop = async (
+    event: React.DragEvent<HTMLElement>,
+    targetRoleId: string,
+    placement: "before" | "after" = "before"
+  ) => {
     event.preventDefault();
 
     if (!server?.id || !canManageRoles || isSavingRoleOrder) {
@@ -2790,7 +2770,7 @@ export const EditServerModal = () => {
     }
 
     const previousOrder = roles;
-    const nextOrder = reorderRoles(previousOrder, payloadDraggedId, targetRoleId);
+    const nextOrder = reorderRoles(previousOrder, payloadDraggedId, targetRoleId, placement);
 
     if (nextOrder === previousOrder) {
       return;
@@ -3659,53 +3639,72 @@ export const EditServerModal = () => {
                               ) : filteredRoles.length === 0 ? (
                                 <p className="rounded-md bg-[#2b2d31] px-3 py-2 text-xs text-zinc-400">No roles match your search.</p>
                               ) : (
-                                filteredRoles.map((role) => (
-                                  <div
-                                    key={role.id}
-                                    role="button"
-                                    tabIndex={0}
-                                    draggable={canManageRoles && !isSavingRoleOrder}
-                                    onDragStart={(event) => onRoleDragStart(event, role.id)}
-                                    onDragEnd={onRoleDragEnd}
-                                    onDragOver={(event) => onRoleDragOver(event, role.id)}
-                                    onDrop={(event) => void onRoleDrop(event, role.id)}
-                                    onClick={() => onSelectRole(role)}
-                                    onKeyDown={(event) => {
-                                      if (event.key === "Enter" || event.key === " ") {
-                                        event.preventDefault();
-                                        onSelectRole(role);
-                                      }
-                                    }}
-                                    className={cn(
-                                      "grid w-full cursor-pointer grid-cols-[1fr_72px] items-center gap-2 rounded-md px-2 py-1.5 text-left transition",
-                                      canManageRoles ? "cursor-grab active:cursor-grabbing" : "",
-                                      draggedRoleId && dragOverRoleId === role.id ? "ring-1 ring-indigo-500/50" : "",
-                                      selectedRoleId === role.id
-                                        ? "bg-[#404249] text-white"
-                                        : "text-zinc-300 hover:bg-[#36393f]"
-                                    )}
-                                  >
-                                    <span className="flex min-w-0 items-center gap-2">
-                                      {role.iconUrl ? (
-                                        <span className="relative inline-flex h-4 w-4 overflow-hidden rounded-full border border-black/30">
-                                          <Image src={role.iconUrl} alt={`${role.name} icon`} fill className="object-cover" unoptimized />
-                                        </span>
-                                      ) : (
-                                        <span
-                                          className="inline-flex h-3 w-3 rounded-full border border-black/30"
-                                          style={{ backgroundColor: role.color || "#99aab5" }}
-                                        />
+                                filteredRoles.map((role) => {
+                                  const isActiveRoleDragTarget = Boolean(draggedRoleId && dragOverRoleId === role.id);
+
+                                  return (
+                                    <div
+                                      key={role.id}
+                                      className={cn(
+                                        "transition-all duration-150",
+                                        isActiveRoleDragTarget ? "mb-10" : "mb-0"
                                       )}
-                                      <span className="truncate text-sm">{role.name}</span>
-                                      {role.isManaged ? (
-                                        <span className="rounded bg-black/25 px-1.5 py-0.5 text-[10px] text-zinc-300">System</span>
+                                    >
+                                      <div
+                                        role="button"
+                                        tabIndex={0}
+                                        draggable={canManageRoles && !isSavingRoleOrder}
+                                        onDragStart={(event) => onRoleDragStart(event, role.id)}
+                                        onDragEnd={onRoleDragEnd}
+                                        onDragOver={(event) => onRoleDragOver(event, role.id)}
+                                        onDrop={(event) => void onRoleDrop(event, role.id, "before")}
+                                        onClick={() => onSelectRole(role)}
+                                        onKeyDown={(event) => {
+                                          if (event.key === "Enter" || event.key === " ") {
+                                            event.preventDefault();
+                                            onSelectRole(role);
+                                          }
+                                        }}
+                                        className={cn(
+                                          "grid w-full cursor-pointer grid-cols-[1fr_72px] items-center gap-2 rounded-md px-2 py-1.5 text-left transition",
+                                          canManageRoles ? "cursor-grab active:cursor-grabbing" : "",
+                                          isActiveRoleDragTarget ? "ring-1 ring-indigo-500/50" : "",
+                                          selectedRoleId === role.id
+                                            ? "bg-[#404249] text-white"
+                                            : "text-zinc-300 hover:bg-[#36393f]"
+                                        )}
+                                      >
+                                        <span className="flex min-w-0 items-center gap-2">
+                                          {role.iconUrl ? (
+                                            <span className="relative inline-flex h-4 w-4 overflow-hidden rounded-full border border-black/30">
+                                              <Image src={role.iconUrl} alt={`${role.name} icon`} fill className="object-cover" unoptimized />
+                                            </span>
+                                          ) : (
+                                            <span
+                                              className="inline-flex h-3 w-3 rounded-full border border-black/30"
+                                              style={{ backgroundColor: role.color || "#99aab5" }}
+                                            />
+                                          )}
+                                          <span className="truncate text-sm">{role.name}</span>
+                                          {role.isManaged ? (
+                                            <span className="rounded bg-black/25 px-1.5 py-0.5 text-[10px] text-zinc-300">System</span>
+                                          ) : null}
+                                        </span>
+                                        <span className="text-center text-xs text-zinc-300">
+                                          {(role.memberCount ?? 0) === 0 ? "N/N" : role.memberCount}
+                                        </span>
+                                      </div>
+
+                                      {isActiveRoleDragTarget ? (
+                                        <div
+                                          className="mt-1 h-9 w-full"
+                                          onDragOver={(event) => onRoleDragOver(event, role.id)}
+                                          onDrop={(event) => void onRoleDrop(event, role.id, "after")}
+                                        />
                                       ) : null}
-                                    </span>
-                                    <span className="text-center text-xs text-zinc-300">
-                                      {(role.memberCount ?? 0) === 0 ? "N/N" : role.memberCount}
-                                    </span>
-                                  </div>
-                                ))
+                                    </div>
+                                  );
+                                })
                               )}
                             </div>
                           </div>
@@ -4042,6 +4041,16 @@ export const EditServerModal = () => {
                                             )}
                                           </div>
                                         </div>
+                                      </div>
+
+                                      <div className="flex items-center justify-end border-t border-zinc-700 px-4 py-3">
+                                        <Button
+                                          type="button"
+                                          onClick={() => setIsManageRoleMembersModalOpen(false)}
+                                          className="h-8 bg-transparent px-3 text-xs text-zinc-300 hover:bg-white/10"
+                                        >
+                                          Close
+                                        </Button>
                                       </div>
                                     </div>
                                   </div>
@@ -4381,7 +4390,6 @@ export const EditServerModal = () => {
 
                                 setIsTemplateImportModalOpen(false);
                                 setTemplateImportSourceServerId("");
-                                setTemplateReimportSelection(DEFAULT_TEMPLATE_REIMPORT_SELECTION);
                               }}
                               className="rounded p-1 text-zinc-300 transition hover:bg-white/10 hover:text-white"
                               aria-label="Close import modal"
@@ -4406,120 +4414,6 @@ export const EditServerModal = () => {
                               </p>
                             </div>
 
-                            <div>
-                              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Select what to re-import</p>
-                              <div className="grid gap-2 sm:grid-cols-2">
-                                <label className="flex items-center gap-2 rounded border border-zinc-700 bg-[#15161a] px-2.5 py-2 text-xs text-zinc-200">
-                                  <input
-                                    type="checkbox"
-                                    checked={templateReimportSelection.roles}
-                                    onChange={(event) =>
-                                      setTemplateReimportSelection((previous) => ({
-                                        ...previous,
-                                        roles: event.target.checked,
-                                      }))
-                                    }
-                                    disabled={isImportingOtherTemplate}
-                                  />
-                                  Roles
-                                </label>
-
-                                <label className="flex items-center gap-2 rounded border border-zinc-700 bg-[#15161a] px-2.5 py-2 text-xs text-zinc-200">
-                                  <input
-                                    type="checkbox"
-                                    checked={templateReimportSelection.channelGroups}
-                                    onChange={(event) =>
-                                      setTemplateReimportSelection((previous) => ({
-                                        ...previous,
-                                        channelGroups: event.target.checked,
-                                      }))
-                                    }
-                                    disabled={isImportingOtherTemplate}
-                                  />
-                                  Channel Groups
-                                </label>
-
-                                <label className="flex items-center gap-2 rounded border border-zinc-700 bg-[#15161a] px-2.5 py-2 text-xs text-zinc-200">
-                                  <input
-                                    type="checkbox"
-                                    checked={templateReimportSelection.channels}
-                                    onChange={(event) =>
-                                      setTemplateReimportSelection((previous) => ({
-                                        ...previous,
-                                        channels: event.target.checked,
-                                      }))
-                                    }
-                                    disabled={isImportingOtherTemplate}
-                                  />
-                                  Channels
-                                </label>
-
-                                <div className="hidden sm:block" />
-
-                                <label className="flex items-center gap-2 rounded border border-zinc-700 bg-[#15161a] px-2.5 py-2 text-xs text-zinc-200">
-                                  <input
-                                    type="checkbox"
-                                    checked={templateReimportSelection.roleGroups}
-                                    onChange={(event) =>
-                                      setTemplateReimportSelection((previous) => ({
-                                        ...previous,
-                                        roleGroups: event.target.checked,
-                                      }))
-                                    }
-                                    disabled={isImportingOtherTemplate}
-                                  />
-                                  Role Groups
-                                </label>
-
-                                <label className="flex items-center gap-2 rounded border border-zinc-700 bg-[#15161a] px-2.5 py-2 text-xs text-zinc-200">
-                                  <input
-                                    type="checkbox"
-                                    checked={templateReimportSelection.roleIcons}
-                                    onChange={(event) =>
-                                      setTemplateReimportSelection((previous) => ({
-                                        ...previous,
-                                        roleIcons: event.target.checked,
-                                      }))
-                                    }
-                                    disabled={isImportingOtherTemplate}
-                                  />
-                                  Role Icons
-                                </label>
-
-                                <label className="flex items-center gap-2 rounded border border-zinc-700 bg-[#15161a] px-2.5 py-2 text-xs text-zinc-200">
-                                  <input
-                                    type="checkbox"
-                                    checked={templateReimportSelection.serverBanner}
-                                    onChange={(event) =>
-                                      setTemplateReimportSelection((previous) => ({
-                                        ...previous,
-                                        serverBanner: event.target.checked,
-                                      }))
-                                    }
-                                    disabled={isImportingOtherTemplate}
-                                  />
-                                  Server Banner
-                                </label>
-
-                                <label className="flex items-center gap-2 rounded border border-zinc-700 bg-[#15161a] px-2.5 py-2 text-xs text-zinc-200">
-                                  <input
-                                    type="checkbox"
-                                    checked={templateReimportSelection.serverIcon}
-                                    onChange={(event) =>
-                                      setTemplateReimportSelection((previous) => ({
-                                        ...previous,
-                                        serverIcon: event.target.checked,
-                                      }))
-                                    }
-                                    disabled={isImportingOtherTemplate}
-                                  />
-                                  Server Icon
-                                </label>
-                              </div>
-                              <p className="mt-2 text-[11px] text-zinc-500">
-                                Re-import runs in merge mode: existing matching entries are kept (no overwrite) and duplicates are skipped.
-                              </p>
-                            </div>
                           </div>
 
                           <div className="mt-4 flex items-center justify-end gap-2">
@@ -4532,7 +4426,6 @@ export const EditServerModal = () => {
 
                                 setIsTemplateImportModalOpen(false);
                                 setTemplateImportSourceServerId("");
-                                setTemplateReimportSelection(DEFAULT_TEMPLATE_REIMPORT_SELECTION);
                               }}
                               className="bg-transparent text-zinc-300 hover:bg-white/10"
                               disabled={isImportingOtherTemplate}
@@ -6600,6 +6493,24 @@ export const EditServerModal = () => {
                             {inviteMode === "approval"
                               ? "New joins are routed to approval-required flow."
                               : "Invites join immediately when valid."}
+                          </p>
+
+                          <label className="mt-3 inline-flex items-center gap-2 rounded-md border border-zinc-700 bg-[#15161a] px-3 py-2 text-xs text-zinc-200">
+                            <input
+                              type="checkbox"
+                              checked={showChannelGroups}
+                              onChange={(event) =>
+                                form.setValue("showChannelGroups", event.target.checked, {
+                                  shouldDirty: true,
+                                  shouldValidate: true,
+                                })
+                              }
+                              disabled={isLoading}
+                            />
+                            Show Channel Groups in sidebar
+                          </label>
+                          <p className="mt-1 text-[11px] text-zinc-500">
+                            Turn this off to hide grouped sections and show channels in one flat list.
                           </p>
                         </>
                       ) : null}

@@ -20,7 +20,6 @@ export const ChannelDropZone = ({
   className,
 }: ChannelDropZoneProps) => {
   const router = useRouter();
-  const [isOver, setIsOver] = useState(false);
   const [isMoving, setIsMoving] = useState(false);
 
   const getDraggedChannelId = (event: React.DragEvent<HTMLDivElement>) => {
@@ -42,18 +41,10 @@ export const ChannelDropZone = ({
 
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
-    if (!isOver) {
-      setIsOver(true);
-    }
-  };
-
-  const onDragLeave = () => {
-    setIsOver(false);
   };
 
   const onDrop = async (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
-    setIsOver(false);
 
     const channelId = getDraggedChannelId(event);
     if (!channelId || isMoving) {
@@ -78,13 +69,8 @@ export const ChannelDropZone = ({
   return (
     <div
       onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
       onDrop={onDrop}
-      className={cn(
-        "rounded-md transition-colors",
-        isOver && "ring-1 ring-emerald-400/70 bg-emerald-500/10",
-        className
-      )}
+      className={cn("rounded-md", className)}
     >
       {children}
     </div>

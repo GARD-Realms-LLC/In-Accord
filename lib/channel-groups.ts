@@ -338,8 +338,12 @@ export const ensureMediaChannelsGroupedForServer = async ({
           limit 1
         `);
 
-        selectedGroupId =
-          (ensuredGroupResult as unknown as { rows?: Array<{ id: string }> }).rows?.[0]?.id ?? null;
+        const ensuredGroupId =
+          (ensuredGroupResult as unknown as { rows?: Array<{ id: string }> }).rows?.[0]?.id;
+
+        if (ensuredGroupId) {
+          selectedGroupId = ensuredGroupId;
+        }
       }
 
       result[mediaType] = selectedGroupId;

@@ -4,6 +4,11 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { currentProfile } from "@/lib/current-profile";
 import { db, member, MemberRole, server } from "@/lib/db";
 import { ensureChannelGroupSchema } from "@/lib/channel-groups";
+import { ensureChannelOtherSettingsSchema } from "@/lib/channel-discord-settings";
+import { ensureChannelPermissionSchema } from "@/lib/channel-permissions";
+import { ensureChannelThreadSchema } from "@/lib/channel-threads";
+import { ensureChannelTopicSchema } from "@/lib/channel-topic";
+import { ensureVoiceStateSchema } from "@/lib/voice-states";
 
 export async function PATCH(
   req: Request,
@@ -149,14 +154,75 @@ export async function DELETE(
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
+    await ensureChannelTopicSchema();
+    await ensureChannelOtherSettingsSchema();
+    await ensureChannelPermissionSchema();
+    await ensureChannelThreadSchema();
+    await ensureVoiceStateSchema();
+
     await db.transaction(async (tx) => {
-      await tx.execute(sql`
-        update "Channel"
-        set
-          "channelGroupId" = null,
-          "updatedAt" = now()
-        where "channelGroupId" = ${groupId}
+      const channelResult = await tx.execute(sql`
+        select "id"
+        from "Channel"
+        where "serverId" = ${serverId}
+          and "channelGroupId" = ${groupId}
       `);
+
+      const channelIds = ((channelResult as unknown as { rows?: Array<{ id: string | null }> }).rows ?? [])
+        .map((row) => String(row.id ?? "").trim())
+        .filter(Boolean);
+
+      if (channelIds.length > 0) {
+        await tx.execute(sql`
+          delete from "ThreadReadState"
+          where "threadId" in (
+            select "id"
+            from "ChannelThread"
+            where "serverId" = ${serverId}
+              and "channelId" in (${sql.join(channelIds.map((id) => sql`${id}`), sql`, `)})
+          )
+        `);
+
+        await tx.execute(sql`
+          delete from "ChannelThread"
+          where "serverId" = ${serverId}
+            and "channelId" in (${sql.join(channelIds.map((id) => sql`${id}`), sql`, `)})
+        `);
+
+        await tx.execute(sql`
+          delete from "Message"
+          where "channelId" in (${sql.join(channelIds.map((id) => sql`${id}`), sql`, `)})
+        `);
+
+        await tx.execute(sql`
+          delete from "VoiceState"
+          where "serverId" = ${serverId}
+            and "channelId" in (${sql.join(channelIds.map((id) => sql`${id}`), sql`, `)})
+        `);
+
+        await tx.execute(sql`
+          delete from "ChannelPermission"
+          where "serverId" = ${serverId}
+            and "channelId" in (${sql.join(channelIds.map((id) => sql`${id}`), sql`, `)})
+        `);
+
+        await tx.execute(sql`
+          delete from "ChannelTopic"
+          where "channelId" in (${sql.join(channelIds.map((id) => sql`${id}`), sql`, `)})
+        `);
+
+        await tx.execute(sql`
+          delete from "ChannelOtherSettings"
+          where "serverId" = ${serverId}
+            and "channelId" in (${sql.join(channelIds.map((id) => sql`${id}`), sql`, `)})
+        `);
+
+        await tx.execute(sql`
+          delete from "Channel"
+          where "serverId" = ${serverId}
+            and "id" in (${sql.join(channelIds.map((id) => sql`${id}`), sql`, `)})
+        `);
+      }
 
       await tx.execute(sql`
         delete from "ChannelGroup"

@@ -5,7 +5,10 @@ import { currentProfile } from "@/lib/current-profile";
 import { db, server } from "@/lib/db";
 import { emitInAccordSystemEvent } from "@/lib/in-accord-event-system";
 import { getServerBannerConfig, setServerBannerConfig } from "@/lib/server-banner-store";
+import { removeServerFromAllProfileServerTabs } from "@/lib/profile-server-tabs";
 import { getServerProfileSettings, setServerProfileSettings } from "@/lib/server-profile-settings-store";
+import { removeServerFromServerRailFolders } from "@/lib/server-rail-layout";
+import { hardDeleteServerScopedData } from "@/lib/server-hard-delete";
 import { isInAccordProtectedServer } from "@/lib/server-security";
 
 export async function GET(
@@ -46,6 +49,7 @@ export async function GET(
       gamesPlayed: profileSettings.gamesPlayed,
       bannerColor: profileSettings.bannerColor,
       inviteMode: profileSettings.inviteMode,
+      showChannelGroups: profileSettings.showChannelGroups,
     });
   } catch (error) {
     console.log("[SERVER_ID_GET]", error);
@@ -81,6 +85,10 @@ export async function DELETE(
     if (isInAccordProtectedServer({ serverId: target.id, serverName: target.name })) {
       return new NextResponse("In-Accord server is protected and cannot be deleted.", { status: 403 });
     }
+
+    await removeServerFromAllProfileServerTabs(serverId);
+    await removeServerFromServerRailFolders(serverId);
+    await hardDeleteServerScopedData(serverId);
 
     await db.delete(server).where(
       and(eq(server.id, serverId), eq(server.profileId, profile.id))
@@ -126,6 +134,7 @@ export async function PATCH(
       gamesPlayed,
       bannerColor,
       inviteMode,
+      showChannelGroups,
     } = await req.json();
 
     if (!profile) {
@@ -168,7 +177,8 @@ export async function PATCH(
       traits: Array.isArray(traits) ? traits : [],
       gamesPlayed: Array.isArray(gamesPlayed) ? gamesPlayed : [],
       bannerColor: typeof bannerColor === "string" ? bannerColor : null,
-      inviteMode: typeof inviteMode === "string" ? inviteMode : "normal",
+      inviteMode: inviteMode === "approval" ? "approval" : "normal",
+      showChannelGroups: typeof showChannelGroups === "boolean" ? showChannelGroups : true,
     });
 
     const updatedServer = await db.query.server.findFirst({
@@ -195,6 +205,7 @@ export async function PATCH(
         gamesPlayed: resolvedProfileSettings.gamesPlayed,
         bannerColor: resolvedProfileSettings.bannerColor,
         inviteMode: resolvedProfileSettings.inviteMode,
+        showChannelGroups: resolvedProfileSettings.showChannelGroups,
       },
     }).catch((eventError) => {
       console.warn("[SERVER_ID_PATCH_EVENT]", eventError);
@@ -212,6 +223,7 @@ export async function PATCH(
             gamesPlayed: resolvedProfileSettings.gamesPlayed,
             bannerColor: resolvedProfileSettings.bannerColor,
             inviteMode: resolvedProfileSettings.inviteMode,
+            showChannelGroups: resolvedProfileSettings.showChannelGroups,
           }
         : updatedServer
     );

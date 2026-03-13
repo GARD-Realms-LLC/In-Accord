@@ -144,6 +144,9 @@ export const NavigationServersCollection = ({
   const [railContextMenu, setRailContextMenu] = useState<RailContextMenuState | null>(null);
   const hasLocalFolderEdits = useRef(false);
   const lastAppliedLayoutSignature = useRef<string>("[]");
+  const dragStartedServerIdRef = useRef<string | null>(null);
+  const dragStartedFromFolderRef = useRef(false);
+  const dragDropHandledRef = useRef(false);
 
   const allServers = useMemo(() => [...myServers, ...joinedServers], [myServers, joinedServers]);
   const allServerMap = useMemo(() => {
@@ -536,6 +539,7 @@ export const NavigationServersCollection = ({
         event.stopPropagation();
         const activeDraggedServerId = resolveDraggedServerId(event, draggedServerId);
         if (activeDraggedServerId) {
+          dragDropHandledRef.current = true;
           dropServerOnServer(activeDraggedServerId, server.id);
         }
         setDragOverServerId(null);
@@ -553,8 +557,25 @@ export const NavigationServersCollection = ({
         updatedAt={server.updatedAt}
         onContextMenu={(event) => openServerContextMenu(event, server.id)}
         draggable
-        onDragStart={() => setDraggedServerId(server.id)}
+        onDragStart={() => {
+          dragStartedServerIdRef.current = server.id;
+          dragStartedFromFolderRef.current = Boolean(findFolderIdByServer(server.id, folders));
+          dragDropHandledRef.current = false;
+          setDraggedServerId(server.id);
+        }}
         onDragEnd={() => {
+          const activeDraggedServerId = String(draggedServerId ?? dragStartedServerIdRef.current ?? "").trim();
+          if (
+            activeDraggedServerId &&
+            dragStartedFromFolderRef.current &&
+            !dragDropHandledRef.current
+          ) {
+            ungroupServer(activeDraggedServerId);
+          }
+
+          dragStartedServerIdRef.current = null;
+          dragStartedFromFolderRef.current = false;
+          dragDropHandledRef.current = false;
           setDraggedServerId(null);
           setDragOverFolderId(null);
           setDragOverServerId(null);
@@ -577,6 +598,7 @@ export const NavigationServersCollection = ({
         event.preventDefault();
         const activeDraggedServerId = resolveDraggedServerId(event, draggedServerId);
         if (activeDraggedServerId) {
+          dragDropHandledRef.current = true;
           ungroupServer(activeDraggedServerId);
         }
         setDraggedServerId(null);
@@ -697,6 +719,7 @@ export const NavigationServersCollection = ({
                       event.stopPropagation();
                       const activeDraggedServerId = resolveDraggedServerId(event, draggedServerId);
                       if (activeDraggedServerId) {
+                        dragDropHandledRef.current = true;
                         assignServerToFolder(activeDraggedServerId, folder.id);
                       }
                       setDragOverFolderId(null);
@@ -762,6 +785,7 @@ export const NavigationServersCollection = ({
                       event.stopPropagation();
                       const activeDraggedServerId = resolveDraggedServerId(event, draggedServerId);
                       if (activeDraggedServerId) {
+                        dragDropHandledRef.current = true;
                         assignServerToFolder(activeDraggedServerId, folder.id);
                       }
                       setDragOverFolderId(null);

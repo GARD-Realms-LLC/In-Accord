@@ -58,13 +58,16 @@ export async function POST(req: Request) {
     }
 
     if (action === "finish") {
+      const rawTransports = body.credential?.response?.transports;
+      const transports: string[] = Array.isArray(rawTransports)
+        ? rawTransports.map((transport) => String(transport))
+        : [];
+
       const result = await finishSecurityKeyRegistration({
         userId: profile.id,
         credentialId: String(body.credential?.id ?? ""),
         clientDataJSON: String(body.credential?.response?.clientDataJSON ?? ""),
-        transports: Array.isArray(body.credential?.response?.transports)
-          ? body.credential?.response?.transports
-          : [],
+        transports,
       });
 
       if (!result.ok) {

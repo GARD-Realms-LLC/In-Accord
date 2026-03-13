@@ -15,6 +15,10 @@ import { isImmutableAccountUserId } from "@/lib/account-security";
 import { ADMINISTRATOR_ROLE_KEY } from "@/lib/account-security-constants";
 import { isBotUser } from "@/lib/is-bot-user";
 import { ensureInAccordRoleSchema } from "@/lib/in-accord-roles";
+import { isInAccordProtectedServer } from "@/lib/server-security";
+import { removeServerFromAllProfileServerTabs } from "@/lib/profile-server-tabs";
+import { removeServerFromServerRailFolders } from "@/lib/server-rail-layout";
+import { hardDeleteServerScopedData } from "@/lib/server-hard-delete";
 
 type UserRow = {
   userId: string;
@@ -530,9 +534,6 @@ export async function DELETE(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const userId = String(searchParams.get("userId") ?? "").trim();
-    const forceCleanup =
-      String(searchParams.get("forceCleanup") ?? "").trim().toLowerCase() === "true";
-
     if (!userId) {
       return new NextResponse("userId is required", { status: 400 });
     }
@@ -567,60 +568,53 @@ export async function DELETE(request: Request) {
       return new NextResponse("User not found", { status: 404 });
     }
 
-    const isTargetBotAccount = isBotUser({
-      role: userRow.role,
-      name: userRow.name,
-      email: userRow.email,
-    });
-
-    const usageResult = await db.execute(sql`
-      select
-        (
-          select count(*)::int
-          from "Server" s
-          where s."profileId" = ${userId}
-        ) as "ownedServerCount",
-        (
-          select count(*)::int
-          from "Member" m
-          where m."profileId" = ${userId}
-        ) as "memberCount"
+    const ownedServersResult = await db.execute(sql`
+      select "id", "name"
+      from "Server"
+      where "profileId" = ${userId}
     `);
 
-    const usageRow = (usageResult as unknown as {
-      rows: Array<{
-        ownedServerCount: number | string | null;
-        memberCount: number | string | null;
-      }>;
-    }).rows?.[0];
+    const ownedServers = (ownedServersResult as unknown as {
+      rows?: Array<{ id: string | null; name: string | null }>;
+    }).rows ?? [];
 
-    const ownedServerCount = Number(usageRow?.ownedServerCount ?? 0);
-    const memberCount = Number(usageRow?.memberCount ?? 0);
+    for (const ownedServer of ownedServers) {
+      const ownedServerId = String(ownedServer.id ?? "").trim();
+      if (!ownedServerId) {
+        continue;
+      }
 
-    if (ownedServerCount > 0) {
-      return new NextResponse(
-        "User cannot be deleted because they own one or more servers.",
-        { status: 409 }
-      );
+      if (
+        isInAccordProtectedServer({
+          serverId: ownedServerId,
+          serverName: ownedServer.name,
+        })
+      ) {
+        return new NextResponse("This user owns a protected In-Accord server and cannot be deleted.", {
+          status: 403,
+        });
+      }
     }
 
-    if (memberCount > 0 && !(forceCleanup && isTargetBotAccount)) {
-      return new NextResponse(
-        "User cannot be deleted because they are linked to servers or memberships.",
-        { status: 409 }
-      );
-    }
+    await db.execute(sql`
+      delete from "Member"
+      where "profileId" = ${userId}
+    `);
 
-    if (forceCleanup && !isTargetBotAccount) {
-      return new NextResponse("Force cleanup delete is only allowed for bot/app accounts.", {
-        status: 403,
-      });
-    }
+    for (const ownedServer of ownedServers) {
+      const ownedServerId = String(ownedServer.id ?? "").trim();
+      if (!ownedServerId) {
+        continue;
+      }
 
-    if (forceCleanup && memberCount > 0) {
+      await removeServerFromAllProfileServerTabs(ownedServerId);
+      await removeServerFromServerRailFolders(ownedServerId);
+      await hardDeleteServerScopedData(ownedServerId);
+
       await db.execute(sql`
-        delete from "Member"
-        where "profileId" = ${userId}
+        delete from "Server"
+        where "id" = ${ownedServerId}
+          and "profileId" = ${userId}
       `);
     }
 

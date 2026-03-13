@@ -41,7 +41,7 @@ export const ServerChannel = ({
   const [isDragOver, setIsDragOver] = useState(false);
   const [isReordering, setIsReordering] = useState(false);
   const customIcon = String((channel as { icon?: string | null }).icon ?? "").trim();
-  const canReorder = !!role && role !== MemberRole.GUEST && draggable;
+  const canReorder = draggable && role !== MemberRole.GUEST;
   const showConnectedCount = (channel.type === ChannelType.AUDIO || channel.type === ChannelType.VIDEO) && connectedCount > 0;
   const isActiveChannel = matchesRouteParam(String(params?.channelId ?? ""), {
     id: channel.id,
@@ -150,21 +150,27 @@ export const ServerChannel = ({
   };
 
   return (
-    <button
-      onClick={onClick}
-      draggable={canReorder}
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
+    <div
       className={cn(
-        "group mb-0.5 flex w-full items-center gap-x-2 rounded px-2 py-1.5 text-left transition hover:bg-[#3a3c43]",
-        canReorder && "cursor-grab active:cursor-grabbing",
-        isDragOver && "bg-[#5865f2]/20 ring-1 ring-[#5865f2]/70",
-        isActiveChannel && "bg-[#404249]"
+        "transition-all duration-150",
+        isDragOver && canReorder ? "mb-10" : "mb-0"
       )}
     >
+      <button
+        onClick={onClick}
+        draggable={canReorder}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+        className={cn(
+          "group mb-0.5 flex w-full items-center gap-x-2 rounded px-2 py-1.5 text-left transition hover:bg-[#3a3c43]",
+          canReorder && "cursor-grab active:cursor-grabbing",
+          isDragOver && "bg-[#5865f2]/20 ring-1 ring-[#5865f2]/70",
+          isActiveChannel && "bg-[#404249]"
+        )}
+      >
       {customIcon ? (
         <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-sm leading-none text-zinc-500 dark:text-zinc-300">
           {customIcon}
@@ -186,16 +192,19 @@ export const ServerChannel = ({
           {connectedCount}
         </span>
       ) : null}
-      <div className="ml-auto flex items-center gap-x-2">
-        {role !== MemberRole.GUEST && (
-          <ActionTooltip label="Channel Settings" align="center">
-            <Settings
-              onClick={(e) => onAction(e, "editChannel")}
-              className="h-4 w-4 text-[#949ba4] transition hover:text-[#dbdee1]"
-            />
-          </ActionTooltip>
-        )}
-      </div>
-    </button>
+        <div className="ml-auto flex items-center gap-x-2">
+          {role !== MemberRole.GUEST && (
+            <ActionTooltip label="Channel Settings" align="center">
+              <Settings
+                onClick={(e) => onAction(e, "editChannel")}
+                className="h-4 w-4 text-[#949ba4] transition hover:text-[#dbdee1]"
+              />
+            </ActionTooltip>
+          )}
+        </div>
+      </button>
+
+      {isDragOver && canReorder ? <div className="mt-1 h-9 w-full" /> : null}
+    </div>
   );
 };

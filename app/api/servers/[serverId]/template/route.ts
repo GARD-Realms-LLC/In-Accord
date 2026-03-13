@@ -1065,6 +1065,16 @@ export async function POST(req: Request, { params }: Params) {
         .filter((item) => isOtherCategoryType(item.type))
         .sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0));
 
+      const categoryNameById = new Map<string, string>();
+      for (const category of categories) {
+        const categoryId = String(category.id ?? "").trim();
+        if (!categoryId) {
+          continue;
+        }
+
+        categoryNameById.set(categoryId, String(category.name ?? "").trim().slice(0, 191));
+      }
+
       const existingGroupNamesResult = await tx.execute(sql`
         select lower(trim(coalesce("name", ''))) as "normalizedName"
         from "ChannelGroup"
@@ -1077,6 +1087,7 @@ export async function POST(req: Request, { params }: Params) {
       );
 
       const groupByTemplateCategoryId = new Map<string, string>();
+      const groupIdByNormalizedName = new Map<string, string>();
       let importedGroups = 0;
       let skippedGroups = 0;
       const maxSortOrderResult = await tx.execute(sql`
@@ -1128,10 +1139,65 @@ export async function POST(req: Request, { params }: Params) {
           groupByTemplateCategoryId.set(categoryId, groupId);
         }
 
+        const normalizedCategoryName = categoryName.trim().toLowerCase();
+        if (normalizedCategoryName) {
+          groupIdByNormalizedName.set(normalizedCategoryName, groupId);
+        }
+
         maxAssignedGroupSortOrder = Math.max(maxAssignedGroupSortOrder, groupSort);
 
         importedGroups += 1;
       }
+
+      const autoGroupIdByChannelType = new Map<ChannelType, string>();
+      const defaultGroupLabelByType: Record<ChannelType, string> = {
+        [ChannelType.TEXT]: "Text Channels",
+        [ChannelType.AUDIO]: "Audio Channels",
+        [ChannelType.VIDEO]: "Video Channels",
+      };
+
+      for (const channelType of [ChannelType.TEXT, ChannelType.AUDIO, ChannelType.VIDEO] as const) {
+        const defaultNameKey = defaultGroupLabelByType[channelType].trim().toLowerCase();
+        const existingDefaultGroupId = groupIdByNormalizedName.get(defaultNameKey);
+        if (existingDefaultGroupId) {
+          autoGroupIdByChannelType.set(channelType, existingDefaultGroupId);
+        }
+      }
+
+      const ensureAutoGroupForChannelType = async (channelType: ChannelType) => {
+        const existing = autoGroupIdByChannelType.get(channelType);
+        if (existing) {
+          return existing;
+        }
+
+        const resolvedGroupName = resolveUniqueName(defaultGroupLabelByType[channelType], usedGroupNames, "imported-group").slice(0, 191);
+        const resolvedNameKey = resolvedGroupName.trim().toLowerCase();
+        const groupId = uuidv4();
+        maxAssignedGroupSortOrder += 1;
+
+        await tx.execute(sql`
+          insert into "ChannelGroup" (
+            "id", "name", "icon", "serverId", "profileId", "sortOrder", "createdAt", "updatedAt"
+          )
+          values (
+            ${groupId},
+            ${resolvedGroupName},
+            ${null},
+            ${serverId},
+            ${profile.id},
+            ${maxAssignedGroupSortOrder},
+            now(),
+            now()
+          )
+        `);
+
+        autoGroupIdByChannelType.set(channelType, groupId);
+        if (resolvedNameKey) {
+          groupIdByNormalizedName.set(resolvedNameKey, groupId);
+        }
+        importedGroups += 1;
+        return groupId;
+      };
 
       const importableChannels = templateChannels
         .filter((item) => Number(item.type) !== 4)
@@ -1173,14 +1239,20 @@ export async function POST(req: Request, { params }: Params) {
         const parentTemplateId = String(templateChannel.parent_id ?? "").trim();
         let channelGroupId = parentTemplateId ? groupByTemplateCategoryId.get(parentTemplateId) ?? null : null;
         if (parentTemplateId && !channelGroupId) {
+          const parentCategoryName = categoryNameById.get(parentTemplateId);
+          if (parentCategoryName) {
+            channelGroupId = groupIdByNormalizedName.get(parentCategoryName.trim().toLowerCase()) ?? null;
+          }
+        }
+        if (parentTemplateId && !channelGroupId) {
           channelsWithMissingParentGroup += 1;
         }
 
-        const groupKey = channelGroupId ?? uncategorizedKey;
+        if (!channelGroupId) {
+          channelGroupId = await ensureAutoGroupForChannelType(mappedType);
+        }
 
-        const currentSort = channelSortByGroup.get(groupKey) ?? 0;
-        const nextSort = currentSort + 1;
-        channelSortByGroup.set(groupKey, nextSort);
+        const groupKey = channelGroupId ?? uncategorizedKey;
 
         const channelNameRaw = String(templateChannel.name ?? "").trim().slice(0, 191);
         if (!channelNameRaw) {
@@ -1190,6 +1262,27 @@ export async function POST(req: Request, { params }: Params) {
         const channelName = resolveUniqueName(channelNameRaw, usedChannelNames, "imported-channel").slice(0, 191);
         if (channelName !== channelNameRaw) {
           warnings.push(`Channel \"${channelNameRaw}\" already existed and was imported as \"${channelName}\".`);
+        }
+
+        const isGeneralChannel = channelNameRaw.trim().toLowerCase() === "general";
+        let nextSort = 1;
+
+        if (isGeneralChannel) {
+          await tx.execute(sql`
+            update "Channel" c
+            set
+              "sortOrder" = coalesce(c."sortOrder", 0) + 1,
+              "updatedAt" = now()
+            where c."serverId" = ${serverId}
+              and c."channelGroupId" is not distinct from ${channelGroupId}
+          `);
+
+          const bumpedCurrentSort = (channelSortByGroup.get(groupKey) ?? 0) + 1;
+          channelSortByGroup.set(groupKey, bumpedCurrentSort);
+        } else {
+          const currentSort = channelSortByGroup.get(groupKey) ?? 0;
+          nextSort = currentSort + 1;
+          channelSortByGroup.set(groupKey, nextSort);
         }
 
         const createdChannelId = uuidv4();
@@ -1336,7 +1429,7 @@ export async function POST(req: Request, { params }: Params) {
       }
 
       if (channelsWithMissingParentGroup > 0) {
-        warnings.push(`${channelsWithMissingParentGroup} channel(s) referenced parent groups that were unavailable and were imported uncategorized.`);
+        warnings.push(`${channelsWithMissingParentGroup} channel(s) referenced parent groups that were unavailable and were mapped to default channel groups.`);
       }
 
       if (channelsWithOverwrites > 0) {

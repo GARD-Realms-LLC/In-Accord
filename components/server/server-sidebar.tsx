@@ -1,4 +1,4 @@
-import { ChannelType, MemberRole } from "@/lib/db/types";
+import { Channel, ChannelType, MemberRole } from "@/lib/db/types";
 import { Hash, Mic, Video } from "lucide-react";
 import { asc, eq, sql } from "drizzle-orm";
 
@@ -8,12 +8,14 @@ import { channel, db, server } from "@/lib/db";
 import { ensureChannelGroupSchema } from "@/lib/channel-groups";
 import { visibleChannelIdsForRole } from "@/lib/channel-permissions";
 import { getServerBannerConfig } from "@/lib/server-banner-store";
+import { getServerProfileSettings } from "@/lib/server-profile-settings-store";
 import { listActiveVoiceCountsForServer } from "@/lib/voice-states";
 
 import { ServerHeader } from "./server-header";
 import { ServerSection } from "./server-section";
 import { ServerChannel } from "./server-channel";
 import { ChannelDropZone } from "./channel-drop-zone";
+import { ChannelGroupsList } from "./channel-groups-list";
 import { ServerEventsMenu } from "./server-events-menu";
 
 interface ServerSidebarProps {
@@ -26,8 +28,17 @@ type ChannelRow = {
   type: ChannelType;
   profileId: string;
   serverId: string;
+  channelGroupId: string | null;
+  sortOrder: number;
   createdAt: Date | string;
   updatedAt: Date | string;
+};
+
+type ChannelGroupRow = {
+  id: string;
+  name: string;
+  icon: string | null;
+  sortOrder: number;
 };
 
 const iconMap = {
@@ -39,6 +50,8 @@ const iconMap = {
 export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
   const profile = await currentProfile();
 
+  await ensureChannelGroupSchema();
+
   const currentServerResult = await db
     .select()
     .from(server)
@@ -47,20 +60,58 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
 
   const currentServer = currentServerResult[0];
   const bannerConfig = currentServer ? await getServerBannerConfig(currentServer.id) : null;
+  const serverProfileSettings = currentServer ? await getServerProfileSettings(currentServer.id) : null;
 
-  const channels = (await db
-    .select({
-      id: channel.id,
-      name: channel.name,
-      type: channel.type,
-      profileId: channel.profileId,
-      serverId: channel.serverId,
-      createdAt: channel.createdAt,
-      updatedAt: channel.updatedAt,
-    })
-    .from(channel)
-    .where(eq(channel.serverId, serverId))
-    .orderBy(asc(channel.createdAt))) as ChannelRow[];
+  const rawChannels = (
+    (await db.execute(sql`
+      select
+        c."id",
+        c."name",
+        c."type",
+        c."profileId",
+        c."serverId",
+        c."channelGroupId",
+        coalesce(c."sortOrder", 0) as "sortOrder",
+        c."createdAt",
+        c."updatedAt"
+      from "Channel" c
+      where c."serverId" = ${serverId}
+      order by
+        case when c."channelGroupId" is null then 0 else 1 end,
+        c."sortOrder" asc,
+        c."createdAt" asc,
+        c."id" asc
+    `) as unknown as {
+      rows?: ChannelRow[];
+    }).rows ?? []
+  ) as ChannelRow[];
+
+  const channelGroups = (
+    (await db.execute(sql`
+      select
+        g."id",
+        g."name",
+        g."icon",
+        coalesce(g."sortOrder", 0) as "sortOrder"
+      from "ChannelGroup" g
+      where g."serverId" = ${serverId}
+      order by g."sortOrder" asc, g."createdAt" asc, g."id" asc
+    `) as unknown as {
+      rows?: ChannelGroupRow[];
+    }).rows ?? []
+  ) as ChannelGroupRow[];
+
+  const channels = rawChannels.map((item) => ({
+    id: item.id,
+    name: item.name,
+    type: item.type,
+    profileId: item.profileId,
+    serverId: item.serverId,
+    channelGroupId: item.channelGroupId,
+    sortOrder: Number(item.sortOrder ?? 0),
+    createdAt: item.createdAt instanceof Date ? item.createdAt : new Date(item.createdAt),
+    updatedAt: item.updatedAt instanceof Date ? item.updatedAt : new Date(item.updatedAt),
+  }));
 
   const membersResult = await db.execute(sql`
     select
@@ -150,22 +201,41 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
     return normalizedName !== "stage" && normalizedName !== "rules";
   });
 
-  await ensureChannelGroupSchema();
-  const channelGroupsCountResult = await db.execute(sql`
-    select count(*)::int as "count"
-    from "ChannelGroup"
-    where "serverId" = ${serverId}
-  `);
-  const channelGroupsCount = Number(
-    (
-      channelGroupsCountResult as unknown as {
-        rows?: Array<{ count?: number | string | null }>;
-      }
-    ).rows?.[0]?.count ?? 0
-  );
+  const channelGroupsCount = channelGroups.length;
   const channelsCount = visibleChannelsWithoutSpecial.length;
 
-  const ungroupedChannels = visibleChannelsWithoutSpecial;
+  const channelGroupById = new Map(channelGroups.map((group) => [group.id, group]));
+  const toEpoch = (value: Date | string) => (value instanceof Date ? value.getTime() : new Date(value).getTime());
+  const sortChannelsForDisplay = (left: (typeof visibleChannelsWithoutSpecial)[number], right: (typeof visibleChannelsWithoutSpecial)[number]) => {
+    const leftOrder = Number(left.sortOrder ?? 0);
+    const rightOrder = Number(right.sortOrder ?? 0);
+    if (leftOrder !== rightOrder) {
+      return leftOrder - rightOrder;
+    }
+
+    const leftCreatedAt = toEpoch(left.createdAt);
+    const rightCreatedAt = toEpoch(right.createdAt);
+    if (leftCreatedAt !== rightCreatedAt) {
+      return leftCreatedAt - rightCreatedAt;
+    }
+
+    return left.id.localeCompare(right.id);
+  };
+
+  const groupedChannelGroups = channelGroups
+    .map((group) => ({
+      id: group.id,
+      name: group.name,
+      icon: group.icon,
+      channels: visibleChannelsWithoutSpecial
+        .filter((channelItem) => channelItem.channelGroupId === group.id)
+        .sort(sortChannelsForDisplay) as Channel[],
+    }))
+    .filter((group) => group.channels.length > 0);
+
+  const ungroupedChannels = visibleChannelsWithoutSpecial
+    .filter((channelItem) => !channelItem.channelGroupId || !channelGroupById.has(channelItem.channelGroupId))
+    .sort(sortChannelsForDisplay) as Channel[];
   const serverWithMembers = {
     ...currentServer,
     members,
@@ -201,6 +271,18 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
         />
       </div>
       <ScrollArea className="settings-scrollbar min-h-0 flex-1 px-3 pt-3">
+        {serverProfileSettings?.showChannelGroups !== false && groupedChannelGroups.length > 0 ? (
+          <div className="mb-2">
+            <ChannelGroupsList
+              serverId={serverId}
+              role={role}
+              server={serverWithMembers}
+              groups={groupedChannelGroups}
+              connectedVoiceCountsByChannelId={Object.fromEntries(connectedVoiceCountsByChannelId)}
+            />
+          </div>
+        ) : null}
+
         {!!ungroupedChannels?.length && (
           <ChannelDropZone serverId={serverId} targetGroupId={null} className="mb-2">
             <ServerSection

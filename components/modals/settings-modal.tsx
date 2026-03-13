@@ -3078,7 +3078,16 @@ export const SettingsModal = () => {
           excludeCredentials: (begin.excludeCredentials ?? []).map((entry) => ({
             type: entry.type,
             id: decodeBase64UrlToUint8Array(entry.id),
-            transports: entry.transports,
+            transports: Array.isArray(entry.transports)
+              ? entry.transports.filter(
+                  (transport): transport is AuthenticatorTransport =>
+                    transport === "usb" ||
+                    transport === "nfc" ||
+                    transport === "ble" ||
+                    transport === "hybrid" ||
+                    transport === "internal"
+                )
+              : undefined,
           })),
         },
       })) as PublicKeyCredential | null;

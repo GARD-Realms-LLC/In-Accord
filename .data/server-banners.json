@@ -9,5 +9,10 @@
     "url": "/uploads/server-icons/1772912303677-00000001.png",
     "fit": "cover",
     "scale": 1
+  },
+  "14a54a8a-8f52-4565-a045-9cc862fef912": {
+    "url": "http://localhost:3000/api/r2/object?key=Client%2FServer%20Icons%2F1773365680417-00000001.png",
+    "fit": "cover",
+    "scale": 1
   }
 }

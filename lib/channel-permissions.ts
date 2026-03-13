@@ -24,6 +24,88 @@ const defaultPermissions: ChannelPermissionSet = {
   allowConnect: true,
 };
 
+export const ensureChannelPermissionSchema = async () => {
+  await db.execute(sql`
+    create table if not exists "ChannelPermission" (
+      "id" varchar(191) primary key,
+      "serverId" varchar(191) not null,
+      "channelId" varchar(191) not null,
+      "targetType" varchar(32) not null,
+      "targetId" varchar(191) not null,
+      "allowView" boolean,
+      "allowSend" boolean,
+      "allowConnect" boolean,
+      "createdAt" timestamp not null default now(),
+      "updatedAt" timestamp not null default now()
+    )
+  `);
+
+  await db.execute(sql`
+    alter table "ChannelPermission"
+    add column if not exists "id" varchar(191)
+  `);
+
+  await db.execute(sql`
+    alter table "ChannelPermission"
+    add column if not exists "serverId" varchar(191)
+  `);
+
+  await db.execute(sql`
+    alter table "ChannelPermission"
+    add column if not exists "channelId" varchar(191)
+  `);
+
+  await db.execute(sql`
+    alter table "ChannelPermission"
+    add column if not exists "targetType" varchar(32)
+  `);
+
+  await db.execute(sql`
+    alter table "ChannelPermission"
+    add column if not exists "targetId" varchar(191)
+  `);
+
+  await db.execute(sql`
+    alter table "ChannelPermission"
+    add column if not exists "allowView" boolean
+  `);
+
+  await db.execute(sql`
+    alter table "ChannelPermission"
+    add column if not exists "allowSend" boolean
+  `);
+
+  await db.execute(sql`
+    alter table "ChannelPermission"
+    add column if not exists "allowConnect" boolean
+  `);
+
+  await db.execute(sql`
+    alter table "ChannelPermission"
+    add column if not exists "createdAt" timestamp not null default now()
+  `);
+
+  await db.execute(sql`
+    alter table "ChannelPermission"
+    add column if not exists "updatedAt" timestamp not null default now()
+  `);
+
+  await db.execute(sql`
+    create index if not exists "ChannelPermission_serverId_idx"
+    on "ChannelPermission" ("serverId")
+  `);
+
+  await db.execute(sql`
+    create index if not exists "ChannelPermission_channelId_idx"
+    on "ChannelPermission" ("channelId")
+  `);
+
+  await db.execute(sql`
+    create unique index if not exists "ChannelPermission_channel_target_key"
+    on "ChannelPermission" ("channelId", "targetType", "targetId")
+  `);
+};
+
 const rolePermissionRows = async ({
   serverId,
   role,

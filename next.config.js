@@ -48,10 +48,31 @@ const nextConfig = {
       },
     ],
   },
-  webpack: (config, { dev }) => {
+  turbopack: {
+    resolveAlias: {
+      "discord.js": "./lib/shims/discord-client-shim.js",
+      "@discordjs/ws": "./lib/shims/empty-client-module.js",
+      "zlib-sync": "./lib/shims/empty-client-module.js",
+      bufferutil: "./lib/shims/empty-client-module.js",
+      "utf-8-validate": "./lib/shims/empty-client-module.js",
+    },
+  },
+  webpack: (config, { dev, isServer }) => {
     if (dev) {
       config.cache = {
         type: "memory",
+      };
+    }
+
+    if (!isServer) {
+      config.resolve = config.resolve || {};
+      config.resolve.alias = {
+        ...(config.resolve.alias || {}),
+        "discord.js": require("node:path").resolve(__dirname, "./lib/shims/discord-client-shim.js"),
+        "@discordjs/ws": require("node:path").resolve(__dirname, "./lib/shims/empty-client-module.js"),
+        "zlib-sync": require("node:path").resolve(__dirname, "./lib/shims/empty-client-module.js"),
+        bufferutil: require("node:path").resolve(__dirname, "./lib/shims/empty-client-module.js"),
+        "utf-8-validate": require("node:path").resolve(__dirname, "./lib/shims/empty-client-module.js"),
       };
     }
 

@@ -129,3 +129,22 @@ export const upsertServerRailFolders = async (folders: ServerRailFolder[]) => {
         "updatedAt" = excluded."updatedAt"
   `);
 };
+
+export const removeServerFromServerRailFolders = async (serverId: string) => {
+  const normalizedServerId = String(serverId ?? "").trim();
+  if (!normalizedServerId) {
+    return;
+  }
+
+  const folders = await getServerRailFolders();
+  const nextFolders = normalizeServerRailFolders(
+    folders
+      .map((folder) => ({
+        ...folder,
+        serverIds: folder.serverIds.filter((id) => id !== normalizedServerId),
+      }))
+      .filter((folder) => folder.serverIds.length > 0)
+  );
+
+  await upsertServerRailFolders(nextFolders);
+};

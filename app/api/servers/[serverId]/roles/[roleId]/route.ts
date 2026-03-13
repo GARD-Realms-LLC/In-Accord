@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db, server } from "@/lib/db";
+import { ensureChannelPermissionSchema } from "@/lib/channel-permissions";
 import { ensureServerRolesSchema } from "@/lib/server-roles";
 
 type Params = { params: Promise<{ serverId: string; roleId: string }> };
@@ -34,6 +35,7 @@ export async function PATCH(req: Request, { params }: Params) {
 		}
 
 		await ensureServerRolesSchema();
+		await ensureChannelPermissionSchema();
 
 		const body = (await req.json().catch(() => ({}))) as {
 			name?: string;
@@ -224,6 +226,19 @@ export async function DELETE(_req: Request, { params }: Params) {
 			delete from "ServerRolePermission"
 			where "roleId" = ${roleId}
 				and "serverId" = ${serverId}
+		`);
+
+		await db.execute(sql`
+			delete from "ChannelPermission"
+			where "serverId" = ${serverId}
+				and "targetType" = 'ROLE'
+				and "targetId" = (
+					select "name"
+					from "ServerRole"
+					where "id" = ${roleId}
+						and "serverId" = ${serverId}
+					limit 1
+				)
 		`);
 
 		await db.execute(sql`
