@@ -271,18 +271,6 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
         />
       </div>
       <ScrollArea className="settings-scrollbar min-h-0 flex-1 px-3 pt-3">
-        {serverProfileSettings?.showChannelGroups !== false && groupedChannelGroups.length > 0 ? (
-          <div className="mb-2">
-            <ChannelGroupsList
-              serverId={serverId}
-              role={role}
-              server={serverWithMembers}
-              groups={groupedChannelGroups}
-              connectedVoiceCountsByChannelId={Object.fromEntries(connectedVoiceCountsByChannelId)}
-            />
-          </div>
-        ) : null}
-
         {!!ungroupedChannels?.length && (
           <ChannelDropZone serverId={serverId} targetGroupId={null} className="mb-2">
             <ServerSection
@@ -306,6 +294,18 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
             </div>
           </ChannelDropZone>
         )}
+
+        {serverProfileSettings?.showChannelGroups !== false && groupedChannelGroups.length > 0 ? (
+          <div className="mb-2">
+            <ChannelGroupsList
+              serverId={serverId}
+              role={role}
+              server={serverWithMembers}
+              groups={groupedChannelGroups}
+              connectedVoiceCountsByChannelId={Object.fromEntries(connectedVoiceCountsByChannelId)}
+            />
+          </div>
+        ) : null}
 
         {false ? <div /> : null}
       </ScrollArea>

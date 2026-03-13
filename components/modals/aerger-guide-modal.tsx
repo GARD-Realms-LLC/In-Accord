@@ -12,8 +12,7 @@ import {
 export const AergerGuideModal = () => {
   const { isOpen, onClose, type, data } = useModal();
   const isModalOpen = isOpen && type === "aergerGuide";
-  const serverName = String(data.server?.name ?? "").trim();
-  const guideLabel = serverName ? `${serverName} Guide` : "Guide";
+  const guideLabel = "Our Guide";
 
   return (
     <Dialog open={isModalOpen} onOpenChange={onClose}>

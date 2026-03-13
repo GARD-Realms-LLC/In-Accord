@@ -52,8 +52,9 @@ const formatTimestamp = (value: Date) => {
   }
 
   return value.toLocaleString(undefined, {
+    year: "numeric",
     month: "short",
-    day: "numeric",
+    day: "2-digit",
     hour: "numeric",
     minute: "2-digit",
   });
@@ -1276,7 +1277,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                               id={item.id}
                               content={item.content}
                               member={item.member}
-                              timestamp={new Date(item.createdAt).toLocaleString()}
+                              timestamp={formatTimestamp(new Date(item.createdAt))}
                               fileUrl={item.fileUrl}
                               deleted={item.deleted}
                               currentMember={selectedConversation!.currentMember}
@@ -1356,7 +1357,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                               id={item.id}
                               content={item.content}
                               member={item.member}
-                              timestamp={new Date(item.createdAt).toLocaleString()}
+                              timestamp={formatTimestamp(new Date(item.createdAt))}
                               fileUrl={item.fileUrl}
                               deleted={item.deleted}
                               currentMember={selectedConversation!.currentMember}

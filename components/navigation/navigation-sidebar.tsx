@@ -10,6 +10,7 @@ import { NavigationAction } from "@/components/navigation/navigation-action";
 import { NavigationJoinAction } from "@/components/navigation/navigation-join-action";
 import { NavigationHomeButton } from "@/components/navigation/navigation-home-button";
 import { NavigationUsersHomeButton } from "@/components/navigation/navigation-users-home-button";
+import { NavigationInAboardButton } from "@/components/navigation/navigation-in-aboard-button";
 import { NavigationServersCollection } from "@/components/navigation/navigation-servers-collection";
 import { AdminTotalsButtons } from "@/components/navigation/admin-totals-buttons";
 
@@ -190,6 +191,7 @@ export const NavigationSidebar = async () => {
       <div className="h-[2px] w-[85%] rounded bg-zinc-700 dark:bg-zinc-200" />
 
       <NavigationUsersHomeButton />
+      <NavigationInAboardButton />
       <NavigationAction />
       <NavigationJoinAction />
       <Separator className="h-[2px] bg-zinc-300 dark:bg-zinc-700 rounded-md w-10 mx-auto" />

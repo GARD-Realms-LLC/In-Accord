@@ -4,7 +4,10 @@ const SESSION_COOKIE_NAME = "inaccord_session_user_id";
 const PUBLIC_PATH_PREFIXES = [
   "/sign-in",
   "/sign-up",
+  "/in-aboard",
+  "/our-board",
   "/api/auth",
+  "/api/our-board",
   "/api/uploadthing",
   "/api/r2/object",
 ];

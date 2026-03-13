@@ -30,6 +30,21 @@ interface ThreadPageProps {
   }>;
 }
 
+const formatPostTimestamp = (value: Date | string) => {
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  return parsed.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+};
+
 const ThreadPage = async ({ params }: ThreadPageProps) => {
   const perfStart = Date.now();
   const isPerfLoggingEnabled = process.env.NODE_ENV !== "production";
@@ -332,7 +347,7 @@ const ThreadPage = async ({ params }: ThreadPageProps) => {
                 id={item.id}
                 content={item.content}
                 member={item.member}
-                timestamp={new Date(item.createdAt).toLocaleString()}
+                timestamp={formatPostTimestamp(item.createdAt)}
                 fileUrl={item.fileUrl}
                 deleted={item.deleted}
                 currentMember={access.currentMember!}

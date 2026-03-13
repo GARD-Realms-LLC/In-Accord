@@ -33,6 +33,7 @@ type AdminSection =
   | "members"
   | "iaServerMenu"
   | "servers"
+  | "ourBoard"
   | "serverTags"
   | "reported"
   | "issuesBugs"
@@ -58,6 +59,7 @@ const adminSections = [
   "members",
   "iaServerMenu",
   "servers",
+  "ourBoard",
   "serverTags",
   "reported",
   "issuesBugs",
@@ -96,6 +98,10 @@ const adminSectionMeta: Record<AdminSection, { label: string; description: strin
   servers: {
     label: "Servers",
     description: "Browse servers, owners, and server activity details.",
+  },
+  ourBoard: {
+    label: "In-Aboard",
+    description: "Monitor public listing activity, bump usage, and listing status across servers.",
   },
   serverTags: {
     label: "Server Tags",
@@ -191,7 +197,7 @@ const adminMenuGroups: Array<{ id: AdminMenuGroupId; label: string; sections: Ad
   {
     id: "serverOperations",
     label: "Server Ops",
-    sections: ["servers", "serverTags", "invites", "emojiStickers", "templateMeBot", "OtherAppsBots", "webhooks"],
+    sections: ["servers", "ourBoard", "serverTags", "invites", "emojiStickers", "templateMeBot", "OtherAppsBots", "webhooks"],
   },
   {
     id: "moderationSafety",
@@ -215,6 +221,7 @@ const adminMenuItemMeta: Record<AdminSection, { label: string; icon: ComponentTy
   members: { label: "I-A Accounts", icon: Users },
   iaServerMenu: { label: "I-A Server", icon: Server },
   servers: { label: "Servers", icon: Server },
+  ourBoard: { label: "In-Aboard", icon: MessageCircle },
   serverTags: { label: "Server Tags", icon: Flag },
   reported: { label: "Reports", icon: Flag },
   issuesBugs: { label: "Issues & Bugs", icon: Bug },
@@ -281,6 +288,23 @@ type AdminServer = {
   updatedAt: string | null;
   memberCount: number;
   channelCount: number;
+};
+
+type AdminOurBoardEntry = {
+  serverId: string;
+  serverName: string;
+  ownerDisplayName: string;
+  listed: boolean;
+  bumpCount: number;
+  bumpChannelId: string | null;
+  lastBumpedAt: string | null;
+  updatedAt: string;
+};
+
+type AdminOurBoardSummary = {
+  total: number;
+  listed: number;
+  unlisted: number;
 };
 
 type AdminServerTag = {
@@ -758,6 +782,12 @@ export const InAccordAdminModal = () => {
   const [servers, setServers] = useState<AdminServer[]>([]);
   const [isLoadingServers, setIsLoadingServers] = useState(false);
   const [serversError, setServersError] = useState<string | null>(null);
+  const [ourBoardEntries, setOurBoardEntries] = useState<AdminOurBoardEntry[]>([]);
+  const [ourBoardSummary, setOurBoardSummary] = useState<AdminOurBoardSummary | null>(null);
+  const [isLoadingOurBoard, setIsLoadingOurBoard] = useState(false);
+  const [ourBoardError, setOurBoardError] = useState<string | null>(null);
+  const [ourBoardSearch, setOurBoardSearch] = useState("");
+  const [ourBoardListedFilter, setOurBoardListedFilter] = useState<"ALL" | "LISTED" | "UNLISTED">("ALL");
   const [memberSearch, setMemberSearch] = useState("");
   const [memberRoleFilter, setMemberRoleFilter] = useState("ALL");
   const [serverSearch, setServerSearch] = useState("");
@@ -2399,6 +2429,40 @@ export const InAccordAdminModal = () => {
     }
   }, [notifyAdminTotalsRefresh]);
 
+  const loadOurBoard = useCallback(async () => {
+    try {
+      setIsLoadingOurBoard(true);
+      setOurBoardError(null);
+
+      const response = await fetch("/api/admin/our-board", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load In-Aboard (${response.status})`);
+      }
+
+      const payload = (await response.json()) as {
+        entries?: AdminOurBoardEntry[];
+        summary?: AdminOurBoardSummary;
+      };
+
+      setOurBoardEntries(payload.entries ?? []);
+      setOurBoardSummary(payload.summary ?? null);
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_OUR_BOARD_LOAD]", error);
+      setOurBoardEntries([]);
+      setOurBoardSummary(null);
+      setOurBoardError("Unable to load In-Aboard insights right now.");
+    } finally {
+      setIsLoadingOurBoard(false);
+    }
+  }, []);
+
   const loadEmojiStickers = useCallback(async () => {
     try {
       setIsLoadingEmojiStickers(true);
@@ -2671,6 +2735,14 @@ export const InAccordAdminModal = () => {
   }, [activeSection, isModalOpen, loadServers]);
 
   useEffect(() => {
+    if (!isModalOpen || activeSection !== "ourBoard") {
+      return;
+    }
+
+    void loadOurBoard();
+  }, [activeSection, isModalOpen, loadOurBoard]);
+
+  useEffect(() => {
     if (!isModalOpen || activeSection !== "webhooks") {
       return;
     }
@@ -2795,6 +2867,12 @@ export const InAccordAdminModal = () => {
       setServers([]);
       setServersError(null);
       setIsLoadingServers(false);
+      setOurBoardEntries([]);
+      setOurBoardSummary(null);
+      setIsLoadingOurBoard(false);
+      setOurBoardError(null);
+      setOurBoardSearch("");
+      setOurBoardListedFilter("ALL");
       setServerSearch("");
       setServerOwnerFilter("ALL");
       setServerTags([]);
@@ -4149,6 +4227,30 @@ export const InAccordAdminModal = () => {
   }, [serverOwnerFilter, serverSearch, servers]);
 
   const hasActiveServerFilters = serverSearch.trim().length > 0 || serverOwnerFilter !== "ALL";
+
+  const filteredOurBoardEntries = useMemo(() => {
+    const query = ourBoardSearch.trim().toLowerCase();
+
+    return ourBoardEntries.filter((entry) => {
+      const listedMatches =
+        ourBoardListedFilter === "ALL" ||
+        (ourBoardListedFilter === "LISTED" ? entry.listed : !entry.listed);
+
+      if (!query) {
+        return listedMatches;
+      }
+
+      const haystack = [entry.serverId, entry.serverName, entry.ownerDisplayName, entry.bumpChannelId]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return listedMatches && haystack.includes(query);
+    });
+  }, [ourBoardEntries, ourBoardListedFilter, ourBoardSearch]);
+
+  const hasActiveOurBoardFilters =
+    ourBoardSearch.trim().length > 0 || ourBoardListedFilter !== "ALL";
 
   const moderationListData = useMemo(() => {
     const query = moderationSearch.trim().toLowerCase();
@@ -7021,6 +7123,118 @@ export const InAccordAdminModal = () => {
                           ))}
                         </div>
                       </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeSection === "ourBoard" && (
+              <div className="rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">In-Aboard</p>
+                  <button
+                    type="button"
+                    onClick={() => void loadOurBoard()}
+                    className="h-8 rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                  >
+                    Refresh
+                  </button>
+                </div>
+
+                <div className="mb-4 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Total Listings</p>
+                    <p className="mt-1 text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{ourBoardSummary?.total ?? ourBoardEntries.length}</p>
+                  </div>
+                  <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Public</p>
+                    <p className="mt-1 text-2xl font-semibold text-emerald-600 dark:text-emerald-300">{ourBoardSummary?.listed ?? ourBoardEntries.filter((entry) => entry.listed).length}</p>
+                  </div>
+                  <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Hidden</p>
+                    <p className="mt-1 text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{ourBoardSummary?.unlisted ?? ourBoardEntries.filter((entry) => !entry.listed).length}</p>
+                  </div>
+                </div>
+
+                <div className="mb-4 grid gap-2 sm:grid-cols-[1fr_180px_auto]">
+                  <input
+                    type="text"
+                    value={ourBoardSearch}
+                    onChange={(event) => setOurBoardSearch(event.target.value)}
+                    placeholder="Search by server, owner, ID, or bump channel"
+                    className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
+                  />
+                  <select
+                    value={ourBoardListedFilter}
+                    onChange={(event) => setOurBoardListedFilter(event.target.value as "ALL" | "LISTED" | "UNLISTED")}
+                    className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                  >
+                    <option value="ALL">All listings</option>
+                    <option value="LISTED">Public only</option>
+                    <option value="UNLISTED">Hidden only</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOurBoardSearch("");
+                      setOurBoardListedFilter("ALL");
+                    }}
+                    disabled={!hasActiveOurBoardFilters}
+                    className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                  >
+                    Clear filters
+                  </button>
+                </div>
+
+                {isLoadingOurBoard ? (
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading In-Aboard entries...</p>
+                ) : ourBoardError ? (
+                  <p className="text-sm text-rose-500">{ourBoardError}</p>
+                ) : filteredOurBoardEntries.length === 0 ? (
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300">No In-Aboard entries found for current filters.</p>
+                ) : (
+                  <div className="overflow-hidden rounded-lg border border-zinc-300 dark:border-zinc-700">
+                    <div className="grid grid-cols-[1.1fr_1fr_0.7fr_0.7fr_1fr_1fr] gap-2 bg-zinc-200/80 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                      <p>Server</p>
+                      <p>Owner</p>
+                      <p>Status</p>
+                      <p>Bumps</p>
+                      <p>Bump Channel</p>
+                      <p>Updated</p>
+                    </div>
+                    <div className="max-h-105 overflow-y-auto bg-white/80 text-xs text-zinc-800 dark:bg-zinc-950/30 dark:text-zinc-200">
+                      {filteredOurBoardEntries.map((entry, index) => (
+                        <div
+                          key={entry.serverId}
+                          className={cn(
+                            "grid grid-cols-[1.1fr_1fr_0.7fr_0.7fr_1fr_1fr] items-center gap-2 px-3",
+                            listRowDensityClass,
+                            index % 2 === 0
+                              ? "bg-white/70 dark:bg-zinc-950/25"
+                              : "bg-zinc-100/70 dark:bg-zinc-900/35"
+                          )}
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold" title={entry.serverName}>{entry.serverName}</p>
+                            <p className="truncate font-mono text-[10px] text-zinc-500 dark:text-zinc-400" title={entry.serverId}>{entry.serverId}</p>
+                          </div>
+                          <p className="truncate" title={entry.ownerDisplayName}>{entry.ownerDisplayName}</p>
+                          <p>
+                            <span className={cn(
+                              "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]",
+                              entry.listed
+                                ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-700 dark:text-emerald-200"
+                                : "border-zinc-500/35 bg-zinc-500/15 text-zinc-600 dark:text-zinc-300"
+                            )}>
+                              {entry.listed ? "Public" : "Hidden"}
+                            </span>
+                          </p>
+                          <p>{entry.bumpCount}</p>
+                          <p className="truncate" title={entry.bumpChannelId ?? "Any channel"}>{entry.bumpChannelId || "Any channel"}</p>
+                          <p className="truncate" title={formatDateTime(entry.updatedAt)}>{formatDateTime(entry.updatedAt)}</p>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}

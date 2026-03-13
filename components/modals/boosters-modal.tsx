@@ -26,7 +26,7 @@ export const BoostersModal = () => {
     <Dialog open={isModalOpen} onOpenChange={onClose}>
       <DialogContent className="max-h-[86vh] overflow-hidden border-0 bg-[#313338] p-0 text-white shadow-2xl sm:max-w-155 [&>button]:hidden">
         <DialogHeader className="border-b border-black/20 px-6 pb-4 pt-5 text-left">
-          <DialogTitle className="text-xl font-semibold text-white">Boosters</DialogTitle>
+          <DialogTitle className="text-xl font-semibold text-white">Our Boosters</DialogTitle>
           <DialogDescription className="text-sm text-zinc-300">
             {serverName ? `${serverName} • ${boosterCount} booster${boosterCount === 1 ? "" : "s"}` : `${boosterCount} booster${boosterCount === 1 ? "" : "s"}`}
           </DialogDescription>

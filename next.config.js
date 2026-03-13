@@ -78,6 +78,20 @@ const nextConfig = {
 
     return config;
   },
+  async redirects() {
+    return [
+      {
+        source: "/our-board",
+        destination: "/in-aboard",
+        permanent: false,
+      },
+      {
+        source: "/our-board/:path*",
+        destination: "/in-aboard/:path*",
+        permanent: false,
+      },
+    ];
+  },
 }
 
 module.exports = nextConfig

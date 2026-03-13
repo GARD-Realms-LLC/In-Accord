@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { BookOpen, CalendarDays, Gem, Link2, ScrollText, Users, Video } from "lucide-react";
+import { BookOpen, CalendarDays, Gem, Link2, Megaphone, ScrollText, Users, Video } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { type Channel } from "@/lib/db/types";
 
 import { useModal } from "@/hooks/use-modal-store";
@@ -27,6 +28,7 @@ export const ServerEventsMenu = ({
   stageChannel = null,
   rulesChannel = null,
 }: Props) => {
+  const router = useRouter();
   const { onOpen, isOpen, type, data } = useModal();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const isActive = isOpen && type === "serverEvents" && String(data.server?.id ?? "") === server.id;
@@ -37,14 +39,14 @@ export const ServerEventsMenu = ({
   const isStageActive = isOpen && type === "serverStage" && String(data.server?.id ?? "") === server.id;
   const isRulesActive = isOpen && type === "serverRules" && String(data.server?.id ?? "") === server.id;
   const membersCount = Array.isArray(server.members) ? server.members.length : 0;
-  const normalizedServerName = String(server.name ?? "").trim();
-  const guideLabel = normalizedServerName ? `${normalizedServerName} Guide` : "Guide";
-  const eventsLabel = normalizedServerName ? `${normalizedServerName} Events` : "Events";
-  const invitesLabel = normalizedServerName ? `${normalizedServerName} Invites` : "Invites";
-  const membersLabel = normalizedServerName ? `${normalizedServerName} Members` : "Members";
-  const boostersLabel = normalizedServerName ? `${normalizedServerName} Boosters` : "Boosters";
-  const rulesLabel = normalizedServerName ? `${normalizedServerName} Rules` : "Rules";
-  const stageLabel = normalizedServerName ? `${normalizedServerName} Stage` : "Stage";
+  const guideLabel = "Our Guide";
+  const eventsLabel = "Our Events";
+  const invitesLabel = "Our Invites";
+  const membersLabel = "Our Members";
+  const boostersLabel = "Our Boosters";
+  const rulesLabel = "Our Rules";
+  const stageLabel = "Our Stage";
+  const inAboardLabel = "In-Aboard";
 
   return (
     <div className="mt-3">
@@ -81,6 +83,18 @@ export const ServerEventsMenu = ({
 
       {!isCollapsed ? (
         <>
+      <button
+        type="button"
+        onClick={() => router.push("/in-aboard")}
+        className="group flex w-full items-center gap-x-2 rounded px-2 py-1.5 text-left transition hover:bg-[#3a3c43]"
+        aria-label={`Open ${inAboardLabel}`}
+      >
+        <Megaphone className="h-3 w-3 shrink-0 text-[#949ba4]" />
+        <span className="line-clamp-1 min-w-0 flex-1 text-left text-[12px] font-medium text-[#949ba4] transition group-hover:text-[#dbdee1]">
+          {inAboardLabel}
+        </span>
+      </button>
+
       <button
         type="button"
         onClick={() => onOpen("aergerGuide", { server })}

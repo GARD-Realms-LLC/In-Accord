@@ -21,7 +21,7 @@ export const ServerRulesModal = () => {
   const serverName = String(data.server?.name ?? "").trim();
   const channelId = String(data.channel?.id ?? "").trim();
   const channelName = String(data.channel?.name ?? "rules").trim() || "rules";
-  const rulesLabel = serverName ? `${serverName} Rules` : "Rules";
+  const rulesLabel = "Our Rules";
 
   const canOpenChannel = serverId.length > 0 && channelId.length > 0;
 

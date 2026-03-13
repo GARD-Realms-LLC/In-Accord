@@ -148,7 +148,7 @@ export const InviteModal = () => {
       <DialogContent className="overflow-hidden bg-white p-0 text-black dark:bg-[#313338] dark:text-white">
         <DialogHeader className="pt-8 px-6">
           <DialogTitle className="text-2xl text-center font-bold">
-            Invite friends
+            Our Invites
           </DialogTitle>
         </DialogHeader>
         <div className="p-6">

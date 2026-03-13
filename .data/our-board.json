@@ -1,0 +1,44 @@
+{
+  "c5125059-2188-4140-9254-b9d0ce36ab47": {
+    "serverId": "c5125059-2188-4140-9254-b9d0ce36ab47",
+    "serverName": "📜In-Accord",
+    "imageUrl": null,
+    "ownerProfileId": "00000001",
+    "ownerDisplayName": "Doc Cowles",
+    "ownerEmail": "docrst@gmail.com",
+    "listed": true,
+    "description": "",
+    "bumpChannelId": null,
+    "bumpCount": 0,
+    "lastBumpedAt": null,
+    "lastBumpedByProfileId": null,
+    "manageToken": "9923f714-76b3-4454-bcd3-303f14faf2c9",
+    "createdAt": "2026-03-13T03:17:55.899Z",
+    "updatedAt": "2026-03-13T03:21:25.869Z"
+  },
+  "101a4ed8-f7a0-4fe0-b6d7-ef80b2145c61": {
+    "serverId": "101a4ed8-f7a0-4fe0-b6d7-ef80b2145c61",
+    "serverName": "🪄𝓗𝓞𝓖𝓦𝓐𝓡𝓣𝓢🪄",
+    "imageUrl": "/uploads/server-icons/1772912225349-00000001.png",
+    "bannerUrl": "/uploads/server-icons/1772912303677-00000001.png",
+    "tags": [
+      "Harry Potter",
+      "Hogwarts"
+    ],
+    "ownerProfileId": "00000001",
+    "ownerDisplayName": "Doc Cowles",
+    "ownerEmail": "docrst@gmail.com",
+    "listed": true,
+    "description": "We are HOGWARTS\nFor the best Harry Potter and Hogwarts Role Play or just fun chat we are what you are looking for!\n\nWe currently have:\n\nFull Working Sorting Hat to join the House of your choice or the Hat will sort you!\n\nFull Working WAND Builder to pick the Wood, Core and Size of the want you want.\n\nPick your own Pet to have at the school.\n\nLearn a Patronus from Professor Lupin or from Harry Potter himself.\n\nYou can Create a Private Room in the Room of Requirements that only you and closest friends can use.\n\nWe have a fully working Trunk to keep all you kit in and see all your stats and the stats from your House.\n\nWe are always adding more fun all the time.\n\nAnd Lots of games for all! \n\nWe are LGBT+ friendly!",
+    "bumpChannelId": "2a6716a3-5271-407a-ad96-a69a67362259",
+    "bumpCount": 2,
+    "lastBumpedAt": "2026-03-13T03:47:35.173Z",
+    "lastBumpedByProfileId": "00000002",
+    "bumpTimestampsByProfileId": {
+      "00000002": "2026-03-13T03:47:35.173Z"
+    },
+    "manageToken": "59324ad0-a592-42d5-bbe6-62bf480b6a90",
+    "createdAt": "2026-03-13T03:23:13.584Z",
+    "updatedAt": "2026-03-13T03:47:35.173Z"
+  }
+}

@@ -1736,11 +1736,15 @@ export const ChatItem = ({
   if (deleted) {
     const deletedByName = String(displayName ?? "").trim() || "Deleted User";
     const canHardDeleteDeletedMessage = canPurgeDeletedMessage && reactionScope === "channel";
+    const deletedTimestampLabel = String(timestamp ?? "").trim();
 
     return (
       <div className="relative flex w-full items-center px-4 py-3">
         <div className="rounded-md border border-zinc-300/70 bg-zinc-100/70 px-3 py-2 text-xs italic text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-400">
           A message has been deleted by: "{deletedByName}".
+          {deletedTimestampLabel ? (
+            <span className="not-italic text-zinc-500 dark:text-zinc-400"> ({deletedTimestampLabel})</span>
+          ) : null}
         </div>
         {canHardDeleteDeletedMessage ? (
           <div className="absolute right-5 top-1/2 -translate-y-1/2 rounded-sm border bg-white/95 p-1 shadow-sm dark:bg-zinc-800/95">
@@ -1962,7 +1966,7 @@ export const ChatItem = ({
                 />
               </button>
             </div>
-            <span className="invisible text-xs text-[#949ba4] group-hover:visible">
+            <span className="text-xs text-[#949ba4]">
               {timestamp}
             </span>
           </div>

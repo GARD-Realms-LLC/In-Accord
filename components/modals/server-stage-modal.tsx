@@ -21,7 +21,7 @@ export const ServerStageModal = () => {
   const serverName = String(data.server?.name ?? "").trim();
   const channelId = String(data.channel?.id ?? "").trim();
   const channelName = String(data.channel?.name ?? "stage").trim() || "stage";
-  const stageLabel = serverName ? `${serverName} Stage` : "Stage";
+  const stageLabel = "Our Stage";
 
   const canOpenChannel = serverId.length > 0 && channelId.length > 0;
 

@@ -6,6 +6,7 @@ import { currentProfile } from "@/lib/current-profile";
 import { channel, ChannelType, db, MemberRole, member, server } from "@/lib/db";
 import { getServerBannerConfig, setServerBannerConfig } from "@/lib/server-banner-store";
 import { appendServerInviteHistory } from "@/lib/server-invite-store";
+import { upsertOurBoardEntry } from "@/lib/our-board-store";
 import { createServerScheduledEvent } from "@/lib/server-scheduled-events-store";
 import {
   ensureRulesChannelForServer,
@@ -145,11 +146,20 @@ export async function POST(req: Request) {
     const defaultEventStartAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     await createServerScheduledEvent({
       serverId,
-      title: "Welcome Event",
-      description: "Kick things off and say hello.",
+      title: "Our Events",
+      description: "Our Events are ready — schedule and manage activities for your server.",
       startsAt: defaultEventStartAt,
       frequency: "ONCE",
       createdByProfileId: profile.id,
+    });
+
+    await upsertOurBoardEntry({
+      serverId,
+      serverName: String(createdServer?.name ?? name ?? "Untitled Server"),
+      imageUrl: String(createdServer?.imageUrl ?? imageUrl ?? "").trim() || "/in-accord-steampunk-logo.png",
+      ownerProfileId: profile.id,
+      ownerDisplayName: String(profile.name ?? profile.email ?? profile.id),
+      ownerEmail: profile.email ?? null,
     });
 
     const resolvedBanner = await getServerBannerConfig(serverId);

@@ -10,6 +10,7 @@ import { getServerProfileSettings, setServerProfileSettings } from "@/lib/server
 import { removeServerFromServerRailFolders } from "@/lib/server-rail-layout";
 import { hardDeleteServerScopedData } from "@/lib/server-hard-delete";
 import { isInAccordProtectedServer } from "@/lib/server-security";
+import { upsertOurBoardEntry } from "@/lib/our-board-store";
 
 export async function GET(
   _req: Request,
@@ -186,6 +187,19 @@ export async function PATCH(
     });
 
     const resolvedBanner = await getServerBannerConfig(serverId);
+
+    await upsertOurBoardEntry({
+      serverId,
+      serverName: String(name ?? target.name ?? "Untitled Server"),
+      imageUrl: String(imageUrl ?? target.imageUrl ?? "").trim() || null,
+      bannerUrl: resolvedBanner?.url ?? null,
+      ownerProfileId: profile.id,
+      ownerDisplayName:
+        String((profile as { name?: string | null }).name ?? "").trim() ||
+        String((profile as { email?: string | null }).email ?? "").trim() ||
+        profile.id,
+      ownerEmail: (profile as { email?: string | null }).email ?? null,
+    });
 
     void emitInAccordSystemEvent({
       eventType: "SERVER_SETTINGS_UPDATED",

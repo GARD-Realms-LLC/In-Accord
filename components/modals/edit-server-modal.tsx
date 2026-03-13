@@ -53,6 +53,7 @@ type ServerSettingsSection =
   | "members"
   | "invites"
   | "integrations"
+  | "ourBoard"
   | "serverGuide"
   | "onboarding"
   | "emoji"
@@ -94,6 +95,7 @@ const SETTINGS_SECTIONS: Array<{
       { key: "members", label: "Members" },
       { key: "invites", label: "Invites" },
       { key: "integrations", label: "Manage Bots" },
+      { key: "ourBoard", label: "In-Aboard" },
       { key: "serverGuide", label: "Server Guide" },
       { key: "emoji", label: "Emoji" },
       { key: "stickers", label: "Stickers" },
@@ -151,6 +153,7 @@ const SECTION_TITLES: Record<ServerSettingsSection, string> = {
   members: "Members",
   invites: "Invites",
   integrations: "Integrations",
+  ourBoard: "In-Aboard",
   serverGuide: "Server Guide",
   onboarding: "Onboarding",
   emoji: "Emoji",
@@ -192,6 +195,7 @@ const GENERIC_SECTION_DESCRIPTIONS: Partial<Record<ServerSettingsSection, string
   members: "Review member-level settings and access behavior.",
   invites: "Configure invite creation and expiration defaults.",
   integrations: "Control connected integrations and their behavior.",
+  ourBoard: "Manage your public listing, bump visibility, and allowed bump channel.",
   serverGuide: "Configure guide content and channel recommendations.",
   onboarding: "Adjust onboarding prompts and suggested channels.",
   moderation: "Set moderation defaults and automated enforcement behavior.",
@@ -225,6 +229,7 @@ const SERVER_GUIDE_USAGE: Partial<Record<ServerSettingsSection, string>> = {
   members: "Review member list and role distribution to verify access and moderation coverage.",
   invites: "Track invite links, who created them, usage counts, and remove stale links.",
   integrations: "Manage bots and integrations. Use Boot, Ban, and Kick controls to moderate bots.",
+  ourBoard: "Enable listing and choose the allowed /bump channel. Only the server owner can manage In-Aboard settings.",
   serverGuide: "Use this guide page to learn what every settings component does and where to configure it.",
   onboarding: "Configure onboarding prompts and recommended channels for new members.",
   emoji: "Create and manage custom emoji assets, including enable/disable and delete actions.",
@@ -838,6 +843,25 @@ type CommunityEventItem = {
   channelId?: string | null;
 };
 
+type ServerOurBoardEntry = {
+  serverId: string;
+  serverName: string;
+  listed: boolean;
+  bannerUrl: string | null;
+  tags: string[];
+  description: string;
+  bumpChannelId: string | null;
+  bumpCount: number;
+  lastBumpedAt: string | null;
+  manageToken: string;
+};
+
+type ServerOurBoardChannel = {
+  id: string;
+  name: string;
+  type: string;
+};
+
 const DEFAULT_ONBOARDING_CONFIG: OnboardingConfig = {
   enabled: false,
   welcomeMessage: "Welcome to the server! Complete onboarding to unlock your best channels.",
@@ -859,6 +883,7 @@ const ONBOARDING_BANNER_PRESETS = [
 export const EditServerModal = () => {
   const { isOpen, onClose, onOpen, type, data } = useModal();
   const router = useRouter();
+  const [currentProfileId, setCurrentProfileId] = useState("");
   const [activeSection, setActiveSection] = useState<ServerSettingsSection>("overview");
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isUploadingBanner, setIsUploadingBanner] = useState(false);
@@ -976,6 +1001,17 @@ export const EditServerModal = () => {
   const [communityEventsError, setCommunityEventsError] = useState<string | null>(null);
   const [communityEventsSuccess, setCommunityEventsSuccess] = useState<string | null>(null);
   const [deletingCommunityEventId, setDeletingCommunityEventId] = useState<string | null>(null);
+  const [ourBoardEntry, setOurBoardEntry] = useState<ServerOurBoardEntry | null>(null);
+  const [ourBoardChannels, setOurBoardChannels] = useState<ServerOurBoardChannel[]>([]);
+  const [isLoadingOurBoard, setIsLoadingOurBoard] = useState(false);
+  const [isSavingOurBoard, setIsSavingOurBoard] = useState(false);
+  const [ourBoardError, setOurBoardError] = useState<string | null>(null);
+  const [ourBoardSuccess, setOurBoardSuccess] = useState<string | null>(null);
+  const [ourBoardDescriptionDraft, setOurBoardDescriptionDraft] = useState("");
+  const [ourBoardListedDraft, setOurBoardListedDraft] = useState(true);
+  const [ourBoardBumpChannelDraft, setOurBoardBumpChannelDraft] = useState("");
+  const [ourBoardTagsDraft, setOurBoardTagsDraft] = useState<string[]>([]);
+  const [ourBoardTagInputDraft, setOurBoardTagInputDraft] = useState("");
   const [genericSectionSettings, setGenericSectionSettings] = useState<Record<ServerSettingsSection, GenericSectionSettings>>(
     () => createDefaultGenericSectionSettings()
   );
@@ -996,10 +1032,109 @@ export const EditServerModal = () => {
 
   const isModalOpen = isOpen && type === "editServer";
   const { server } = data;
+  const isInAboardSettingsOwner =
+    String((server as { profileId?: string | null } | undefined)?.profileId ?? "").trim().length > 0 &&
+    String((server as { profileId?: string | null } | undefined)?.profileId ?? "").trim() === currentProfileId;
   const isProtectedInAccordServer = isInAccordProtectedServer({
     serverId: server?.id,
     serverName: server?.name,
   });
+
+  useEffect(() => {
+    if (!isModalOpen) {
+      setCurrentProfileId("");
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadCurrentProfileId = async () => {
+      try {
+        const response = await axios.get<{ id?: string }>("/api/profile/me");
+        if (cancelled) {
+          return;
+        }
+
+        setCurrentProfileId(String(response.data?.id ?? "").trim());
+      } catch {
+        if (!cancelled) {
+          setCurrentProfileId("");
+        }
+      }
+    };
+
+    void loadCurrentProfileId();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isModalOpen]);
+
+  useEffect(() => {
+    if (!isModalOpen) {
+      return;
+    }
+
+    const requestedSection = String((data as { query?: { section?: string } } | undefined)?.query?.section ?? "").trim();
+    if (!requestedSection) {
+      return;
+    }
+
+    const allowedSections: ServerSettingsSection[] = [
+      "overview",
+      "boostStatus",
+      "roles",
+      "members",
+      "invites",
+      "integrations",
+      "serverGuide",
+      "onboarding",
+      "emoji",
+      "stickers",
+      "soundboard",
+      "moderation",
+      "autoMod",
+      "auditLog",
+      "bans",
+      "security",
+      "raidProtection",
+      "rulesScreening",
+      "welcomeScreen",
+      "safetyAlerts",
+      "communityOverview",
+      "eventsManagement",
+      "safetySetup",
+      "serverInsights",
+      "partnerProgram",
+      "discovery",
+      "serverTemplate",
+      "customInviteLink",
+      "vanityUrl",
+      "widget",
+      "webhooks",
+      "integrationsPermissions",
+      "installedApps",
+      "deleteServer",
+    ];
+
+    if (isInAboardSettingsOwner) {
+      allowedSections.push("ourBoard");
+    }
+
+    if (allowedSections.includes(requestedSection as ServerSettingsSection)) {
+      setActiveSection(requestedSection as ServerSettingsSection);
+    }
+  }, [data, isInAboardSettingsOwner, isModalOpen]);
+
+  useEffect(() => {
+    if (!isModalOpen) {
+      return;
+    }
+
+    if (activeSection === "ourBoard" && !isInAboardSettingsOwner) {
+      setActiveSection("overview");
+    }
+  }, [activeSection, isInAboardSettingsOwner, isModalOpen]);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -1229,6 +1364,17 @@ export const EditServerModal = () => {
       setCommunityEventsError(null);
       setCommunityEventsSuccess(null);
       setDeletingCommunityEventId(null);
+      setOurBoardEntry(null);
+      setOurBoardChannels([]);
+      setIsLoadingOurBoard(false);
+      setIsSavingOurBoard(false);
+      setOurBoardError(null);
+      setOurBoardSuccess(null);
+      setOurBoardDescriptionDraft("");
+      setOurBoardListedDraft(true);
+      setOurBoardBumpChannelDraft("");
+      setOurBoardTagsDraft([]);
+      setOurBoardTagInputDraft("");
       setGenericSectionSettings(createDefaultGenericSectionSettings());
       setGenericSectionSaveMessage(null);
       setCollapsedSettingsGroups(createDefaultSettingsGroupCollapseState());
@@ -3335,6 +3481,7 @@ export const EditServerModal = () => {
     activeSection === "serverTemplate" ||
     activeSection === "serverGuide" ||
     activeSection === "integrations" ||
+    activeSection === "ourBoard" ||
     activeSection === "soundboard" ||
     activeSection === "deleteServer" ||
     Boolean(activeEmojiStickerType);
@@ -3455,6 +3602,124 @@ export const EditServerModal = () => {
 
   const onSaveGenericSectionSettings = () => {
     setGenericSectionSaveMessage(`${SECTION_TITLES[activeSection]} settings saved.`);
+  };
+
+  const loadOurBoardSettings = useCallback(async () => {
+    if (!server?.id) {
+      return;
+    }
+
+    try {
+      setIsLoadingOurBoard(true);
+      setOurBoardError(null);
+
+      const response = await axios.get<{
+        entry?: ServerOurBoardEntry;
+        channels?: ServerOurBoardChannel[];
+      }>(`/api/servers/${server.id}/our-board`);
+
+      const entry = response.data.entry ?? null;
+      const channels = Array.isArray(response.data.channels) ? response.data.channels : [];
+
+      setOurBoardEntry(entry);
+      setOurBoardChannels(channels);
+      setOurBoardDescriptionDraft(entry?.description ?? "");
+      setOurBoardListedDraft(Boolean(entry?.listed ?? true));
+      setOurBoardBumpChannelDraft(String(entry?.bumpChannelId ?? ""));
+      setOurBoardTagsDraft(Array.isArray(entry?.tags) ? entry?.tags ?? [] : []);
+      setOurBoardTagInputDraft("");
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          (typeof error.response?.data === "string" ? error.response.data : "") ||
+          error.message;
+        setOurBoardError(message || "Failed to load In-Aboard settings.");
+      } else {
+        setOurBoardError("Failed to load In-Aboard settings.");
+      }
+
+      setOurBoardEntry(null);
+      setOurBoardChannels([]);
+      setOurBoardTagsDraft([]);
+      setOurBoardTagInputDraft("");
+    } finally {
+      setIsLoadingOurBoard(false);
+    }
+  }, [server?.id]);
+
+  useEffect(() => {
+    if (!isModalOpen || activeSection !== "ourBoard") {
+      return;
+    }
+
+    void loadOurBoardSettings();
+  }, [activeSection, isModalOpen, loadOurBoardSettings]);
+
+  const onSaveOurBoardSettings = async () => {
+    if (!server?.id || isSavingOurBoard) {
+      return;
+    }
+
+    try {
+      setIsSavingOurBoard(true);
+      setOurBoardError(null);
+      setOurBoardSuccess(null);
+
+      const response = await axios.patch<{ entry?: ServerOurBoardEntry }>(`/api/servers/${server.id}/our-board`, {
+        listed: ourBoardListedDraft,
+        description: ourBoardDescriptionDraft,
+        tags: ourBoardTagsDraft,
+        bumpChannelId: ourBoardBumpChannelDraft || null,
+      });
+
+      const updatedEntry = response.data.entry ?? null;
+
+      setOurBoardEntry(updatedEntry);
+      setOurBoardDescriptionDraft(updatedEntry?.description ?? "");
+      setOurBoardListedDraft(Boolean(updatedEntry?.listed ?? true));
+      setOurBoardBumpChannelDraft(String(updatedEntry?.bumpChannelId ?? ""));
+      setOurBoardTagsDraft(Array.isArray(updatedEntry?.tags) ? updatedEntry?.tags ?? [] : []);
+      setOurBoardTagInputDraft("");
+      setOurBoardSuccess("In-Aboard settings saved.");
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          (typeof error.response?.data === "string" ? error.response.data : "") ||
+          error.message;
+        setOurBoardError(message || "Failed to save In-Aboard settings.");
+      } else {
+        setOurBoardError("Failed to save In-Aboard settings.");
+      }
+    } finally {
+      setIsSavingOurBoard(false);
+    }
+  };
+
+  const onAddOurBoardTag = () => {
+    const normalized = ourBoardTagInputDraft.trim().slice(0, 32);
+    if (!normalized) {
+      return;
+    }
+
+    setOurBoardTagsDraft((previous) => {
+      if (previous.length >= 12) {
+        return previous;
+      }
+
+      if (previous.some((tag) => tag.toLowerCase() === normalized.toLowerCase())) {
+        return previous;
+      }
+
+      return [...previous, normalized];
+    });
+
+    setOurBoardTagInputDraft("");
+  };
+
+  const onRemoveOurBoardTag = (targetTag: string) => {
+    setOurBoardTagsDraft((previous) => previous.filter((tag) => tag !== targetTag));
   };
 
   const loadCommunityEvents = useCallback(async () => {
@@ -4639,6 +4904,181 @@ export const EditServerModal = () => {
                               </div>
                             ))
                           )}
+                        </div>
+                      </div>
+                    ) : activeSection === "ourBoard" ? (
+                      <div className="space-y-4">
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Listing</p>
+                            <p className="mt-1 text-2xl font-semibold text-zinc-100">
+                              {ourBoardListedDraft ? "Public" : "Hidden"}
+                            </p>
+                          </div>
+                          <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Bumps</p>
+                            <p className="mt-1 text-2xl font-semibold text-zinc-100">{ourBoardEntry?.bumpCount ?? 0}</p>
+                          </div>
+                          <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Last Bump</p>
+                            <p className="mt-1 text-sm font-semibold text-zinc-100">
+                              {ourBoardEntry?.lastBumpedAt ? new Date(ourBoardEntry.lastBumpedAt).toLocaleString() : "Never"}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-4 space-y-3">
+                          {ourBoardEntry?.bannerUrl ? (
+                            <div>
+                              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Ad Banner (Auto)</p>
+                              <div className="relative h-24 overflow-hidden rounded-md border border-zinc-700 bg-[#15161a] sm:h-28">
+                                <Image
+                                  src={ourBoardEntry.bannerUrl}
+                                  alt="In-Aboard ad banner preview"
+                                  fill
+                                  className="object-cover"
+                                  unoptimized
+                                />
+                              </div>
+                              <p className="mt-1 text-[11px] text-zinc-500">
+                                This banner is pulled automatically from Server Overview → Banner.
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-zinc-400">
+                              Add a server banner in Server Overview to show a top banner on your In-Aboard ad.
+                            </p>
+                          )}
+
+                          <label className="inline-flex items-center gap-2 text-sm text-zinc-200">
+                            <input
+                              type="checkbox"
+                              checked={ourBoardListedDraft}
+                              onChange={(event) => setOurBoardListedDraft(event.target.checked)}
+                              disabled={isLoadingOurBoard || isSavingOurBoard}
+                            />
+                            List this server on public In-Aboard
+                          </label>
+
+                          <div>
+                            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Tags</p>
+                            <div className="flex flex-wrap gap-2">
+                              {ourBoardTagsDraft.map((tag) => (
+                                <span
+                                  key={`our-board-tag-${tag}`}
+                                  className="inline-flex items-center gap-1 rounded-full border border-indigo-500/40 bg-indigo-500/10 px-2.5 py-1 text-xs text-indigo-200"
+                                >
+                                  {tag}
+                                  <button
+                                    type="button"
+                                    onClick={() => onRemoveOurBoardTag(tag)}
+                                    disabled={isLoadingOurBoard || isSavingOurBoard}
+                                    className="rounded p-0.5 text-indigo-200 hover:bg-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                                    aria-label={`Remove ${tag} tag`}
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                  </button>
+                                </span>
+                              ))}
+                              {ourBoardTagsDraft.length === 0 ? (
+                                <span className="text-xs text-zinc-500">No tags yet.</span>
+                              ) : null}
+                            </div>
+
+                            <div className="mt-2 flex gap-2">
+                              <Input
+                                value={ourBoardTagInputDraft}
+                                onChange={(event) => setOurBoardTagInputDraft(event.target.value.slice(0, 32))}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter") {
+                                    event.preventDefault();
+                                    onAddOurBoardTag();
+                                  }
+                                }}
+                                maxLength={32}
+                                disabled={isLoadingOurBoard || isSavingOurBoard || ourBoardTagsDraft.length >= 12}
+                                className="h-10 border-zinc-700 bg-[#15161a] text-sm text-zinc-100"
+                                placeholder="Add a tag"
+                              />
+                              <Button
+                                type="button"
+                                onClick={onAddOurBoardTag}
+                                disabled={
+                                  isLoadingOurBoard ||
+                                  isSavingOurBoard ||
+                                  ourBoardTagsDraft.length >= 12 ||
+                                  ourBoardTagInputDraft.trim().length === 0
+                                }
+                                className="h-10 bg-[#4e5058] px-3 text-xs text-white hover:bg-[#5d6069]"
+                              >
+                                Add Tag
+                              </Button>
+                            </div>
+                            <p className="mt-1 text-right text-[11px] text-zinc-500">{ourBoardTagsDraft.length}/12 tags</p>
+                          </div>
+
+                          <div>
+                            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Listing Description</p>
+                            <textarea
+                              value={ourBoardDescriptionDraft}
+                              onChange={(event) => setOurBoardDescriptionDraft(event.target.value.slice(0, 800))}
+                              rows={4}
+                              maxLength={800}
+                              disabled={isLoadingOurBoard || isSavingOurBoard}
+                              className="w-full rounded-md border border-zinc-700 bg-[#15161a] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-indigo-500"
+                              placeholder="Tell people what your server is about..."
+                            />
+                            <p className="mt-1 text-right text-[11px] text-zinc-500">{ourBoardDescriptionDraft.length}/800</p>
+                          </div>
+
+                          <div>
+                            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Allowed /bump Channel</p>
+                            <select
+                              value={ourBoardBumpChannelDraft}
+                              onChange={(event) => setOurBoardBumpChannelDraft(event.target.value)}
+                              disabled={isLoadingOurBoard || isSavingOurBoard}
+                              className="h-10 w-full rounded-md border border-zinc-700 bg-[#15161a] px-2 text-sm text-zinc-100 outline-none focus:border-indigo-500"
+                            >
+                              <option value="">Any channel</option>
+                              {ourBoardChannels
+                                .filter((channelItem) => String(channelItem.type).toUpperCase() === "TEXT")
+                                .map((channelItem) => (
+                                  <option key={channelItem.id} value={channelItem.id}>
+                                    #{channelItem.name}
+                                  </option>
+                                ))}
+                            </select>
+                            <p className="mt-1 text-[11px] text-zinc-500">
+                              If set, users can only run <span className="font-semibold">/bump</span> in that channel.
+                            </p>
+                          </div>
+
+                          {ourBoardError ? (
+                            <p className="text-xs text-rose-300">{ourBoardError}</p>
+                          ) : null}
+
+                          {ourBoardSuccess ? (
+                            <p className="text-xs text-emerald-300">{ourBoardSuccess}</p>
+                          ) : null}
+
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              type="button"
+                              onClick={() => void loadOurBoardSettings()}
+                              disabled={isLoadingOurBoard || isSavingOurBoard}
+                              className="bg-transparent text-zinc-300 hover:bg-white/10"
+                            >
+                              Reset
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={() => void onSaveOurBoardSettings()}
+                              disabled={isLoadingOurBoard || isSavingOurBoard}
+                              className="bg-[#5865f2] text-white hover:bg-[#4752c4]"
+                            >
+                              {isSavingOurBoard ? "Saving..." : "Save In-Aboard"}
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     ) : activeSection === "eventsManagement" ? (
@@ -6567,7 +7007,7 @@ export const EditServerModal = () => {
                           </span>
                         </button>
 
-                        {!isCollapsed && section.items.map((item) => (
+                        {!isCollapsed && section.items.filter((item) => item.key !== "ourBoard" || isInAboardSettingsOwner).map((item) => (
                           <button
                             key={item.key}
                             type="button"

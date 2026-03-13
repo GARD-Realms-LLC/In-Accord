@@ -154,27 +154,87 @@ export async function POST(req: Request) {
       return new NextResponse("Content is required", { status: 400 });
     }
 
-    const now = new Date();
+    const createMessage = async ({
+      content,
+      fileUrl,
+      memberId,
+    }: {
+      content: string;
+      fileUrl: string | null;
+      memberId: string;
+    }) => {
+      const now = new Date();
+      const insertedRows = await db
+        .insert(message)
+        .values({
+          id: uuidv4(),
+          content,
+          fileUrl,
+          memberId,
+          channelId: currentChannel.id,
+          threadId: normalizedThreadId,
+          deleted: false,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
 
-    const inserted = await db
-      .insert(message)
-      .values({
-        id: uuidv4(),
-        content: sanitizedContent || "[attachment]",
-        fileUrl: fileUrl ?? null,
-        memberId: currentMember.id,
+      return insertedRows[0];
+    };
+
+    const isSlashCommandInput = sanitizedContent.startsWith("/") && !fileUrl;
+
+    if (isSlashCommandInput) {
+      const commandResult = await executeServerSlashCommand({
+        serverId,
+        rawInput: sanitizedContent,
         channelId: currentChannel.id,
-        threadId: normalizedThreadId,
-        deleted: false,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning();
+        actorProfileId: profile.id,
+      });
+
+      if (commandResult.handled) {
+        const responderMemberId =
+          typeof commandResult.responseMemberId === "string" && commandResult.responseMemberId.trim().length > 0
+            ? commandResult.responseMemberId.trim()
+            : currentMember.id;
+
+        const responderMembership = await db.query.member.findFirst({
+          where: and(eq(member.id, responderMemberId), eq(member.serverId, serverId)),
+        });
+
+        const insertedResponse = await createMessage({
+          content: commandResult.responseContent,
+          fileUrl: null,
+          memberId: responderMembership?.id ?? currentMember.id,
+        });
+
+        if (normalizedThreadId) {
+          await touchThreadActivity({
+            threadId: normalizedThreadId,
+          });
+
+          await markThreadRead({
+            threadId: normalizedThreadId,
+            profileId: profile.id,
+          });
+        }
+
+        return NextResponse.json(insertedResponse);
+      }
+    }
+
+    const inserted = await createMessage({
+      content: sanitizedContent || "[attachment]",
+      fileUrl: fileUrl ?? null,
+      memberId: currentMember.id,
+    });
 
     if (sanitizedContent.startsWith("/") && !fileUrl) {
       const commandResult = await executeServerSlashCommand({
         serverId,
         rawInput: sanitizedContent,
+        channelId: currentChannel.id,
+        actorProfileId: profile.id,
       });
 
       if (commandResult.handled) {
@@ -212,7 +272,7 @@ export async function POST(req: Request) {
       });
     }
 
-    return NextResponse.json(inserted[0]);
+    return NextResponse.json(inserted);
   } catch (error) {
     console.error("[SOCKET_MESSAGES_POST]", error);
     return new NextResponse("Internal Error", { status: 500 });

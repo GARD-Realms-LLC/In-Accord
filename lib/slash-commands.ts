@@ -2,6 +2,11 @@ import { and, eq, sql } from "drizzle-orm";
 
 import { db, member, server } from "@/lib/db";
 import { makeIntegrationBotProfileId } from "@/lib/integration-bot-profile";
+import {
+  OUR_BOARD_BUMP_COOLDOWN_MS,
+  recordOurBoardBump,
+  upsertOurBoardEntry,
+} from "@/lib/our-board-store";
 import { getUserPreferences } from "@/lib/user-preferences";
 
 export type SlashCommandDefinition = {
@@ -127,6 +132,12 @@ export const listServerSlashCommands = async (serverId: string): Promise<SlashCo
       sourceType: "SYSTEM",
       sourceName: "In-Accord",
     },
+    {
+      name: "bump",
+      description: "Bump this server on In-Aboard.",
+      sourceType: "SYSTEM",
+      sourceName: "In-Accord",
+    },
   ];
 
   for (const bot of enabledBots) {
@@ -185,9 +196,13 @@ export const listServerSlashCommands = async (serverId: string): Promise<SlashCo
 export const executeServerSlashCommand = async ({
   serverId,
   rawInput,
+  channelId,
+  actorProfileId,
 }: {
   serverId: string;
   rawInput: string;
+  channelId: string;
+  actorProfileId: string;
 }): Promise<
   | { handled: false }
   | { handled: true; responseContent: string; responseMemberId?: string }
@@ -264,6 +279,91 @@ export const executeServerSlashCommand = async ({
     return {
       handled: true,
       responseContent: summary || "No bot/app integration commands are available for this server yet.",
+    };
+  }
+
+  if (selectedCommand.name === "bump") {
+    const normalizedChannelId = String(channelId ?? "").trim();
+    const normalizedActorProfileId = String(actorProfileId ?? "").trim();
+
+    if (!normalizedChannelId || !normalizedActorProfileId) {
+      return {
+        handled: true,
+        responseContent: "Unable to process /bump in this channel.",
+      };
+    }
+
+    const targetServer = await db.query.server.findFirst({
+      where: eq(server.id, serverId),
+    });
+
+    if (!targetServer) {
+      return {
+        handled: true,
+        responseContent: "Server not found for /bump.",
+      };
+    }
+
+    const ownerResult = await db.execute(sql`
+      select
+        coalesce(nullif(trim(u."name"), ''), nullif(trim(u."email"), ''), ${targetServer.profileId}) as "ownerDisplayName",
+        u."email" as "ownerEmail"
+      from "Users" u
+      where u."userId" = ${targetServer.profileId}
+      limit 1
+    `);
+
+    const ownerRow = (ownerResult as unknown as {
+      rows?: Array<{ ownerDisplayName: string | null; ownerEmail: string | null }>;
+    }).rows?.[0];
+
+    const ensuredEntry = await upsertOurBoardEntry({
+      serverId: targetServer.id,
+      serverName: String(targetServer.name ?? "Untitled Server"),
+      imageUrl: String(targetServer.imageUrl ?? "").trim() || null,
+      ownerProfileId: String(targetServer.profileId ?? "").trim(),
+      ownerDisplayName: String(ownerRow?.ownerDisplayName ?? targetServer.profileId ?? "Unknown Owner"),
+      ownerEmail: ownerRow?.ownerEmail ?? null,
+    });
+
+    const bumpResult = await recordOurBoardBump({
+      serverId: targetServer.id,
+      channelId: normalizedChannelId,
+      actorProfileId: normalizedActorProfileId,
+    });
+
+    if (!bumpResult.ok && bumpResult.code === "CHANNEL_NOT_ALLOWED") {
+      return {
+        handled: true,
+        responseContent: "❌ /bump is not allowed in this channel. Ask an admin to update the allowed bump channel in Edit Server → In-Aboard.",
+      };
+    }
+
+    if (!bumpResult.ok && bumpResult.code === "COOLDOWN") {
+      const minutesRemaining = Math.max(1, Math.ceil(bumpResult.cooldownMsRemaining / 60_000));
+      const hours = Math.floor(minutesRemaining / 60);
+      const minutes = minutesRemaining % 60;
+      const remainingLabel = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+
+      return {
+        handled: true,
+        responseContent: `⏳ Your /bump cooldown is active. Try again in ${remainingLabel}.`,
+      };
+    }
+
+    const baseUrl =
+      String(process.env.NEXT_PUBLIC_SITE_URL ?? "").trim() ||
+      String(process.env.APP_BASE_URL ?? "").trim();
+    const boardUrl = baseUrl
+      ? `${baseUrl.replace(/\/$/, "")}/in-aboard`
+      : "/in-aboard";
+
+    return {
+      handled: true,
+      responseContent:
+        `🚀 ${targetServer.name} bumped on In-Aboard! ` +
+        `Your next bump is available in ${Math.round(OUR_BOARD_BUMP_COOLDOWN_MS / 60_000)} minutes. ` +
+        `Public board: ${boardUrl}`,
     };
   }
 
