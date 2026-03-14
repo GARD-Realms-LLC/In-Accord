@@ -1,0 +1,14 @@
+[
+  {
+    "aliasName": "@aws-sdk/client-s3-ecbef8e33fd0b8f0",
+    "baseName": "@aws-sdk/client-s3"
+  },
+  {
+    "aliasName": "pg-587764f78a6c7a9c",
+    "baseName": "pg"
+  },
+  {
+    "aliasName": "socket.io-708778d0eeebd101",
+    "baseName": "socket.io"
+  }
+]

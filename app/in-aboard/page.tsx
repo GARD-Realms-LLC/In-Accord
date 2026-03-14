@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
 
 import { toInAboardImageUrl } from "@/lib/in-aboard-image-url";
 
@@ -53,8 +52,7 @@ const formatRelativeBump = (value: string | null) => {
 };
 
 export default function InAboardPage() {
-  const searchParams = useSearchParams();
-  const token = String(searchParams?.get("token") ?? "").trim();
+  const [token, setToken] = useState("");
 
   const [entries, setEntries] = useState<PublicEntry[]>([]);
   const [managed, setManaged] = useState<ManagedEntry | null>(null);
@@ -132,6 +130,24 @@ export default function InAboardPage() {
       setIsSavingManaged(false);
     }
   };
+
+  useEffect(() => {
+    const syncTokenFromLocation = () => {
+      if (typeof window === "undefined") {
+        return;
+      }
+
+      const nextToken = new URLSearchParams(window.location.search).get("token");
+      setToken(String(nextToken ?? "").trim());
+    };
+
+    syncTokenFromLocation();
+    window.addEventListener("popstate", syncTokenFromLocation);
+
+    return () => {
+      window.removeEventListener("popstate", syncTokenFromLocation);
+    };
+  }, []);
 
   useEffect(() => {
     void load();

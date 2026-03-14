@@ -75,7 +75,7 @@ const promoteStagedBuildToStable = (stageDir) => {
 };
 
 const writeHowToRunFile = (stageDir) => {
-  const exePath = path.join(stageDir, "win-unpacked", "In-Accord-V2.exe");
+  const exePath = path.join(stageDir, "win-unpacked", "In-Accord.exe");
   const notesPath = path.join(distDir, "WIN_DEV_README.txt");
 
   const lines = [
@@ -85,7 +85,7 @@ const writeHowToRunFile = (stageDir) => {
     `Current build: ${stageDir}`,
     "",
     "Run:",
-    `  ${path.join(stableOutputDir, "win-unpacked", "In-Accord-V2.exe")}`,
+    `  ${path.join(stableOutputDir, "win-unpacked", "In-Accord.exe")}`,
     "",
     "If the stable path is temporarily unavailable, run current build directly:",
     `  ${exePath}`,
@@ -115,6 +115,7 @@ function main() {
   run("next build", {
     BUILD_OUTPUT_DIR: stageDir,
   });
+  run("node scripts/materialize-next-external-aliases.cjs");
 
   const builderOutput = stageDirRelative.split(path.sep).join("/");
   const iconPath = path.join(stageDir, "fav.ico").split(path.sep).join("/");

@@ -179,29 +179,34 @@ export const getCurrentSessionContext = async () => {
     return null;
   }
 
-  await ensureSessionSchema();
+  try {
+    await ensureSessionSchema();
 
-  const result = await db.execute(sql`
-    select
-      "sessionId" as "sessionId",
-      "userId" as "userId"
-    from "InAccordSession"
-    where "sessionId" = ${parsed.sessionId}
-      and "userId" = ${parsed.userId}
-      and "revokedAt" is null
-      and "expiresAt" > now()
-    limit 1
-  `);
+    const result = await db.execute(sql`
+      select
+        "sessionId" as "sessionId",
+        "userId" as "userId"
+      from "InAccordSession"
+      where "sessionId" = ${parsed.sessionId}
+        and "userId" = ${parsed.userId}
+        and "revokedAt" is null
+        and "expiresAt" > now()
+      limit 1
+    `);
 
-  const row = ((result as unknown as { rows?: Array<{ sessionId: string; userId: string }> }).rows ?? [])[0];
-  if (!row) {
+    const row = ((result as unknown as { rows?: Array<{ sessionId: string; userId: string }> }).rows ?? [])[0];
+    if (!row) {
+      return null;
+    }
+
+    return {
+      userId: row.userId,
+      sessionId: row.sessionId,
+    };
+  } catch (error) {
+    console.error("[SESSION_CONTEXT_GET]", error);
     return null;
   }
-
-  return {
-    userId: row.userId,
-    sessionId: row.sessionId,
-  };
 };
 
 export const getSessionUserId = async () => {
@@ -301,14 +306,18 @@ export const clearSessionUserId = async () => {
 
   const parsed = token ? parseSessionToken(token) : null;
   if (parsed) {
-    await ensureSessionSchema();
-    await db.execute(sql`
-      update "InAccordSession"
-      set "revokedAt" = now()
-      where "sessionId" = ${parsed.sessionId}
-        and "userId" = ${parsed.userId}
-        and "revokedAt" is null
-    `);
+    try {
+      await ensureSessionSchema();
+      await db.execute(sql`
+        update "InAccordSession"
+        set "revokedAt" = now()
+        where "sessionId" = ${parsed.sessionId}
+          and "userId" = ${parsed.userId}
+          and "revokedAt" is null
+      `);
+    } catch (error) {
+      console.error("[SESSION_CLEAR]", error);
+    }
   }
 
   cookieStore.set(SESSION_COOKIE_NAME, "", {

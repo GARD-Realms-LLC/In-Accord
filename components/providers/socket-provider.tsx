@@ -9,12 +9,16 @@ type SocketContextType = {
   socket: any | null;
   isConnected: boolean;
   connectionQuality: ConnectionQuality;
+  statusMessage: string;
+  targetUrl: string;
 };
 
 const SocketContext = createContext<SocketContextType>({
   socket: null,
   isConnected: false,
   connectionQuality: "disconnected",
+  statusMessage: "Realtime disconnected — reconnecting...",
+  targetUrl: "/api/socket/io",
 });
 
 export const useSocket = () => {
@@ -25,6 +29,7 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
   const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isSlowNetwork, setIsSlowNetwork] = useState(false);
+  const [lastError, setLastError] = useState<string | null>(null);
   const disconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -42,24 +47,32 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
       }, 3000);
     };
 
-    const socketInstance = new (ClientIO as any)(
-      process.env.NEXT_PUBLIC_SITE_URL!,
-      {
-        path: "/api/socket/io",
-        addTrailingSlash: false,
-      }
-    );
+    const browserOrigin =
+      typeof window !== "undefined" && /^https?:$/i.test(window.location.protocol)
+        ? window.location.origin
+        : "";
+    const configuredOrigin = String(process.env.NEXT_PUBLIC_SITE_URL ?? "").trim();
+    const socketOrigin = browserOrigin || configuredOrigin;
+
+    const socketInstance = new (ClientIO as any)(socketOrigin || undefined, {
+      path: "/api/socket/io",
+      addTrailingSlash: false,
+      transports: ["websocket", "polling"],
+    });
 
     socketInstance.on("connect", () => {
       clearDisconnectTimer();
       setIsConnected(true);
+      setLastError(null);
     });
 
     socketInstance.on("disconnect", () => {
       markDisconnectedWithDelay();
     });
 
-    socketInstance.on("connect_error", () => {
+    socketInstance.on("connect_error", (error: { message?: string } | undefined) => {
+      const message = String(error?.message ?? "").trim();
+      setLastError(message || "Socket connection failed");
       markDisconnectedWithDelay();
     });
 
@@ -106,8 +119,20 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
       ? "slow"
       : "connected";
 
+  const targetUrl =
+    typeof window !== "undefined" && /^https?:$/i.test(window.location.protocol)
+      ? new URL("/api/socket/io", window.location.origin).toString()
+      : "/api/socket/io";
+
+  const statusMessage =
+    connectionQuality === "connected"
+      ? isSlowNetwork
+        ? "Realtime connected — network looks slow."
+        : "Realtime connected."
+      : `Realtime disconnected — could not reach ${targetUrl}${lastError ? ` (${lastError})` : ""}`;
+
   return (
-    <SocketContext.Provider value={{ socket, isConnected, connectionQuality }}>
+    <SocketContext.Provider value={{ socket, isConnected, connectionQuality, statusMessage, targetUrl }}>
       {children}
     </SocketContext.Provider>
   );

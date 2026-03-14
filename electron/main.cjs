@@ -72,6 +72,41 @@ const initializeEnvironment = () => {
 
 initializeEnvironment();
 
+const formatAppDisplayVersion = (value) => {
+  const raw = String(value || "").trim();
+  const match = raw.match(/^(\d+)\.(\d+)\.(\d+)$/);
+
+  if (!match) {
+    return raw || "0.0.00";
+  }
+
+  return `${match[1]}.${match[2]}.${String(match[3]).padStart(2, "0")}`;
+};
+
+const readRuntimePackageManifest = () => {
+  const candidates = [path.join(process.cwd(), "package.json"), path.join(app.getAppPath(), "package.json")];
+
+  for (const candidate of candidates) {
+    try {
+      if (!candidate || !fs.existsSync(candidate)) {
+        continue;
+      }
+
+      return JSON.parse(fs.readFileSync(candidate, "utf8"));
+    } catch (_error) {
+      // Try the next manifest candidate.
+    }
+  }
+
+  return null;
+};
+
+const getAppDisplayVersion = () => {
+  const manifest = readRuntimePackageManifest();
+  const version = manifest?.inaccordDisplayVersion || manifest?.version || app.getVersion();
+  return formatAppDisplayVersion(version);
+};
+
 const {
   getUpdaterState,
   checkForUpdatesNow,
@@ -1373,7 +1408,8 @@ const appendCrashLog = (entry) => {
     const payload = JSON.stringify({
       ...entry,
       timestamp: new Date().toISOString(),
-      appVersion: app.getVersion(),
+      appVersion: getAppDisplayVersion(),
+      internalVersion: app.getVersion(),
       isPackaged: app.isPackaged,
       platform: process.platform,
       pid: process.pid,
@@ -1553,11 +1589,7 @@ async function resolveAppUrl() {
     return String(process.env.ELECTRON_START_URL).replace("http://127.0.0.1", "http://localhost");
   }
 
-  if (!app.isPackaged) {
-    return DEFAULT_URL;
-  }
-
-  return startInternalServer();
+  return DEFAULT_URL;
 }
 
 function createWindow(appUrl) {
@@ -1717,7 +1749,8 @@ app
       return {
         isPackaged: app.isPackaged,
         runtimeMode: app.isPackaged ? "production" : "development",
-        appVersion: app.getVersion(),
+        appVersion: getAppDisplayVersion(),
+        internalVersion: app.getVersion(),
       };
     });
 

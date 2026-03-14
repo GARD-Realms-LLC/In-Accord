@@ -30,10 +30,22 @@ function runWithSingleRetry(command, retryNote, extraEnv = {}) {
   }
 }
 
-function readPackageVersion() {
+function readPackageManifest() {
   const pkgPath = path.join(root, "package.json");
-  const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
-  return pkg.version;
+  return JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+}
+
+function formatDisplayVersion(version) {
+  const match = String(version).trim().match(/^(\d+)\.(\d+)\.(\d+)$/);
+  if (!match) {
+    return String(version).trim();
+  }
+
+  return `${match[1]}.${match[2]}.${String(match[3]).padStart(2, "0")}`;
+}
+
+function resolveDisplayVersion(pkg) {
+  return formatDisplayVersion(pkg.inaccordDisplayVersion || pkg.version);
 }
 
 function ensureFileExists(filePath, label) {
@@ -75,6 +87,44 @@ function verifyLatestYmlContainsVersion(version, latestYmlPath) {
   }
 }
 
+function renameInstallerArtifactsForDisplayVersion(version, displayVersion, latestYmlPath) {
+  const setupExe = findInstallerExePath(version);
+  const blockmap = `${setupExe}.blockmap`;
+
+  if (displayVersion === version) {
+    return {
+      version,
+      displayVersion,
+      setupExe,
+      blockmap,
+    };
+  }
+
+  const setupExeDisplay = setupExe.replace(version, displayVersion);
+  const blockmapDisplay = `${setupExeDisplay}.blockmap`;
+
+  if (setupExeDisplay !== setupExe) {
+    if (fs.existsSync(blockmap)) {
+      fs.renameSync(blockmap, blockmapDisplay);
+    }
+    fs.renameSync(setupExe, setupExeDisplay);
+
+    const latestYmlText = fs.readFileSync(latestYmlPath, "utf8");
+    const updatedLatestYmlText = latestYmlText.replaceAll(
+      `In-Accord-Setup-v${version}-x64.exe`,
+      `In-Accord-Setup-v${displayVersion}-x64.exe`
+    );
+    fs.writeFileSync(latestYmlPath, updatedLatestYmlText, "utf8");
+  }
+
+  return {
+    version,
+    displayVersion,
+    setupExe: setupExeDisplay,
+    blockmap: blockmapDisplay,
+  };
+}
+
 function main() {
   console.log("[build:release:strict] Starting strict release build...");
 
@@ -85,6 +135,7 @@ function main() {
     "npm run build",
     "Build failed on first attempt; retrying once after transient Next.js trace/artifact issue..."
   );
+  run("node scripts/materialize-next-external-aliases.cjs");
   run("npm run prepare:win-fav-icon");
   run('node -e "require(\'fs\').mkdirSync(\'.electron-cache/tmp\',{recursive:true})"');
   run(
@@ -98,19 +149,21 @@ function main() {
     }
   );
 
-  const version = readPackageVersion();
+  const pkg = readPackageManifest();
+  const version = pkg.version;
+  const displayVersion = resolveDisplayVersion(pkg);
   const latestYml = path.join(distDir, "latest.yml");
   ensureFileExists(latestYml, "latest.yml");
 
-  const setupExe = findInstallerExePath(version);
-  const blockmap = `${setupExe}.blockmap`;
-  ensureFileExists(setupExe, "Installer EXE");
-  ensureFileExists(blockmap, "Installer blockmap");
   verifyLatestYmlContainsVersion(version, latestYml);
+  const artifactInfo = renameInstallerArtifactsForDisplayVersion(version, displayVersion, latestYml);
+  ensureFileExists(artifactInfo.setupExe, "Installer EXE");
+  ensureFileExists(artifactInfo.blockmap, "Installer blockmap");
 
   console.log("\n[build:release:strict] ✅ Build + artifact verification passed");
-  console.log(`[build:release:strict] Version: ${version}`);
-  console.log(`[build:release:strict] Installer: ${setupExe}`);
+  console.log(`[build:release:strict] Version: ${artifactInfo.displayVersion}`);
+  console.log(`[build:release:strict] Internal version: ${artifactInfo.version}`);
+  console.log(`[build:release:strict] Installer: ${artifactInfo.setupExe}`);
 }
 
 try {

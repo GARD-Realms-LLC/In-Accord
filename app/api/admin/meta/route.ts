@@ -11,6 +11,7 @@ import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 type PackageJsonShape = {
   name?: string;
   version?: string;
+  inaccordDisplayVersion?: string;
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
   repository?: string | { type?: string; url?: string };
@@ -70,6 +71,16 @@ const toDisplayVersion = (value: string | null | undefined) => {
   }
 
   return raw.replace(/^[~^]/, "");
+};
+
+const toAppDisplayVersion = (value: string | null | undefined) => {
+  const normalized = toDisplayVersion(value);
+  const match = normalized.match(/^(\d+)\.(\d+)\.(\d+)$/);
+  if (!match) {
+    return normalized;
+  }
+
+  return `${match[1]}.${match[2]}.${match[3].padStart(2, "0")}`;
 };
 
 const normalizeSdkVersion = (value: string | null | undefined) => {
@@ -309,7 +320,7 @@ export async function GET() {
     return NextResponse.json({
       build: {
         appName: packageJson.name ?? "In-Accord",
-        appVersion: toDisplayVersion(packageJson.version),
+        appVersion: toAppDisplayVersion(packageJson.inaccordDisplayVersion ?? packageJson.version),
         sdkVersion: toDisplayVersion(sdkVersion),
         nextVersion: toDisplayVersion(
           packageJson.dependencies?.next ?? packageJson.devDependencies?.next ?? null

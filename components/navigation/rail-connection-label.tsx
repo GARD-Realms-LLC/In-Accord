@@ -3,7 +3,7 @@
 import { useSocket } from "@/components/providers/socket-provider";
 
 export const RailConnectionLabel = () => {
-  const { connectionQuality } = useSocket();
+  const { connectionQuality, statusMessage } = useSocket();
 
   const qualityColorClass =
     connectionQuality === "disconnected"
@@ -15,13 +15,7 @@ export const RailConnectionLabel = () => {
   return (
     <div
       className={`text-center text-[10px] font-semibold uppercase tracking-[0.08em] ${qualityColorClass}`}
-      title={
-        connectionQuality === "disconnected"
-          ? "Realtime disconnected"
-          : connectionQuality === "slow"
-            ? "Realtime connected (slow network)"
-            : "Realtime connected"
-      }
+      title={statusMessage}
       aria-label={`Realtime status: ${connectionQuality}`}
     >
       In-Accord

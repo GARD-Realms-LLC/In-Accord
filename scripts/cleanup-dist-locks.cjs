@@ -41,7 +41,6 @@ async function main() {
     : path.join(root, configuredOutputDir);
 
   tryStopProcess("In-Accord");
-  tryStopProcess("In-Accord-V2");
   tryStopProcess("In-Accord Launcher");
   tryStopProcess("electron");
   tryStopProcess("electron-builder");

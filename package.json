@@ -1,6 +1,7 @@
 {
   "name": "In-Accord",
-  "version": "1.0.77",
+  "version": "1.0.179",
+  "inaccordDisplayVersion": "1.0.4",
   "main": "electron/main.cjs",
   "private": true,
   "repository": {
@@ -125,10 +126,11 @@
     "wait-on": "^8.0.3"
   },
   "build": {
-    "appId": "com.gardrealms.inaccord.v2",
-    "productName": "In-Accord V2",
+    "appId": "com.gardrealms.inaccord",
+    "productName": "In-Accord",
     "icon": "dist/win64/fav.ico",
-    "artifactName": "In-Accord-V2 Setup v${version}-${arch}.${ext}",
+    "artifactName": "In-Accord Setup v${version}-${arch}.${ext}",
+    "afterPack": "scripts/electron-after-pack-copy-next-external-aliases.cjs",
     "asar": true,
     "asarUnpack": [
       "node_modules/**/*.node"
@@ -157,7 +159,7 @@
     ],
     "win": {
       "icon": "dist/win64/fav.ico",
-      "executableName": "In-Accord-V2",
+      "executableName": "In-Accord",
       "signAndEditExecutable": false,
       "target": [
         {
@@ -177,7 +179,7 @@
       "allowElevation": true,
       "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": true,
-      "shortcutName": "In-Accord V2",
+      "shortcutName": "In-Accord",
       "installerIcon": "dist/win64/fav.ico"
     }
   }
