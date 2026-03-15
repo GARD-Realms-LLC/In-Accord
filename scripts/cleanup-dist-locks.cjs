@@ -27,18 +27,18 @@ const removeWithRetries = async (targetPath, retries = 12, delayMs = 500) => {
 
 async function main() {
   const root = path.join(__dirname, "..");
-  const configuredOutputDir = process.env.BUILD_OUTPUT_DIR || path.join("dist", "win64");
-  const distDir = path.isAbsolute(configuredOutputDir)
+  const configuredOutputDir = process.env.BUILD_OUTPUT_DIR || path.join("Desktop", "win64");
+  const outputDir = path.isAbsolute(configuredOutputDir)
     ? configuredOutputDir
     : path.join(root, configuredOutputDir);
 
-  const lockTargets = [distDir];
+  const lockTargets = [outputDir];
 
   for (const target of lockTargets) {
     await removeWithRetries(target);
   }
 
-  console.log(`Dist lock cleanup complete for: ${distDir}`);
+  console.log(`Build output lock cleanup complete for: ${outputDir}`);
 }
 
 main().catch((error) => {

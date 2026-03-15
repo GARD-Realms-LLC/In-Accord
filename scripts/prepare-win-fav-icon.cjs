@@ -3,11 +3,14 @@ const path = require("path");
 
 function main() {
   const root = path.join(__dirname, "..");
-  const sourceIcon = path.join(root, "Images", "fav.ico");
-  const configuredOutputDir = process.env.BUILD_OUTPUT_DIR || path.join("dist", "win64");
+  const generatedIcon = path.join(root, "Images", "app-icon.ico");
+  const fallbackIcon = path.join(root, "Images", "fav.ico");
+  const sourceIcon = fs.existsSync(generatedIcon) ? generatedIcon : fallbackIcon;
+  const configuredOutputDir = process.env.BUILD_OUTPUT_DIR || path.join("Desktop", "builder-assets");
   const outputDir = path.isAbsolute(configuredOutputDir)
     ? configuredOutputDir
     : path.join(root, configuredOutputDir);
+  const primaryTargetIcon = path.join(outputDir, "app-icon.ico");
   const targetIcon = path.join(outputDir, "fav.ico");
 
   if (!fs.existsSync(sourceIcon)) {
@@ -15,9 +18,12 @@ function main() {
   }
 
   fs.mkdirSync(outputDir, { recursive: true });
+  fs.copyFileSync(sourceIcon, primaryTargetIcon);
   fs.copyFileSync(sourceIcon, targetIcon);
 
-  console.log(`Prepared fixed Windows icon: ${path.relative(root, targetIcon)}`);
+  console.log(
+    `Prepared Windows icons: ${path.relative(root, primaryTargetIcon)} and ${path.relative(root, targetIcon)}`
+  );
 }
 
 try {

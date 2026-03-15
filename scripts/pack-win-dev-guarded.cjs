@@ -3,26 +3,11 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 
 const root = path.join(__dirname, "..");
-const distDir = path.join(root, "dist");
-const stableOutputDir = path.join(distDir, "Win Dev");
-const rollingBuildsDir = path.join(distDir, ".win-dev-builds");
+const desktopDir = path.join(root, "Desktop");
+const stableOutputDir = path.join(desktopDir, "Win Dev");
 const cacheTmpDir = path.join(root, ".electron-cache", "tmp");
-const stablePendingDir = path.join(distDir, "Win Dev.__next");
-const stableBackupDir = path.join(distDir, "Win Dev.__old");
-
-const timestamp = () => {
-  const now = new Date();
-  const pad = (n) => String(n).padStart(2, "0");
-  return [
-    now.getFullYear(),
-    pad(now.getMonth() + 1),
-    pad(now.getDate()),
-    "-",
-    pad(now.getHours()),
-    pad(now.getMinutes()),
-    pad(now.getSeconds()),
-  ].join("");
-};
+const stablePendingDir = path.join(desktopDir, "Win Dev.__next");
+const stableBackupDir = path.join(desktopDir, "Win Dev.__old");
 
 const run = (command, env = {}) => {
   console.log(`\n[pack-win-dev-guarded] > ${command}`);
@@ -75,34 +60,31 @@ const promoteStagedBuildToStable = (stageDir) => {
 };
 
 const writeHowToRunFile = (stageDir) => {
-  const exePath = path.join(stageDir, "win-unpacked", "In-Accord.exe");
-  const notesPath = path.join(distDir, "WIN_DEV_README.txt");
+  const notesPath = path.join(desktopDir, "WIN_DEV_README.txt");
 
   const lines = [
     "In-Accord Win Dev test build",
     "",
     `Stable path: ${stableOutputDir}`,
-    `Current build: ${stageDir}`,
     "",
     "Run:",
     `  ${path.join(stableOutputDir, "win-unpacked", "In-Accord.exe")}`,
     "",
-    "If the stable path is temporarily unavailable, run current build directly:",
-    `  ${exePath}`,
-    "",
-    "Note: this guarded build flow writes to a fresh folder each run, then copies/switches",
-    "to a real 'Win Dev' directory (no redirects/junctions used).",
+    "Note: this guarded build flow stages into a temporary swap folder and then",
+    "promotes the result to the real 'Win Dev' directory (no numbered build folders).",
   ];
 
   fs.writeFileSync(notesPath, `${lines.join("\n")}\n`, "utf8");
 };
 
 function main() {
-  fs.mkdirSync(rollingBuildsDir, { recursive: true });
+  fs.mkdirSync(desktopDir, { recursive: true });
   fs.mkdirSync(cacheTmpDir, { recursive: true });
 
-  const stageDir = path.join(rollingBuildsDir, `build-${timestamp()}`);
+  const stageDir = stablePendingDir;
   const stageDirRelative = path.relative(root, stageDir);
+
+  removePathIfExists(stablePendingDir);
 
   console.log("[pack-win-dev-guarded] Building Win Dev package in isolated staging output...");
   console.log(`[pack-win-dev-guarded] Stage output: ${stageDir}`);
@@ -118,7 +100,7 @@ function main() {
   run("node scripts/materialize-next-external-aliases.cjs");
 
   const builderOutput = stageDirRelative.split(path.sep).join("/");
-  const iconPath = path.join(stageDir, "fav.ico").split(path.sep).join("/");
+  const iconPath = path.join(stageDir, "app-icon.ico").split(path.sep).join("/");
 
   run(
     `electron-builder --dir --win --x64 -c.directories.output=\"${builderOutput}\" -c.win.icon=\"${iconPath}\" -c.win.signAndEditExecutable=false`,
@@ -136,7 +118,6 @@ function main() {
 
   console.log("\n[pack-win-dev-guarded] ✅ Win Dev package ready");
   console.log(`[pack-win-dev-guarded] Stable test path: ${stableOutputDir}`);
-  console.log(`[pack-win-dev-guarded] Current staged build: ${stageDir}`);
 }
 
 try {

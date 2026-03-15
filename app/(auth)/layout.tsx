@@ -1,94 +1,84 @@
 "use client";
 
-import Link from "next/link";
 import {
   AtSign,
   Bell,
-  CirclePlus,
   Hash,
-  LogIn,
   MessageCircle,
   Phone,
   Radio,
   Send,
-  ShieldCheck,
   Users,
   type LucideIcon,
 } from "lucide-react";
-import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
-import { cn } from "@/lib/utils";
+const socialSteampunkGlyphs: LucideIcon[] = [
+  MessageCircle,
+  Users,
+  Hash,
+  AtSign,
+  Send,
+  Bell,
+  Phone,
+  Radio,
+];
 
-const AuthLayout = ({ children }: { children: React.ReactNode }) => {
-  const pathname = usePathname();
-  const isSignInPage = pathname?.startsWith("/sign-in") ?? false;
-  const isSignUpPage = pathname?.startsWith("/sign-up") ?? false;
-  const socialSteampunkGlyphs: LucideIcon[] = [
-    MessageCircle,
-    Users,
-    Hash,
-    AtSign,
-    Send,
-    Bell,
-    Phone,
-    Radio,
-  ];
-  const steampunkSocialIcons = useMemo(
-    () =>
-      Array.from({ length: 34 }, (_, index) => {
-        const shouldSpin = Math.random() < 0.4;
+const steampunkSocialIcons = Array.from({ length: 34 }, (_, index) => {
+  const spinPattern = index % 5;
 
-        return {
-          key: `social-steampunk-${index}`,
-          Icon: socialSteampunkGlyphs[index % socialSteampunkGlyphs.length],
-          left: `${5 + ((index * 19) % 88)}%`,
-          top: `${6 + ((index * 13) % 84)}%`,
-          size: 16 + (index % 5) * 4,
-          rotation: -18 + (index % 9) * 4,
-          delay: `${(index % 8) * 0.9}s`,
-          duration: `${10 + (index % 7) * 1.4}s`,
-          spinDuration: `${6 + (index % 6) * 1.1}s`,
-          pulseDuration: `${2.8 + (index % 5) * 0.4}s`,
-          floatDistance: `${6 + (index % 4) * 2}px`,
-          spinDirection: Math.random() < 0.5 ? "normal" : "reverse",
-          spinPlayState: shouldSpin ? "running" : "paused",
-          opacity: 0.54 + (index % 4) * 0.1,
-        };
-      }),
-    []
-  );
-  const patronRainDrops = Array.from({ length: 24 }, (_, index) => ({
-    key: `patron-rain-${index}`,
-    left: `${4 + (index % 8) * 11.5}%`,
-    delay: `${(index % 9) * 0.85}s`,
-    duration: `${7.2 + (index % 6) * 1.1}s`,
-    opacity: 0.24 + (index % 5) * 0.1,
-    scale: 0.68 + (index % 6) * 0.07,
-    width: `${10 + (index % 3) * 2}px`,
-    height: `${28 + (index % 4) * 6}px`,
-    background:
-      index % 3 === 0
-        ? "linear-gradient(180deg, rgba(250, 204, 21, 0.1) 0%, rgba(234, 179, 8, 0.68) 100%)"
-        : index % 3 === 1
-          ? "linear-gradient(180deg, rgba(196, 181, 253, 0.08) 0%, rgba(139, 92, 246, 0.64) 100%)"
-          : "linear-gradient(180deg, rgba(125, 211, 252, 0.08) 0%, rgba(56, 189, 248, 0.62) 100%)",
-    boxShadow:
-      index % 3 === 0
-        ? "0 0 0 1px rgba(250, 204, 21, 0.2), 0 0 14px rgba(234, 179, 8, 0.4)"
-        : index % 3 === 1
-          ? "0 0 0 1px rgba(196, 181, 253, 0.2), 0 0 14px rgba(139, 92, 246, 0.38)"
-          : "0 0 0 1px rgba(125, 211, 252, 0.18), 0 0 14px rgba(56, 189, 248, 0.35)",
-  }));
-  const patronSparkles = Array.from({ length: 14 }, (_, index) => ({
-    key: `patron-sparkle-${index}`,
-    left: `${8 + (index % 7) * 12}%`,
-    top: `${4 + (index % 10) * 9}%`,
-    delay: `${(index % 8) * 0.7}s`,
-    duration: `${2.6 + (index % 5) * 0.5}s`,
-    opacity: 0.2 + (index % 4) * 0.12,
-    scale: 0.8 + (index % 4) * 0.1,
-  }));
+  return {
+    key: `social-steampunk-${index}`,
+    Icon: socialSteampunkGlyphs[index % socialSteampunkGlyphs.length],
+    left: `${5 + ((index * 19) % 88)}%`,
+    top: `${6 + ((index * 13) % 84)}%`,
+    size: 16 + (index % 5) * 4,
+    rotation: -18 + (index % 9) * 4,
+    delay: `${(index % 8) * 0.9}s`,
+    duration: `${10 + (index % 7) * 1.4}s`,
+    spinDuration: `${6 + (index % 6) * 1.1}s`,
+    pulseDuration: `${2.8 + (index % 5) * 0.4}s`,
+    floatDistance: `${6 + (index % 4) * 2}px`,
+    spinDirection: index % 2 === 0 ? "reverse" : "normal",
+    spinPlayState: spinPattern === 1 || spinPattern === 3 ? "running" : "paused",
+    opacity: 0.54 + (index % 4) * 0.1,
+  };
+});
+
+const patronRainDrops = Array.from({ length: 24 }, (_, index) => ({
+  key: `patron-rain-${index}`,
+  left: `${4 + (index % 8) * 11.5}%`,
+  delay: `${(index % 9) * 0.85}s`,
+  duration: `${7.2 + (index % 6) * 1.1}s`,
+  opacity: 0.24 + (index % 5) * 0.1,
+  scale: 0.68 + (index % 6) * 0.07,
+  width: `${10 + (index % 3) * 2}px`,
+  height: `${28 + (index % 4) * 6}px`,
+  background:
+    index % 3 === 0
+      ? "linear-gradient(180deg, rgba(250, 204, 21, 0.1) 0%, rgba(234, 179, 8, 0.68) 100%)"
+      : index % 3 === 1
+        ? "linear-gradient(180deg, rgba(196, 181, 253, 0.08) 0%, rgba(139, 92, 246, 0.64) 100%)"
+        : "linear-gradient(180deg, rgba(125, 211, 252, 0.08) 0%, rgba(56, 189, 248, 0.62) 100%)",
+  boxShadow:
+    index % 3 === 0
+      ? "0 0 0 1px rgba(250, 204, 21, 0.2), 0 0 14px rgba(234, 179, 8, 0.4)"
+      : index % 3 === 1
+        ? "0 0 0 1px rgba(196, 181, 253, 0.2), 0 0 14px rgba(139, 92, 246, 0.38)"
+        : "0 0 0 1px rgba(125, 211, 252, 0.18), 0 0 14px rgba(56, 189, 248, 0.35)",
+}));
+
+const patronSparkles = Array.from({ length: 14 }, (_, index) => ({
+  key: `patron-sparkle-${index}`,
+  left: `${8 + (index % 7) * 12}%`,
+  top: `${4 + (index % 10) * 9}%`,
+  delay: `${(index % 8) * 0.7}s`,
+  duration: `${2.6 + (index % 5) * 0.5}s`,
+  opacity: 0.2 + (index % 4) * 0.12,
+  scale: 0.8 + (index % 4) * 0.1,
+}));
+
+const AuthLayout = ({ children }: { children: ReactNode }) => {
   const rosterContainerRef = useRef<HTMLDivElement | null>(null);
   const rosterTrackRef = useRef<HTMLDivElement | null>(null);
   const [rosterStartOffset, setRosterStartOffset] = useState(0);
@@ -144,13 +134,13 @@ const AuthLayout = ({ children }: { children: React.ReactNode }) => {
   }, [featuredPatrons.length]);
 
   return (
-    <div className="relative flex h-full min-h-screen w-full overflow-hidden bg-[#0f1115] text-white">
+    <div className="relative flex min-h-screen w-full overflow-hidden bg-[#0f1115] text-white">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(88,101,242,0.28),transparent_38%),radial-gradient(circle_at_82%_14%,rgba(56,189,248,0.2),transparent_36%),linear-gradient(140deg,#0b0d12_0%,#111827_42%,#1f2937_100%)]"
       />
 
-      <div aria-hidden className="auth-steampunk-social-layer pointer-events-none absolute inset-y-0 left-20 right-0 z-5">
+      <div aria-hidden className="auth-steampunk-social-layer pointer-events-none absolute inset-y-0 left-0 right-24 z-5 sm:right-32">
         {steampunkSocialIcons.map((item) => (
           <span
             key={item.key}
@@ -177,60 +167,12 @@ const AuthLayout = ({ children }: { children: React.ReactNode }) => {
         ))}
       </div>
 
-      <aside className="theme-servers-rail relative z-10 flex h-full min-h-screen w-20 shrink-0 flex-col items-center gap-3 border-r border-black/30 bg-[#0d0f14]/80 py-4 backdrop-blur-md">
-        <Link
-          href="/sign-in"
-          className="mt-1 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#5865f2] text-lg font-black text-white shadow-lg shadow-[#5865f2]/40 transition hover:scale-[1.03] hover:bg-[#6774ff]"
-          aria-label="Go to sign in"
-          title="Sign in"
-        >
-          IA
-        </Link>
-        <div className="h-px w-8 bg-white/20" />
-
-        <Link
-          href="/sign-in"
-          className={cn(
-            "group flex h-11 w-11 items-center justify-center rounded-2xl border transition hover:-translate-y-0.5",
-            isSignInPage
-              ? "border-[#8f9bff] bg-[#5865f2]/35 text-white shadow-lg shadow-[#5865f2]/25"
-              : "border-white/10 bg-white/10 text-zinc-200 hover:bg-white/18 hover:text-white"
-          )}
-          aria-label="Open sign in"
-          title="Sign in"
-        >
-          <LogIn className="h-5 w-5" />
-        </Link>
-
-        <Link
-          href="/sign-up"
-          className={cn(
-            "group flex h-11 w-11 items-center justify-center rounded-2xl border transition hover:-translate-y-0.5",
-            isSignUpPage
-              ? "border-[#8f9bff] bg-[#5865f2]/35 text-white shadow-lg shadow-[#5865f2]/25"
-              : "border-white/10 bg-white/10 text-zinc-200 hover:bg-white/18 hover:text-white"
-          )}
-          aria-label="Open sign up"
-          title="Sign up"
-        >
-          <CirclePlus className="h-5 w-5" />
-        </Link>
-
-        <div
-          aria-hidden
-          className="flex h-11 w-11 items-center justify-center rounded-2xl border border-emerald-300/20 bg-emerald-500/10 text-emerald-200"
-          title="Secure auth"
-        >
-          <ShieldCheck className="h-5 w-5" />
-        </div>
-      </aside>
-
-      <main className="relative z-10 flex min-h-screen flex-1 items-center justify-center p-6 md:p-10">
+      <main className="relative z-10 flex min-h-screen w-full items-center justify-center p-6 md:p-10">
         {children}
       </main>
 
       <aside
-        className="relative z-10 flex h-full min-h-screen w-24 shrink-0 flex-col overflow-hidden border-l border-black/30 bg-[#0d0f14]/65 sm:w-32"
+        className="relative z-10 flex min-h-screen w-24 shrink-0 flex-col overflow-hidden border-l border-black/30 bg-[#0d0f14]/65 sm:w-32"
         style={{ ["--auth-patron-intensity" as any]: 1, ["--auth-patron-speed" as any]: 1 }}
       >
         <div className="relative z-20 border-b border-amber-300/25 bg-[#0d0f14]/78 px-3 py-3 backdrop-blur-md">
@@ -305,6 +247,6 @@ const AuthLayout = ({ children }: { children: React.ReactNode }) => {
       </aside>
     </div>
   );
-}
- 
+};
+
 export default AuthLayout;

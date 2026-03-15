@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("electronAPI", {
   platform: process.platform,
   getRuntimeMeta: () => ipcRenderer.invoke("inaccord:runtime-meta-get"),
+  setSpellCheckEnabled: (enabled) => ipcRenderer.invoke("inaccord:spell-check-set", { enabled }),
   getRuntimeActivity: () => ipcRenderer.invoke("inaccord:runtime-activity-get"),
   getInstalledGames: () => ipcRenderer.invoke("inaccord:runtime-installed-games-get"),
   getRunningApps: () => ipcRenderer.invoke("inaccord:runtime-running-apps-get"),

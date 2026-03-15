@@ -5,7 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-import { LAST_IN_ACCORD_LOCATION_STORAGE_KEY } from "@/components/navigation/last-location-tracker";
+import { readLastInAccordLocation } from "@/components/navigation/last-location-tracker";
 import { toInAboardImageUrl } from "@/lib/in-aboard-image-url";
 
 type PublicEntry = {
@@ -159,9 +159,7 @@ export default function InAboardPage() {
       return;
     }
 
-    const storedTarget = String(
-      window.localStorage.getItem(LAST_IN_ACCORD_LOCATION_STORAGE_KEY) || ""
-    ).trim();
+    const storedTarget = readLastInAccordLocation();
 
     if (storedTarget && !storedTarget.startsWith("/in-aboard")) {
       setBackTarget(storedTarget);
@@ -238,7 +236,7 @@ export default function InAboardPage() {
     <main className="min-h-full bg-[#1e1f22] text-zinc-100">
       <div className="mx-auto flex min-h-full w-full max-w-[calc(100vw-140px)] flex-col px-4 pb-10 pt-6">
         <header className="overflow-hidden rounded-2xl border border-[#3f4452] bg-[#2b2d31] shadow-xl shadow-black/35">
-          <div className="border-b border-[#3f4452] bg-gradient-to-r from-[#5865f2] via-[#4f5ad5] to-[#3e48a3] px-6 py-10">
+          <div className="border-b border-[#3f4452] bg-linear-to-r from-[#5865f2] via-[#4f5ad5] to-[#3e48a3] px-6 py-10">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-indigo-100/90">Server Discovery</p>
@@ -263,15 +261,15 @@ export default function InAboardPage() {
 
           <div className="grid gap-3 px-4 py-4 sm:grid-cols-3 sm:px-6">
             <div className="rounded-lg border border-[#3f4452] bg-[#232428] px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-400">Listed Servers</p>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400">Listed Servers</p>
               <p className="mt-1 text-2xl font-bold text-zinc-100">{entries.length}</p>
             </div>
             <div className="rounded-lg border border-[#3f4452] bg-[#232428] px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-400">Total Bumps</p>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400">Total Bumps</p>
               <p className="mt-1 text-2xl font-bold text-zinc-100">{totalBumps}</p>
             </div>
             <div className="rounded-lg border border-[#3f4452] bg-[#232428] px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-400">Bump Cooldown</p>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400">Bump Cooldown</p>
               <p className="mt-1 text-2xl font-bold text-zinc-100">60m</p>
             </div>
           </div>

@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { sql } from "drizzle-orm";
 
@@ -19,6 +19,20 @@ type SessionRow = {
   revokedAt: Date | string | null;
 };
 
+export type SessionDiagnostics = {
+  ok: boolean;
+  code:
+    | "ok"
+    | "no-session-cookie"
+    | "database-unavailable"
+    | "invalid-session-cookie"
+    | "session-not-found"
+    | "session-validation-failed";
+  message: string;
+  userId: string | null;
+  sessionId: string | null;
+};
+
 export type UserSessionEntry = {
   sessionId: string;
   userAgent: string | null;
@@ -30,12 +44,64 @@ export type UserSessionEntry = {
 
 let sessionSchemaReady = false;
 
-const cookieOptions = {
+const resolveSessionCookieSecure = async (request?: Request) => {
+  const requestUrl = String(request?.url || "").trim();
+
+  try {
+    if (requestUrl) {
+      const parsed = new URL(requestUrl);
+      if (parsed.protocol === "https:") {
+        return true;
+      }
+
+      if (parsed.protocol === "http:") {
+        return false;
+      }
+    }
+  } catch (_error) {
+    // Fall through to header detection.
+  }
+
+  try {
+    const headerStore = await headers();
+    const forwardedProto = String(headerStore.get("x-forwarded-proto") ?? "").trim().toLowerCase();
+    const host = String(headerStore.get("x-forwarded-host") ?? headerStore.get("host") ?? "")
+      .trim()
+      .toLowerCase();
+
+    if (forwardedProto === "https") {
+      return true;
+    }
+
+    if (forwardedProto === "http") {
+      return false;
+    }
+
+    if (host.startsWith("localhost") || host.startsWith("127.0.0.1") || host.startsWith("[::1]")) {
+      return false;
+    }
+  } catch (_error) {
+    // Fall through to env-based default.
+  }
+
+  return process.env.NODE_ENV === "production";
+};
+
+const getSessionCookieOptions = async (request?: Request) => ({
   httpOnly: true,
   sameSite: "lax" as const,
-  secure: process.env.NODE_ENV === "production",
+  secure: await resolveSessionCookieSecure(request),
   path: "/",
   maxAge: SESSION_TTL_SECONDS,
+});
+
+const expireSessionCookie = async (request?: Request) => {
+  const cookieStore = await cookies();
+  const cookieOptions = await getSessionCookieOptions(request);
+  cookieStore.set(SESSION_COOKIE_NAME, "", {
+    ...cookieOptions,
+    maxAge: 0,
+  });
 };
 
 const signPayload = (payload: string) => {
@@ -174,8 +240,15 @@ export const getCurrentSessionContext = async () => {
     return null;
   }
 
+  const connectionUrl = process.env.LIVE_DATABASE_URL?.trim() ?? "";
+  if (!connectionUrl || /^replace_/i.test(connectionUrl) || !/^postgres(ql)?:\/\//i.test(connectionUrl)) {
+    await expireSessionCookie();
+    return null;
+  }
+
   const parsed = parseSessionToken(token);
   if (!parsed) {
+    await expireSessionCookie();
     return null;
   }
 
@@ -196,6 +269,7 @@ export const getCurrentSessionContext = async () => {
 
     const row = ((result as unknown as { rows?: Array<{ sessionId: string; userId: string }> }).rows ?? [])[0];
     if (!row) {
+      await expireSessionCookie();
       return null;
     }
 
@@ -205,6 +279,7 @@ export const getCurrentSessionContext = async () => {
     };
   } catch (error) {
     console.error("[SESSION_CONTEXT_GET]", error);
+    await expireSessionCookie();
     return null;
   }
 };
@@ -219,6 +294,111 @@ export const getCurrentSessionId = async () => {
   return session?.sessionId ?? null;
 };
 
+const isDatabaseUnavailableError = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error || "");
+  const maybeCode =
+    typeof error === "object" && error !== null
+      ? String(
+          (error as { code?: unknown; cause?: { code?: unknown } }).code ??
+            (error as { cause?: { code?: unknown } }).cause?.code ??
+            ""
+        )
+      : "";
+
+  return /relation .* does not exist|42P01|ETIMEDOUT|ECONNREFUSED|ENOTFOUND|57P01|08006|08001/i.test(message) ||
+    /ETIMEDOUT|ECONNREFUSED|ENOTFOUND|57P01|08006|08001/i.test(maybeCode);
+};
+
+const resolveCurrentSessionState = async () => {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+
+  if (!token) {
+    return {
+      ok: false,
+      code: "no-session-cookie" as const,
+      message: "No desktop session was found. Please sign in.",
+      userId: null,
+      sessionId: null,
+      shouldExpireCookie: false,
+    };
+  }
+
+  const connectionUrl = process.env.LIVE_DATABASE_URL?.trim() ?? "";
+  if (!connectionUrl || /^replace_/i.test(connectionUrl) || !/^postgres(ql)?:\/\//i.test(connectionUrl)) {
+    return {
+      ok: false,
+      code: "database-unavailable" as const,
+      message: "Database unavailable. Configure LIVE_DATABASE_URL with a valid PostgreSQL connection string.",
+      userId: null,
+      sessionId: null,
+      shouldExpireCookie: false,
+    };
+  }
+
+  const parsed = parseSessionToken(token);
+  if (!parsed) {
+    return {
+      ok: false,
+      code: "invalid-session-cookie" as const,
+      message: "Desktop session cookie is invalid or corrupted. Please sign in again.",
+      userId: null,
+      sessionId: null,
+      shouldExpireCookie: true,
+    };
+  }
+
+  try {
+    await ensureSessionSchema();
+
+    const result = await db.execute(sql`
+      select
+        "sessionId" as "sessionId",
+        "userId" as "userId"
+      from "InAccordSession"
+      where "sessionId" = ${parsed.sessionId}
+        and "userId" = ${parsed.userId}
+        and "revokedAt" is null
+        and "expiresAt" > now()
+      limit 1
+    `);
+
+    const row = ((result as unknown as { rows?: Array<{ sessionId: string; userId: string }> }).rows ?? [])[0];
+    if (!row) {
+      return {
+        ok: false,
+        code: "session-not-found" as const,
+        message: "Desktop session was not found or has expired. Please sign in again.",
+        userId: parsed.userId,
+        sessionId: parsed.sessionId,
+        shouldExpireCookie: true,
+      };
+    }
+
+    return {
+      ok: true,
+      code: "ok" as const,
+      message: "Session is valid.",
+      userId: row.userId,
+      sessionId: row.sessionId,
+      shouldExpireCookie: false,
+    };
+  } catch (error) {
+    console.error("[SESSION_CONTEXT_GET]", error);
+
+    return {
+      ok: false,
+      code: isDatabaseUnavailableError(error) ? "database-unavailable" as const : "session-validation-failed" as const,
+      message: isDatabaseUnavailableError(error)
+        ? "Desktop session validation failed because the database is unavailable."
+        : "Desktop session validation failed because of an internal error.",
+      userId: parsed.userId,
+      sessionId: parsed.sessionId,
+      shouldExpireCookie: false,
+    };
+  }
+};
+
 export const setSessionUserId = async (
   userId: string,
   options?: {
@@ -231,7 +411,28 @@ export const setSessionUserId = async (
     : await createSessionRecord(userId, options?.request);
 
   const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE_NAME, createSessionToken(userId, sessionDetails.sessionId, sessionDetails.issuedAt), cookieOptions);
+  const cookieOptions = await getSessionCookieOptions(options?.request);
+  cookieStore.set(
+    SESSION_COOKIE_NAME,
+    createSessionToken(userId, sessionDetails.sessionId, sessionDetails.issuedAt),
+    cookieOptions
+  );
+};
+
+export const getCurrentSessionDiagnostics = async (): Promise<SessionDiagnostics> => {
+  const state = await resolveCurrentSessionState();
+
+  if (!state.ok && (state as { shouldExpireCookie?: boolean }).shouldExpireCookie) {
+    await expireSessionCookie();
+  }
+
+  return {
+    ok: state.ok,
+    code: state.code,
+    message: state.message,
+    userId: state.userId,
+    sessionId: state.sessionId,
+  };
 };
 
 export const listActiveSessionsForUser = async (userId: string): Promise<UserSessionEntry[]> => {
@@ -300,7 +501,7 @@ export const revokeOtherSessionsForUser = async (userId: string, currentSessionI
   `);
 };
 
-export const clearSessionUserId = async () => {
+export const clearSessionUserId = async (request?: Request) => {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
@@ -320,8 +521,5 @@ export const clearSessionUserId = async () => {
     }
   }
 
-  cookieStore.set(SESSION_COOKIE_NAME, "", {
-    ...cookieOptions,
-    maxAge: 0,
-  });
+  await expireSessionCookie(request);
 };

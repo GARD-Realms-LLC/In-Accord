@@ -1,7 +1,7 @@
 {
   "name": "In-Accord",
-  "version": "1.0.204",
-  "inaccordDisplayVersion": "1.0.29",
+  "version": "1.0.224",
+  "inaccordDisplayVersion": "1.0.49",
   "main": "electron/main.cjs",
   "private": true,
   "repository": {
@@ -25,17 +25,17 @@
     "generate:win-icon": "node scripts/generate-windows-icon.cjs",
     "version:bump:patch": "node scripts/bump-version.cjs",
     "build": "npm run cleanup:dist-locks && npm run clean:next && next build --webpack",
-    "build:dev:portable": "set \"BUILD_OUTPUT_DIR=dist\\Win Dev\"&& npm run cleanup:dist-locks && npm run clean:next && next build --webpack",
+    "build:dev:portable": "set \"BUILD_OUTPUT_DIR=Desktop\\Win Dev\"&& npm run cleanup:dist-locks && npm run clean:next && next build --webpack",
     "start": "next start",
     "lint": "next lint",
     "electron": "electron .",
     "electron:wait": "wait-on tcp:3000",
     "electron:dev": "concurrently -k \"npm run dev\" \"npm run electron:wait && npm run electron\"",
     "electron:start": "concurrently -k \"npm run start\" \"npm run electron:wait && npm run electron\"",
-    "preelectron:dist": "set BUILD_OUTPUT_DIR=dist\\win64&& npm run cleanup:dist-locks && npm run prepare:win-fav-icon",
-    "preelectron:pack": "set BUILD_OUTPUT_DIR=dist\\win64&& npm run cleanup:dist-locks && npm run prepare:win-fav-icon",
-    "preelectron:pack:dev": "set \"BUILD_OUTPUT_DIR=dist\\Win Dev\"&& npm run cleanup:dist-locks && npm run prepare:win-fav-icon",
-    "electron:pack": "npm run build && npm run prepare:win-fav-icon && node -e \"require('fs').mkdirSync('.electron-cache/tmp',{recursive:true})\" && set ELECTRON_CACHE=.electron-cache\\electron&& set ELECTRON_BUILDER_CACHE=.electron-cache\\builder&& set TEMP=%CD%\\.electron-cache\\tmp&& set TMP=%CD%\\.electron-cache\\tmp&& set BUILD_OUTPUT_DIR=dist\\win64&& electron-builder --dir --win --x64 -c.directories.output=dist/win64 -c.win.signAndEditExecutable=false",
+    "preelectron:dist": "set BUILD_OUTPUT_DIR=Desktop\\builder-assets&& npm run cleanup:dist-locks && npm run generate:win-icon && npm run prepare:win-fav-icon",
+    "preelectron:pack": "set BUILD_OUTPUT_DIR=Desktop\\builder-assets&& npm run cleanup:dist-locks && npm run generate:win-icon && npm run prepare:win-fav-icon",
+    "preelectron:pack:dev": "set \"BUILD_OUTPUT_DIR=Desktop\\builder-assets\"&& npm run cleanup:dist-locks && npm run generate:win-icon && npm run prepare:win-fav-icon",
+    "electron:pack": "npm run build && npm run generate:win-icon && npm run prepare:win-fav-icon && node -e \"require('fs').mkdirSync('.electron-cache/tmp',{recursive:true})\" && set ELECTRON_CACHE=.electron-cache\\electron&& set ELECTRON_BUILDER_CACHE=.electron-cache\\builder&& set TEMP=%CD%\\.electron-cache\\tmp&& set TMP=%CD%\\.electron-cache\\tmp&& set BUILD_OUTPUT_DIR=Desktop\\win64&& electron-builder --dir --win --x64 -c.directories.output=Desktop/win64",
     "electron:pack:dev": "node scripts/pack-win-dev-guarded.cjs",
     "electron:dist": "npm run build:release:strict",
     "electron:dist:unblocked": "npm run build:release:strict",
@@ -128,7 +128,7 @@
   "build": {
     "appId": "com.gardrealms.inaccord",
     "productName": "In-Accord",
-    "icon": "dist/win64/fav.ico",
+    "icon": "Desktop/builder-assets/app-icon.ico",
     "artifactName": "In-Accord-Setup-v${version}-${arch}.${ext}",
     "afterPack": "scripts/electron-after-pack-copy-next-external-aliases.cjs",
     "asar": true,
@@ -145,7 +145,7 @@
       "node_modules/**/*"
     ],
     "directories": {
-      "output": "dist/win64"
+      "output": "Desktop/win64"
     },
     "extraResources": [
       {
@@ -158,7 +158,7 @@
       }
     ],
     "win": {
-      "icon": "dist/win64/fav.ico",
+      "icon": "Desktop/builder-assets/app-icon.ico",
       "executableName": "In-Accord",
       "signAndEditExecutable": false,
       "target": [
@@ -180,7 +180,9 @@
       "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": true,
       "shortcutName": "In-Accord",
-      "installerIcon": "dist/win64/fav.ico"
+      "installerIcon": "Desktop/builder-assets/app-icon.ico",
+      "installerHeaderIcon": "Desktop/builder-assets/app-icon.ico",
+      "uninstallerIcon": "Desktop/builder-assets/app-icon.ico"
     }
   }
 }

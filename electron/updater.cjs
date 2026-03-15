@@ -94,7 +94,11 @@ const getUpdaterState = () => ({ ...updaterState });
 const setUpdaterState = (patch, onStateChange) => {
   Object.assign(updaterState, patch);
   if (typeof onStateChange === "function") {
-    onStateChange(getUpdaterState());
+    try {
+      onStateChange(getUpdaterState());
+    } catch (error) {
+      console.warn("[updater] Failed to publish updater state change.", error);
+    }
   }
 };
 

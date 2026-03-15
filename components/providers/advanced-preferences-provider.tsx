@@ -7,14 +7,18 @@ type AdvancedPreferences = {
   openLinksInApp: boolean;
   confirmBeforeQuit: boolean;
   enableDebugOverlay: boolean;
+  enableSpellCheck: boolean;
   diagnosticsLevel: "off" | "basic" | "verbose";
 };
+
+const ADVANCED_PREFERENCES_STORAGE_KEY = "inaccord:advanced:preferences";
 
 const defaultAdvancedPreferences: AdvancedPreferences = {
   enableHardwareAcceleration: true,
   openLinksInApp: true,
   confirmBeforeQuit: true,
   enableDebugOverlay: false,
+  enableSpellCheck: true,
   diagnosticsLevel: "basic",
 };
 
@@ -48,6 +52,10 @@ const normalizeAdvancedPreferences = (value: unknown): AdvancedPreferences => {
       typeof source.enableDebugOverlay === "boolean"
         ? source.enableDebugOverlay
         : defaultAdvancedPreferences.enableDebugOverlay,
+    enableSpellCheck:
+      typeof source.enableSpellCheck === "boolean"
+        ? source.enableSpellCheck
+        : defaultAdvancedPreferences.enableSpellCheck,
     diagnosticsLevel,
   };
 };
@@ -64,11 +72,21 @@ const applyAdvancedPreferencesToDocument = (preferences: AdvancedPreferences) =>
     "data-inaccord-hardware-acceleration",
     preferences.enableHardwareAcceleration ? "on" : "off"
   );
+  root.setAttribute(
+    "data-inaccord-spell-check",
+    preferences.enableSpellCheck ? "on" : "off"
+  );
 
   try {
     window.localStorage.setItem("inaccord:advanced:hardwareAcceleration", preferences.enableHardwareAcceleration ? "on" : "off");
+    window.localStorage.setItem(ADVANCED_PREFERENCES_STORAGE_KEY, JSON.stringify(preferences));
   } catch {
     // ignore storage failures
+  }
+
+  const electronApi = typeof window !== "undefined" ? (window as any)?.electronAPI : null;
+  if (electronApi && typeof electronApi.setSpellCheckEnabled === "function") {
+    void electronApi.setSpellCheckEnabled(preferences.enableSpellCheck).catch(() => undefined);
   }
 };
 
@@ -76,6 +94,19 @@ export const AdvancedPreferencesProvider = () => {
   const [advancedPreferences, setAdvancedPreferences] = useState<AdvancedPreferences>({
     ...defaultAdvancedPreferences,
   });
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(ADVANCED_PREFERENCES_STORAGE_KEY);
+      if (!raw) {
+        return;
+      }
+
+      setAdvancedPreferences(normalizeAdvancedPreferences(JSON.parse(raw) as unknown));
+    } catch {
+      // ignore local storage failures
+    }
+  }, []);
 
   const confirmBeforeQuitEnabled = useMemo(
     () => advancedPreferences.confirmBeforeQuit,
@@ -135,7 +166,8 @@ export const AdvancedPreferencesProvider = () => {
   }, []);
 
   useEffect(() => {
-    if (!confirmBeforeQuitEnabled) {
+    const isDesktopRuntime = typeof window !== "undefined" && Boolean((window as any)?.electronAPI);
+    if (!confirmBeforeQuitEnabled || isDesktopRuntime) {
       return;
     }
 

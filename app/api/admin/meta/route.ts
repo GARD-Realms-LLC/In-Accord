@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -21,9 +21,18 @@ type PackageJsonShape = {
 
 const DEFAULT_GITHUB_REPO_URL = "https://github.com/GARD-Realms-LLC/In-Accord";
 const execFileAsync = promisify(execFile);
-const SDK_VERSION_TRACK_FILE = ".inaccord-sdk-version.json";
 const SDK_SOURCE_FILE = "In-Accord.js";
 const SDK_BASE_VERSION = "1.0.0.1";
+
+declare global {
+  // eslint-disable-next-line no-var
+  var inAccordSdkVersionCache:
+    | {
+        sourceHash: string;
+        version: string;
+      }
+    | undefined;
+}
 
 const isPlaceholder = (value?: string) =>
   !value || value.trim() === "" || value.includes("replace_me");
@@ -106,37 +115,24 @@ const getSdkVersion = async () => {
   try {
     const root = process.cwd();
     const sdkSourcePath = path.join(root, SDK_SOURCE_FILE);
-    const sdkTrackPath = path.join(root, SDK_VERSION_TRACK_FILE);
     const sdkSourceContent = await readFile(sdkSourcePath, "utf8");
     const sourceHash = createHash("sha256").update(sdkSourceContent).digest("hex");
 
-    const existingRaw = await readFile(sdkTrackPath, "utf8").catch(() => "");
-    const existing = existingRaw
-      ? (JSON.parse(existingRaw) as { version?: string; sourceHash?: string })
-      : null;
-
-    const currentVersion = normalizeSdkVersion(existing?.version);
-    const currentSourceHash = String(existing?.sourceHash ?? "").trim();
-
-    if (currentSourceHash === sourceHash) {
-      return currentVersion;
+    if (globalThis.inAccordSdkVersionCache?.sourceHash === sourceHash) {
+      return globalThis.inAccordSdkVersionCache.version;
     }
 
-    const nextVersion = currentSourceHash ? bumpSdkVersion(currentVersion) : SDK_BASE_VERSION;
+    const previousVersion = normalizeSdkVersion(globalThis.inAccordSdkVersionCache?.version);
+    const nextVersion = globalThis.inAccordSdkVersionCache ? bumpSdkVersion(previousVersion) : SDK_BASE_VERSION;
 
-    const nextPayload = {
-      version: nextVersion,
+    globalThis.inAccordSdkVersionCache = {
       sourceHash,
-      updatedAt: new Date().toISOString(),
+      version: nextVersion,
     };
-
-    await writeFile(sdkTrackPath, `${JSON.stringify(nextPayload, null, 2)}\n`, "utf8").catch(() => {
-      // Ignore write failures (e.g. read-only runtime). We can still return the computed version.
-    });
 
     return nextVersion;
   } catch {
-    return SDK_BASE_VERSION;
+    return globalThis.inAccordSdkVersionCache?.version ?? SDK_BASE_VERSION;
   }
 };
 

@@ -5,7 +5,9 @@ const fs = require("fs");
 const path = require("path");
 
 const root = process.cwd();
-const distDir = path.join(root, "dist", "win64");
+const packageManifestPath = path.join(root, "package.json");
+const defaultDistDirRelative = path.join("Desktop", "win64");
+let distDir = path.join(root, defaultDistDirRelative);
 const releaseVersionStatePath = path.join(root, "build", "release-version.json");
 
 const DISPLAY_BASE_MAJOR = 1;
@@ -39,9 +41,92 @@ function runWithSingleRetry(command, retryNote, extraEnv = {}) {
   }
 }
 
+function toRelativeOutputDir(targetDir) {
+  const relative = path.relative(root, targetDir);
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+    return targetDir;
+  }
+
+  return relative.split(path.sep).join("/");
+}
+
+function buildElectronBuilderCommand(outputDir, version, displayVersion) {
+  const outputArg = toRelativeOutputDir(outputDir);
+  return (
+    `npx electron-builder --win nsis --x64 ` +
+    `-c.directories.output=${outputArg} ` +
+    `-c.extraMetadata.version=${version} ` +
+    `-c.extraMetadata.inaccordDisplayVersion=${displayVersion}`
+  );
+}
+
+function buildElectronBuilderArgs(outputDir, version, displayVersion) {
+  return [
+    "electron-builder",
+    "--win",
+    "nsis",
+    "--x64",
+    `-c.directories.output=${toRelativeOutputDir(outputDir)}`,
+    `-c.extraMetadata.version=${version}`,
+    `-c.extraMetadata.inaccordDisplayVersion=${displayVersion}`,
+  ];
+}
+
+function isLockedOutputError(error) {
+  const detail = String(error?.message || "").toLowerCase();
+  return detail.includes("app.asar") && detail.includes("being used by another process");
+}
+
+function runCleanupForOutputDir(outputDir) {
+  run("npm run cleanup:dist-locks", {
+    BUILD_OUTPUT_DIR: outputDir,
+  });
+}
+
+function runElectronBuilderWithRetry(version, displayVersion) {
+  const sharedEnv = {
+    ELECTRON_CACHE: ".electron-cache/electron",
+    ELECTRON_BUILDER_CACHE: ".electron-cache/builder",
+    TEMP: path.join(root, ".electron-cache", "tmp"),
+    TMP: path.join(root, ".electron-cache", "tmp"),
+  };
+
+  const attemptBuild = (outputDir) => {
+    distDir = outputDir;
+    runCleanupForOutputDir(outputDir);
+    run(buildElectronBuilderCommand(outputDir, version, displayVersion), {
+      ...sharedEnv,
+      BUILD_OUTPUT_DIR: outputDir,
+    });
+  };
+
+  const freshOutputDir = path.join(root, "Desktop", "win64");
+
+  attemptBuild(freshOutputDir);
+}
+
 function readPackageManifest() {
-  const pkgPath = path.join(root, "package.json");
-  return JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+  return JSON.parse(fs.readFileSync(packageManifestPath, "utf8"));
+}
+
+function snapshotPackageManifest() {
+  return fs.readFileSync(packageManifestPath, "utf8");
+}
+
+function restorePackageManifest(snapshot) {
+  const original = String(snapshot || "");
+  if (!original) {
+    return;
+  }
+
+  const current = fs.existsSync(packageManifestPath)
+    ? fs.readFileSync(packageManifestPath, "utf8")
+    : "";
+
+  if (current !== original) {
+    fs.writeFileSync(packageManifestPath, original, "utf8");
+    console.log("[build:release:strict] Restored root package.json after packaging");
+  }
 }
 
 function parseSemver(version) {
@@ -430,61 +515,59 @@ function renameInstallerArtifactsForDisplayVersion(version, displayVersion, late
 
 function main() {
   console.log("[build:release:strict] Starting strict release build...");
+  const originalPackageManifest = snapshotPackageManifest();
 
-  loadEnvFile(path.join(root, ".env"));
-  const pkg = readPackageManifest();
-  const releaseState = readReleaseVersionState(pkg);
-  const version = bumpInternalVersion(releaseState.version || pkg.version);
-  const displayVersion = bumpDisplayVersion(releaseState.displayVersion || pkg.inaccordDisplayVersion || pkg.version);
+  try {
+    loadEnvFile(path.join(root, ".env"));
+    const pkg = readPackageManifest();
+    const releaseState = readReleaseVersionState(pkg);
+    const version = bumpInternalVersion(releaseState.version || pkg.version);
+    const displayVersion = bumpDisplayVersion(releaseState.displayVersion || pkg.inaccordDisplayVersion || pkg.version);
 
-  run("npm run cleanup:dist-locks");
-  run("npm run clean:next");
-  runWithSingleRetry(
-    "npm run build",
-    "Build failed on first attempt; retrying once after transient Next.js trace/artifact issue..."
-  );
-  run("node scripts/materialize-next-external-aliases.cjs");
-  run("npm run prepare:win-fav-icon");
-  run('node -e "require(\'fs\').mkdirSync(\'.electron-cache/tmp\',{recursive:true})"');
-  run(
-    `npx electron-builder --win nsis --x64 -c.directories.output=dist/win64 -c.win.signAndEditExecutable=false -c.extraMetadata.version=${version} -c.extraMetadata.inaccordDisplayVersion=${displayVersion}`,
-    {
-      ELECTRON_CACHE: ".electron-cache/electron",
-      ELECTRON_BUILDER_CACHE: ".electron-cache/builder",
-      TEMP: path.join(root, ".electron-cache", "tmp"),
-      TMP: path.join(root, ".electron-cache", "tmp"),
-      BUILD_OUTPUT_DIR: "dist/win64",
-    }
-  );
+    run("npm run clean:next");
+    runWithSingleRetry(
+      "npm run build",
+      "Build failed on first attempt; retrying once after transient Next.js trace/artifact issue..."
+    );
+    run("node scripts/materialize-next-external-aliases.cjs");
+    run("npm run generate:win-icon");
+    run("npm run prepare:win-fav-icon", {
+      BUILD_OUTPUT_DIR: path.join(root, "Desktop", "builder-assets"),
+    });
+    run('node -e "require(\'fs\').mkdirSync(\'.electron-cache/tmp\',{recursive:true})"');
+    runElectronBuilderWithRetry(version, displayVersion);
 
-  const manifestUrl = getConfiguredUpdateManifestUrl();
-  const latestYml = path.join(distDir, "latest.yml");
-  ensureFileExists(latestYml, "latest.yml");
+    const manifestUrl = getConfiguredUpdateManifestUrl();
+    const latestYml = path.join(distDir, "latest.yml");
+    ensureFileExists(latestYml, "latest.yml");
 
-  verifyLatestYmlContainsVersion(version, latestYml);
-  const artifactInfo = renameInstallerArtifactsForDisplayVersion(version, displayVersion, latestYml);
-  syncLatestYmlVersionMetadata(latestYml, version, displayVersion);
-  syncLatestYmlAssetUrls(
-    latestYml,
-    buildPublishedAssetUrl(manifestUrl, version, path.basename(artifactInfo.setupExe))
-  );
-  ensureFileExists(artifactInfo.setupExe, "Installer EXE");
-  ensureFileExists(artifactInfo.blockmap, "Installer blockmap");
-  publishUpdaterArtifacts({
-    manifestUrl,
-    version,
-    displayVersion,
-    latestYmlPath: latestYml,
-    setupExe: artifactInfo.setupExe,
-    blockmap: artifactInfo.blockmap,
-  });
-  writeReleaseVersionState(version, displayVersion);
+    verifyLatestYmlContainsVersion(version, latestYml);
+    const artifactInfo = renameInstallerArtifactsForDisplayVersion(version, displayVersion, latestYml);
+    syncLatestYmlVersionMetadata(latestYml, version, displayVersion);
+    syncLatestYmlAssetUrls(
+      latestYml,
+      buildPublishedAssetUrl(manifestUrl, version, path.basename(artifactInfo.setupExe))
+    );
+    ensureFileExists(artifactInfo.setupExe, "Installer EXE");
+    ensureFileExists(artifactInfo.blockmap, "Installer blockmap");
+    publishUpdaterArtifacts({
+      manifestUrl,
+      version,
+      displayVersion,
+      latestYmlPath: latestYml,
+      setupExe: artifactInfo.setupExe,
+      blockmap: artifactInfo.blockmap,
+    });
+    writeReleaseVersionState(version, displayVersion);
 
-  console.log("\n[build:release:strict] ✅ Build + artifact verification passed");
-  console.log(`[build:release:strict] Version: ${artifactInfo.displayVersion}`);
-  console.log(`[build:release:strict] Internal version: ${artifactInfo.version}`);
-  console.log(`[build:release:strict] Installer: ${artifactInfo.setupExe}`);
-  console.log(`[build:release:strict] Published via: ${manifestUrl}`);
+    console.log("\n[build:release:strict] ✅ Build + artifact verification passed");
+    console.log(`[build:release:strict] Version: ${artifactInfo.displayVersion}`);
+    console.log(`[build:release:strict] Internal version: ${artifactInfo.version}`);
+    console.log(`[build:release:strict] Installer: ${artifactInfo.setupExe}`);
+    console.log(`[build:release:strict] Published via: ${manifestUrl}`);
+  } finally {
+    restorePackageManifest(originalPackageManifest);
+  }
 }
 
 try {

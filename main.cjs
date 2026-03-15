@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Notification, ipcMain, nativeImage, session, shell } = require("electron");
+const { app, BrowserWindow, Notification, ipcMain, shell } = require("electron");
 const http = require("http");
 const fs = require("fs");
 const os = require("os");
@@ -10,24 +10,6 @@ const execFileAsync = promisify(execFile);
 
 app.commandLine.appendSwitch("no-sandbox");
 app.disableHardwareAcceleration();
-
-const APP_USER_MODEL_ID = "com.gardrealms.inaccord";
-const APP_DISPLAY_NAME = "In-Accord";
-let desktopSpellCheckEnabled = true;
-
-try {
-  app.setName(APP_DISPLAY_NAME);
-} catch (_error) {
-  // Ignore early app naming failures.
-}
-
-if (process.platform === "win32") {
-  try {
-    app.setAppUserModelId(APP_USER_MODEL_ID);
-  } catch (_error) {
-    // Ignore early AppUserModelID failures; we retry after ready.
-  }
-}
 
 const parseEnvLine = (line) => {
   const eqIndex = line.indexOf("=");
@@ -145,181 +127,6 @@ const getAppDisplayVersion = () => {
   const manifest = readRuntimePackageManifest();
   const version = manifest?.inaccordDisplayVersion || manifest?.version || app.getVersion();
   return formatAppDisplayVersion(version);
-};
-
-const DESKTOP_EXIT_STORAGE_TYPES = [
-  "serviceworkers",
-  "cachestorage",
-  "cookies",
-  "localstorage",
-  "indexdb",
-  "websql",
-];
-
-let desktopExitCleanupComplete = false;
-let desktopExitCleanupPromise = null;
-
-const getDesktopAppIconPath = () => {
-  const candidates = [
-    path.join(__dirname, "..", "Images", "app-icon.ico"),
-    path.join(__dirname, "..", "Images", "fav.ico"),
-  ];
-
-  for (const candidate of candidates) {
-    if (candidate && fs.existsSync(candidate)) {
-      return candidate;
-    }
-  }
-
-  return null;
-};
-
-const getDesktopAppIcon = () => {
-  const iconPath = getDesktopAppIconPath();
-  if (!iconPath) {
-    return undefined;
-  }
-
-  const icon = nativeImage.createFromPath(iconPath);
-  return icon.isEmpty() ? iconPath : icon;
-};
-
-const getCookieRemovalUrls = (cookie) => {
-  const rawDomain = String(cookie?.domain || "").trim().replace(/^\.+/, "");
-  if (!rawDomain) {
-    return [];
-  }
-
-  const cookiePath = String(cookie?.path || "/").trim() || "/";
-  const schemes = cookie?.secure ? ["https"] : ["https", "http"];
-  const urls = new Set();
-
-  for (const scheme of schemes) {
-    urls.add(`${scheme}://${rawDomain}${cookiePath}`);
-  }
-
-  return Array.from(urls);
-};
-
-const collectDesktopSessions = () => {
-  const sessions = new Set();
-
-  if (session?.defaultSession) {
-    sessions.add(session.defaultSession);
-  }
-
-  for (const windowInstance of BrowserWindow.getAllWindows()) {
-    const targetSession = windowInstance?.webContents?.session;
-    if (targetSession) {
-      sessions.add(targetSession);
-    }
-  }
-
-  return Array.from(sessions);
-};
-
-const clearDesktopSessionPersistence = async (targetSession) => {
-  if (!targetSession) {
-    return;
-  }
-
-  try {
-    await targetSession.closeAllConnections();
-  } catch (_error) {
-    // Connection cleanup is best-effort only.
-  }
-
-  try {
-    const storedCookies = await targetSession.cookies.get({});
-    for (const cookie of storedCookies) {
-      const removalUrls = getCookieRemovalUrls(cookie);
-      await Promise.allSettled(
-        removalUrls.map((removalUrl) => targetSession.cookies.remove(removalUrl, String(cookie.name || "")))
-      );
-    }
-    await targetSession.cookies.flushStore();
-  } catch (_error) {
-    // Cookie cleanup is best-effort only.
-  }
-
-  try {
-    await targetSession.clearAuthCache();
-  } catch (_error) {
-    // Auth cache cleanup is best-effort only.
-  }
-
-  try {
-    await targetSession.clearCache();
-  } catch (_error) {
-    // Cache cleanup is best-effort only.
-  }
-
-  try {
-    await targetSession.clearStorageData({
-      storages: DESKTOP_EXIT_STORAGE_TYPES,
-    });
-  } catch (_error) {
-    // Storage cleanup is best-effort only.
-  }
-
-  try {
-    await targetSession.cookies.flushStore();
-  } catch (_error) {
-    // Cookie store flush is best-effort only.
-  }
-};
-
-const clearDesktopAuthPersistenceOnExit = async () => {
-  const targetSessions = collectDesktopSessions();
-  await Promise.allSettled(targetSessions.map((targetSession) => clearDesktopSessionPersistence(targetSession)));
-};
-
-const beginDesktopExitCleanup = () => {
-  if (desktopExitCleanupComplete) {
-    return Promise.resolve();
-  }
-
-  if (!desktopExitCleanupPromise) {
-    desktopExitCleanupPromise = clearDesktopAuthPersistenceOnExit()
-      .catch((error) => {
-        appendStartupTrace(
-          "app:before-quit:cleanup-error",
-          error instanceof Error ? error.message : String(error || "Unknown cleanup error")
-        );
-      })
-      .finally(() => {
-        desktopExitCleanupComplete = true;
-        desktopExitCleanupPromise = null;
-      });
-  }
-
-  return desktopExitCleanupPromise;
-};
-
-const attachDesktopWindowCloseBehavior = (targetWindow) => {
-  if (!targetWindow) {
-    return;
-  }
-
-  let bypassBeforeUnload = false;
-
-  targetWindow.on("close", (event) => {
-    if (bypassBeforeUnload || targetWindow.isDestroyed()) {
-      return;
-    }
-
-    bypassBeforeUnload = true;
-    event.preventDefault();
-    targetWindow.destroy();
-  });
-
-  targetWindow.on("query-session-end", () => {
-    void beginDesktopExitCleanup();
-  });
-
-  targetWindow.on("session-end", () => {
-    void beginDesktopExitCleanup();
-  });
 };
 
 const {
@@ -716,7 +523,6 @@ const showInternalErrorWindow = async ({ title, source, detail, fatal = false })
     autoHideMenuBar: true,
     backgroundColor: "#0b0d12",
     title: title || "In-Accord error",
-    icon: getDesktopAppIcon(),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -776,38 +582,6 @@ const clearStartupRetryTimer = () => {
 
   clearTimeout(startupRetryTimer);
   startupRetryTimer = null;
-};
-
-const applySpellCheckPreferenceToSession = (targetSession) => {
-  if (!targetSession || typeof targetSession !== "object") {
-    return;
-  }
-
-  if (typeof targetSession.setSpellCheckerEnabled === "function") {
-    try {
-      targetSession.setSpellCheckerEnabled(Boolean(desktopSpellCheckEnabled));
-    } catch (_error) {
-      // Ignore spell-check bridge errors.
-    }
-  }
-
-  if (!desktopSpellCheckEnabled && typeof targetSession.setSpellCheckerLanguages === "function") {
-    try {
-      targetSession.setSpellCheckerLanguages([]);
-    } catch (_error) {
-      // Ignore language reset errors.
-    }
-  }
-};
-
-const applySpellCheckPreferenceToAllWindows = () => {
-  for (const windowInstance of BrowserWindow.getAllWindows()) {
-    if (windowInstance.isDestroyed()) {
-      continue;
-    }
-
-    applySpellCheckPreferenceToSession(windowInstance.webContents.session);
-  }
 };
 
 const normalizeNavigationUrl = (value) => {
@@ -878,9 +652,7 @@ const configureDesktopLiveSession = async (targetSession, appUrl) => {
   }
 
   try {
-    await targetSession.clearStorageData({
-      storages: DESKTOP_EXIT_STORAGE_TYPES,
-    });
+    await targetSession.clearStorageData({ storages: ["serviceworkers", "cachestorage"] });
   } catch (_error) {
     // Storage cleanup is best-effort only.
   }
@@ -2422,15 +2194,11 @@ async function resolveAppUrl() {
     return resolveLiveAppUrl();
   }
 
-  if (runtimeMode === "localhost") {
-    appendStartupTrace(
-      "runtime:packaged-localhost-override",
-      "Packaged localhost runtime mode requested; falling back to configured live web origin."
-    );
-    const resolvedLiveTarget = await resolveLiveAppUrl();
+  if (runtimeMode === "localhost" || !runtimeMode) {
+    const internalServerUrl = await startInternalServer();
     return {
-      ...resolvedLiveTarget,
-      source: `${resolvedLiveTarget.source}-localhost-mode-overridden`,
+      appUrl: internalServerUrl,
+      source: "packaged-internal-server",
     };
   }
 
@@ -2438,7 +2206,7 @@ async function resolveAppUrl() {
 }
 
 function createWindow(appUrl) {
-  const appIcon = getDesktopAppIcon();
+  const appIcon = path.join(__dirname, "..", "Images", "fav.ico");
 
   appendStartupTrace("window:create:start", JSON.stringify({ appUrl, appUrlSource: activeAppUrlSource }));
   appendCrashLog({
@@ -2460,14 +2228,10 @@ function createWindow(appUrl) {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      spellcheck: desktopSpellCheckEnabled,
     },
   });
 
-  applySpellCheckPreferenceToSession(win.webContents.session);
-
   appendStartupTrace("window:create:constructed", `id=${win.id}`);
-  attachDesktopWindowCloseBehavior(win);
 
   const loadWindow = async () => {
     appendStartupTrace("window:load:start", JSON.stringify({ appUrl, appUrlSource: activeAppUrlSource }));
@@ -2560,7 +2324,6 @@ function createWindow(appUrl) {
             contextIsolation: true,
             nodeIntegration: false,
             sandbox: false,
-            spellcheck: desktopSpellCheckEnabled,
           },
         },
       };
@@ -2595,19 +2358,13 @@ function createMeetingPopoutWindow(appUrl, meetingPath) {
     frame: false,
     titleBarStyle: "hidden",
     backgroundColor: "#0f1013",
-    icon: getDesktopAppIcon(),
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      spellcheck: desktopSpellCheckEnabled,
     },
   });
-
-  applySpellCheckPreferenceToSession(popoutWindow.webContents.session);
-
-  attachDesktopWindowCloseBehavior(popoutWindow);
 
   const targetUrl = new URL(normalizedPath, appUrl).toString();
   void configureDesktopLiveSession(popoutWindow.webContents.session, appUrl)
@@ -2643,10 +2400,7 @@ app
   .whenReady()
   .then(async () => {
     appendStartupTrace("app:whenReady:start");
-    app.setName(APP_DISPLAY_NAME);
-    if (process.platform === "win32") {
-      app.setAppUserModelId(APP_USER_MODEL_ID);
-    }
+    app.setAppUserModelId("com.gardrealms.inaccord");
     startMemoryWatch();
     appendStartupTrace("app:whenReady:memory-watch-started");
     await flushPendingInternalErrors();
@@ -2681,12 +2435,6 @@ app
         appVersion: getAppDisplayVersion(),
         internalVersion: app.getVersion(),
       };
-    });
-
-    ipcMain.handle("inaccord:spell-check-set", async (_event, payload) => {
-      desktopSpellCheckEnabled = payload?.enabled !== false;
-      applySpellCheckPreferenceToAllWindows();
-      return { ok: true, enabled: desktopSpellCheckEnabled };
     });
 
     ipcMain.handle("inaccord:runtime-activity-get", async () => {
@@ -2741,7 +2489,7 @@ app
     ipcMain.handle("inaccord:window-close", async (event) => {
       const targetWindow = BrowserWindow.fromWebContents(event.sender);
       if (targetWindow && !targetWindow.isDestroyed()) {
-        targetWindow.destroy();
+        targetWindow.close();
       }
       return { ok: true };
     });
@@ -2780,19 +2528,9 @@ app
     }
   });
 
-app.on("before-quit", (event) => {
-  appendStartupTrace("app:before-quit", `cleanupComplete=${desktopExitCleanupComplete}`);
+app.on("before-quit", () => {
+  appendStartupTrace("app:before-quit");
   stopMemoryWatch();
-
-  if (!desktopExitCleanupComplete) {
-    event.preventDefault();
-
-    void beginDesktopExitCleanup().finally(() => {
-      setImmediate(() => app.quit());
-    });
-
-    return;
-  }
 
   if (nextServer) {
     try {

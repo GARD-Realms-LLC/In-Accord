@@ -1487,7 +1487,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                 <BarChart3 className="h-5 w-5" suppressHydrationWarning />
               </div>
 
-              <div className="absolute right-0 z-10 flex min-w-0 items-center gap-2 rounded-lg bg-background/60 px-2 py-1.5">
+              <div className="absolute left-1/2 z-10 flex min-w-0 -translate-x-1/2 items-center gap-2 rounded-lg bg-background/60 px-2 py-1.5">
                 <span
                   className="mr-1 inline-flex h-20 w-1.5 rounded-full bg-indigo-400/90"
                   aria-hidden="true"

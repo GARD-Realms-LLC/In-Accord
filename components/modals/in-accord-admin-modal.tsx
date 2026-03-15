@@ -765,6 +765,19 @@ const isTemplateMeBotConfig = (row: Pick<AdminOtherConfig, "type" | "configName"
   return normalizedName === "template me bot";
 };
 
+const readAdminJsonOrText = async <TPayload extends Record<string, unknown>>(
+  response: Response
+): Promise<TPayload & { message?: string }> => {
+  const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+
+  if (contentType.includes("application/json")) {
+    return ((await response.json().catch(() => ({}))) ?? {}) as TPayload & { message?: string };
+  }
+
+  const message = String(await response.text().catch(() => "")).trim();
+  return { message } as TPayload & { message?: string };
+};
+
 export const InAccordAdminModal = () => {
   const { isOpen, onClose, type, data } = useModal();
   const router = useRouter();
@@ -1144,13 +1157,14 @@ export const InAccordAdminModal = () => {
         cache: "no-store",
       });
 
-      const payload = (await response.json().catch(() => ({}))) as {
+      const payload = await readAdminJsonOrText<{
         ok?: boolean;
         message?: string;
         branch?: string;
+        localHead?: string;
         remoteBefore?: string;
         remoteAfter?: string;
-      };
+      }>(response);
 
       if (!response.ok || !payload.ok) {
         throw new Error(payload.message || `Failed to force push main (${response.status})`);

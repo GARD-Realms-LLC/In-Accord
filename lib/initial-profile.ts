@@ -64,6 +64,7 @@ export const initialProfile = async () => {
     }
   } catch (error) {
     console.error("[INITIAL_PROFILE_LOOKUP]", error);
+    await clearSessionUserId();
     return redirect("/sign-in");
   }
 

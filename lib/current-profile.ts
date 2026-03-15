@@ -7,8 +7,9 @@ import {
 } from "@/lib/family-accounts";
 import { normalizePresenceStatus } from "@/lib/presence-status";
 import { resolveAvatarUrl, resolveBannerUrl } from "@/lib/asset-url";
-import { getSessionUserId } from "@/lib/session";
+import { clearSessionUserId, getSessionUserId } from "@/lib/session";
 import { getUserBanner } from "@/lib/user-banner-store";
+import { ensureUserProfileSchema } from "@/lib/user-profile";
 
 const CURRENT_PROFILE_CACHE_TTL_MS = 10_000;
 const DISABLE_CURRENT_PROFILE_CACHE = true;
@@ -72,6 +73,67 @@ const setCachedCurrentProfile = (userId: string, value: CachedProfile | null) =>
   });
 };
 
+const getBasicCurrentProfile = async (userId: string): Promise<CachedProfile | null> => {
+  const userResult = await db.execute(sql`
+    select
+      u."userId" as "userId",
+      u."name" as "realName",
+      u."email" as "email",
+      u."role" as "role",
+      coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
+      u."account.created" as "accountCreated",
+      u."lastLogin" as "lastLogin"
+    from "Users" u
+    where u."userId" = ${userId}
+    limit 1
+  `);
+
+  const rows = (userResult as unknown as {
+    rows: Array<{
+      userId: string;
+      realName: string | null;
+      email: string | null;
+      role: string | null;
+      imageUrl: string | null;
+      accountCreated: Date | string | null;
+      lastLogin: Date | string | null;
+    }>;
+  }).rows;
+  const user = rows?.[0] ?? null;
+
+  if (!user) {
+    return null;
+  }
+
+  return {
+    id: user.userId,
+    userId: user.userId,
+    name: user.realName ?? user.email ?? "User",
+    realName: user.realName ?? null,
+    profileName: null,
+    profileNameStyle: null,
+    nameplateLabel: null,
+    nameplateColor: null,
+    nameplateImageUrl: null,
+    pronouns: null,
+    businessRole: null,
+    businessSection: null,
+    comment: null,
+    avatarDecorationUrl: null,
+    phoneNumber: null,
+    dateOfBirth: null,
+    familyParentUserId: null,
+    bannerUrl: null,
+    presenceStatus: "ONLINE",
+    currentGame: null,
+    role: user.role ?? null,
+    imageUrl: resolveAvatarUrl(user.imageUrl) ?? "/in-accord-steampunk-logo.png",
+    email: user.email ?? "",
+    createdAt: user.accountCreated ? new Date(user.accountCreated) : new Date(0),
+    updatedAt: user.lastLogin ? new Date(user.lastLogin) : new Date(0),
+  };
+};
+
 export const currentProfile = async () => {
   const userId = await getSessionUserId();
 
@@ -82,6 +144,7 @@ export const currentProfile = async () => {
   const connectionUrl = process.env.LIVE_DATABASE_URL?.trim() ?? "";
 
   if (!connectionUrl || /^replace_/i.test(connectionUrl) || !/^postgres(ql)?:\/\//i.test(connectionUrl)) {
+    await clearSessionUserId();
     return null;
   }
 
@@ -91,6 +154,7 @@ export const currentProfile = async () => {
   }
 
   try {
+    await ensureUserProfileSchema();
     await ensureFamilyAccountSchema();
 
     const userResult = await db.execute(sql`
@@ -153,13 +217,27 @@ export const currentProfile = async () => {
     }).rows;
     const user = rows?.[0];
 
-    const resolvedBannerUrl = user
-      ? user.bannerUrl ?? (await getUserBanner(user.userId))
-      : null;
+    let resolvedBannerUrl = user?.bannerUrl ?? null;
+    if (user && !resolvedBannerUrl) {
+      try {
+        resolvedBannerUrl = await getUserBanner(user.userId);
+      } catch (error) {
+        console.error("[CURRENT_PROFILE_BANNER_LOOKUP]", error);
+      }
+    }
 
-    const normalizedFamily = user
-      ? await autoConvertFamilyAccountIfNeeded(user.userId, user.dateOfBirth, user.familyParentUserId)
-      : null;
+    let normalizedFamily: Awaited<ReturnType<typeof autoConvertFamilyAccountIfNeeded>> | null = null;
+    if (user) {
+      try {
+        normalizedFamily = await autoConvertFamilyAccountIfNeeded(
+          user.userId,
+          user.dateOfBirth,
+          user.familyParentUserId
+        );
+      } catch (error) {
+        console.error("[CURRENT_PROFILE_FAMILY_NORMALIZE]", error);
+      }
+    }
 
     const current: CachedProfile | null = user
       ? {
@@ -196,6 +274,16 @@ export const currentProfile = async () => {
     return current;
   } catch (error) {
     console.error("[CURRENT_PROFILE_LOOKUP]", error);
+
+    try {
+      const fallbackProfile = await getBasicCurrentProfile(userId);
+      setCachedCurrentProfile(userId, fallbackProfile);
+      return fallbackProfile;
+    } catch (fallbackError) {
+      console.error("[CURRENT_PROFILE_LOOKUP_FALLBACK]", fallbackError);
+    }
+
+    await clearSessionUserId();
     return null;
   }
 }

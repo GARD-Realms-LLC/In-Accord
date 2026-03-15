@@ -552,6 +552,7 @@ const defaultAdvancedPreferences: AdvancedPreferences = {
   openLinksInApp: true,
   confirmBeforeQuit: true,
   enableDebugOverlay: false,
+  enableSpellCheck: true,
   diagnosticsLevel: "basic",
 };
 
@@ -888,6 +889,10 @@ const normalizeAdvancedPreferences = (value: unknown): AdvancedPreferences => {
       typeof source.enableDebugOverlay === "boolean"
         ? source.enableDebugOverlay
         : defaultAdvancedPreferences.enableDebugOverlay,
+    enableSpellCheck:
+      typeof source.enableSpellCheck === "boolean"
+        ? source.enableSpellCheck
+        : defaultAdvancedPreferences.enableSpellCheck,
     diagnosticsLevel,
   };
 };
@@ -10037,6 +10042,11 @@ export const SettingsModal = () => {
           key: "enableDebugOverlay",
           title: "Debug Overlay",
           description: "Display additional runtime diagnostics in overlay panels.",
+        },
+        {
+          key: "enableSpellCheck",
+          title: "Spell Check",
+          description: "Enable desktop spell checking across sign-in, chat, and other text inputs.",
         },
       ];
 

@@ -235,6 +235,7 @@ export const ServerRouteShell = ({
   const CONTENT_TOP = TOPBAR_HEIGHT + TABBAR_HEIGHT;
   const LEFT_SIDEBAR_TOP = CONTENT_TOP + TOP_TO_CONTENT_GAP;
   const MAIN_TOP_PADDING = CONTENT_TOP + TOP_TO_CONTENT_GAP;
+  const chatWindowLeftEdge = CHANNELS_RAIL_LEFT + channelsRailWidth + CHANNELS_TO_CHAT_GAP;
 
   const defaultChannelId = useMemo(() => {
     const preferred = textChannels.find((item) => item.name.toLowerCase() === "general") ?? textChannels[0];
@@ -409,6 +410,18 @@ export const ServerRouteShell = ({
   useEffect(() => {
     setIsHydrated(true);
   }, []);
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    document.documentElement.style.setProperty("--inaccord-chat-left-edge", `${chatWindowLeftEdge}px`);
+
+    return () => {
+      document.documentElement.style.removeProperty("--inaccord-chat-left-edge");
+    };
+  }, [chatWindowLeftEdge]);
 
   useEffect(() => {
     if (!isHydrated || typeof window === "undefined") {
@@ -737,7 +750,7 @@ export const ServerRouteShell = ({
         />
 
         {hasAvailableUpdate ? (
-          <div className="absolute left-[19rem] top-1/2 z-20 -translate-y-1/2">
+          <div className="absolute left-76 top-1/2 z-20 -translate-y-1/2">
             <button
               type="button"
               onClick={() => setIsUpdaterModalOpen(true)}

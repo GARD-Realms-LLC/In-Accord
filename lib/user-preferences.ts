@@ -108,6 +108,7 @@ export type AdvancedPreferences = {
   openLinksInApp: boolean;
   confirmBeforeQuit: boolean;
   enableDebugOverlay: boolean;
+  enableSpellCheck: boolean;
   diagnosticsLevel: "off" | "basic" | "verbose";
 };
 
@@ -276,6 +277,7 @@ const defaultAdvancedPreferences: AdvancedPreferences = {
   openLinksInApp: true,
   confirmBeforeQuit: true,
   enableDebugOverlay: false,
+  enableSpellCheck: true,
   diagnosticsLevel: "basic",
 };
 
@@ -921,6 +923,10 @@ const normalizeAdvancedPreferences = (value: unknown): AdvancedPreferences => {
       typeof source.enableDebugOverlay === "boolean"
         ? source.enableDebugOverlay
         : defaultAdvancedPreferences.enableDebugOverlay,
+    enableSpellCheck:
+      typeof source.enableSpellCheck === "boolean"
+        ? source.enableSpellCheck
+        : defaultAdvancedPreferences.enableSpellCheck,
     diagnosticsLevel,
   };
 };

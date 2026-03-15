@@ -16,6 +16,12 @@
 /.electron-cache/
 /.next-dev/
 /.next-win64/
+.tmp-asar-check-*/
+.tmp-asar-inspect*/
+.tmp-electron-*/
+.tmp-electron-*.log
+/Desktop/win64/
+/Desktop/Win Dev/
 /Win-64/
 *.asar
 *.exe
