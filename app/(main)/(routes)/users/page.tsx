@@ -10,17 +10,14 @@ import { UserAvatar } from "@/components/user-avatar";
 import { getOrCreateConversation } from "@/lib/conversation";
 import { getUserProfileNameMap } from "@/lib/user-profile";
 import { ChatHeader } from "@/components/chat/chat-header";
-import { ChatItem } from "@/components/chat/chat-item";
 import { ChatInput } from "@/components/chat/chat-input";
-import { ChatScrollBox } from "@/components/chat/chat-scroll-box";
-import { ChatLiveRefresh } from "@/components/chat/chat-live-refresh";
 import { ConversationTypingIndicator } from "@/components/chat/conversation-typing-indicator";
-import { DirectMessageListItem } from "@/components/chat/direct-message-list-item";
+import { LiveRecentDmsRail } from "@/components/chat/live-recent-dms-rail";
+import { LiveDirectMessagesPane } from "@/components/chat/live-direct-messages-pane";
 import { DeleteDmConversationButton } from "@/components/chat/delete-dm-conversation-button";
 import { PrivateMessageAudioCallPanel } from "@/components/chat/private-message-audio-call-panel";
 import { PrivateMessageVideoCallPanel } from "@/components/chat/private-message-video-call-panel";
 import { PendingRequestItem } from "@/components/friends/pending-request-item";
-import { UsersPageAutoRefresh } from "@/components/friends/users-page-auto-refresh";
 import { IncomingPmCallTabNotifier } from "@/components/friends/incoming-pm-call-tab-notifier";
 import { isBotUser } from "@/lib/is-bot-user";
 import { formatPresenceStatusLabel, presenceStatusDotClassMap, resolveAutoPresenceStatus } from "@/lib/presence-status";
@@ -838,10 +835,34 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
   const currentUserPresenceStatus = resolveAutoPresenceStatus(profile.presenceStatus, profile.updatedAt);
   const showPmVideoSplitLayout = !isPmRequestPending && isPmVideoCallActive;
   const canSeeInvisibleBoxes = hasInAccordAdministrativeAccess(profile.role);
+  const initialRecentDmItems = recentDms.map((dm) => ({
+    conversationId: dm.conversationId,
+    serverId: dm.serverId,
+    memberId: dm.memberId,
+    profileId: dm.profileId,
+    displayName: dm.displayName,
+    imageUrl: dm.imageUrl,
+    profileCreatedAt: dm.profileCreatedAt ? new Date(dm.profileCreatedAt).toISOString() : null,
+    timestampLabel: formatTimestamp(dm.lastMessageAt),
+    unreadCount: dm.unreadCount,
+  }));
+  const initialConversationMessages = selectedConversation
+    ? selectedConversation.messages.map((item) => ({
+        id: item.id,
+        content: item.content,
+        member: item.member,
+        fileUrl: item.fileUrl,
+        deleted: item.deleted,
+        timestamp: formatTimestamp(new Date(item.createdAt)),
+        isUpdated: new Date(item.updatedAt).getTime() !== new Date(item.createdAt).getTime(),
+      }))
+    : [];
+  const initialConversationReactions = selectedConversation
+    ? Object.fromEntries(Array.from(selectedConversation.reactionsByMessageId.entries()))
+    : {};
 
   return (
     <div className="theme-users-shell h-full bg-[#313338] text-[#dbdee1]">
-      <UsersPageAutoRefresh />
       <IncomingPmCallTabNotifier incomingCallCount={incomingPmCallCount} />
       <header
         className="theme-server-topbar fixed right-0 top-0 z-40 flex h-12 items-center overflow-hidden rounded-b-xl border-b border-border bg-background"
@@ -984,27 +1005,12 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                   Private Messages
                 </p>
 
-                {recentDms.length === 0 ? (
-                  <p>No recent PMs yet.</p>
-                ) : (
-                  <div className="space-y-1.5">
-                    {recentDms.slice(0, 8).map((dm) => (
-                      <DirectMessageListItem
-                        key={dm.conversationId}
-                        conversationId={dm.conversationId}
-                        serverId={dm.serverId}
-                        memberId={dm.memberId}
-                        profileId={dm.profileId}
-                        displayName={dm.displayName}
-                        imageUrl={dm.imageUrl}
-                        profileCreatedAt={dm.profileCreatedAt}
-                        timestampLabel={formatTimestamp(dm.lastMessageAt)}
-                        unreadCount={dm.unreadCount}
-                        isActive={selectedConversation?.conversationId === dm.conversationId}
-                      />
-                    ))}
-                  </div>
-                )}
+                <LiveRecentDmsRail
+                  initialItems={initialRecentDmItems}
+                  profileId={profile.id}
+                  selectedConversationId={selectedConversation?.conversationId ?? null}
+                  selectedServerId={selectedServerId || null}
+                />
               </div>
             </div>
           </div>
@@ -1261,38 +1267,15 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                         />
                       </div>
 
-                      <ChatScrollBox
+                      <LiveDirectMessagesPane
+                        initialMessages={initialConversationMessages}
+                        initialReactionsByMessageId={initialConversationReactions}
+                        currentMember={selectedConversation.currentMember}
+                        conversationId={selectedConversation.conversationId}
+                        serverId={selectedConversation.serverId}
                         className="flex-1 overflow-y-auto"
-                        scrollKey={`${selectedConversation.conversationId}:${selectedConversation.messages.length}:${selectedConversation.messages[selectedConversation.messages.length - 1]?.id ?? "none"}`}
-                      >
-                        <ChatLiveRefresh />
-                        {selectedConversation.messages.length === 0 ? (
-                          <div className="p-6 text-sm text-zinc-500 dark:text-zinc-400">
-                            No private messages yet. Say hello to {selectedConversation.otherMember.name}.
-                          </div>
-                        ) : (
-                          selectedConversation.messages.map((item) => (
-                            <ChatItem
-                              key={item.id}
-                              id={item.id}
-                              content={item.content}
-                              member={item.member}
-                              timestamp={formatTimestamp(new Date(item.createdAt))}
-                              fileUrl={item.fileUrl}
-                              deleted={item.deleted}
-                              currentMember={selectedConversation!.currentMember}
-                              isUpdated={
-                                new Date(item.updatedAt).getTime() !== new Date(item.createdAt).getTime()
-                              }
-                              socketUrl="/api/socket/direct-messages"
-                              socketQuery={{ conversationId: selectedConversation!.conversationId }}
-                              dmServerId={selectedConversation!.serverId}
-                              reactionScope="direct"
-                              initialReactions={selectedConversation!.reactionsByMessageId.get(item.id) ?? []}
-                            />
-                          ))
-                        )}
-                      </ChatScrollBox>
+                        otherMemberName={selectedConversation.otherMember.name}
+                      />
 
                       <div className="theme-users-chat-bar w-full max-w-full border-t border-black/20 bg-white shadow-lg shadow-black/25 dark:bg-[#313338]">
                         <ConversationTypingIndicator conversationId={selectedConversation.conversationId} />
@@ -1341,38 +1324,15 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                         />
                       </div>
 
-                      <ChatScrollBox
+                      <LiveDirectMessagesPane
+                        initialMessages={initialConversationMessages}
+                        initialReactionsByMessageId={initialConversationReactions}
+                        currentMember={selectedConversation.currentMember}
+                        conversationId={selectedConversation.conversationId}
+                        serverId={selectedConversation.serverId}
                         className="flex-1 overflow-y-auto"
-                        scrollKey={`${selectedConversation.conversationId}:${selectedConversation.messages.length}:${selectedConversation.messages[selectedConversation.messages.length - 1]?.id ?? "none"}`}
-                      >
-                        <ChatLiveRefresh />
-                        {selectedConversation.messages.length === 0 ? (
-                          <div className="p-6 text-sm text-zinc-500 dark:text-zinc-400">
-                            No private messages yet. Say hello to {selectedConversation.otherMember.name}.
-                          </div>
-                        ) : (
-                          selectedConversation.messages.map((item) => (
-                            <ChatItem
-                              key={item.id}
-                              id={item.id}
-                              content={item.content}
-                              member={item.member}
-                              timestamp={formatTimestamp(new Date(item.createdAt))}
-                              fileUrl={item.fileUrl}
-                              deleted={item.deleted}
-                              currentMember={selectedConversation!.currentMember}
-                              isUpdated={
-                                new Date(item.updatedAt).getTime() !== new Date(item.createdAt).getTime()
-                              }
-                              socketUrl="/api/socket/direct-messages"
-                              socketQuery={{ conversationId: selectedConversation!.conversationId }}
-                              dmServerId={selectedConversation!.serverId}
-                              reactionScope="direct"
-                              initialReactions={selectedConversation!.reactionsByMessageId.get(item.id) ?? []}
-                            />
-                          ))
-                        )}
-                      </ChatScrollBox>
+                        otherMemberName={selectedConversation.otherMember.name}
+                      />
                     </div>
 
                     <div className="theme-users-chat-bar w-full max-w-full rounded-2xl border border-black/20 bg-white shadow-lg shadow-black/25 dark:bg-[#313338]">

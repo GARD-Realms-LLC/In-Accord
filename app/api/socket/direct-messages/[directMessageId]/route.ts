@@ -3,6 +3,7 @@ import { and, eq, or } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { conversation, db, directMessage, member, MemberRole } from "@/lib/db";
+import { publishRealtimeRefresh } from "@/lib/realtime-events-server";
 
 type RouteParams = { directMessageId: string };
 
@@ -35,6 +36,22 @@ const getConversationForMember = async ({
     currentConversation,
     currentMember,
   };
+};
+
+const getConversationProfileIds = async (conversationId: string) => {
+  const currentConversation = await db.query.conversation.findFirst({
+    where: eq(conversation.id, conversationId),
+  });
+
+  if (!currentConversation) {
+    return [] as string[];
+  }
+
+  const rows = await db.query.member.findMany({
+    where: or(eq(member.id, currentConversation.memberOneId), eq(member.id, currentConversation.memberTwoId)),
+  });
+
+  return rows.map((item) => String(item.profileId ?? "").trim()).filter(Boolean);
 };
 
 export async function PATCH(req: Request, { params }: { params: Promise<RouteParams> }) {
@@ -112,6 +129,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<RoutePar
       )
       .returning();
 
+    const participantProfileIds = await getConversationProfileIds(conversationId);
+
+    await publishRealtimeRefresh(
+      {
+        conversationId,
+        profileIds: participantProfileIds,
+      },
+      { entity: "direct-message", action: "updated" }
+    );
+
     return NextResponse.json(updated[0] ?? null);
   } catch (error) {
     console.error("[SOCKET_DIRECT_MESSAGES_PATCH]", error);
@@ -186,6 +213,16 @@ export async function DELETE(req: Request, { params }: { params: Promise<RoutePa
         )
       )
       .returning();
+
+    const participantProfileIds = await getConversationProfileIds(conversationId);
+
+    await publishRealtimeRefresh(
+      {
+        conversationId,
+        profileIds: participantProfileIds,
+      },
+      { entity: "direct-message", action: "deleted" }
+    );
 
     return NextResponse.json(updated[0] ?? null);
   } catch (error) {

@@ -1,3 +1,5 @@
+"use client";
+
 import { cn } from "@/lib/utils";
 import type { ProfileIcon } from "@/lib/profile-icons";
 

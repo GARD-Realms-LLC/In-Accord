@@ -25,6 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useModal } from "@/hooks/use-modal-store";
+import { resolveBannerUrl } from "@/lib/asset-url";
 import { ChannelType, MemberRole } from "@/lib/db/types";
 interface ServerHeaderProps {
   server: ServerWithMembersWithProfiles & {
@@ -39,9 +40,7 @@ interface ServerHeaderProps {
 export const ServerHeader = ({ server, role, isServerOwner = false }: ServerHeaderProps) => {
   const { onOpen } = useModal();
   const normalizedBannerUrl =
-    typeof server.bannerUrl === "string" && server.bannerUrl.trim()
-      ? server.bannerUrl.trim()
-      : "";
+    resolveBannerUrl(server.bannerUrl) ?? "";
   const bannerFit =
     server.bannerFit === "contain" || server.bannerFit === "scale"
       ? server.bannerFit

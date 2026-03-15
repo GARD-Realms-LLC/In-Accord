@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 
+import { resolveAvatarUrl, resolveBannerUrl } from "@/lib/asset-url";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { buildServerPath, matchesRouteParam } from "@/lib/route-slugs";
@@ -69,7 +70,7 @@ export const NavigationItem = ({
   const closeTimerRef = useRef<number | null>(null);
 
   const normalizedImageUrl = useMemo(() => {
-    const candidate = String(imageUrl ?? "").trim();
+    const candidate = resolveAvatarUrl(imageUrl) ?? "";
     if (!candidate) {
       return "";
     }
@@ -94,6 +95,11 @@ export const NavigationItem = ({
 
     return `${normalizedImageUrl}${joiner}sv=${encodeURIComponent(cacheKey)}`;
   }, [normalizedImageUrl, id, updatedAt]);
+
+  const resolvedProfileBannerUrl = useMemo(
+    () => resolveBannerUrl(serverProfile?.bannerUrl ?? null),
+    [serverProfile?.bannerUrl]
+  );
 
   const initials = (name?.trim()?.[0] ?? "S").toUpperCase();
   const showImage = !!resolvedImageSrc && !imageFailed;
@@ -224,9 +230,9 @@ export const NavigationItem = ({
         ) : serverProfile ? (
           <>
             <div className="relative h-24 bg-linear-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
-              {serverProfile.bannerUrl ? (
+              {resolvedProfileBannerUrl ? (
                 <Image
-                  src={serverProfile.bannerUrl}
+                  src={resolvedProfileBannerUrl}
                   alt="Server banner"
                   fill
                   className="object-cover"

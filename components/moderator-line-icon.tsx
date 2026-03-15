@@ -1,3 +1,5 @@
+"use client";
+
 import type { SVGProps } from "react";
 
 export const ModeratorLineIcon = ({ className, ...props }: SVGProps<SVGSVGElement>) => {

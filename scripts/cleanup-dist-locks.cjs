@@ -1,15 +1,7 @@
 const fs = require("fs");
 const path = require("path");
-const { spawnSync } = require("child_process");
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-const tryStopProcess = (name) => {
-  spawnSync("taskkill", ["/F", "/IM", `${name}.exe`, "/T"], {
-    stdio: "ignore",
-    windowsHide: true,
-  });
-};
 
 const removeWithRetries = async (targetPath, retries = 12, delayMs = 500) => {
   for (let i = 0; i < retries; i += 1) {
@@ -39,11 +31,6 @@ async function main() {
   const distDir = path.isAbsolute(configuredOutputDir)
     ? configuredOutputDir
     : path.join(root, configuredOutputDir);
-
-  tryStopProcess("In-Accord");
-  tryStopProcess("In-Accord Launcher");
-  tryStopProcess("electron");
-  tryStopProcess("electron-builder");
 
   const lockTargets = [distDir];
 

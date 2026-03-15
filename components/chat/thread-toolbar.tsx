@@ -2,7 +2,6 @@
 
 import { Archive, ArchiveRestore } from "lucide-react";
 import axios from "axios";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 interface ThreadToolbarProps {
@@ -31,8 +30,9 @@ export const ThreadToolbar = ({
   autoArchiveMinutes,
   unreadCount = 0,
 }: ThreadToolbarProps) => {
-  const router = useRouter();
   const [isPending, setIsPending] = useState(false);
+  const [isArchived, setIsArchived] = useState(archived);
+  const [currentAutoArchiveMinutes, setCurrentAutoArchiveMinutes] = useState(autoArchiveMinutes);
 
   const onToggleArchive = async () => {
     if (isPending) {
@@ -43,10 +43,10 @@ export const ThreadToolbar = ({
       setIsPending(true);
       await axios.patch(`/api/channels/${channelId}/threads/${threadId}`, {
         serverId,
-        archived: !archived,
+        archived: !isArchived,
       });
 
-      router.refresh();
+      setIsArchived((previous) => !previous);
     } catch (error) {
       console.error("[THREAD_TOOLBAR_TOGGLE_ARCHIVE]", error);
       window.alert("Unable to update thread archive state right now.");
@@ -71,7 +71,7 @@ export const ThreadToolbar = ({
         autoArchiveMinutes: next,
       });
 
-      router.refresh();
+      setCurrentAutoArchiveMinutes(next);
     } catch (error) {
       console.error("[THREAD_TOOLBAR_AUTO_ARCHIVE]", error);
       window.alert("Unable to update auto-archive right now.");
@@ -95,7 +95,7 @@ export const ThreadToolbar = ({
         className="rounded-full border border-indigo-400/40 bg-indigo-500/15 px-2 py-1 font-semibold transition hover:bg-indigo-500/25 disabled:opacity-70"
         title="Cycle auto archive timer"
       >
-        Auto-archive: {AUTO_ARCHIVE_LABELS[autoArchiveMinutes] ?? `${autoArchiveMinutes}m`}
+        Auto-archive: {AUTO_ARCHIVE_LABELS[currentAutoArchiveMinutes] ?? `${currentAutoArchiveMinutes}m`}
       </button>
 
       <button
@@ -105,10 +105,10 @@ export const ThreadToolbar = ({
         }}
         disabled={isPending}
         className="inline-flex items-center gap-1 rounded-full border border-indigo-400/40 bg-indigo-500/15 px-2 py-1 font-semibold transition hover:bg-indigo-500/25 disabled:opacity-70"
-        title={archived ? "Unarchive thread" : "Archive thread"}
+        title={isArchived ? "Unarchive thread" : "Archive thread"}
       >
-        {archived ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
-        {archived ? "Unarchive" : "Archive"}
+        {isArchived ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
+        {isArchived ? "Unarchive" : "Archive"}
       </button>
 
       {unreadCount > 0 ? (

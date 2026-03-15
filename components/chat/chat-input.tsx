@@ -21,7 +21,12 @@ import {
   readMentionsEnabled,
   writeMentionsEnabled,
 } from "@/lib/mentions";
+import { emitLocalChatMutationForRoute } from "@/lib/chat-live-events";
 import { buildQuotedContent, type QuotedMessageMeta } from "@/lib/message-quotes";
+
+type RuntimeMeta = {
+  appUrl?: string;
+};
 
 interface ChatInputProps {
   apiUrl: string;
@@ -38,8 +43,6 @@ interface ChatInputProps {
 const formSchema = z.object({
   content: z.string().min(1),
 });
-
-const POST_CREATED_EVENT = "inaccord:post-created";
 
 type RuntimeEmojiPreferences = {
   showComposerEmojiButton: boolean;
@@ -99,6 +102,45 @@ const normalizeRuntimeEmojiPreferences = (value: unknown): RuntimeEmojiPreferenc
   };
 };
 
+const normalizeHttpOrigin = (value: unknown) => {
+  const raw = String(value ?? "").trim();
+  if (!raw) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return "";
+    }
+
+    return parsed.origin.replace(/\/$/, "");
+  } catch {
+    return "";
+  }
+};
+
+const resolveAbsoluteAppUrl = (origin: string, relativeOrAbsoluteUrl: string) => {
+  const normalizedUrl = String(relativeOrAbsoluteUrl ?? "").trim();
+  if (!normalizedUrl) {
+    return normalizedUrl;
+  }
+
+  if (/^https?:\/\//i.test(normalizedUrl)) {
+    return normalizedUrl;
+  }
+
+  if (!origin) {
+    return normalizedUrl;
+  }
+
+  try {
+    return new URL(normalizedUrl, origin).toString();
+  } catch {
+    return normalizedUrl;
+  }
+};
+
 export const ChatInput = ({
   apiUrl,
   query,
@@ -129,7 +171,36 @@ export const ChatInput = ({
   });
   const [activeQuote, setActiveQuote] = useState<QuotedMessageMeta | null>(null);
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
+  const [appOrigin, setAppOrigin] = useState("");
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const resolvedApiUrl = useMemo(() => resolveAbsoluteAppUrl(appOrigin, apiUrl), [apiUrl, appOrigin]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const resolveAppOrigin = async () => {
+      const electronApi = typeof window !== "undefined" ? (window as any)?.electronAPI : null;
+      const runtimeMeta =
+        electronApi && typeof electronApi.getRuntimeMeta === "function"
+          ? ((await electronApi.getRuntimeMeta().catch(() => null)) as RuntimeMeta | null)
+          : null;
+
+      const nextOrigin =
+        normalizeHttpOrigin(runtimeMeta?.appUrl) ||
+        (typeof window !== "undefined" ? normalizeHttpOrigin(window.location.href) : "") ||
+        normalizeHttpOrigin(process.env.NEXT_PUBLIC_SITE_URL);
+
+      if (!cancelled) {
+        setAppOrigin(nextOrigin);
+      }
+    };
+
+    void resolveAppOrigin();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const mentionOptions = useMemo<MentionOption[]>(() => {
     const userOptions = mentionUsers
@@ -226,9 +297,10 @@ export const ChatInput = ({
           setIsLoadingSlashCommands(true);
         }
 
-        const response = await fetch(`/api/servers/${encodeURIComponent(stickerServerId)}/slash-commands`, {
+        const response = await fetch(resolveAbsoluteAppUrl(appOrigin, `/api/servers/${encodeURIComponent(stickerServerId)}/slash-commands`), {
           method: "GET",
           cache: "no-store",
+          credentials: "include",
         });
 
         if (!response.ok) {
@@ -291,9 +363,10 @@ export const ChatInput = ({
 
     const syncMentionsPreference = async () => {
       try {
-        const response = await fetch("/api/profile/preferences", {
+        const response = await fetch(resolveAbsoluteAppUrl(appOrigin, "/api/profile/preferences"), {
           method: "GET",
           cache: "no-store",
+          credentials: "include",
         });
 
         if (!response.ok) {
@@ -345,9 +418,10 @@ export const ChatInput = ({
 
     const syncEmojiPreferences = async () => {
       try {
-        const response = await fetch("/api/profile/preferences", {
+        const response = await fetch(resolveAbsoluteAppUrl(appOrigin, "/api/profile/preferences"), {
           method: "GET",
           cache: "no-store",
+          credentials: "include",
         });
 
         if (!response.ok) {
@@ -470,10 +544,6 @@ export const ChatInput = ({
     setActiveSlashIndex(0);
   };
 
-  const notifyPostCreated = () => {
-    window.dispatchEvent(new Event(POST_CREATED_EVENT));
-  };
-
   const detectMentionState = (value: string, caret: number | null | undefined) => {
     if (!mentionsEnabled || !mentionOptions.length || typeof caret !== "number") {
       clearMentionState();
@@ -538,9 +608,10 @@ export const ChatInput = ({
 
     if (stickerServerId && Date.now() - lastSlashCommandsLoadedAt > 5000 && !isLoadingSlashCommands) {
       setIsLoadingSlashCommands(true);
-      void fetch(`/api/servers/${encodeURIComponent(stickerServerId)}/slash-commands`, {
+      void fetch(resolveAbsoluteAppUrl(appOrigin, `/api/servers/${encodeURIComponent(stickerServerId)}/slash-commands`), {
         method: "GET",
         cache: "no-store",
+        credentials: "include",
       })
         .then(async (response) => {
           if (!response.ok) {
@@ -676,29 +747,41 @@ export const ChatInput = ({
       setSendError(null);
 
       const url = qs.stringifyUrl({
-        url: apiUrl,
+        url: resolvedApiUrl,
         query,
       });
 
       const encodedContent = encodeMentionLabelsForSubmit(values.content);
 
-      await axios.post(url, {
-        ...values,
-        content: buildQuotedContent(encodedContent, activeQuote),
-      });
+      await axios.post(
+        url,
+        {
+          ...values,
+          content: buildQuotedContent(encodedContent, activeQuote),
+        },
+        {
+          withCredentials: true,
+        }
+      );
 
       if (type === "conversation" && conversationId) {
-        void axios.post("/api/direct-messages/typing", {
-          conversationId,
-          isTyping: false,
-        });
+        void axios.post(
+          resolveAbsoluteAppUrl(appOrigin, "/api/direct-messages/typing"),
+          {
+            conversationId,
+            isTyping: false,
+          },
+          {
+            withCredentials: true,
+          }
+        );
       }
 
       form.reset();
       clearMentionState();
       clearSlashState();
       setActiveQuote(null);
-      notifyPostCreated();
+      emitLocalChatMutationForRoute(apiUrl, query);
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
         const statusCode = error.response?.status;
@@ -729,10 +812,16 @@ export const ChatInput = ({
     }
 
     const isTyping = nextValue.trim().length > 0;
-    void axios.post("/api/direct-messages/typing", {
-      conversationId,
-      isTyping,
-    });
+    void axios.post(
+      resolveAbsoluteAppUrl(appOrigin, "/api/direct-messages/typing"),
+      {
+        conversationId,
+        isTyping,
+      },
+      {
+        withCredentials: true,
+      }
+    );
   };
 
   const onGifSelect = async (gifUrl: string) => {
@@ -740,26 +829,38 @@ export const ChatInput = ({
       setSendError(null);
 
       const url = qs.stringifyUrl({
-        url: apiUrl,
+        url: resolvedApiUrl,
         query,
       });
 
-      await axios.post(url, {
-        content: buildQuotedContent("[gif]", activeQuote),
-        fileUrl: gifUrl,
-      });
+      await axios.post(
+        url,
+        {
+          content: buildQuotedContent("[gif]", activeQuote),
+          fileUrl: gifUrl,
+        },
+        {
+          withCredentials: true,
+        }
+      );
 
       if (type === "conversation" && conversationId) {
-        void axios.post("/api/direct-messages/typing", {
-          conversationId,
-          isTyping: false,
-        });
+        void axios.post(
+          resolveAbsoluteAppUrl(appOrigin, "/api/direct-messages/typing"),
+          {
+            conversationId,
+            isTyping: false,
+          },
+          {
+            withCredentials: true,
+          }
+        );
       }
 
       form.reset();
       clearMentionState();
       setActiveQuote(null);
-      notifyPostCreated();
+      emitLocalChatMutationForRoute(apiUrl, query);
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
         const dataMessage =
@@ -781,26 +882,38 @@ export const ChatInput = ({
       setSendError(null);
 
       const url = qs.stringifyUrl({
-        url: apiUrl,
+        url: resolvedApiUrl,
         query,
       });
 
-      await axios.post(url, {
-        content: buildQuotedContent("[sticker]", activeQuote),
-        fileUrl: stickerUrl,
-      });
+      await axios.post(
+        url,
+        {
+          content: buildQuotedContent("[sticker]", activeQuote),
+          fileUrl: stickerUrl,
+        },
+        {
+          withCredentials: true,
+        }
+      );
 
       if (type === "conversation" && conversationId) {
-        void axios.post("/api/direct-messages/typing", {
-          conversationId,
-          isTyping: false,
-        });
+        void axios.post(
+          resolveAbsoluteAppUrl(appOrigin, "/api/direct-messages/typing"),
+          {
+            conversationId,
+            isTyping: false,
+          },
+          {
+            withCredentials: true,
+          }
+        );
       }
 
       form.reset();
       clearMentionState();
       setActiveQuote(null);
-      notifyPostCreated();
+      emitLocalChatMutationForRoute(apiUrl, query);
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
         const dataMessage =
@@ -822,26 +935,38 @@ export const ChatInput = ({
       setSendError(null);
 
       const url = qs.stringifyUrl({
-        url: apiUrl,
+        url: resolvedApiUrl,
         query,
       });
 
-      await axios.post(url, {
-        content: buildQuotedContent("[emote]", activeQuote),
-        fileUrl: emoteUrl,
-      });
+      await axios.post(
+        url,
+        {
+          content: buildQuotedContent("[emote]", activeQuote),
+          fileUrl: emoteUrl,
+        },
+        {
+          withCredentials: true,
+        }
+      );
 
       if (type === "conversation" && conversationId) {
-        void axios.post("/api/direct-messages/typing", {
-          conversationId,
-          isTyping: false,
-        });
+        void axios.post(
+          resolveAbsoluteAppUrl(appOrigin, "/api/direct-messages/typing"),
+          {
+            conversationId,
+            isTyping: false,
+          },
+          {
+            withCredentials: true,
+          }
+        );
       }
 
       form.reset();
       clearMentionState();
       setActiveQuote(null);
-      notifyPostCreated();
+      emitLocalChatMutationForRoute(apiUrl, query);
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
         const dataMessage =
@@ -863,26 +988,38 @@ export const ChatInput = ({
       setSendError(null);
 
       const url = qs.stringifyUrl({
-        url: apiUrl,
+        url: resolvedApiUrl,
         query,
       });
 
-      await axios.post(url, {
-        content: buildQuotedContent("[sound_efx]", activeQuote),
-        fileUrl: soundEfxUrl,
-      });
+      await axios.post(
+        url,
+        {
+          content: buildQuotedContent("[sound_efx]", activeQuote),
+          fileUrl: soundEfxUrl,
+        },
+        {
+          withCredentials: true,
+        }
+      );
 
       if (type === "conversation" && conversationId) {
-        void axios.post("/api/direct-messages/typing", {
-          conversationId,
-          isTyping: false,
-        });
+        void axios.post(
+          resolveAbsoluteAppUrl(appOrigin, "/api/direct-messages/typing"),
+          {
+            conversationId,
+            isTyping: false,
+          },
+          {
+            withCredentials: true,
+          }
+        );
       }
 
       form.reset();
       clearMentionState();
       setActiveQuote(null);
-      notifyPostCreated();
+      emitLocalChatMutationForRoute(apiUrl, query);
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
         const dataMessage =
@@ -976,7 +1113,7 @@ export const ChatInput = ({
                   ) : null}
                   <textarea
                     disabled={isLoading}
-                    className={`min-h-[44px] max-h-44 w-full resize-none overflow-y-auto rounded-lg border-0 bg-[#ebedef] py-3 text-sm text-[#2e3338] shadow-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0 dark:bg-[#383a40] dark:text-[#dbdee1] ${canBulkDeleteMessages ? "px-14 pr-20" : "px-14"}`}
+                    className={`min-h-11 max-h-44 w-full resize-none overflow-y-auto rounded-lg border-0 bg-[#ebedef] py-3 text-sm text-[#2e3338] shadow-none outline-none focus-visible:ring-0 focus-visible:ring-offset-0 dark:bg-[#383a40] dark:text-[#dbdee1] ${canBulkDeleteMessages ? "px-14 pr-20" : "px-14"}`}
                     placeholder={`Message ${
                       type === "conversation" ? name : "#" + name
                     }`}

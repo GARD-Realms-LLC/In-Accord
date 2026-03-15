@@ -3,6 +3,10 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { io as ClientIO } from "socket.io-client";
 
+type RuntimeMeta = {
+  appUrl?: string;
+};
+
 type ConnectionQuality = "connected" | "slow" | "disconnected";
 
 type SocketContextType = {
@@ -21,6 +25,32 @@ const SocketContext = createContext<SocketContextType>({
   targetUrl: "/api/socket/io",
 });
 
+const normalizeHttpOrigin = (value: unknown) => {
+  const raw = String(value ?? "").trim();
+  if (!raw) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return "";
+    }
+
+    return parsed.origin.replace(/\/$/, "");
+  } catch {
+    return "";
+  }
+};
+
+const getWindowHttpOrigin = () => {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  return normalizeHttpOrigin(window.location.href);
+};
+
 export const useSocket = () => {
   return useContext(SocketContext);
 };
@@ -30,9 +60,13 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isSlowNetwork, setIsSlowNetwork] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [targetUrl, setTargetUrl] = useState<string>("/api/socket/io");
   const disconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const socketRef = useRef<any | null>(null);
 
   useEffect(() => {
+    let isDisposed = false;
+
     const clearDisconnectTimer = () => {
       if (disconnectTimerRef.current) {
         clearTimeout(disconnectTimerRef.current);
@@ -46,37 +80,6 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
         setIsConnected(false);
       }, 3000);
     };
-
-    const browserOrigin =
-      typeof window !== "undefined" && /^https?:$/i.test(window.location.protocol)
-        ? window.location.origin
-        : "";
-    const configuredOrigin = String(process.env.NEXT_PUBLIC_SITE_URL ?? "").trim();
-    const socketOrigin = browserOrigin || configuredOrigin;
-
-    const socketInstance = new (ClientIO as any)(socketOrigin || undefined, {
-      path: "/api/socket/io",
-      addTrailingSlash: false,
-      transports: ["websocket", "polling"],
-    });
-
-    socketInstance.on("connect", () => {
-      clearDisconnectTimer();
-      setIsConnected(true);
-      setLastError(null);
-    });
-
-    socketInstance.on("disconnect", () => {
-      markDisconnectedWithDelay();
-    });
-
-    socketInstance.on("connect_error", (error: { message?: string } | undefined) => {
-      const message = String(error?.message ?? "").trim();
-      setLastError(message || "Socket connection failed");
-      markDisconnectedWithDelay();
-    });
-
-    setSocket(socketInstance);
 
     const networkInfo =
       typeof navigator !== "undefined"
@@ -106,10 +109,66 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
     updateNetworkQuality();
     networkInfo?.addEventListener?.("change", updateNetworkQuality);
 
+    const connectSocket = async () => {
+      const electronApi = typeof window !== "undefined" ? (window as any)?.electronAPI : null;
+      const runtimeMeta =
+        electronApi && typeof electronApi.getRuntimeMeta === "function"
+          ? ((await electronApi.getRuntimeMeta().catch(() => null)) as RuntimeMeta | null)
+          : null;
+
+      const resolvedOrigin =
+        normalizeHttpOrigin(runtimeMeta?.appUrl) ||
+        getWindowHttpOrigin() ||
+        normalizeHttpOrigin(process.env.NEXT_PUBLIC_SITE_URL);
+
+      const resolvedTargetUrl = resolvedOrigin ? `${resolvedOrigin}/api/socket/io` : "/api/socket/io";
+
+      if (isDisposed) {
+        return;
+      }
+
+      setTargetUrl(resolvedTargetUrl);
+
+      const socketInstance = new (ClientIO as any)(resolvedOrigin || undefined, {
+        path: "/api/socket/io",
+        addTrailingSlash: false,
+        transports: ["websocket", "polling"],
+        withCredentials: true,
+      });
+
+      socketInstance.on("connect", () => {
+        clearDisconnectTimer();
+        setIsConnected(true);
+        setLastError(null);
+      });
+
+      socketInstance.on("disconnect", () => {
+        markDisconnectedWithDelay();
+      });
+
+      socketInstance.on("connect_error", (error: { message?: string } | undefined) => {
+        const message = String(error?.message ?? "").trim();
+        setLastError(message || "Socket connection failed");
+        markDisconnectedWithDelay();
+      });
+
+      if (isDisposed) {
+        socketInstance.disconnect();
+        return;
+      }
+
+      socketRef.current = socketInstance;
+      setSocket(socketInstance);
+    };
+
+    void connectSocket();
+
     return () => {
+      isDisposed = true;
       clearDisconnectTimer();
       networkInfo?.removeEventListener?.("change", updateNetworkQuality);
-      socketInstance.disconnect();
+      socketRef.current?.disconnect?.();
+      socketRef.current = null;
     };
   }, []);
 
@@ -118,11 +177,6 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
     : isSlowNetwork
       ? "slow"
       : "connected";
-
-  const targetUrl =
-    typeof window !== "undefined" && /^https?:$/i.test(window.location.protocol)
-      ? new URL("/api/socket/io", window.location.origin).toString()
-      : "/api/socket/io";
 
   const statusMessage =
     connectionQuality === "connected"

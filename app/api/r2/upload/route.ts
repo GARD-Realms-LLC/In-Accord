@@ -2,12 +2,8 @@ import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { NextResponse } from "next/server";
 import { currentProfile } from "@/lib/current-profile";
 import { getEffectiveSiteUrl } from "@/lib/runtime-site-url-config";
-import { mkdir } from "node:fs/promises";
-import path from "node:path";
 import { Readable } from "node:stream";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
-import { createWriteStream } from "node:fs";
-import { pipeline } from "node:stream/promises";
 
 const accountId = process.env.CLOUDFLARE_R2_ACCOUNT_ID;
 const accessKeyId = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID;
@@ -105,36 +101,12 @@ export async function POST(req: Request) {
     const key = `${prefix}${fileName}`;
 
     if (!r2Client) {
-      if (type === "familyApplication") {
-        return NextResponse.json(
-          {
-            error: "Document upload is temporarily unavailable. Please try again later.",
-          },
-          { status: 503 }
-        );
-      }
-
-      const localSubDir =
-        type === "userImage"
-          ? "user-icons"
-          : type === "userBanner"
-            ? "user-banners"
-            : "server-icons";
-      const localDir = path.join(process.cwd(), "public", "uploads", localSubDir);
-      const localPath = path.join(localDir, fileName);
-
-      await mkdir(localDir, { recursive: true });
-      await pipeline(Readable.fromWeb(file.stream() as unknown as NodeReadableStream), createWriteStream(localPath));
-
-      const localUrl = `/uploads/${localSubDir}/${fileName}`;
-      logPerf("r2.upload.post", startedAtMs, `status=200 storage=local bytes=${file.size}`);
-
-      return NextResponse.json({
-        url: localUrl,
-        key: `local:${localSubDir}/${fileName}`,
-        storage: "local",
-        warning: "R2 not configured; saved locally for development",
-      });
+      return NextResponse.json(
+        {
+          error: "Cloudflare R2 image storage is required and is not fully configured.",
+        },
+        { status: 503 }
+      );
     }
 
     await r2Client.send(

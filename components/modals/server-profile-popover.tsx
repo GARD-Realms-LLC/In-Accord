@@ -4,6 +4,7 @@ import Image from "next/image";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { UserAvatar } from "@/components/user-avatar";
+import { resolveBannerUrl } from "@/lib/asset-url";
 
 type ServerProfileData = {
   id: string;
@@ -38,6 +39,8 @@ const formatDateTime = (value: string | null) => {
 };
 
 export const ServerProfilePopover = ({ server }: ServerProfilePopoverProps) => {
+  const resolvedBannerUrl = resolveBannerUrl(server.bannerUrl);
+
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -57,9 +60,9 @@ export const ServerProfilePopover = ({ server }: ServerProfilePopoverProps) => {
         className="w-[340px] overflow-hidden rounded-xl border border-black/30 bg-[#111214] p-0 text-[#dbdee1] shadow-2xl shadow-black/50"
       >
         <div className="relative h-24 bg-gradient-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
-          {server.bannerUrl ? (
+          {resolvedBannerUrl ? (
             <Image
-              src={server.bannerUrl}
+              src={resolvedBannerUrl}
               alt="Server banner"
               fill
               className="object-cover"

@@ -6,6 +6,7 @@ import { channel, db, member, MemberRole, message, server } from "@/lib/db";
 import { computeChannelPermissionForRole, resolveMemberContext } from "@/lib/channel-permissions";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 import { parseMentionSegments } from "@/lib/mentions";
+import { publishRealtimeRefresh } from "@/lib/realtime-events-server";
 
 type RouteParams = { messageId: string };
 
@@ -166,6 +167,15 @@ export async function PATCH(
       .where(and(eq(message.id, messageId), eq(message.channelId, channelId)))
       .returning();
 
+    await publishRealtimeRefresh(
+      {
+        serverId,
+        channelId,
+        threadId: currentMessage.threadId,
+      },
+      { entity: "message", action: "updated" }
+    );
+
     return NextResponse.json(updated[0] ?? null);
   } catch (error) {
     console.error("[SOCKET_MESSAGES_PATCH]", error);
@@ -302,6 +312,15 @@ export async function DELETE(
         .delete(message)
         .where(and(eq(message.id, messageId), eq(message.channelId, channelId)));
 
+      await publishRealtimeRefresh(
+        {
+          serverId,
+          channelId,
+          threadId: currentMessage.threadId,
+        },
+        { entity: "message", action: "deleted" }
+      );
+
       return NextResponse.json({ ok: true, hardDeleted: true });
     }
 
@@ -317,6 +336,15 @@ export async function DELETE(
       })
       .where(and(eq(message.id, messageId), eq(message.channelId, channelId)))
       .returning();
+
+    await publishRealtimeRefresh(
+      {
+        serverId,
+        channelId,
+        threadId: currentMessage.threadId,
+      },
+      { entity: "message", action: "deleted" }
+    );
 
     return NextResponse.json(updated[0] ?? null);
   } catch (error) {

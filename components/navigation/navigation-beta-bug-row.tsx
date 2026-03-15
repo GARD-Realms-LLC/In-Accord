@@ -1,12 +1,16 @@
 "use client";
 
-import { Bug } from "lucide-react";
+import { ArrowUpCircle, Bug, Loader2 } from "lucide-react";
 
 import { useModal } from "@/hooks/use-modal-store";
 
 type NavigationBetaBugRowProps = {
   showBugReportsIcon?: boolean;
   openBugCount?: number;
+  showUpdaterIcon?: boolean;
+  updaterBusy?: boolean;
+  updaterTitle?: string;
+  onOpenUpdater?: () => void;
   profileId?: string;
   profileName?: string;
   profileRole?: string;
@@ -18,6 +22,10 @@ type NavigationBetaBugRowProps = {
 export const NavigationBetaBugRow = ({
   showBugReportsIcon = false,
   openBugCount = 0,
+  showUpdaterIcon = false,
+  updaterBusy = false,
+  updaterTitle = "Open updater",
+  onOpenUpdater,
   profileId,
   profileName,
   profileRole,
@@ -57,6 +65,21 @@ export const NavigationBetaBugRow = ({
               {openBugCount > 99 ? "99+" : openBugCount}
             </span>
           ) : null}
+        </button>
+      ) : null}
+      {showUpdaterIcon ? (
+        <button
+          type="button"
+          onClick={() => onOpenUpdater?.()}
+          className="relative inline-flex h-4 w-4 items-center justify-center rounded-sm border border-emerald-500/70 bg-emerald-400 text-emerald-950 transition hover:bg-emerald-300 dark:border-emerald-300/80 dark:bg-emerald-300 dark:text-emerald-950 dark:hover:bg-emerald-200"
+          title={updaterTitle}
+          aria-label={updaterTitle}
+        >
+          {updaterBusy ? (
+            <Loader2 className="h-2.5 w-2.5 animate-spin" suppressHydrationWarning />
+          ) : (
+            <ArrowUpCircle className="h-2.5 w-2.5" suppressHydrationWarning />
+          )}
         </button>
       ) : null}
     </div>

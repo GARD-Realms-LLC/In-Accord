@@ -1,4 +1,5 @@
 import { NavigationSidebar } from "@/components/navigation/navigation-sidebar";
+import { LastLocationTracker } from "@/components/navigation/last-location-tracker";
 
 import { currentProfile } from "@/lib/current-profile";
 import { SettingsButton } from "@/components/settings/settings-button";
@@ -12,6 +13,7 @@ const MainLayout = async ({ children }: { children: React.ReactNode }) => {
 
   return (
     <div className="h-full">
+      <LastLocationTracker />
       <div className="fixed bottom-23.5 left-0 top-0 z-50 flex w-27 flex-col">
         <NavigationSidebar />
       </div>

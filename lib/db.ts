@@ -11,12 +11,11 @@ declare global {
 }
 
 const liveDatabaseUrl = process.env.LIVE_DATABASE_URL?.trim();
-const fallbackDatabaseUrl = process.env.DATABASE_URL?.trim();
 
 const connectionString =
   liveDatabaseUrl && !/^replace_/i.test(liveDatabaseUrl)
     ? liveDatabaseUrl
-    : fallbackDatabaseUrl;
+    : "";
 
 if (!connectionString) {
   throw new Error("No database URL configured. Set LIVE_DATABASE_URL for the shared live PostgreSQL database.");
@@ -34,6 +33,7 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 export const db = drizzle(pool, { schema });
+export { pool };
 
 export {
   channel,

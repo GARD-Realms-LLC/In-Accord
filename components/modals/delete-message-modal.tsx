@@ -2,7 +2,6 @@
 
 import axios from "axios";
 import qs from "query-string";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -16,10 +15,10 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useModal } from "@/hooks/use-modal-store";
+import { emitLocalChatMutationForRoute } from "@/lib/chat-live-events";
 
 export const DeleteMessageModal = () => {
   const { isOpen, onClose, type, data } = useModal();
-  const router = useRouter();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -51,7 +50,7 @@ export const DeleteMessageModal = () => {
 
       await axios.delete(url);
 
-      router.refresh();
+      emitLocalChatMutationForRoute(apiUrl, query);
       toast.success("Post deleted.");
       handleClose();
     } catch (error) {

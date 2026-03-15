@@ -5,8 +5,10 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const http = require("node:http");
 const https = require("node:https");
+const { spawn } = require("node:child_process");
 
 const UPDATE_MANIFEST_URL = process.env.INACCORD_UPDATE_MANIFEST_URL;
+const UPDATE_AUTO_DOWNLOAD = String(process.env.INACCORD_UPDATE_AUTO_DOWNLOAD || "true").trim().toLowerCase() !== "false";
 const UPDATE_CHECK_INTERVAL_MS = Number(process.env.INACCORD_UPDATE_CHECK_INTERVAL_MS || 30 * 60 * 1000);
 const UPDATE_REQUEST_TIMEOUT_MS = Number(process.env.INACCORD_UPDATE_REQUEST_TIMEOUT_MS || 15_000);
 const UPDATE_MAX_MANIFEST_BYTES = Number(process.env.INACCORD_UPDATE_MAX_MANIFEST_BYTES || 1024 * 1024);
@@ -17,12 +19,70 @@ let updateCheckInFlight = false;
 let updateDownloadInFlight = false;
 let cachedManifest = null;
 let cachedInstallerPath = "";
+let backgroundDownloadPromise = null;
+let lastNotifiedUpdateSignature = "";
+
+const formatDisplayVersion = (value) => {
+  const raw = String(value || "").trim();
+  const match = raw.match(/^(\d+)\.(\d+)\.(\d+)$/);
+
+  if (!match) {
+    return raw;
+  }
+
+  return `${match[1]}.${match[2]}.${String(match[3]).padStart(2, "0")}`;
+};
+
+const readRuntimePackageManifest = () => {
+  const candidates = app.isPackaged
+    ? [path.join(app.getAppPath(), "package.json"), path.join(process.cwd(), "package.json")]
+    : [path.join(process.cwd(), "package.json"), path.join(app.getAppPath(), "package.json")];
+
+  for (const candidate of candidates) {
+    try {
+      if (!candidate || !fs.existsSync(candidate)) {
+        continue;
+      }
+
+      return JSON.parse(fs.readFileSync(candidate, "utf8"));
+    } catch (_error) {
+      // Try next candidate.
+    }
+  }
+
+  return null;
+};
+
+const getCurrentDisplayVersion = () => {
+  const manifest = readRuntimePackageManifest();
+  return formatDisplayVersion(manifest?.inaccordDisplayVersion || manifest?.version || app.getVersion());
+};
+
+const extractDisplayVersionFromInstallerUrl = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(raw);
+    const fileName = path.basename(parsed.pathname || "");
+    const match = fileName.match(/v(\d+\.\d+\.\d+)/i);
+    return match ? formatDisplayVersion(match[1]) : "";
+  } catch {
+    const fileName = path.basename(raw);
+    const match = fileName.match(/v(\d+\.\d+\.\d+)/i);
+    return match ? formatDisplayVersion(match[1]) : "";
+  }
+};
 
 const updaterState = {
   enabled: Boolean(UPDATE_MANIFEST_URL),
   status: UPDATE_MANIFEST_URL ? "idle" : "disabled",
-  currentVersion: app.getVersion(),
+  currentVersion: getCurrentDisplayVersion(),
   latestVersion: "",
+  currentInternalVersion: app.getVersion(),
+  latestInternalVersion: "",
   releaseNotes: "",
   progress: 0,
   requiresRestart: false,
@@ -36,6 +96,32 @@ const setUpdaterState = (patch, onStateChange) => {
   if (typeof onStateChange === "function") {
     onStateChange(getUpdaterState());
   }
+};
+
+const consumeUpdaterNotificationSignal = () => {
+  const notification = updaterState.notification;
+  if (!notification || typeof notification !== "object") {
+    return null;
+  }
+
+  const status = String(notification.status || "").trim();
+  const version = String(notification.version || "").trim();
+  if (!status || !version) {
+    return null;
+  }
+
+  const signature = `${status}:${version}`;
+  if (signature === lastNotifiedUpdateSignature) {
+    return null;
+  }
+
+  lastNotifiedUpdateSignature = signature;
+  return {
+    status,
+    version,
+    title: String(notification.title || "").trim(),
+    body: String(notification.body || "").trim(),
+  };
 };
 
 const parseVersion = (value) => {
@@ -53,6 +139,35 @@ const parseVersion = (value) => {
     .map((part) => (Number.isFinite(part) ? part : 0));
 
   return [parts[0] || 0, parts[1] || 0, parts[2] || 0];
+};
+
+const unquoteYamlScalar = (value) => {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return "";
+  }
+
+  if (
+    (normalized.startsWith('"') && normalized.endsWith('"')) ||
+    (normalized.startsWith("'") && normalized.endsWith("'"))
+  ) {
+    return normalized.slice(1, -1);
+  }
+
+  return normalized;
+};
+
+const toAbsoluteUrl = (baseUrl, candidate) => {
+  const normalizedCandidate = String(candidate || "").trim();
+  if (!normalizedCandidate) {
+    return "";
+  }
+
+  try {
+    return new URL(normalizedCandidate, baseUrl).toString();
+  } catch (_error) {
+    return normalizedCandidate;
+  }
 };
 
 const isVersionNewer = (candidate, current) => {
@@ -73,7 +188,7 @@ const isVersionNewer = (candidate, current) => {
 
 const getHttpClient = (url) => (url.startsWith("https:") ? https : http);
 
-const fetchJson = (url, redirectCount = 0) =>
+const fetchManifestDocument = (url, redirectCount = 0, requestUrl = url) =>
   new Promise((resolve, reject) => {
     if (redirectCount > UPDATE_MAX_REDIRECTS) {
       reject(new Error("Manifest request exceeded redirect limit"));
@@ -84,7 +199,7 @@ const fetchJson = (url, redirectCount = 0) =>
     const request = client.get(url, { timeout: UPDATE_REQUEST_TIMEOUT_MS }, (response) => {
       if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
         response.resume();
-        resolve(fetchJson(response.headers.location, redirectCount + 1));
+        resolve(fetchManifestDocument(toAbsoluteUrl(url, response.headers.location), redirectCount + 1, requestUrl));
         return;
       }
 
@@ -117,7 +232,13 @@ const fetchJson = (url, redirectCount = 0) =>
       response.on("end", () => {
         try {
           const raw = Buffer.concat(chunks).toString("utf8");
-          resolve(JSON.parse(raw));
+          resolve({
+            raw,
+            contentType: String(response.headers["content-type"] || "").trim().toLowerCase(),
+            url,
+            finalUrl: url,
+            requestUrl,
+          });
         } catch (error) {
           reject(error);
         }
@@ -132,17 +253,142 @@ const fetchJson = (url, redirectCount = 0) =>
     request.on("error", reject);
   });
 
+const parseLatestYml = (raw) => {
+  const lines = String(raw || "").split(/\r?\n/);
+  const manifest = {
+    version: "",
+    displayVersion: "",
+    internalVersion: "",
+    path: "",
+    sha512: "",
+    releaseNotes: "",
+    files: [],
+  };
+
+  let currentFile = null;
+  let collectingReleaseNotes = false;
+  const releaseNoteLines = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      if (collectingReleaseNotes) {
+        releaseNoteLines.push("");
+      }
+      continue;
+    }
+
+    if (/^releaseNotes:\s*[>|]?$/.test(trimmed)) {
+      collectingReleaseNotes = true;
+      currentFile = null;
+      continue;
+    }
+
+    if (collectingReleaseNotes) {
+      if (/^[A-Za-z0-9_-]+:/.test(trimmed) || /^-\s+url:/.test(trimmed)) {
+        collectingReleaseNotes = false;
+      } else {
+        releaseNoteLines.push(trimmed.replace(/^[-\s]+/, ""));
+        continue;
+      }
+    }
+
+    const versionMatch = trimmed.match(/^version:\s*(.+)$/);
+    if (versionMatch) {
+      manifest.version = unquoteYamlScalar(versionMatch[1]);
+      currentFile = null;
+      continue;
+    }
+
+    const displayVersionMatch = trimmed.match(/^displayVersion:\s*(.+)$/);
+    if (displayVersionMatch) {
+      manifest.displayVersion = unquoteYamlScalar(displayVersionMatch[1]);
+      currentFile = null;
+      continue;
+    }
+
+    const internalVersionMatch = trimmed.match(/^internalVersion:\s*(.+)$/);
+    if (internalVersionMatch) {
+      manifest.internalVersion = unquoteYamlScalar(internalVersionMatch[1]);
+      currentFile = null;
+      continue;
+    }
+
+    const pathMatch = trimmed.match(/^path:\s*(.+)$/);
+    if (pathMatch) {
+      manifest.path = unquoteYamlScalar(pathMatch[1]);
+      currentFile = null;
+      continue;
+    }
+
+    const sha512Match = trimmed.match(/^sha512:\s*(.+)$/);
+    if (sha512Match && !currentFile) {
+      manifest.sha512 = unquoteYamlScalar(sha512Match[1]);
+      continue;
+    }
+
+    const fileUrlMatch = trimmed.match(/^-\s+url:\s*(.+)$/);
+    if (fileUrlMatch) {
+      currentFile = { url: unquoteYamlScalar(fileUrlMatch[1]), sha512: "" };
+      manifest.files.push(currentFile);
+      continue;
+    }
+
+    const nestedUrlMatch = trimmed.match(/^url:\s*(.+)$/);
+    if (nestedUrlMatch && currentFile) {
+      currentFile.url = unquoteYamlScalar(nestedUrlMatch[1]);
+      continue;
+    }
+
+    const nestedSha512Match = trimmed.match(/^sha512:\s*(.+)$/);
+    if (nestedSha512Match && currentFile) {
+      currentFile.sha512 = unquoteYamlScalar(nestedSha512Match[1]);
+    }
+  }
+
+  if (releaseNoteLines.length > 0) {
+    manifest.releaseNotes = releaseNoteLines.join("\n").trim();
+  }
+
+  return manifest;
+};
+
+const parseManifestDocument = (document) => {
+  const raw = String(document?.raw || "").trim();
+  if (!raw) {
+    throw new Error("Update manifest was empty");
+  }
+
+  const looksLikeJson = raw.startsWith("{") || raw.startsWith("[");
+  const looksLikeYaml = /(^|\n)version:\s*/i.test(raw) || String(document?.url || "").toLowerCase().endsWith(".yml");
+
+  if (looksLikeJson) {
+    return JSON.parse(raw);
+  }
+
+  if (looksLikeYaml) {
+    return parseLatestYml(raw);
+  }
+
+  try {
+    return JSON.parse(raw);
+  } catch (_error) {
+    return parseLatestYml(raw);
+  }
+};
+
 const ensureDir = async (dirPath) => {
   await fsp.mkdir(dirPath, { recursive: true });
 };
 
-const sha256File = (filePath) =>
+const hashFile = (filePath, algorithm, encoding) =>
   new Promise((resolve, reject) => {
-    const hash = crypto.createHash("sha256");
+    const hash = crypto.createHash(algorithm);
     const stream = fs.createReadStream(filePath);
 
     stream.on("data", (chunk) => hash.update(chunk));
-    stream.on("end", () => resolve(hash.digest("hex")));
+    stream.on("end", () => resolve(hash.digest(encoding)));
     stream.on("error", reject);
   });
 
@@ -176,7 +422,9 @@ const downloadFile = (url, destinationPath, onProgress, redirectCount = 0) =>
     const request = client.get(url, { timeout: UPDATE_REQUEST_TIMEOUT_MS }, (response) => {
       if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
         response.resume();
-        resolve(downloadFile(response.headers.location, destinationPath, onProgress, redirectCount + 1));
+        resolve(
+          downloadFile(toAbsoluteUrl(url, response.headers.location), destinationPath, onProgress, redirectCount + 1)
+        );
         return;
       }
 
@@ -228,10 +476,14 @@ const downloadFile = (url, destinationPath, onProgress, redirectCount = 0) =>
   });
 
 const getManifestFields = (manifest) => {
-  const latestVersion = String(manifest.version || manifest.latestVersion || "").trim();
+  const latestInternalVersion = String(
+    manifest.internalVersion || manifest.version || manifest.latestVersion || ""
+  ).trim();
   const installerUrl = String(
     manifest.installerUrl ||
       manifest.url ||
+      manifest.path ||
+      (Array.isArray(manifest.files) && manifest.files[0] && manifest.files[0].url) ||
       (manifest.platforms && manifest.platforms.win64 && manifest.platforms.win64.url) ||
       ""
   ).trim();
@@ -243,22 +495,48 @@ const getManifestFields = (manifest) => {
   )
     .trim()
     .toLowerCase();
+  const sha512 = String(
+    manifest.sha512 ||
+      (Array.isArray(manifest.files) && manifest.files[0] && manifest.files[0].sha512) ||
+      ""
+  ).trim();
   const releaseNotes = String(manifest.notes || manifest.releaseNotes || "").trim();
+  const latestDisplayVersion = formatDisplayVersion(
+    String(
+      manifest.displayVersion ||
+        manifest.latestDisplayVersion ||
+        extractDisplayVersionFromInstallerUrl(installerUrl) ||
+        latestInternalVersion
+    ).trim()
+  );
 
   return {
-    latestVersion,
+    latestVersion: latestDisplayVersion,
+    latestInternalVersion,
     installerUrl,
     sha256,
+    sha512,
     releaseNotes,
   };
 };
 
 const installDownloadedUpdate = async (installerPath) => {
-  const openResult = await shell.openPath(installerPath);
-  if (openResult) {
-    throw new Error(openResult);
+  const normalizedInstallerPath = String(installerPath || "").trim();
+  if (!normalizedInstallerPath) {
+    throw new Error("No installer path was provided for update installation");
   }
 
+  if (!fs.existsSync(normalizedInstallerPath)) {
+    throw new Error(`Downloaded installer was not found: ${normalizedInstallerPath}`);
+  }
+
+  const installerProcess = spawn(normalizedInstallerPath, ["/S", "--updated"], {
+    detached: true,
+    stdio: "ignore",
+    windowsHide: true,
+  });
+
+  installerProcess.unref();
   app.quit();
 };
 
@@ -284,37 +562,45 @@ const checkForUpdatesNow = async ({ onStateChange } = {}) => {
     {
       status: "checking",
       message: "Checking for updates...",
-      currentVersion: app.getVersion(),
+      currentVersion: getCurrentDisplayVersion(),
+      currentInternalVersion: app.getVersion(),
     },
     onStateChange
   );
 
   try {
-    const manifest = await fetchJson(UPDATE_MANIFEST_URL);
-    const { latestVersion, installerUrl, sha256, releaseNotes } = getManifestFields(manifest);
-    const currentVersion = app.getVersion();
+    const manifestDocument = await fetchManifestDocument(UPDATE_MANIFEST_URL);
+    const manifest = parseManifestDocument(manifestDocument);
+    const { latestVersion, latestInternalVersion, installerUrl, sha256, sha512, releaseNotes } = getManifestFields(manifest);
+    const currentVersion = getCurrentDisplayVersion();
+    const currentInternalVersion = app.getVersion();
 
-    if (!latestVersion || !installerUrl) {
+    if (!latestInternalVersion || !installerUrl) {
       throw new Error("Manifest missing required fields: version and installerUrl");
     }
 
     cachedManifest = {
-      latestVersion,
-      installerUrl,
+      latestVersion: latestInternalVersion,
+      latestDisplayVersion: latestVersion,
+      installerUrl: toAbsoluteUrl(manifestDocument.requestUrl || manifestDocument.url || UPDATE_MANIFEST_URL, installerUrl),
       sha256,
+      sha512,
       releaseNotes,
     };
 
-    if (!isVersionNewer(latestVersion, currentVersion)) {
+    if (!isVersionNewer(latestInternalVersion, currentInternalVersion)) {
       setUpdaterState(
         {
           status: "up-to-date",
           currentVersion,
           latestVersion,
+          currentInternalVersion,
+          latestInternalVersion,
           releaseNotes,
           progress: 0,
           requiresRestart: false,
           message: "You are up to date.",
+          notification: null,
         },
         onStateChange
       );
@@ -326,13 +612,27 @@ const checkForUpdatesNow = async ({ onStateChange } = {}) => {
         status: "update-available",
         currentVersion,
         latestVersion,
+        currentInternalVersion,
+        latestInternalVersion,
         releaseNotes,
         progress: 0,
         requiresRestart: false,
         message: `Update ${latestVersion} is available.`,
+        notification: {
+          status: "update-available",
+          version: latestVersion || latestInternalVersion,
+          title: "In-Accord update available",
+          body: `Version ${latestVersion || latestInternalVersion} is now available.`,
+        },
       },
       onStateChange
     );
+
+    if (UPDATE_AUTO_DOWNLOAD && !cachedInstallerPath && !backgroundDownloadPromise) {
+      backgroundDownloadPromise = downloadAndPrepareUpdate({ onStateChange }).finally(() => {
+        backgroundDownloadPromise = null;
+      });
+    }
 
     return getUpdaterState();
   } catch (error) {
@@ -342,6 +642,7 @@ const checkForUpdatesNow = async ({ onStateChange } = {}) => {
         status: "error",
         message,
         requiresRestart: false,
+        notification: null,
       },
       onStateChange
     );
@@ -366,6 +667,7 @@ const downloadAndPrepareUpdate = async ({ onStateChange } = {}) => {
       {
         status: "error",
         message: "No update metadata available. Try checking for updates again.",
+        notification: null,
       },
       onStateChange
     );
@@ -378,11 +680,13 @@ const downloadAndPrepareUpdate = async ({ onStateChange } = {}) => {
     setUpdaterState(
       {
         status: "downloading",
-        latestVersion: cachedManifest.latestVersion,
+        latestVersion: cachedManifest.latestDisplayVersion || formatDisplayVersion(cachedManifest.latestVersion),
+        latestInternalVersion: cachedManifest.latestVersion,
         releaseNotes: cachedManifest.releaseNotes || "",
         progress: 0,
         requiresRestart: false,
         message: "Downloading update...",
+        notification: null,
       },
       onStateChange
     );
@@ -396,10 +700,18 @@ const downloadAndPrepareUpdate = async ({ onStateChange } = {}) => {
     });
 
     if (cachedManifest.sha256) {
-      const downloadedSha = await sha256File(installerPath);
+      const downloadedSha = await hashFile(installerPath, "sha256", "hex");
       if (downloadedSha !== cachedManifest.sha256) {
         await fsp.rm(installerPath, { force: true });
         throw new Error("Downloaded installer failed integrity verification");
+      }
+    }
+
+    if (cachedManifest.sha512) {
+      const downloadedSha512 = await hashFile(installerPath, "sha512", "base64");
+      if (downloadedSha512 !== cachedManifest.sha512) {
+        await fsp.rm(installerPath, { force: true });
+        throw new Error("Downloaded installer failed SHA-512 integrity verification");
       }
     }
 
@@ -409,7 +721,13 @@ const downloadAndPrepareUpdate = async ({ onStateChange } = {}) => {
         status: "ready-to-restart",
         progress: 100,
         requiresRestart: true,
-        message: `Update ${cachedManifest.latestVersion} downloaded. Restart required to install.`,
+        message: `Update ${cachedManifest.latestDisplayVersion || formatDisplayVersion(cachedManifest.latestVersion)} downloaded. Restart required to install.`,
+        notification: {
+          status: "ready-to-restart",
+          version: cachedManifest.latestDisplayVersion || formatDisplayVersion(cachedManifest.latestVersion),
+          title: "In-Accord update ready",
+          body: "The update finished downloading and is ready to install.",
+        },
       },
       onStateChange
     );
@@ -422,6 +740,7 @@ const downloadAndPrepareUpdate = async ({ onStateChange } = {}) => {
         status: "error",
         message,
         requiresRestart: false,
+        notification: null,
       },
       onStateChange
     );
@@ -438,6 +757,7 @@ const restartAndInstallUpdate = async ({ onStateChange } = {}) => {
       {
         status: "error",
         message: "No downloaded update is ready to install.",
+        notification: null,
       },
       onStateChange
     );
@@ -463,7 +783,7 @@ const startUpdateLoop = ({ onStateChange } = {}) => {
 
   const initialTimer = setTimeout(() => {
     void checkForUpdatesNow({ onStateChange });
-  }, 10_000);
+  }, 2_000);
 
   const periodicTimer = setInterval(() => {
     void checkForUpdatesNow({ onStateChange });
@@ -476,6 +796,7 @@ const startUpdateLoop = ({ onStateChange } = {}) => {
 };
 
 module.exports = {
+  consumeUpdaterNotificationSignal,
   getUpdaterState,
   checkForUpdatesNow,
   downloadAndPrepareUpdate,

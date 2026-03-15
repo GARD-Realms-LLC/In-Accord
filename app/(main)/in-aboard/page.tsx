@@ -1,8 +1,11 @@
 "use client";
 
 import Image from "next/image";
+import { ArrowLeft } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { LAST_IN_ACCORD_LOCATION_STORAGE_KEY } from "@/components/navigation/last-location-tracker";
 import { toInAboardImageUrl } from "@/lib/in-aboard-image-url";
 
 type PublicEntry = {
@@ -52,6 +55,7 @@ const formatRelativeBump = (value: string | null) => {
 };
 
 export default function InAboardPage() {
+  const router = useRouter();
   const [token, setToken] = useState("");
 
   const [entries, setEntries] = useState<PublicEntry[]>([]);
@@ -64,6 +68,7 @@ export default function InAboardPage() {
   const [managedListed, setManagedListed] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<"recent" | "bumps" | "name">("recent");
+  const [backTarget, setBackTarget] = useState<string>("/");
 
   const load = async () => {
     try {
@@ -150,6 +155,38 @@ export default function InAboardPage() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const storedTarget = String(
+      window.localStorage.getItem(LAST_IN_ACCORD_LOCATION_STORAGE_KEY) || ""
+    ).trim();
+
+    if (storedTarget && !storedTarget.startsWith("/in-aboard")) {
+      setBackTarget(storedTarget);
+      return;
+    }
+
+    const referrer = String(document.referrer || "").trim();
+    try {
+      const parsed = referrer ? new URL(referrer) : null;
+      const sameOrigin = parsed && parsed.origin === window.location.origin;
+      const fallbackTarget = sameOrigin ? `${parsed.pathname}${parsed.search}` : "/";
+
+      setBackTarget(
+        fallbackTarget && !fallbackTarget.startsWith("/in-aboard") ? fallbackTarget : "/"
+      );
+    } catch {
+      setBackTarget("/");
+    }
+  }, []);
+
+  const handleGoBack = () => {
+    router.push(backTarget || "/");
+  };
+
+  useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
@@ -198,15 +235,30 @@ export default function InAboardPage() {
   }, [entries, searchQuery, sortBy]);
 
   return (
-    <main className="min-h-screen bg-[#1e1f22] text-zinc-100">
-      <div className="mx-auto w-full max-w-6xl px-4 pb-10 pt-6">
-        <header className="overflow-hidden rounded-2xl border border-[#3f4452] bg-[#2b2d31]">
+    <main className="min-h-full bg-[#1e1f22] text-zinc-100">
+      <div className="mx-auto flex min-h-full w-full max-w-[calc(100vw-140px)] flex-col px-4 pb-10 pt-6">
+        <header className="overflow-hidden rounded-2xl border border-[#3f4452] bg-[#2b2d31] shadow-xl shadow-black/35">
           <div className="border-b border-[#3f4452] bg-gradient-to-r from-[#5865f2] via-[#4f5ad5] to-[#3e48a3] px-6 py-10">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-indigo-100/90">Server Discovery</p>
-            <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-white sm:text-4xl">In-Aboard</h1>
-            <p className="mt-3 max-w-3xl text-sm text-indigo-100/95 sm:text-base">
-              A public server discovery board for In-Accord. Bump your server every 60 minutes with <span className="font-semibold">/bump</span> to stay near the top.
-            </p>
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-indigo-100/90">Server Discovery</p>
+                <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-white sm:text-4xl">In-Aboard</h1>
+                <p className="mt-3 max-w-3xl text-sm text-indigo-100/95 sm:text-base">
+                  A public server discovery board for In-Accord. Bump your server every 60 minutes with <span className="font-semibold">/bump</span> to stay near the top.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleGoBack}
+                className="inline-flex h-10 shrink-0 items-center gap-2 rounded-lg border border-white/25 bg-black/15 px-4 text-sm font-semibold text-white transition hover:bg-black/25"
+                title="Back to previous page"
+                aria-label="Back to previous page"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back
+              </button>
+            </div>
           </div>
 
           <div className="grid gap-3 px-4 py-4 sm:grid-cols-3 sm:px-6">
@@ -251,6 +303,37 @@ export default function InAboardPage() {
             <p className="mt-2 text-sm text-zinc-200">
               In-Aboard settings can only be managed by the server owner in <span className="font-semibold">Edit Server → In-Aboard</span>.
             </p>
+
+            <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+              <textarea
+                value={managedDescription}
+                onChange={(event) => setManagedDescription(event.target.value.slice(0, 300))}
+                rows={4}
+                className="w-full rounded-lg border border-[#4a5061] bg-[#1f2126] px-3 py-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-indigo-400"
+                placeholder="Describe your server for In-Aboard"
+              />
+
+              <div className="flex flex-col gap-3">
+                <label className="inline-flex items-center gap-2 rounded-lg border border-[#4a5061] bg-[#1f2126] px-3 py-2 text-sm text-zinc-100">
+                  <input
+                    type="checkbox"
+                    checked={managedListed}
+                    onChange={(event) => setManagedListed(event.target.checked)}
+                    className="h-4 w-4 accent-indigo-500"
+                  />
+                  Publicly listed
+                </label>
+
+                <button
+                  type="button"
+                  onClick={onSaveManaged}
+                  disabled={isSavingManaged}
+                  className="inline-flex h-10 items-center justify-center rounded-lg border border-indigo-400/40 bg-indigo-500/20 px-4 text-sm font-semibold text-indigo-100 transition hover:bg-indigo-500/30 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSavingManaged ? "Saving..." : "Save In-Aboard"}
+                </button>
+              </div>
+            </div>
           </section>
         ) : null}
 
@@ -258,7 +341,7 @@ export default function InAboardPage() {
           <p className="mt-5 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{error}</p>
         ) : null}
 
-        <section className="mt-6">
+        <section className="mt-6 flex-1">
           {isLoading ? (
             <p className="text-sm text-zinc-300">Loading board...</p>
           ) : visibleEntries.length === 0 ? (
@@ -268,7 +351,7 @@ export default function InAboardPage() {
           ) : (
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 2xl:grid-cols-3">
               {visibleEntries.map((entry, index) => (
-                <article key={entry.serverId} className="overflow-hidden rounded-xl border border-[#3f4452] bg-[#2b2d31]">
+                <article key={entry.serverId} className="overflow-hidden rounded-xl border border-[#3f4452] bg-[#2b2d31] shadow-lg shadow-black/25">
                   {entry.bannerUrl ? (
                     <div className="relative h-28 w-full border-b border-[#3f4452] bg-[#232428] sm:h-32">
                       <Image

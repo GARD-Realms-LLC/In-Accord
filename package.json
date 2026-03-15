@@ -1,7 +1,7 @@
 {
   "name": "In-Accord",
-  "version": "1.0.179",
-  "inaccordDisplayVersion": "1.0.4",
+  "version": "1.0.204",
+  "inaccordDisplayVersion": "1.0.29",
   "main": "electron/main.cjs",
   "private": true,
   "repository": {
@@ -13,7 +13,7 @@
     "url": "https://github.com/GARD-Realms-LLC/In-Accord/issues"
   },
   "scripts": {
-    "clean:next": "node -e \"const fs=require('fs');const p=process.env.NEXT_DIST_DIR||'.next';fs.rmSync(p,{recursive:true,force:true})\"",
+    "clean:next": "node -e \"const fs=require('fs');for(const p of [process.env.NEXT_DIST_DIR||'.next','.next/dev/types','.next-dev/dev/types'])fs.rmSync(p,{recursive:true,force:true})\"",
     "clean:next:all": "node -e \"const fs=require('fs');for(const p of ['.next-dev','.next'])fs.rmSync(p,{recursive:true,force:true})\"",
     "cleanup:caches": "node scripts/cleanup-caches.cjs",
     "cleanup:caches:dry": "node scripts/cleanup-caches.cjs --dry-run",
@@ -24,8 +24,8 @@
     "prepare:win-fav-icon": "node scripts/prepare-win-fav-icon.cjs",
     "generate:win-icon": "node scripts/generate-windows-icon.cjs",
     "version:bump:patch": "node scripts/bump-version.cjs",
-    "build": "npm run cleanup:dist-locks && npm run clean:next && next build",
-    "build:dev:portable": "set \"BUILD_OUTPUT_DIR=dist\\Win Dev\"&& npm run cleanup:dist-locks && npm run clean:next && next build",
+    "build": "npm run cleanup:dist-locks && npm run clean:next && next build --webpack",
+    "build:dev:portable": "set \"BUILD_OUTPUT_DIR=dist\\Win Dev\"&& npm run cleanup:dist-locks && npm run clean:next && next build --webpack",
     "start": "next start",
     "lint": "next lint",
     "electron": "electron .",
@@ -37,8 +37,8 @@
     "preelectron:pack:dev": "set \"BUILD_OUTPUT_DIR=dist\\Win Dev\"&& npm run cleanup:dist-locks && npm run prepare:win-fav-icon",
     "electron:pack": "npm run build && npm run prepare:win-fav-icon && node -e \"require('fs').mkdirSync('.electron-cache/tmp',{recursive:true})\" && set ELECTRON_CACHE=.electron-cache\\electron&& set ELECTRON_BUILDER_CACHE=.electron-cache\\builder&& set TEMP=%CD%\\.electron-cache\\tmp&& set TMP=%CD%\\.electron-cache\\tmp&& set BUILD_OUTPUT_DIR=dist\\win64&& electron-builder --dir --win --x64 -c.directories.output=dist/win64 -c.win.signAndEditExecutable=false",
     "electron:pack:dev": "node scripts/pack-win-dev-guarded.cjs",
-    "electron:dist": "npm run version:bump:patch && npm run build && npm run prepare:win-fav-icon && node -e \"require('fs').mkdirSync('.electron-cache/tmp',{recursive:true})\" && set ELECTRON_CACHE=.electron-cache\\electron&& set ELECTRON_BUILDER_CACHE=.electron-cache\\builder&& set TEMP=%CD%\\.electron-cache\\tmp&& set TMP=%CD%\\.electron-cache\\tmp&& set BUILD_OUTPUT_DIR=dist\\win64&& electron-builder --win nsis --x64 -c.directories.output=dist/win64 -c.win.signAndEditExecutable=false",
-    "electron:dist:unblocked": "npm run version:bump:patch && npm run build && npm run prepare:win-fav-icon && node -e \"require('fs').mkdirSync('.electron-cache/tmp',{recursive:true})\" && set ELECTRON_CACHE=.electron-cache\\electron&& set ELECTRON_BUILDER_CACHE=.electron-cache\\builder&& set TEMP=%CD%\\.electron-cache\\tmp&& set TMP=%CD%\\.electron-cache\\tmp&& set BUILD_OUTPUT_DIR=dist\\win64&& electron-builder --win nsis --x64 -c.directories.output=dist/win64 -c.win.signAndEditExecutable=false",
+    "electron:dist": "npm run build:release:strict",
+    "electron:dist:unblocked": "npm run build:release:strict",
     "build:release:strict": "node scripts/build-release-strict.cjs",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
@@ -129,7 +129,7 @@
     "appId": "com.gardrealms.inaccord",
     "productName": "In-Accord",
     "icon": "dist/win64/fav.ico",
-    "artifactName": "In-Accord Setup v${version}-${arch}.${ext}",
+    "artifactName": "In-Accord-Setup-v${version}-${arch}.${ext}",
     "afterPack": "scripts/electron-after-pack-copy-next-external-aliases.cjs",
     "asar": true,
     "asarUnpack": [

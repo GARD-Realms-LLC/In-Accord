@@ -51,6 +51,8 @@ type UpdaterState = {
   status?: string;
   currentVersion?: string;
   latestVersion?: string;
+  currentInternalVersion?: string;
+  latestInternalVersion?: string;
   releaseNotes?: string;
   progress?: number;
   requiresRestart?: boolean;
@@ -59,7 +61,7 @@ type UpdaterState = {
 
 type RuntimeMeta = {
   isPackaged?: boolean;
-  runtimeMode?: "development" | "production" | string;
+  runtimeMode?: "development" | "production" | "localhost" | "web-thin-client" | string;
   appVersion?: string;
 };
 
@@ -609,19 +611,20 @@ export const ServerRouteShell = ({
 
   const headerTitleStyle = useMemo(
     () => ({
-      left: "50%",
+      left: "calc(50% - 144px)",
       maxWidth: "min(52vw, 760px)",
     }),
     []
   );
 
   const updaterStatus = updaterState.status || "idle";
-  const isProductionRuntime = Boolean(runtimeMeta.isPackaged) || runtimeMeta.runtimeMode === "production";
   const hasAvailableUpdate =
     updaterStatus === "update-available" ||
     updaterStatus === "downloading" ||
     updaterStatus === "ready-to-restart" ||
     updaterStatus === "installing";
+  const isUpdaterBusy = updaterStatus === "checking" || updaterStatus === "downloading" || updaterStatus === "installing";
+  const updaterButtonTitle = hasAvailableUpdate ? "Open updater" : "Check updater";
 
   const updateProgress = Math.max(0, Math.min(100, Number(updaterState.progress || 0)));
   const canUpgradeNow = updaterStatus === "update-available";
@@ -727,18 +730,14 @@ export const ServerRouteShell = ({
         <SupportHelpControls
           panelTop={TOPBAR_HEIGHT + TOP_TO_CONTENT_GAP}
           showInvisibleBoxes={showInvisibleBoxes}
+          showUpdaterIcon={true}
+          updaterBusy={isUpdaterBusy}
+          updaterTitle={updaterButtonTitle}
+          onOpenUpdater={() => setIsUpdaterModalOpen(true)}
         />
 
-        {isProductionRuntime ? (
-          <div className="absolute left-48 top-1/2 z-20 -translate-y-1/2">
-            <span className="inline-flex items-center rounded-md border border-amber-500/35 bg-amber-500/15 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-amber-200">
-              Production Mode
-            </span>
-          </div>
-        ) : null}
-
         {hasAvailableUpdate ? (
-          <div className="absolute left-40 top-1/2 z-20 -translate-y-1/2">
+          <div className="absolute left-[19rem] top-1/2 z-20 -translate-y-1/2">
             <button
               type="button"
               onClick={() => setIsUpdaterModalOpen(true)}
@@ -865,6 +864,7 @@ export const ServerRouteShell = ({
       >
         <div
           className="settings-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden py-1"
+          style={{ paddingLeft: "144px" }}
           onDragOver={(event) => {
             event.preventDefault();
             event.dataTransfer.dropEffect = draggedTabId ? "move" : "copy";
@@ -1339,10 +1339,16 @@ export const ServerRouteShell = ({
           <div className="space-y-3 rounded-xl border border-black/20 bg-[#1e1f22] p-4">
             <div className="grid grid-cols-2 gap-2 text-xs text-[#b5bac1]">
               <p>
-                <span className="text-[#949ba4]">Current:</span> {updaterState.currentVersion || "unknown"}
+                <span className="text-[#949ba4]">Current app version:</span> {updaterState.currentVersion || "unknown"}
               </p>
               <p>
-                <span className="text-[#949ba4]">Latest:</span> {updaterState.latestVersion || "unknown"}
+                <span className="text-[#949ba4]">Latest app version:</span> {updaterState.latestVersion || "unknown"}
+              </p>
+              <p>
+                <span className="text-[#949ba4]">Current shell build:</span> {updaterState.currentInternalVersion || "unknown"}
+              </p>
+              <p>
+                <span className="text-[#949ba4]">Latest shell build:</span> {updaterState.latestInternalVersion || "unknown"}
               </p>
             </div>
 

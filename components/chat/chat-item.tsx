@@ -31,6 +31,7 @@ import { extractQuotedContent, getQuoteSnippetFromBody } from "@/lib/message-quo
 import { parseMentionSegments } from "@/lib/mentions";
 import { extractUrlsFromText, splitTextWithUrls } from "@/lib/link-previews";
 import { resolveProfileIcons, type ProfileIcon } from "@/lib/profile-icons";
+import { emitLocalChatMutationForRoute } from "@/lib/chat-live-events";
 
 interface ChatItemProps {
   id: string;
@@ -1221,6 +1222,7 @@ export const ChatItem = ({
 
       form.reset();
       setIsEditing(false);
+      emitLocalChatMutationForRoute(socketUrl, socketQuery);
     } catch (error) {
       console.log(error);
     }

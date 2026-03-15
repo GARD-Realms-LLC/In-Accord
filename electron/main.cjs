@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, Notification, dialog, ipcMain, shell } = require("electron");
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
@@ -84,7 +84,9 @@ const formatAppDisplayVersion = (value) => {
 };
 
 const readRuntimePackageManifest = () => {
-  const candidates = [path.join(process.cwd(), "package.json"), path.join(app.getAppPath(), "package.json")];
+  const candidates = app.isPackaged
+    ? [path.join(app.getAppPath(), "package.json"), path.join(process.cwd(), "package.json")]
+    : [path.join(process.cwd(), "package.json"), path.join(app.getAppPath(), "package.json")];
 
   for (const candidate of candidates) {
     try {
@@ -108,6 +110,7 @@ const getAppDisplayVersion = () => {
 };
 
 const {
+  consumeUpdaterNotificationSignal,
   getUpdaterState,
   checkForUpdatesNow,
   downloadAndPrepareUpdate,
@@ -119,6 +122,7 @@ const DEFAULT_URL = "http://localhost:3000";
 let stopUpdateLoop = null;
 let nextServer = null;
 let activeAppUrl = DEFAULT_URL;
+let activeAppUrlSource = "default-localhost";
 let crashHandlingInProgress = false;
 let mainWindow = null;
 
@@ -270,6 +274,187 @@ const MEMORY_EVENT_COOLDOWN_MS = 5 * 60 * 1000;
 let memoryWatchTimer = null;
 let lastMemoryWarnAt = 0;
 let lastMemoryTrimAt = 0;
+
+const LOCALHOST_HOSTNAME_SET = new Set(["localhost", "127.0.0.1", "::1"]);
+const LIVE_DESKTOP_CACHE_CONTROL = "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0";
+const configuredDesktopSessions = new WeakSet();
+
+const normalizeHttpOrigin = (value) => {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+
+    const origin = parsed.origin.trim();
+    return origin.endsWith("/") ? origin.slice(0, -1) : origin;
+  } catch (_error) {
+    return null;
+  }
+};
+
+const isLocalHttpOrigin = (value) => {
+  const normalized = normalizeHttpOrigin(value);
+  if (!normalized) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    return LOCALHOST_HOSTNAME_SET.has(String(parsed.hostname || "").trim().toLowerCase());
+  } catch (_error) {
+    return false;
+  }
+};
+
+const isPackagedRemoteLiveOrigin = (value) => app.isPackaged && !isLocalHttpOrigin(value);
+
+const isMatchingHttpOrigin = (candidateUrl, origin) => {
+  const normalizedOrigin = normalizeHttpOrigin(origin);
+  if (!normalizedOrigin) {
+    return false;
+  }
+
+  try {
+    return new URL(String(candidateUrl || "")).origin === normalizedOrigin;
+  } catch (_error) {
+    return false;
+  }
+};
+
+const toArrayHeaderValue = (value) => (Array.isArray(value) ? value : [String(value || "")]);
+
+const configureDesktopLiveSession = async (targetSession, appUrl) => {
+  if (!targetSession || !isPackagedRemoteLiveOrigin(appUrl) || configuredDesktopSessions.has(targetSession)) {
+    return;
+  }
+
+  configuredDesktopSessions.add(targetSession);
+
+  try {
+    await targetSession.clearCache();
+  } catch (_error) {
+    // Cache cleanup is best-effort only.
+  }
+
+  try {
+    await targetSession.clearStorageData({ storages: ["serviceworkers", "cachestorage"] });
+  } catch (_error) {
+    // Storage cleanup is best-effort only.
+  }
+
+  targetSession.webRequest.onBeforeSendHeaders((details, callback) => {
+    if (!isMatchingHttpOrigin(details.url, appUrl)) {
+      callback({ requestHeaders: details.requestHeaders });
+      return;
+    }
+
+    callback({
+      requestHeaders: {
+        ...details.requestHeaders,
+        "Cache-Control": LIVE_DESKTOP_CACHE_CONTROL,
+        Pragma: "no-cache",
+        Expires: "0",
+      },
+    });
+  });
+
+  targetSession.webRequest.onHeadersReceived((details, callback) => {
+    if (!isMatchingHttpOrigin(details.url, appUrl)) {
+      callback({ responseHeaders: details.responseHeaders });
+      return;
+    }
+
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        "Cache-Control": [LIVE_DESKTOP_CACHE_CONTROL],
+        Pragma: ["no-cache"],
+        Expires: ["0"],
+        Vary: Array.from(new Set([...toArrayHeaderValue(details.responseHeaders?.Vary), "Origin"])).filter(Boolean),
+      },
+    });
+  });
+};
+
+const resolveConfiguredLiveOrigin = () => {
+  const candidates = [
+    process.env.INACCORD_DESKTOP_APP_URL,
+    process.env.NEXT_PUBLIC_SITE_URL,
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeHttpOrigin(candidate);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return null;
+};
+
+const resolveRuntimeSiteUrlFromDatabase = async () => {
+  const connectionString = String(process.env.LIVE_DATABASE_URL || "").trim();
+  if (!connectionString) {
+    return null;
+  }
+
+  let client = null;
+  try {
+    const { Client } = require("pg");
+    client = new Client({ connectionString });
+    await client.connect();
+
+    const result = await client.query(
+      'select "appBaseUrl" from "InAccordRuntimeConfig" where "id" = $1 limit 1',
+      ["default"]
+    );
+
+    const candidate = normalizeHttpOrigin(result?.rows?.[0]?.appBaseUrl);
+    if (!candidate) {
+      return null;
+    }
+
+    return candidate;
+  } catch (_error) {
+    return null;
+  } finally {
+    if (client) {
+      try {
+        await client.end();
+      } catch (_error) {
+        // Ignore client shutdown issues.
+      }
+    }
+  }
+};
+
+const resolveLiveAppUrl = async () => {
+  const configuredOrigin = resolveConfiguredLiveOrigin();
+  if (configuredOrigin) {
+    return {
+      appUrl: configuredOrigin,
+      source: isLocalHttpOrigin(configuredOrigin) ? "env-web-origin-localhost" : "env-web-origin-remote",
+    };
+  }
+
+  const databaseOrigin = await resolveRuntimeSiteUrlFromDatabase();
+  if (databaseOrigin) {
+    return {
+      appUrl: databaseOrigin,
+      source: isLocalHttpOrigin(databaseOrigin) ? "database-web-origin-localhost" : "database-web-origin-remote",
+    };
+  }
+
+  throw new Error(
+    "Packaged desktop web runtime URL is not configured. Set Admin > I-A Information > App Base URL, or set NEXT_PUBLIC_SITE_URL / INACCORD_DESKTOP_APP_URL to the web origin the desktop shell should load."
+  );
+};
 
 const setBoundedMapValue = (map, key, value, limit) => {
   if (map.has(key)) {
@@ -1539,6 +1724,20 @@ const wireCrashHandlers = () => {
 
 const broadcastUpdaterState = (state) => {
   const payload = state || getUpdaterState();
+
+  const notification = consumeUpdaterNotificationSignal();
+  if (notification && Notification.isSupported()) {
+    try {
+      new Notification({
+        title: notification.title || "In-Accord update",
+        body: notification.body || `Updater status: ${notification.status}`,
+        silent: false,
+      }).show();
+    } catch (_error) {
+      // Native notifications are best-effort only.
+    }
+  }
+
   for (const windowInstance of BrowserWindow.getAllWindows()) {
     windowInstance.webContents.send("inaccord:updater-state", payload);
   }
@@ -1585,11 +1784,28 @@ async function startInternalServer() {
 }
 
 async function resolveAppUrl() {
-  if (process.env.ELECTRON_START_URL) {
-    return String(process.env.ELECTRON_START_URL).replace("http://127.0.0.1", "http://localhost");
+  const runtimeMode = String(process.env.INACCORD_DESKTOP_RUNTIME_MODE || "").trim().toLowerCase();
+  const localOverride = normalizeHttpOrigin(process.env.ELECTRON_START_URL) || DEFAULT_URL;
+
+  if (!app.isPackaged) {
+    if (runtimeMode === "live") {
+      return resolveLiveAppUrl();
+    }
+
+    return {
+      appUrl: localOverride.replace("http://127.0.0.1", "http://localhost"),
+      source: "development-localhost",
+    };
   }
 
-  return DEFAULT_URL;
+  if (runtimeMode === "localhost") {
+    return {
+      appUrl: localOverride.replace("http://127.0.0.1", "http://localhost"),
+      source: "packaged-localhost-override",
+    };
+  }
+
+  return resolveLiveAppUrl();
 }
 
 function createWindow(appUrl) {
@@ -1610,7 +1826,12 @@ function createWindow(appUrl) {
     },
   });
 
-  void win.loadURL(appUrl).catch(async (error) => {
+  const loadWindow = async () => {
+    await configureDesktopLiveSession(win.webContents.session, appUrl);
+    await win.loadURL(appUrl);
+  };
+
+  void loadWindow().catch(async (error) => {
     const detail = error instanceof Error ? error.message : String(error || "Unknown startup error");
     appendCrashLog({ source: "window:loadURL", detail, fatal: false });
     await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`<h2>In-Accord failed to start</h2><p>${detail}</p>`)}`);
@@ -1696,7 +1917,15 @@ function createMeetingPopoutWindow(appUrl, meetingPath) {
   });
 
   const targetUrl = new URL(normalizedPath, appUrl).toString();
-  void popoutWindow.loadURL(targetUrl);
+  void configureDesktopLiveSession(popoutWindow.webContents.session, appUrl)
+    .then(() => popoutWindow.loadURL(targetUrl))
+    .catch((error) => {
+      appendCrashLog({
+        source: "meeting-popout:loadURL",
+        detail: error instanceof Error ? error.message : String(error || "Unknown startup error"),
+        fatal: false,
+      });
+    });
 
   popoutWindow.on("closed", () => {
     const match = normalizedPath.match(/^\/meeting-popout\/([^/]+)\/([^/?#]+)/i);
@@ -1722,9 +1951,12 @@ function createMeetingPopoutWindow(appUrl, meetingPath) {
 app
   .whenReady()
   .then(async () => {
+    app.setAppUserModelId("com.gardrealms.inaccord");
     wireCrashHandlers();
     startMemoryWatch();
-    activeAppUrl = await resolveAppUrl();
+    const resolvedAppTarget = await resolveAppUrl();
+    activeAppUrl = resolvedAppTarget.appUrl;
+    activeAppUrlSource = resolvedAppTarget.source;
     createWindow(activeAppUrl);
 
     stopUpdateLoop = startUpdateLoop({ onStateChange: broadcastUpdaterState });
@@ -1748,7 +1980,9 @@ app
     ipcMain.handle("inaccord:runtime-meta-get", async () => {
       return {
         isPackaged: app.isPackaged,
-        runtimeMode: app.isPackaged ? "production" : "development",
+        runtimeMode: app.isPackaged ? "web-thin-client" : activeAppUrlSource.includes("localhost") ? "localhost" : "web-thin-client",
+        appUrl: activeAppUrl,
+        appUrlSource: activeAppUrlSource,
         appVersion: getAppDisplayVersion(),
         internalVersion: app.getVersion(),
       };

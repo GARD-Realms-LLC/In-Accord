@@ -2,7 +2,6 @@
 
 import axios from "axios";
 import qs from "query-string";
-import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -17,13 +16,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useModal } from "@/hooks/use-modal-store";
+import { emitLocalChatMutationForRoute } from "@/lib/chat-live-events";
 
 const MIN_DELETE_COUNT = 1;
 const MAX_DELETE_COUNT = 500;
 
 export const BulkDeleteMessagesModal = () => {
   const { isOpen, onClose, type, data } = useModal();
-  const router = useRouter();
 
   const [countInput, setCountInput] = useState("10");
   const [profileNameInput, setProfileNameInput] = useState("");
@@ -90,7 +89,7 @@ export const BulkDeleteMessagesModal = () => {
       const deletedCount = Number((response.data as { deletedCount?: number } | null)?.deletedCount ?? 0);
       toast.success(`Deleted ${deletedCount} post${deletedCount === 1 ? "" : "s"}.`);
 
-      router.refresh();
+      emitLocalChatMutationForRoute(apiUrl, query);
       handleClose();
     } catch (error) {
       if (axios.isAxiosError(error)) {

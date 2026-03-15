@@ -6,6 +6,7 @@ import {
   ensureFamilyAccountSchema,
 } from "@/lib/family-accounts";
 import { normalizePresenceStatus } from "@/lib/presence-status";
+import { resolveAvatarUrl, resolveBannerUrl } from "@/lib/asset-url";
 import { getSessionUserId } from "@/lib/session";
 import { getUserBanner } from "@/lib/user-banner-store";
 
@@ -179,11 +180,11 @@ export const currentProfile = async () => {
           phoneNumber: user.phoneNumber ?? null,
           dateOfBirth: user.dateOfBirth ?? null,
           familyParentUserId: normalizedFamily?.familyParentUserId ?? user.familyParentUserId ?? null,
-          bannerUrl: resolvedBannerUrl,
+          bannerUrl: resolveBannerUrl(resolvedBannerUrl),
           presenceStatus: normalizePresenceStatus(user.presenceStatus),
           currentGame: user.currentGame ?? null,
           role: user.role ?? null,
-          imageUrl: user.imageUrl ?? "/in-accord-steampunk-logo.png",
+          imageUrl: resolveAvatarUrl(user.imageUrl) ?? "/in-accord-steampunk-logo.png",
           email: user.email ?? "",
           createdAt: user.accountCreated ? new Date(user.accountCreated) : new Date(0),
           updatedAt: user.lastLogin ? new Date(user.lastLogin) : new Date(0),

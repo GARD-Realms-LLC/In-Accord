@@ -5,6 +5,7 @@ import { currentProfile } from "@/lib/current-profile";
 import { channel, db, member, message } from "@/lib/db";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 import { computeChannelPermissionForRole, resolveMemberContext } from "@/lib/channel-permissions";
+import { publishRealtimeRefresh } from "@/lib/realtime-events-server";
 
 const MIN_DELETE_COUNT = 1;
 const MAX_DELETE_COUNT = 500;
@@ -219,6 +220,15 @@ export async function POST(req: Request) {
     }
 
     const deletedCount = softDeleteIds.length + hardDeleteIds.length;
+
+    await publishRealtimeRefresh(
+      {
+        serverId,
+        channelId,
+        threadId: threadId || null,
+      },
+      { entity: "message", action: "bulk-deleted", deletedCount }
+    );
 
     return NextResponse.json({
       ok: true,

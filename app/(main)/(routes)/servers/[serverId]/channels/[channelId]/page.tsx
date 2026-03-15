@@ -7,9 +7,7 @@ import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { currentProfile } from "@/lib/current-profile";
 import { ChatHeader } from "@/components/chat/chat-header";
 import { ChatInput } from "@/components/chat/chat-input";
-import { ChatItem } from "@/components/chat/chat-item";
-import { ChatScrollBox } from "@/components/chat/chat-scroll-box";
-import { ChatLiveRefresh } from "@/components/chat/chat-live-refresh";
+import { LiveChannelMessagesPane } from "@/components/chat/live-channel-messages-pane";
 import { VoiceStateSession } from "@/components/server/voice-state-session";
 import { VideoChannelMeetingPanel } from "@/components/server/video-channel-meeting-panel";
 import { MeetingPopbackListener } from "@/components/server/meeting-popback-listener";
@@ -428,6 +426,31 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
   const isVideoPopoutChatMode = isVideoChannel && isPopoutChatRequested && !isMeetingPopoutView;
   const normalizedChannelIcon = String((currentChannel as { icon?: string | null }).icon ?? "").trim();
   const canBulkDeleteMessages = Boolean(memberContext?.isServerOwner) || hasInAccordAdministrativeAccess(profile.role);
+  const initialLiveMessages = hydratedChannelMessages.map((item) => ({
+    id: item.id,
+    content: item.content,
+    member: item.member,
+    fileUrl: item.fileUrl,
+    deleted: item.deleted,
+    timestamp: formatPostTimestamp(item.createdAt),
+    isUpdated: new Date(item.updatedAt).getTime() !== new Date(item.createdAt).getTime(),
+  }));
+  const initialLiveReactions = Object.fromEntries(Array.from(reactionMap.entries()));
+  const initialLiveThreads = Object.fromEntries(
+    Array.from(threadBySourceMessageId.entries()).map(([key, value]) => [
+      key,
+      value
+        ? {
+            id: value.id,
+            title: value.title,
+            replyCount: value.replyCount,
+            archived: value.archived,
+            participantCount: value.participantCount,
+            unreadCount: value.unreadCount,
+          }
+        : null,
+    ])
+  );
   return (
     <div className={`flex h-full min-h-0 flex-col gap-2 ${isMeetingPopoutView ? "fixed inset-0 z-200 bg-[#0f1013] p-0" : ""}`}>
       {isVideoChannel ? (
@@ -629,44 +652,23 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
           <div className="grid min-h-0 flex-1 gap-4 border-t border-border/60 p-3 lg:grid-cols-[minmax(0,1fr)_220px]">
             <div className="min-h-0 rounded-[22px] border border-border/80 bg-background/55 shadow-lg shadow-black/25">
               <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[22px]">
-                <ChatLiveRefresh />
-                <ChatScrollBox
+                <LiveChannelMessagesPane
+                  initialMessages={initialLiveMessages}
+                  initialReactionsByMessageId={initialLiveReactions}
+                  initialThreadsBySourceMessageId={initialLiveThreads}
+                  currentMember={currentMember}
+                  socketUrl="/api/socket/messages"
+                  socketQuery={{ channelId: currentChannel.id, serverId: currentChannel.serverId }}
+                  serverId={currentChannel.serverId}
+                  channelId={currentChannel.id}
+                  emptyState={
+                    isMediaChannel
+                      ? `No chat messages yet in #${currentChannel.name}. Say hi below.`
+                      : `No messages yet. Start the conversation in #${currentChannel.name}.`
+                  }
                   className="flex-1 overflow-y-auto"
-                  scrollKey={`${currentChannel.id}:${hydratedChannelMessages.length}:${lastChannelMessageId}`}
-                >
-                  {hydratedChannelMessages.length === 0 ? (
-                    <div className="p-6 text-sm text-zinc-500 dark:text-zinc-400">
-                      {isMediaChannel
-                        ? `No chat messages yet in #${currentChannel.name}. Say hi below.`
-                        : `No messages yet. Start the conversation in #${currentChannel.name}.`}
-                    </div>
-                  ) : (
-                    hydratedChannelMessages.map((item) => (
-                      <ChatItem
-                        key={item.id}
-                        id={item.id}
-                        content={item.content}
-                        member={item.member}
-                        timestamp={formatPostTimestamp(item.createdAt)}
-                        fileUrl={item.fileUrl}
-                        deleted={item.deleted}
-                        currentMember={currentMember}
-                        isUpdated={new Date(item.updatedAt).getTime() !== new Date(item.createdAt).getTime()}
-                        socketUrl="/api/socket/messages"
-                        socketQuery={{
-                          channelId: currentChannel.id,
-                          serverId: currentChannel.serverId,
-                        }}
-                        reactionScope="channel"
-                        initialReactions={reactionMap.get(item.id) ?? []}
-                        serverId={currentChannel.serverId}
-                        channelId={currentChannel.id}
-                        thread={threadBySourceMessageId.get(item.id) ?? null}
-                        canPurgeDeletedMessage={Boolean(memberContext?.isServerOwner) || currentMember.role === "ADMIN" || hasInAccordAdministrativeAccess(profile.role)}
-                      />
-                    ))
-                  )}
-                </ChatScrollBox>
+                  canPurgeDeletedMessage={Boolean(memberContext?.isServerOwner) || currentMember.role === "ADMIN" || hasInAccordAdministrativeAccess(profile.role)}
+                />
               </div>
             </div>
 
@@ -690,44 +692,23 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
           </div>
         ) : (
           <>
-          <ChatLiveRefresh />
-          <ChatScrollBox
+          <LiveChannelMessagesPane
+            initialMessages={initialLiveMessages}
+            initialReactionsByMessageId={initialLiveReactions}
+            initialThreadsBySourceMessageId={initialLiveThreads}
+            currentMember={currentMember}
+            socketUrl="/api/socket/messages"
+            socketQuery={{ channelId: currentChannel.id, serverId: currentChannel.serverId }}
+            serverId={currentChannel.serverId}
+            channelId={currentChannel.id}
+            emptyState={
+              isMediaChannel
+                ? `No chat messages yet in #${currentChannel.name}. Say hi below.`
+                : `No messages yet. Start the conversation in #${currentChannel.name}.`
+            }
             className="flex-1 overflow-y-auto"
-            scrollKey={`${currentChannel.id}:${hydratedChannelMessages.length}:${lastChannelMessageId}`}
-          >
-            {hydratedChannelMessages.length === 0 ? (
-              <div className="p-6 text-sm text-zinc-500 dark:text-zinc-400">
-                {isMediaChannel
-                  ? `No chat messages yet in #${currentChannel.name}. Say hi below.`
-                  : `No messages yet. Start the conversation in #${currentChannel.name}.`}
-              </div>
-            ) : (
-              hydratedChannelMessages.map((item) => (
-                <ChatItem
-                  key={item.id}
-                  id={item.id}
-                  content={item.content}
-                  member={item.member}
-                  timestamp={formatPostTimestamp(item.createdAt)}
-                  fileUrl={item.fileUrl}
-                  deleted={item.deleted}
-                  currentMember={currentMember}
-                  isUpdated={new Date(item.updatedAt).getTime() !== new Date(item.createdAt).getTime()}
-                  socketUrl="/api/socket/messages"
-                  socketQuery={{
-                    channelId: currentChannel.id,
-                    serverId: currentChannel.serverId,
-                  }}
-                  reactionScope="channel"
-                  initialReactions={reactionMap.get(item.id) ?? []}
-                  serverId={currentChannel.serverId}
-                  channelId={currentChannel.id}
-                  thread={threadBySourceMessageId.get(item.id) ?? null}
-                  canPurgeDeletedMessage={Boolean(memberContext?.isServerOwner) || currentMember.role === "ADMIN" || hasInAccordAdministrativeAccess(profile.role)}
-                />
-              ))
-            )}
-          </ChatScrollBox>
+            canPurgeDeletedMessage={Boolean(memberContext?.isServerOwner) || currentMember.role === "ADMIN" || hasInAccordAdministrativeAccess(profile.role)}
+          />
           </>
         )}
       </div>

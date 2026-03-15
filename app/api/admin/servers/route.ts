@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
+import { resolveAvatarUrl, resolveBannerUrl } from "@/lib/asset-url";
 import { db } from "@/lib/db";
 import { getServerBannerConfig } from "@/lib/server-banner-store";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
@@ -66,8 +67,8 @@ export async function GET() {
         return {
           id: row.id,
           name: row.name ?? "Untitled Server",
-          imageUrl: row.imageUrl ?? "/in-accord-steampunk-logo.png",
-          bannerUrl: bannerConfig?.url ?? null,
+          imageUrl: resolveAvatarUrl(row.imageUrl) ?? "/in-accord-steampunk-logo.png",
+          bannerUrl: resolveBannerUrl(bannerConfig?.url ?? null),
           inviteCode: row.inviteCode ?? "",
           ownerId: row.profileId ?? "",
           ownerName: row.ownerName ?? row.ownerEmail ?? row.profileId ?? "Unknown Owner",
