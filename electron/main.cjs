@@ -2403,6 +2403,28 @@ async function startInternalServer() {
   return `http://localhost:${address.port}`;
 }
 
+const requireRemotePackagedLiveTarget = (resolvedTarget) => {
+  if (!resolvedTarget || typeof resolvedTarget !== "object") {
+    throw new Error("Could not resolve the packaged desktop live runtime target.");
+  }
+
+  if (isLocalHttpOrigin(resolvedTarget.appUrl)) {
+    throw new Error(
+      "Packaged desktop live mode cannot target localhost. Set Admin > I-A Information > App Base URL, NEXT_PUBLIC_SITE_URL, or INACCORD_DESKTOP_APP_URL to a real remote web origin, or leave INACCORD_DESKTOP_RUNTIME_MODE unset / localhost to boot the bundled internal server."
+    );
+  }
+
+  return resolvedTarget;
+};
+
+const resolveReportedRuntimeMode = () => {
+  if (activeAppUrlSource === "packaged-internal-server" || activeAppUrlSource.includes("localhost")) {
+    return "localhost";
+  }
+
+  return "web-thin-client";
+};
+
 async function resolveAppUrl() {
   const runtimeMode = String(process.env.INACCORD_DESKTOP_RUNTIME_MODE || "").trim().toLowerCase();
   const localOverride = normalizeHttpOrigin(process.env.ELECTRON_START_URL) || DEFAULT_URL;
@@ -2419,22 +2441,20 @@ async function resolveAppUrl() {
   }
 
   if (runtimeMode === "live") {
-    return resolveLiveAppUrl();
+    return requireRemotePackagedLiveTarget(await resolveLiveAppUrl());
   }
 
-  if (runtimeMode === "localhost") {
-    appendStartupTrace(
-      "runtime:packaged-localhost-override",
-      "Packaged localhost runtime mode requested; falling back to configured live web origin."
-    );
-    const resolvedLiveTarget = await resolveLiveAppUrl();
+  if (!runtimeMode || runtimeMode === "localhost") {
+    const internalServerUrl = await startInternalServer();
     return {
-      ...resolvedLiveTarget,
-      source: `${resolvedLiveTarget.source}-localhost-mode-overridden`,
+      appUrl: internalServerUrl,
+      source: "packaged-internal-server",
     };
   }
 
-  return resolveLiveAppUrl();
+  throw new Error(
+    `Unsupported INACCORD_DESKTOP_RUNTIME_MODE "${runtimeMode}". Use "localhost" (or leave it unset) for the bundled internal server, or "live" for a remote web origin.`
+  );
 }
 
 function createWindow(appUrl) {
@@ -2675,7 +2695,7 @@ app
     ipcMain.handle("inaccord:runtime-meta-get", async () => {
       return {
         isPackaged: app.isPackaged,
-        runtimeMode: app.isPackaged ? "web-thin-client" : activeAppUrlSource.includes("localhost") ? "localhost" : "web-thin-client",
+        runtimeMode: resolveReportedRuntimeMode(),
         appUrl: activeAppUrl,
         appUrlSource: activeAppUrlSource,
         appVersion: getAppDisplayVersion(),
