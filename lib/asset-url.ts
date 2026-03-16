@@ -16,7 +16,18 @@ const normalizeBaseUrl = (value: unknown): string => {
   }
 };
 
+const isAppObjectPath = (pathname: string): boolean => {
+  const normalizedPath = String(pathname ?? "").trim();
+  return normalizedPath === "/api/r2/object" || normalizedPath.startsWith("/api/r2/object/");
+};
+
+const toAppRelativeUrl = (value: URL): string => `${value.pathname}${value.search}${value.hash}`;
+
 const toAbsoluteUrl = (raw: string): string | null => {
+  if (raw.startsWith("/")) {
+    return raw;
+  }
+
   if (raw.startsWith("/")) {
     const siteBaseUrl = normalizeBaseUrl(process.env.NEXT_PUBLIC_SITE_URL);
     if (!siteBaseUrl) {
@@ -65,9 +76,37 @@ export const resolveAssetUrl = (
     return null;
   }
 
+  if (raw.startsWith("/")) {
+    return raw;
+  }
+
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+
+    if (isAppObjectPath(parsed.pathname)) {
+      return toAppRelativeUrl(parsed);
+    }
+
+    return buildCloudflareImageUrl(
+      parsed.toString(),
+      Math.max(32, options?.width ?? 512),
+      options?.fit === "contain" ? "contain" : "cover",
+      Math.max(30, options?.quality ?? 85)
+    );
+  } catch {
+    // Fall through to legacy normalization path below.
+  }
+
   const absoluteUrl = toAbsoluteUrl(raw);
   if (!absoluteUrl) {
     return raw.startsWith("/") ? raw : null;
+  }
+
+  if (absoluteUrl.startsWith("/")) {
+    return absoluteUrl;
   }
 
   return buildCloudflareImageUrl(
@@ -82,4 +121,4 @@ export const resolveAvatarUrl = (value: unknown) =>
   resolveAssetUrl(value, { width: 256, fit: "cover", quality: 85 });
 
 export const resolveBannerUrl = (value: unknown) =>
-  resolveAssetUrl(value, { width: 1600, fit: "cover", quality: 85 });
+  resolveAssetUrl(value, { width: 1280, fit: "cover", quality: 80 });

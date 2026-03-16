@@ -25,10 +25,13 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { BannerImage } from "@/components/ui/banner-image";
 import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
 import { UserAvatar } from "@/components/user-avatar";
 import { useModal } from "@/hooks/use-modal-store";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { resolveBannerUrl } from "@/lib/asset-url";
+import { getOtherApiOrigin } from "@/lib/other-upstream-identifiers";
 import { cn } from "@/lib/utils";
 import { isInAccordProtectedServer } from "@/lib/server-security";
 
@@ -1896,7 +1899,7 @@ export const EditServerModal = () => {
 
     const normalizedSourceServerId = String(templateImportSourceServerId).trim().replace(/\D/g, "");
     if (!/^\d{15,22}$/.test(normalizedSourceServerId)) {
-      setServerTemplateError("Enter a valid Discord source server ID (15-22 digits).");
+      setServerTemplateError("Enter a valid source server ID (15-22 digits).");
       return;
     }
 
@@ -1974,7 +1977,7 @@ export const EditServerModal = () => {
       return;
     }
 
-    const inviteUrl = `https://discord.com/oauth2/authorize?client_id=${encodeURIComponent(clientId)}&permissions=8&scope=bot%20applications.commands`;
+    const inviteUrl = `${getOtherApiOrigin()}/oauth2/authorize?client_id=${encodeURIComponent(clientId)}&permissions=8&scope=bot%20applications.commands`;
     window.open(inviteUrl, "_blank", "noopener,noreferrer");
   };
 
@@ -2278,6 +2281,7 @@ export const EditServerModal = () => {
   const isLoading = form.formState.isSubmitting;
   const imageUrl = form.watch("imageUrl") || "";
   const bannerUrl = form.watch("bannerUrl") || "";
+  const resolvedServerBannerUrl = resolveBannerUrl(bannerUrl) ?? "";
   const bannerFit = form.watch("bannerFit") || "cover";
   const bannerScale = form.watch("bannerScale") || 1;
   const description = form.watch("description") || "";
@@ -4928,16 +4932,14 @@ export const EditServerModal = () => {
                         </div>
 
                         <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-4 space-y-3">
-                          {ourBoardEntry?.bannerUrl ? (
+                          {resolveBannerUrl(ourBoardEntry?.bannerUrl ?? null) ? (
                             <div>
                               <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Ad Banner (Auto)</p>
                               <div className="relative h-24 overflow-hidden rounded-md border border-zinc-700 bg-[#15161a] sm:h-28">
-                                <Image
-                                  src={ourBoardEntry.bannerUrl}
+                                <BannerImage
+                                  src={resolveBannerUrl(ourBoardEntry?.bannerUrl ?? null) as string}
                                   alt="In-Aboard ad banner preview"
-                                  fill
                                   className="object-cover"
-                                  unoptimized
                                 />
                               </div>
                               <p className="mt-1 text-[11px] text-zinc-500">
@@ -5216,13 +5218,11 @@ export const EditServerModal = () => {
                           </div>
 
                           <div className="relative h-28 w-full overflow-hidden rounded-md border border-zinc-700 bg-[#1e1f22]">
-                            {onboardingConfig.bannerUrl ? (
-                              <Image
-                                fill
-                                src={onboardingConfig.bannerUrl}
+                            {resolveBannerUrl(onboardingConfig.bannerUrl) ? (
+                              <BannerImage
+                                src={resolveBannerUrl(onboardingConfig.bannerUrl) as string}
                                 alt="Onboarding screen banner preview"
                                 className="object-cover"
-                                unoptimized
                               />
                             ) : (
                               <div className="absolute inset-0" style={{ background: onboardingSelectedPreset.value }} />
@@ -6538,10 +6538,9 @@ export const EditServerModal = () => {
                         <FormControl>
                           <div className="space-y-3">
                             <div className="relative h-[260px] w-full overflow-hidden rounded-md border border-zinc-700 bg-[#1E1F22]">
-                              {bannerUrl ? (
-                                <Image
-                                  fill
-                                  src={bannerUrl}
+                              {resolvedServerBannerUrl ? (
+                                <BannerImage
+                                  src={resolvedServerBannerUrl}
                                   alt="Server banner preview"
                                   className={bannerFit === "contain" ? "object-contain" : "object-cover"}
                                   style={
@@ -6656,9 +6655,8 @@ export const EditServerModal = () => {
                                         aria-pressed={isSelected}
                                         disabled={isUploadingBanner || isLoading}
                                       >
-                                        <Image
-                                          fill
-                                          src={thumbnailUrl}
+                                        <BannerImage
+                                          src={resolveBannerUrl(thumbnailUrl) ?? thumbnailUrl}
                                           alt="Uploaded banner tile"
                                           className="object-cover"
                                         />
@@ -6698,7 +6696,7 @@ export const EditServerModal = () => {
                       </button>
                       {!collapsedOverviewSections.description ? (
                         <>
-                          <p className="mt-1 text-xs text-zinc-400">Show what your server is about in a Discord-style profile card.</p>
+                          <p className="mt-1 text-xs text-zinc-400">Show what your server is about in a chat-style profile card.</p>
                           <textarea
                             value={description}
                             onChange={(event) =>

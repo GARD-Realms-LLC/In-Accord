@@ -3,7 +3,11 @@ import { NextResponse } from "next/server";
 
 import { currentProfile } from "@/lib/current-profile";
 import { channel, db, server } from "@/lib/db";
-import { updateOurBoardEntryByServerId, upsertOurBoardEntry } from "@/lib/our-board-store";
+import {
+  getOurBoardEntryByServerId,
+  updateOurBoardEntryByServerId,
+  upsertOurBoardEntry,
+} from "@/lib/our-board-store";
 import { getServerBannerConfig } from "@/lib/server-banner-store";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ serverId: string }> }) {
@@ -48,15 +52,36 @@ export async function GET(_request: Request, { params }: { params: Promise<{ ser
 
     const serverBanner = await getServerBannerConfig(targetServer.id);
 
-    const ensuredEntry = await upsertOurBoardEntry({
+    const existingEntry = await getOurBoardEntryByServerId(targetServer.id);
+    const createdAtIso =
+      targetServer.createdAt instanceof Date
+        ? targetServer.createdAt.toISOString()
+        : new Date().toISOString();
+    const updatedAtIso =
+      targetServer.updatedAt instanceof Date
+        ? targetServer.updatedAt.toISOString()
+        : createdAtIso;
+
+    const ensuredEntry = existingEntry ?? {
       serverId: targetServer.id,
       serverName: String(targetServer.name ?? "Untitled Server"),
       imageUrl: String(targetServer.imageUrl ?? "").trim() || null,
       bannerUrl: serverBanner?.url ?? null,
+      tags: [],
       ownerProfileId: String(targetServer.profileId ?? "").trim(),
       ownerDisplayName: String(ownerRow?.ownerDisplayName ?? targetServer.profileId ?? "Unknown Owner"),
       ownerEmail: ownerRow?.ownerEmail ?? null,
-    });
+      listed: true,
+      description: "",
+      bumpChannelId: null,
+      bumpCount: 0,
+      lastBumpedAt: null,
+      lastBumpedByProfileId: null,
+      bumpTimestampsByProfileId: {},
+      manageToken: `preview-${targetServer.id}`,
+      createdAt: createdAtIso,
+      updatedAt: updatedAtIso,
+    };
 
     const channelRows = await db
       .select({ id: channel.id, name: channel.name, type: channel.type })

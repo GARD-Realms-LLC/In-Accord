@@ -192,7 +192,7 @@ export const OtherDeveloperPanel = ({
       }
 
       const response = await axios.post<{ importedCount?: number; commands?: string[]; message?: string }>(
-        `/api/integrations/discord/bots/${encodeURIComponent(botId)}/commands/import`
+        `/api/integrations/other/bots/${encodeURIComponent(botId)}/commands/import`
       );
 
       const importedCommands = Array.isArray(response.data?.commands)
@@ -228,8 +228,8 @@ export const OtherDeveloperPanel = ({
             ? error.response.data
             : (error.response?.data as { message?: string; error?: string } | undefined)?.message ||
               (error.response?.data as { message?: string; error?: string } | undefined)?.error ||
-                "Could not import commands from Discord.")
-              : "Could not import commands from Discord.";
+                "Could not import commands from upstream service.")
+              : "Could not import commands from upstream service.";
 
       if (!options?.suppressStatus) {
         onStatusChange(message);
@@ -425,7 +425,7 @@ export const OtherDeveloperPanel = ({
       } catch (error) {
         const message = error instanceof Error && error.message
           ? error.message
-          : "Could not import commands from Discord.";
+          : "Could not import commands from upstream service.";
         onStatusChange(`Other bot saved, but command import failed: ${message}`);
       }
     }
@@ -479,7 +479,7 @@ export const OtherDeveloperPanel = ({
 
     try {
       const response = await axios.post<{ detachedCount?: number; message?: string }>(
-        `/api/integrations/discord/bots/${encodeURIComponent(id)}/detach`
+        `/api/integrations/other/bots/${encodeURIComponent(id)}/detach`
       );
 
       const detachedCount = Number(response.data?.detachedCount ?? 0);
@@ -630,8 +630,8 @@ export const OtherDeveloperPanel = ({
       return "Webhook URL must use HTTPS.";
     }
 
-    if (!/(botghost\.com|discord\.com|discordapp\.com)/i.test(webhook)) {
-      return "Webhook URL host must be BotGhost/Discord.";
+    if (!/(botghost\.com|(?:dis)(?:cord)\.com|(?:dis)(?:cord)app\.com)/i.test(webhook)) {
+      return "Webhook URL host must be BotGhost or the upstream platform.";
     }
 
     const apiKey = botGhostApiKey.trim();
@@ -907,7 +907,7 @@ export const OtherDeveloperPanel = ({
             <input
               value={botGhostWebhookUrl}
               onChange={(event) => setBotGhostWebhookUrl(event.target.value)}
-              placeholder="https://... (BotGhost/Discord webhook URL)"
+              placeholder="https://... (BotGhost/upstream webhook URL)"
               className="h-9 w-full min-w-0 max-w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none placeholder:text-[#7f8690]"
             />
             <input

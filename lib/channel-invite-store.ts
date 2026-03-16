@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 
 import { db } from "@/lib/db";
-import { ensureChannelOtherSettingsSchema } from "@/lib/channel-discord-settings";
+import { ensureChannelOtherSettingsSchema } from "@/lib/channel-other-settings";
 
 export type ChannelInviteItem = {
   code: string;

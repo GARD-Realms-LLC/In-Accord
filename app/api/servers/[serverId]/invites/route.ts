@@ -43,15 +43,25 @@ export async function GET(
       return new NextResponse("Server not found", { status: 404 });
     }
 
-    if (serverRecord.inviteCode?.trim()) {
-      await appendServerInviteHistory(serverId, {
-        code: serverRecord.inviteCode,
-        source: "created",
-        createdByProfileId: serverRecord.profileId,
-      });
-    }
-
-    const invites = await getServerInviteHistory(serverId);
+    const persistedInvites = await getServerInviteHistory(serverId);
+    const currentInviteCode = String(serverRecord.inviteCode ?? "").trim();
+    const invites =
+      currentInviteCode.length > 0 && !persistedInvites.some((item) => item.code === currentInviteCode)
+        ? [
+            {
+              code: currentInviteCode,
+              createdAt:
+                serverRecord.createdAt instanceof Date
+                  ? serverRecord.createdAt.toISOString()
+                  : new Date().toISOString(),
+              source: "created" as const,
+              createdByProfileId: serverRecord.profileId,
+              usedCount: 0,
+              usedByProfileIds: [],
+            },
+            ...persistedInvites,
+          ]
+        : persistedInvites;
 
     const creatorIds = Array.from(
       new Set(invites.map((item) => item.createdByProfileId).filter((id): id is string => Boolean(id)))

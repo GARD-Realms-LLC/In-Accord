@@ -4,7 +4,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { currentProfile } from "@/lib/current-profile";
 import { db, member, server } from "@/lib/db";
 import { MemberRole } from "@/lib/db/types";
-import { ensureChannelOtherSettingsSchema } from "@/lib/channel-discord-settings";
+import { ensureChannelOtherSettingsSchema } from "@/lib/channel-other-settings";
 
 type Params = {
   params: Promise<{

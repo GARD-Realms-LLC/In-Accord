@@ -2,7 +2,6 @@
 
 import axios from "axios";
 import qs from "query-string";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import {
@@ -16,11 +15,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { FileUpload } from "@/components/file-upload";
 import { useModal } from "@/hooks/use-modal-store";
+import {
+  emitLocalChatConfirmedMessageForRoute,
+  type LocalChatMutationMessage,
+} from "@/lib/chat-live-events";
 import { buildQuotedContent } from "@/lib/message-quotes";
 
 export const MessageFileModal = () => {
   const { isOpen, onClose, type, data } = useModal();
-  const router = useRouter();
   const [fileUrl, setFileUrl] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -58,12 +60,21 @@ export const MessageFileModal = () => {
         query,
       });
 
-      await axios.post(url, {
+      const clientMutationId = crypto.randomUUID();
+
+      const response = await axios.post<LocalChatMutationMessage>(url, {
         content: buildQuotedContent("[attachment]", null),
         fileUrl: normalizedFileUrl,
+        clientMutationId,
       });
 
-      router.refresh();
+      if (response.data?.id) {
+        emitLocalChatConfirmedMessageForRoute(apiUrl, query, {
+          clientMutationId,
+          message: response.data,
+        });
+      }
+
       handleClose();
     } catch (error) {
       if (axios.isAxiosError(error)) {

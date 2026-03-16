@@ -4,10 +4,9 @@
 
 ![In-Accord Logo](./Images/in-accord-steampunk-logo.png)
 
-In-Accord is a desktop-ready, real-time social platform built with:
+In-Accord is a real-time social platform built with:
 
 - Next.js (App Router) + TypeScript
-- Electron (desktop shell)
 - Local database-backed authentication (session cookies)
 - Socket.IO (real-time updates)
 - Drizzle ORM + MySQL
@@ -23,7 +22,7 @@ This repository ships with a lightweight SDK client at `./In-Accord.js`.
 const { createInAccordClient } = require("./In-Accord.js");
 
 const client = createInAccordClient({
-	baseUrl: "http://localhost:3000", // local dev
+  baseUrl: "http://localhost:3000", // local dev
 });
 ```
 
@@ -33,7 +32,7 @@ When deploying, initialize the SDK with your real domain:
 
 ```js
 const client = createInAccordClient({
-	baseUrl: "https://your-domain.com",
+  baseUrl: "https://your-domain.com",
 });
 ```
 
@@ -65,11 +64,6 @@ It must be the full base64 token string (JSON payload), with no surrounding quot
 
 Optional:
 
-- `ELECTRON_START_URL` (override Electron target URL)
-- `INACCORD_DESKTOP_APP_URL` (optional explicit live web origin for packaged desktop clients)
-- `INACCORD_UPDATE_MANIFEST_URL` (remote JSON manifest URL for desktop auto-updates; JSON and `latest.yml` are supported)
-- `INACCORD_UPDATE_CHECK_INTERVAL_MS` (optional check interval in milliseconds)
-- `INACCORD_UPDATE_AUTO_DOWNLOAD` (`true` by default; automatically downloads available shell updates in the background)
 - `BOT_TOKEN_ENCRYPTION_KEY` (recommended; if not set, falls back to `SESSION_SECRET`)
 - `SLASH_COMMAND_LIMIT_NON_IN_ACCORD` (default `100`)
 - `SLASH_COMMAND_LIMIT_IN_ACCORD` (default `200`)
@@ -95,26 +89,11 @@ npm run dev
 
 Open `http://localhost:3000`.
 
-## Run (desktop / Electron)
-
-```bash
-npm run electron:dev
-```
-
 ## Production build
 
 ```bash
 npm run build
-npm run electron:pack
 ```
-
-For a Windows installer:
-
-```bash
-npm run electron:dist
-```
-
-> Note: Windows installer creation may require elevated permissions depending on your local machine policy.
 
 ## Branding assets
 
@@ -124,44 +103,3 @@ Core brand image and icon outputs live under `Images/`, including:
 - `fav.ico`
 
 The app favicon/logo is wired to these assets via `app/favicon.ico` and public image references.
-
-## Desktop on-the-fly updater (Electron)
-
-The desktop app now behaves as a web thin client for packaged builds:
-
-- packaged desktop windows load the configured web app origin instead of a stale bundled snapshot,
-- regular web deploys reach desktop users immediately without reinstalling the app,
-- the native Electron shell still supports background shell updates for native/runtime fixes.
-
-Set the web origin for packaged clients using either:
-
-- Admin panel → `I-A Information` → App Base URL, or
-- `INACCORD_DESKTOP_APP_URL=https://your-app.example.com`, or
-- `NEXT_PUBLIC_SITE_URL=https://your-app.example.com`
-
-The updater also:
-
-- checks a remote manifest on startup (and periodically),
-- compares versions,
-- auto-downloads a new installer in the background,
-- verifies SHA-256 or SHA-512 (when provided),
-- supports both custom JSON manifests and Electron Builder `latest.yml` feeds.
-
-Set in `.env`:
-
-- `INACCORD_UPDATE_MANIFEST_URL=https://your-domain/releases/inaccord-manifest.json`
-
-Or with GitHub/Electron Builder style feeds:
-
-- `INACCORD_UPDATE_MANIFEST_URL=https://github.com/<owner>/<repo>/releases/latest/download/latest.yml`
-
-Example manifest:
-
-```json
-{
-	"version": "0.1.1",
-	"installerUrl": "https://your-domain/releases/In-Accord-Setup-0.1.1.exe",
-	"sha256": "<sha256-hex>",
-	"notes": "Bug fixes and UI improvements"
-}
-```

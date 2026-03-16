@@ -1,5 +1,5 @@
-import { DesktopSignInForm } from "@/components/auth/desktop-sign-in-form";
+import { SignInForm } from "@/components/auth/sign-in-form";
 
 export default function Page() {
-  return <DesktopSignInForm />;
+  return <SignInForm />;
 }

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 
+import { appendBannerDebugEvent } from "@/lib/banner-debug";
+import { resolveBannerUrl } from "@/lib/asset-url";
 import { currentProfile } from "@/lib/current-profile";
 import { db } from "@/lib/db";
 import { setUserBanner } from "@/lib/user-banner-store";
@@ -47,7 +49,18 @@ export async function PATCH(req: Request) {
 
     await setUserBanner(current.id, normalizedBannerUrl);
 
-    return NextResponse.json({ ok: true, bannerUrl: normalizedBannerUrl });
+    const resolvedBannerUrl = resolveBannerUrl(normalizedBannerUrl);
+    void appendBannerDebugEvent({
+      source: "api/profile/banner",
+      stage: "patch",
+      rawValue: normalizedBannerUrl,
+      resolvedValue: resolvedBannerUrl,
+      metadata: {
+        profileId: current.id,
+      },
+    });
+
+    return NextResponse.json({ ok: true, bannerUrl: resolvedBannerUrl });
   } catch (error) {
     console.error("[PROFILE_BANNER_PATCH]", error);
     return NextResponse.json({ error: "Internal Error" }, { status: 500 });

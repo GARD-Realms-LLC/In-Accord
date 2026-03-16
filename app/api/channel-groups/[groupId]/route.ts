@@ -4,7 +4,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { currentProfile } from "@/lib/current-profile";
 import { db, member, MemberRole, server } from "@/lib/db";
 import { ensureChannelGroupSchema } from "@/lib/channel-groups";
-import { ensureChannelOtherSettingsSchema } from "@/lib/channel-discord-settings";
+import { ensureChannelOtherSettingsSchema } from "@/lib/channel-other-settings";
 import { ensureChannelPermissionSchema } from "@/lib/channel-permissions";
 import { ensureChannelThreadSchema } from "@/lib/channel-threads";
 import { ensureChannelTopicSchema } from "@/lib/channel-topic";

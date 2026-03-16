@@ -21,12 +21,13 @@ import {
   readMentionsEnabled,
   writeMentionsEnabled,
 } from "@/lib/mentions";
-import { emitLocalChatMutationForRoute } from "@/lib/chat-live-events";
+import {
+  emitLocalChatConfirmedMessageForRoute,
+  emitLocalChatFailedMessageForRoute,
+  emitLocalChatOptimisticMessageForRoute,
+  type LocalChatMutationMessage,
+} from "@/lib/chat-live-events";
 import { buildQuotedContent, type QuotedMessageMeta } from "@/lib/message-quotes";
-
-type RuntimeMeta = {
-  appUrl?: string;
-};
 
 interface ChatInputProps {
   apiUrl: string;
@@ -179,14 +180,7 @@ export const ChatInput = ({
     let cancelled = false;
 
     const resolveAppOrigin = async () => {
-      const electronApi = typeof window !== "undefined" ? (window as any)?.electronAPI : null;
-      const runtimeMeta =
-        electronApi && typeof electronApi.getRuntimeMeta === "function"
-          ? ((await electronApi.getRuntimeMeta().catch(() => null)) as RuntimeMeta | null)
-          : null;
-
       const nextOrigin =
-        normalizeHttpOrigin(runtimeMeta?.appUrl) ||
         (typeof window !== "undefined" ? normalizeHttpOrigin(window.location.href) : "") ||
         normalizeHttpOrigin(process.env.NEXT_PUBLIC_SITE_URL);
 
@@ -742,46 +736,98 @@ export const ChatInput = ({
     return nextContent;
   };
 
-  const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    try {
-      setSendError(null);
+  const stopConversationTyping = () => {
+    if (type !== "conversation" || !conversationId) {
+      return;
+    }
 
-      const url = qs.stringifyUrl({
-        url: resolvedApiUrl,
-        query,
+    void axios.post(
+      resolveAbsoluteAppUrl(appOrigin, "/api/direct-messages/typing"),
+      {
+        conversationId,
+        isTyping: false,
+      },
+      {
+        withCredentials: true,
+      }
+    );
+  };
+
+  const resetComposerState = () => {
+    form.reset();
+    clearMentionState();
+    clearSlashState();
+    setActiveQuote(null);
+  };
+
+  const sendMessage = async ({
+    content,
+    fileUrl = null,
+    optimistic = true,
+  }: {
+    content: string;
+    fileUrl?: string | null;
+    optimistic?: boolean;
+  }) => {
+    const url = qs.stringifyUrl({
+      url: resolvedApiUrl,
+      query,
+    });
+    const clientMutationId = crypto.randomUUID();
+    const normalizedFileUrl = typeof fileUrl === "string" && fileUrl.trim().length > 0 ? fileUrl.trim() : null;
+
+    if (optimistic) {
+      emitLocalChatOptimisticMessageForRoute(apiUrl, query, {
+        clientMutationId,
+        content,
+        fileUrl: normalizedFileUrl,
       });
+    }
 
-      const encodedContent = encodeMentionLabelsForSubmit(values.content);
-
-      await axios.post(
+    try {
+      const response = await axios.post<LocalChatMutationMessage>(
         url,
         {
-          ...values,
-          content: buildQuotedContent(encodedContent, activeQuote),
+          content,
+          fileUrl: normalizedFileUrl,
+          clientMutationId,
         },
         {
           withCredentials: true,
         }
       );
 
-      if (type === "conversation" && conversationId) {
-        void axios.post(
-          resolveAbsoluteAppUrl(appOrigin, "/api/direct-messages/typing"),
-          {
-            conversationId,
-            isTyping: false,
-          },
-          {
-            withCredentials: true,
-          }
-        );
+      stopConversationTyping();
+      resetComposerState();
+
+      if (response.data?.id) {
+        emitLocalChatConfirmedMessageForRoute(apiUrl, query, {
+          clientMutationId,
+          message: response.data,
+        });
       }
 
-      form.reset();
-      clearMentionState();
-      clearSlashState();
-      setActiveQuote(null);
-      emitLocalChatMutationForRoute(apiUrl, query);
+      return response.data;
+    } catch (error) {
+      if (optimistic) {
+        emitLocalChatFailedMessageForRoute(apiUrl, query, clientMutationId);
+      }
+
+      throw error;
+    }
+  };
+
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    try {
+      setSendError(null);
+
+      const encodedContent = encodeMentionLabelsForSubmit(values.content);
+      const isSlashCommandSubmission = type === "channel" && !activeQuote && encodedContent.trim().startsWith("/");
+
+      await sendMessage({
+        content: buildQuotedContent(encodedContent, activeQuote),
+        optimistic: !isSlashCommandSubmission,
+      });
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
         const statusCode = error.response?.status;
@@ -828,39 +874,10 @@ export const ChatInput = ({
     try {
       setSendError(null);
 
-      const url = qs.stringifyUrl({
-        url: resolvedApiUrl,
-        query,
+      await sendMessage({
+        content: buildQuotedContent("[gif]", activeQuote),
+        fileUrl: gifUrl,
       });
-
-      await axios.post(
-        url,
-        {
-          content: buildQuotedContent("[gif]", activeQuote),
-          fileUrl: gifUrl,
-        },
-        {
-          withCredentials: true,
-        }
-      );
-
-      if (type === "conversation" && conversationId) {
-        void axios.post(
-          resolveAbsoluteAppUrl(appOrigin, "/api/direct-messages/typing"),
-          {
-            conversationId,
-            isTyping: false,
-          },
-          {
-            withCredentials: true,
-          }
-        );
-      }
-
-      form.reset();
-      clearMentionState();
-      setActiveQuote(null);
-      emitLocalChatMutationForRoute(apiUrl, query);
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
         const dataMessage =
@@ -881,39 +898,10 @@ export const ChatInput = ({
     try {
       setSendError(null);
 
-      const url = qs.stringifyUrl({
-        url: resolvedApiUrl,
-        query,
+      await sendMessage({
+        content: buildQuotedContent("[sticker]", activeQuote),
+        fileUrl: stickerUrl,
       });
-
-      await axios.post(
-        url,
-        {
-          content: buildQuotedContent("[sticker]", activeQuote),
-          fileUrl: stickerUrl,
-        },
-        {
-          withCredentials: true,
-        }
-      );
-
-      if (type === "conversation" && conversationId) {
-        void axios.post(
-          resolveAbsoluteAppUrl(appOrigin, "/api/direct-messages/typing"),
-          {
-            conversationId,
-            isTyping: false,
-          },
-          {
-            withCredentials: true,
-          }
-        );
-      }
-
-      form.reset();
-      clearMentionState();
-      setActiveQuote(null);
-      emitLocalChatMutationForRoute(apiUrl, query);
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
         const dataMessage =
@@ -934,39 +922,10 @@ export const ChatInput = ({
     try {
       setSendError(null);
 
-      const url = qs.stringifyUrl({
-        url: resolvedApiUrl,
-        query,
+      await sendMessage({
+        content: buildQuotedContent("[emote]", activeQuote),
+        fileUrl: emoteUrl,
       });
-
-      await axios.post(
-        url,
-        {
-          content: buildQuotedContent("[emote]", activeQuote),
-          fileUrl: emoteUrl,
-        },
-        {
-          withCredentials: true,
-        }
-      );
-
-      if (type === "conversation" && conversationId) {
-        void axios.post(
-          resolveAbsoluteAppUrl(appOrigin, "/api/direct-messages/typing"),
-          {
-            conversationId,
-            isTyping: false,
-          },
-          {
-            withCredentials: true,
-          }
-        );
-      }
-
-      form.reset();
-      clearMentionState();
-      setActiveQuote(null);
-      emitLocalChatMutationForRoute(apiUrl, query);
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
         const dataMessage =
@@ -987,39 +946,10 @@ export const ChatInput = ({
     try {
       setSendError(null);
 
-      const url = qs.stringifyUrl({
-        url: resolvedApiUrl,
-        query,
+      await sendMessage({
+        content: buildQuotedContent("[sound_efx]", activeQuote),
+        fileUrl: soundEfxUrl,
       });
-
-      await axios.post(
-        url,
-        {
-          content: buildQuotedContent("[sound_efx]", activeQuote),
-          fileUrl: soundEfxUrl,
-        },
-        {
-          withCredentials: true,
-        }
-      );
-
-      if (type === "conversation" && conversationId) {
-        void axios.post(
-          resolveAbsoluteAppUrl(appOrigin, "/api/direct-messages/typing"),
-          {
-            conversationId,
-            isTyping: false,
-          },
-          {
-            withCredentials: true,
-          }
-        );
-      }
-
-      form.reset();
-      clearMentionState();
-      setActiveQuote(null);
-      emitLocalChatMutationForRoute(apiUrl, query);
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
         const dataMessage =

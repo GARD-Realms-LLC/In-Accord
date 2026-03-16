@@ -120,10 +120,11 @@ export async function POST(req: Request) {
     );
 
     const appUrl = await getEffectiveSiteUrl();
-    const objectUrl = `${appUrl}/api/r2/object?key=${encodeURIComponent(key)}`;
+    const objectPath = `/api/r2/object?key=${encodeURIComponent(key)}`;
+    const objectUrl = `${appUrl}${objectPath}`;
 
     logPerf("r2.upload.post", startedAtMs, `status=200 storage=r2 bytes=${file.size}`);
-    return NextResponse.json({ url: objectUrl, key });
+    return NextResponse.json({ url: objectPath, appUrl: objectUrl, key });
   } catch (error) {
     logPerf("r2.upload.post", startedAtMs, "status=500");
     console.error("[R2_UPLOAD_POST]", error);

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 
+import { resolveBannerUrl } from "@/lib/asset-url";
 import { currentProfile } from "@/lib/current-profile";
 import { db } from "@/lib/db";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
@@ -163,7 +164,7 @@ export async function GET() {
       profileName: row.profileName ?? null,
       pronouns: row.pronouns ?? null,
       comment: row.comment ?? null,
-      bannerUrl: row.bannerUrl ?? null,
+      bannerUrl: resolveBannerUrl(row.bannerUrl),
       presenceStatus: normalizePresenceStatus(row.presenceStatus),
       currentGame: row.currentGame ?? null,
       email: row.email ?? "",

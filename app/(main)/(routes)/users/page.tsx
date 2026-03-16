@@ -1271,6 +1271,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                         initialMessages={initialConversationMessages}
                         initialReactionsByMessageId={initialConversationReactions}
                         currentMember={selectedConversation.currentMember}
+                        currentProfile={profile}
                         conversationId={selectedConversation.conversationId}
                         serverId={selectedConversation.serverId}
                         className="flex-1 overflow-y-auto"
@@ -1328,6 +1329,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                         initialMessages={initialConversationMessages}
                         initialReactionsByMessageId={initialConversationReactions}
                         currentMember={selectedConversation.currentMember}
+                        currentProfile={profile}
                         conversationId={selectedConversation.conversationId}
                         serverId={selectedConversation.serverId}
                         className="flex-1 overflow-y-auto"

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { getOtherApiHost, getOtherLegacyApiHost } from "@/lib/other-upstream-identifiers";
+
 type HealthBody = {
   webhookUrl?: unknown;
   apiKey?: unknown;
@@ -7,7 +9,11 @@ type HealthBody = {
 
 const isLikelyBotGhostWebhook = (url: URL) => {
   const hostname = url.hostname.toLowerCase();
-  return hostname.includes("botghost.com") || hostname.includes("discord.com") || hostname.includes("discordapp.com");
+  return (
+    hostname.includes("botghost.com") ||
+    hostname.includes(getOtherApiHost()) ||
+    hostname.includes(getOtherLegacyApiHost())
+  );
 };
 
 export async function POST(req: Request) {
@@ -45,7 +51,7 @@ export async function POST(req: Request) {
         {
           ok: false,
           status: "unhealthy",
-          message: "Webhook host does not look like BotGhost/Discord.",
+          message: "Webhook host does not look like BotGhost/partner chat.",
         },
         { status: 400 }
       );

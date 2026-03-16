@@ -5,24 +5,10 @@ import type { CSSProperties } from "react";
 
 export const MeetingPopoutWindowControls = () => {
   const onMinimize = () => {
-    const electronApi = (window as any).electronAPI;
-
-    if (electronApi?.minimizeCurrentWindow) {
-      void electronApi.minimizeCurrentWindow();
-      return;
-    }
-
     window.blur();
   };
 
   const onClose = () => {
-    const electronApi = (window as any).electronAPI;
-
-    if (electronApi?.closeCurrentWindow) {
-      void electronApi.closeCurrentWindow();
-      return;
-    }
-
     window.close();
   };
 

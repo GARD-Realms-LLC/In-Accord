@@ -7,6 +7,7 @@ import type { MouseEvent } from "react";
 
 import { resolveAvatarUrl, resolveBannerUrl } from "@/lib/asset-url";
 import { cn } from "@/lib/utils";
+import { BannerImage } from "@/components/ui/banner-image";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { buildServerPath, matchesRouteParam } from "@/lib/route-slugs";
 
@@ -231,12 +232,10 @@ export const NavigationItem = ({
           <>
             <div className="relative h-24 bg-linear-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
               {resolvedProfileBannerUrl ? (
-                <Image
+                <BannerImage
                   src={resolvedProfileBannerUrl}
                   alt="Server banner"
-                  fill
                   className="object-cover"
-                  unoptimized
                 />
               ) : null}
             </div>

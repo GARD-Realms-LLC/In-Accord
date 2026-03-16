@@ -25,6 +25,7 @@ import {
 import { hasSucceededPatronage } from "@/lib/patronage";
 import { resolveProfileIcons } from "@/lib/profile-icons";
 import { ensureUserProfileSchema } from "@/lib/user-profile";
+import { resolveAvatarUrl, resolveBannerUrl } from "@/lib/asset-url";
 
 export async function GET(
   req: Request,
@@ -254,8 +255,8 @@ export async function GET(
           : row.profileNameStyle && isProfileNameStyleValue(row.profileNameStyle)
           ? normalizeProfileNameStyleValue(row.profileNameStyle)
           : DEFAULT_PROFILE_NAME_STYLE,
-      bannerUrl: row.bannerUrl ?? fallbackBanner,
-      effectiveBannerUrl: serverProfile?.bannerUrl ?? row.bannerUrl ?? fallbackBanner,
+      bannerUrl: resolveBannerUrl(row.bannerUrl ?? fallbackBanner),
+      effectiveBannerUrl: resolveBannerUrl(serverProfile?.bannerUrl ?? row.bannerUrl ?? fallbackBanner),
       serverProfile: memberServerId
         ? {
             serverId: memberServerId,
@@ -267,7 +268,7 @@ export async function GET(
             nameplateColor: serverProfile?.nameplateColor ?? null,
             nameplateImageUrl: serverProfile?.nameplateImageUrl ?? null,
             avatarDecorationUrl: serverProfile?.avatarDecorationUrl ?? null,
-            bannerUrl: serverProfile?.bannerUrl ?? null,
+            bannerUrl: resolveBannerUrl(serverProfile?.bannerUrl ?? null),
           }
         : null,
       selectedServerTag,
@@ -275,7 +276,7 @@ export async function GET(
       currentGame: row.currentGame ?? null,
       role: row.role,
       email: row.email ?? "",
-      imageUrl: row.imageUrl ?? "/in-accord-steampunk-logo.png",
+      imageUrl: resolveAvatarUrl(row.imageUrl) ?? "/in-accord-steampunk-logo.png",
       createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : null,
       lastLogonAt: row.lastLogonAt ? new Date(row.lastLogonAt).toISOString() : null,
     });

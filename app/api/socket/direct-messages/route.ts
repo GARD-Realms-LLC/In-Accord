@@ -4,10 +4,13 @@ import { v4 as uuidv4 } from "uuid";
 
 import { currentProfile } from "@/lib/current-profile";
 import { conversation, db, directMessage, member } from "@/lib/db";
-import { publishRealtimeEvent, publishRealtimeRefresh } from "@/lib/realtime-events-server";
+import { publishRealtimeEvent } from "@/lib/realtime-events-server";
+import {
+  REALTIME_DIRECT_MESSAGE_CREATED_EVENT,
+  REALTIME_DIRECT_MESSAGES_REFRESH_EVENT,
+  REALTIME_DM_RAIL_REFRESH_EVENT,
+} from "@/lib/realtime-events";
 import { getUserProfileNameMap } from "@/lib/user-profile";
-
-const DIRECT_MESSAGE_CREATED_EVENT = "inaccord:direct-message-created";
 
 const formatTimestamp = (value: Date | string) => {
   const parsed = value instanceof Date ? value : new Date(value);
@@ -234,7 +237,7 @@ export async function POST(req: Request) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { content, fileUrl } = await req.json();
+    const { content, fileUrl, clientMutationId } = await req.json();
     const { searchParams } = new URL(req.url);
     const conversationId = String(searchParams.get("conversationId") ?? "").trim();
 
@@ -289,19 +292,27 @@ export async function POST(req: Request) {
 
     try {
       const serializedInserted = await getSerializedDirectMessageById(inserted[0].id);
+      const normalizedClientMutationId =
+        typeof clientMutationId === "string" && clientMutationId.trim().length > 0
+          ? clientMutationId.trim()
+          : undefined;
 
       if (serializedInserted) {
         await publishRealtimeEvent(
-          DIRECT_MESSAGE_CREATED_EVENT,
+          REALTIME_DIRECT_MESSAGE_CREATED_EVENT,
           { conversationId },
           {
             entity: "direct-message",
             action: "created",
-            message: serializedInserted,
+            message: {
+              ...serializedInserted,
+              clientMutationId: normalizedClientMutationId,
+            },
           }
         );
       } else {
-        await publishRealtimeRefresh(
+        await publishRealtimeEvent(
+          REALTIME_DIRECT_MESSAGES_REFRESH_EVENT,
           {
             conversationId,
           },
@@ -310,7 +321,8 @@ export async function POST(req: Request) {
       }
     } catch (realtimeError) {
       console.error("[SOCKET_DIRECT_MESSAGES_POST_REALTIME]", realtimeError);
-      await publishRealtimeRefresh(
+      await publishRealtimeEvent(
+        REALTIME_DIRECT_MESSAGES_REFRESH_EVENT,
         {
           conversationId,
         },
@@ -321,7 +333,8 @@ export async function POST(req: Request) {
     try {
       const participantProfileIds = await getConversationProfileIds(conversationId);
 
-      await publishRealtimeRefresh(
+      await publishRealtimeEvent(
+        REALTIME_DM_RAIL_REFRESH_EVENT,
         {
           profileIds: participantProfileIds,
         },
@@ -331,7 +344,20 @@ export async function POST(req: Request) {
       console.error("[SOCKET_DIRECT_MESSAGES_POST_RAIL]", railRefreshError);
     }
 
-    return NextResponse.json(inserted[0]);
+    const serializedInserted = await getSerializedDirectMessageById(inserted[0].id);
+    const normalizedClientMutationId =
+      typeof clientMutationId === "string" && clientMutationId.trim().length > 0
+        ? clientMutationId.trim()
+        : undefined;
+
+    return NextResponse.json(
+      serializedInserted
+        ? {
+            ...serializedInserted,
+            clientMutationId: normalizedClientMutationId,
+          }
+        : inserted[0]
+    );
   } catch (error) {
     console.error("[SOCKET_DIRECT_MESSAGES_POST]", error);
     return new NextResponse("Internal Error", { status: 500 });

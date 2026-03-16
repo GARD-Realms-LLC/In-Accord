@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { resolveBannerUrl } from "@/lib/asset-url";
 
 type EventChannelKind = "STAGE" | "VOICE" | "TEXT";
 type ServerChannelItem = {
@@ -104,6 +105,7 @@ export const CreateEventModal = () => {
     const selected = serverChannels.find((item) => item.id === selectedChannelId);
     return selected?.name ?? "Unknown channel";
   }, [selectedChannelId, serverChannels]);
+  const resolvedBannerUrl = useMemo(() => resolveBannerUrl(bannerUrl), [bannerUrl]);
 
   const formattedStart = useMemo(() => {
     if (!startDate || !startTime) {
@@ -525,9 +527,9 @@ export const CreateEventModal = () => {
                   className="hidden"
                   onChange={(event) => void onBannerChange(event.target.files?.[0])}
                 />
-                {bannerUrl ? (
+                {resolvedBannerUrl ? (
                   <img
-                    src={bannerUrl}
+                    src={resolvedBannerUrl}
                     alt="Event banner preview"
                     className="mt-3 h-24 w-full rounded-md border border-zinc-700 object-cover"
                   />
@@ -539,8 +541,8 @@ export const CreateEventModal = () => {
           {step === 3 ? (
             <>
               <div className="overflow-hidden rounded-md border border-zinc-700 bg-[#1e1f22] text-sm">
-                {bannerUrl ? (
-                  <img src={bannerUrl} alt="Event banner preview" className="h-28 w-full object-cover" />
+                {resolvedBannerUrl ? (
+                  <img src={resolvedBannerUrl} alt="Event banner preview" className="h-28 w-full object-cover" />
                 ) : (
                   <div className="h-28 w-full bg-gradient-to-r from-[#5865f2]/40 via-[#3b82f6]/30 to-[#1f2937]" />
                 )}

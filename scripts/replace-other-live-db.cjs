@@ -25,7 +25,7 @@ if (!normalizedSelectedUrl || /^replace_/i.test(normalizedSelectedUrl)) {
   process.exit(1);
 }
 
-const SEARCH_REGEX = "(DISCORD|Discord|discord)";
+const SEARCH_REGEX = "((DIS|Dis|dis)(CORD|Cord|cord))";
 const REPLACEMENT = "Other";
 
 function isConnectionLikeError(error) {

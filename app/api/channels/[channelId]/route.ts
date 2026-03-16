@@ -5,7 +5,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { currentProfile } from "@/lib/current-profile";
 import { channel, db, member, server } from "@/lib/db";
 import { ensureChannelGroupSchema } from "@/lib/channel-groups";
-import { ensureChannelOtherSettingsSchema } from "@/lib/channel-discord-settings";
+import { ensureChannelOtherSettingsSchema } from "@/lib/channel-other-settings";
 import { ensureChannelTopicSchema } from "@/lib/channel-topic";
 import { ensureSystemChannelSchema } from "@/lib/system-channels";
 

@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { BotAppBadge } from "@/components/bot-app-badge";
 import { BusinessMemberIcon } from "@/components/business-member-icon";
+import { BannerImage } from "@/components/ui/banner-image";
 import { ModeratorLineIcon } from "@/components/moderator-line-icon";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
@@ -22,6 +23,8 @@ import { ServerProfilePopover } from "@/components/modals/server-profile-popover
 import { UserAvatar } from "@/components/user-avatar";
 import { useModal } from "@/hooks/use-modal-store";
 import { getInAccordStaffLabel, isInAccordAdministrator, isInAccordDeveloper, isInAccordModerator } from "@/lib/in-accord-admin";
+import { resolveBannerUrl } from "@/lib/asset-url";
+import { getOtherApiOrigin } from "@/lib/other-upstream-identifiers";
 import { resolveProfileIcons } from "@/lib/profile-icons";
 import { ADMINISTRATOR_ROLE_KEY, IMMUTABLE_ACCOUNT_USER_ID } from "@/lib/account-security-constants";
 import { isBotUser } from "@/lib/is-bot-user";
@@ -169,7 +172,7 @@ const adminSectionMeta: Record<AdminSection, { label: string; description: strin
   },
   templateMeBot: {
     label: "Template Me Bot",
-    description: "Manage Template Me bot configs used for real Discord template imports.",
+    description: "Manage Template Me bot configs used for real external template imports.",
   },
   patronage: {
     label: "Patronage",
@@ -4716,7 +4719,7 @@ export const InAccordAdminModal = () => {
       return null;
     }
 
-    return `https://discord.com/oauth2/authorize?client_id=${encodeURIComponent(candidateApplicationId)}&scope=bot%20applications.commands&permissions=8`;
+    return `${getOtherApiOrigin()}/oauth2/authorize?client_id=${encodeURIComponent(candidateApplicationId)}&scope=bot%20applications.commands&permissions=8`;
   }, [primaryTemplateMeBotConfig?.applicationId, templateMeRuntimeInviteUrl, templateMeRuntimeState?.applicationId]);
 
   const separatedOtherConfigs = useMemo(() => {
@@ -5614,13 +5617,11 @@ export const InAccordAdminModal = () => {
                         className="w-[320px] overflow-hidden rounded-xl border border-black/30 bg-[#111214] p-0 text-[#dbdee1] shadow-2xl shadow-black/50"
                       >
                         <div className="relative h-24 bg-linear-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
-                          {user.bannerUrl ? (
-                            <Image
-                              src={user.bannerUrl}
+                          {resolveBannerUrl(user.bannerUrl) ? (
+                            <BannerImage
+                              src={resolveBannerUrl(user.bannerUrl) as string}
                               alt="User banner"
-                              fill
                               className="object-cover"
-                              unoptimized
                             />
                           ) : null}
                         </div>

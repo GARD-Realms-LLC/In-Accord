@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 
+import { appendBannerDebugEvent } from "@/lib/banner-debug";
+import { resolveBannerUrl } from "@/lib/asset-url";
 import { currentProfile } from "@/lib/current-profile";
 import { db, server } from "@/lib/db";
 import { emitInAccordSystemEvent } from "@/lib/in-accord-event-system";
@@ -39,10 +41,22 @@ export async function GET(
 
     const resolvedBanner = await getServerBannerConfig(serverId);
     const profileSettings = await getServerProfileSettings(serverId);
+    const resolvedBannerUrl = resolveBannerUrl(resolvedBanner?.url ?? null);
+
+    void appendBannerDebugEvent({
+      source: "api/servers/[serverId]",
+      stage: "get",
+      rawValue: resolvedBanner?.url ?? null,
+      resolvedValue: resolvedBannerUrl,
+      metadata: {
+        serverId,
+        profileId: profile.id,
+      },
+    });
 
     return NextResponse.json({
       ...target,
-      bannerUrl: resolvedBanner?.url ?? null,
+      bannerUrl: resolvedBannerUrl,
       bannerFit: resolvedBanner?.fit ?? "cover",
       bannerScale: resolvedBanner?.scale ?? 1,
       description: profileSettings.description,
@@ -187,6 +201,20 @@ export async function PATCH(
     });
 
     const resolvedBanner = await getServerBannerConfig(serverId);
+    const resolvedBannerUrl = resolveBannerUrl(resolvedBanner?.url ?? null);
+
+    void appendBannerDebugEvent({
+      source: "api/servers/[serverId]",
+      stage: "patch",
+      rawValue: resolvedBanner?.url ?? bannerUrl ?? null,
+      resolvedValue: resolvedBannerUrl,
+      metadata: {
+        serverId,
+        profileId: profile.id,
+        bannerFit: resolvedBanner?.fit ?? bannerFit ?? null,
+        bannerScale: resolvedBanner?.scale ?? bannerScale ?? null,
+      },
+    });
 
     await upsertOurBoardEntry({
       serverId,
@@ -229,7 +257,7 @@ export async function PATCH(
       updatedServer
         ? {
             ...updatedServer,
-            bannerUrl: resolvedBanner?.url ?? null,
+            bannerUrl: resolvedBannerUrl,
             bannerFit: resolvedBanner?.fit ?? "cover",
             bannerScale: resolvedBanner?.scale ?? 1,
             description: resolvedProfileSettings.description,

@@ -3,10 +3,6 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { io as ClientIO } from "socket.io-client";
 
-type RuntimeMeta = {
-  appUrl?: string;
-};
-
 type ConnectionQuality = "connected" | "slow" | "disconnected";
 
 type SocketContextType = {
@@ -110,14 +106,7 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
     networkInfo?.addEventListener?.("change", updateNetworkQuality);
 
     const connectSocket = async () => {
-      const electronApi = typeof window !== "undefined" ? (window as any)?.electronAPI : null;
-      const runtimeMeta =
-        electronApi && typeof electronApi.getRuntimeMeta === "function"
-          ? ((await electronApi.getRuntimeMeta().catch(() => null)) as RuntimeMeta | null)
-          : null;
-
       const resolvedOrigin =
-        normalizeHttpOrigin(runtimeMeta?.appUrl) ||
         getWindowHttpOrigin() ||
         normalizeHttpOrigin(process.env.NEXT_PUBLIC_SITE_URL);
 
@@ -129,11 +118,25 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
 
       setTargetUrl(resolvedTargetUrl);
 
+      try {
+        await fetch(resolvedTargetUrl, {
+          method: "GET",
+          cache: "no-store",
+          credentials: "include",
+        });
+      } catch (bootstrapError) {
+        console.error("[SOCKET_PROVIDER_BOOTSTRAP]", bootstrapError);
+      }
+
       const socketInstance = new (ClientIO as any)(resolvedOrigin || undefined, {
         path: "/api/socket/io",
         addTrailingSlash: false,
-        transports: ["websocket", "polling"],
+        transports: ["polling", "websocket"],
         withCredentials: true,
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
       });
 
       socketInstance.on("connect", () => {

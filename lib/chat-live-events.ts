@@ -1,11 +1,52 @@
 export const LOCAL_CHAT_MUTATION_EVENT = "inaccord:chat-mutated";
 
+export type LocalChatMutationProfile = {
+	id: string;
+	userId: string;
+	name: string;
+	imageUrl: string;
+	email: string;
+	role?: string | null;
+	createdAt: Date | string;
+	updatedAt: Date | string;
+};
+
+export type LocalChatMutationMember = {
+	id: string;
+	role: string;
+	profileId: string;
+	serverId: string;
+	createdAt: Date | string;
+	updatedAt: Date | string;
+	profile: LocalChatMutationProfile;
+};
+
+export type LocalChatMutationMessage = {
+	id: string;
+	content: string;
+	fileUrl: string | null;
+	deleted: boolean;
+	timestamp: string;
+	isUpdated: boolean;
+	clientMutationId?: string;
+	member: LocalChatMutationMember;
+};
+
+export type LocalChatOptimisticMessage = {
+	content: string;
+	fileUrl: string | null;
+};
+
 export type LocalChatMutationDetail = {
 	scope: "channel" | "conversation";
 	serverId?: string | null;
 	channelId?: string | null;
 	threadId?: string | null;
 	conversationId?: string | null;
+	state?: "refresh" | "optimistic" | "confirmed" | "failed";
+	clientMutationId?: string | null;
+	optimisticMessage?: LocalChatOptimisticMessage | null;
+	confirmedMessage?: LocalChatMutationMessage | null;
 };
 
 const normalizeId = (value: unknown) => {
@@ -57,6 +98,8 @@ export const emitLocalChatMutation = (detail: LocalChatMutationDetail | null | u
 				channelId: normalizeId(detail.channelId),
 				threadId: normalizeId(detail.threadId),
 				conversationId: normalizeId(detail.conversationId),
+				state: detail.state ?? "refresh",
+				clientMutationId: normalizeId(detail.clientMutationId),
 			},
 		})
 	);
@@ -66,7 +109,78 @@ export const emitLocalChatMutationForRoute = (
 	apiUrl: string,
 	query?: Record<string, unknown> | null
 ) => {
-	emitLocalChatMutation(buildLocalChatMutationDetailFromRoute(apiUrl, query));
+	const baseDetail = buildLocalChatMutationDetailFromRoute(apiUrl, query);
+	if (!baseDetail) {
+		return;
+	}
+
+	emitLocalChatMutation({
+		...baseDetail,
+		state: "refresh",
+	});
+};
+
+export const emitLocalChatOptimisticMessageForRoute = (
+	apiUrl: string,
+	query: Record<string, unknown> | null | undefined,
+	options: {
+		clientMutationId: string;
+		content: string;
+		fileUrl?: string | null;
+	}
+) => {
+	const baseDetail = buildLocalChatMutationDetailFromRoute(apiUrl, query);
+	if (!baseDetail) {
+		return;
+	}
+
+	emitLocalChatMutation({
+		...baseDetail,
+		state: "optimistic",
+		clientMutationId: options.clientMutationId,
+		optimisticMessage: {
+			content: String(options.content ?? ""),
+			fileUrl: typeof options.fileUrl === "string" && options.fileUrl.trim().length > 0 ? options.fileUrl.trim() : null,
+		},
+	});
+};
+
+export const emitLocalChatConfirmedMessageForRoute = (
+	apiUrl: string,
+	query: Record<string, unknown> | null | undefined,
+	options: {
+		clientMutationId: string;
+		message: LocalChatMutationMessage;
+	}
+) => {
+	const baseDetail = buildLocalChatMutationDetailFromRoute(apiUrl, query);
+	if (!baseDetail) {
+		return;
+	}
+
+	emitLocalChatMutation({
+		...baseDetail,
+		state: "confirmed",
+		clientMutationId: options.clientMutationId,
+		confirmedMessage: options.message,
+	});
+};
+
+export const emitLocalChatFailedMessageForRoute = (
+	apiUrl: string,
+	query: Record<string, unknown> | null | undefined,
+	clientMutationId: string
+) => {
+	const baseDetail = buildLocalChatMutationDetailFromRoute(apiUrl, query);
+	if (!baseDetail) {
+		return;
+	}
+
+	emitLocalChatMutation({
+		...baseDetail,
+		state: "failed",
+		clientMutationId,
+	});
 };
 
 export const matchesChannelMutation = (

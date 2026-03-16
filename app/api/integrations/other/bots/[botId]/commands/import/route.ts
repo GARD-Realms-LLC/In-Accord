@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { currentProfile } from "@/lib/current-profile";
-import { importOtherBotCommandsForOwner } from "@/lib/discord-bot-commands";
+import { importOtherBotCommandsForOwner } from "@/lib/other-bot-commands";
 import { updateOtherBotTemplateStats } from "@/lib/user-preferences";
 
 export async function POST(

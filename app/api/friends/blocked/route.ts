@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
+import { resolveBannerUrl } from "@/lib/asset-url";
 import { currentProfile } from "@/lib/current-profile";
 import { db } from "@/lib/db";
 import { ensureFriendRelationsSchema } from "@/lib/friend-relations";
@@ -99,7 +100,7 @@ export async function GET() {
         email: row.email,
         imageUrl: row.imageUrl ?? null,
         presenceStatus: normalizePresenceStatus(row.presenceStatus),
-        bannerUrl: row.bannerUrl,
+        bannerUrl: resolveBannerUrl(row.bannerUrl),
         lastLogonAt: row.lastLogonAt ? new Date(row.lastLogonAt).toISOString() : null,
         createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : null,
         blockedAt: row.blockedAt ? new Date(row.blockedAt).toISOString() : null,

@@ -5,6 +5,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
+import { BannerImage } from "@/components/ui/banner-image";
+import { resolveBannerUrl } from "@/lib/asset-url";
 
 type PromptItem = {
   id: string;
@@ -141,6 +143,7 @@ const FormsPage = () => {
     const fallback = BANNER_PRESETS[config?.bannerPreset ?? "aurora"] ?? BANNER_PRESETS.aurora;
     return { background: fallback };
   }, [config?.bannerPreset, config?.bannerUrl]);
+  const resolvedConfigBannerUrl = useMemo(() => resolveBannerUrl(config?.bannerUrl ?? null), [config?.bannerUrl]);
 
   const onToggleAnswer = (prompt: PromptItem, option: string) => {
     setSuccess(null);
@@ -308,8 +311,8 @@ const FormsPage = () => {
           <div className="space-y-4">
             <div className="relative overflow-hidden rounded-xl border border-zinc-700 bg-[#1e1f22]">
               <div className="relative h-36 w-full">
-                {config.bannerUrl ? (
-                  <Image src={config.bannerUrl} alt="Forms banner" fill className="object-cover" unoptimized />
+                {resolvedConfigBannerUrl ? (
+                  <BannerImage src={resolvedConfigBannerUrl} alt="Forms banner" className="object-cover" />
                 ) : (
                   <div className="absolute inset-0" style={bannerStyle} />
                 )}

@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from "uuid";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db, member, MemberRole, server } from "@/lib/db";
-import { importOtherBotCommandsForOwner } from "@/lib/discord-bot-commands";
+import { importOtherBotCommandsForOwner } from "@/lib/other-bot-commands";
 import { makeIntegrationBotProfileId } from "@/lib/integration-bot-profile";
 import { getUserPreferences, updateOtherBotTemplateStats } from "@/lib/user-preferences";
 

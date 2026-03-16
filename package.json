@@ -2,7 +2,6 @@
   "name": "In-Accord",
   "version": "1.0.224",
   "inaccordDisplayVersion": "1.0.49",
-  "main": "electron/main.cjs",
   "private": true,
   "repository": {
     "type": "git",
@@ -17,37 +16,21 @@
     "clean:next:all": "node -e \"const fs=require('fs');for(const p of ['.next-dev','.next'])fs.rmSync(p,{recursive:true,force:true})\"",
     "cleanup:caches": "node scripts/cleanup-caches.cjs",
     "cleanup:caches:dry": "node scripts/cleanup-caches.cjs --dry-run",
-    "cleanup:caches:deep": "node scripts/cleanup-caches.cjs --include-win64",
+    "cleanup:caches:deep": "node scripts/cleanup-caches.cjs",
     "dev": "set NEXT_DIST_DIR=.next-dev&& next dev --webpack -p 3000",
     "dev:3000": "set NEXT_DIST_DIR=.next&& npm run clean:next && next dev --webpack -p 3000",
-    "cleanup:dist-locks": "node scripts/cleanup-dist-locks.cjs",
-    "prepare:win-fav-icon": "node scripts/prepare-win-fav-icon.cjs",
-    "generate:win-icon": "node scripts/generate-windows-icon.cjs",
     "version:bump:patch": "node scripts/bump-version.cjs",
-    "build": "npm run cleanup:dist-locks && npm run clean:next && next build --webpack",
-    "build:dev:portable": "set \"BUILD_OUTPUT_DIR=Desktop\\Win Dev\"&& npm run cleanup:dist-locks && npm run clean:next && next build --webpack",
+    "build": "npm run clean:next && next build --webpack",
     "start": "next start",
     "lint": "next lint",
-    "electron": "electron .",
-    "electron:wait": "wait-on tcp:3000",
-    "electron:dev": "concurrently -k \"npm run dev\" \"npm run electron:wait && npm run electron\"",
-    "electron:start": "concurrently -k \"npm run start\" \"npm run electron:wait && npm run electron\"",
-    "preelectron:dist": "set BUILD_OUTPUT_DIR=Desktop\\builder-assets&& npm run cleanup:dist-locks && npm run generate:win-icon && npm run prepare:win-fav-icon",
-    "preelectron:pack": "set BUILD_OUTPUT_DIR=Desktop\\builder-assets&& npm run cleanup:dist-locks && npm run generate:win-icon && npm run prepare:win-fav-icon",
-    "preelectron:pack:dev": "set \"BUILD_OUTPUT_DIR=Desktop\\builder-assets\"&& npm run cleanup:dist-locks && npm run generate:win-icon && npm run prepare:win-fav-icon",
-    "electron:pack": "npm run build && npm run generate:win-icon && npm run prepare:win-fav-icon && node -e \"require('fs').mkdirSync('.electron-cache/tmp',{recursive:true})\" && set ELECTRON_CACHE=.electron-cache\\electron&& set ELECTRON_BUILDER_CACHE=.electron-cache\\builder&& set TEMP=%CD%\\.electron-cache\\tmp&& set TMP=%CD%\\.electron-cache\\tmp&& set BUILD_OUTPUT_DIR=Desktop\\win64&& electron-builder --dir --win --x64 -c.directories.output=Desktop/win64",
-    "electron:pack:dev": "node scripts/pack-win-dev-guarded.cjs",
-    "electron:dist": "npm run build:release:strict",
-    "electron:dist:unblocked": "npm run build:release:strict",
-    "build:release:strict": "node scripts/build-release-strict.cjs",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:replace-discord-live": "node scripts/replace-discord-live-db.cjs",
-    "db:replace-discord-live:fallback": "node scripts/replace-discord-live-db.cjs --allow-fallback",
-    "db:replace-discord-live:dry": "node scripts/replace-discord-live-db.cjs --dry-run",
-    "db:replace-discord-live:dry:fallback": "node scripts/replace-discord-live-db.cjs --dry-run --allow-fallback",
-    "db:replace-discord-db:dry": "node scripts/replace-discord-live-db.cjs --use-database-url --dry-run",
+    "db:replace-other-live": "node scripts/replace-other-live-db.cjs",
+    "db:replace-other-live:fallback": "node scripts/replace-other-live-db.cjs --allow-fallback",
+    "db:replace-other-live:dry": "node scripts/replace-other-live-db.cjs --dry-run",
+    "db:replace-other-live:dry:fallback": "node scripts/replace-other-live-db.cjs --dry-run --allow-fallback",
+    "db:replace-other-db:dry": "node scripts/replace-other-live-db.cjs --use-database-url --dry-run",
     "db:cleanup:legacy-role-groups:dry": "node scripts/cleanup-legacy-role-channel-groups.cjs --use-database-url",
     "db:cleanup:legacy-role-groups": "node scripts/cleanup-legacy-role-channel-groups.cjs --use-database-url --apply",
     "db:backfill:stage:dry": "node scripts/backfill-stage-channels.cjs --use-database-url",
@@ -85,7 +68,6 @@
     "class-variance-authority": "0.7.1-canary.2",
     "clsx": "2.1.1",
     "cmdk": "^1.1.1",
-    "discord.js": "^14.25.1",
     "drizzle-orm": "^0.44.5",
     "eslint-config-next": "^16.1.6",
     "lucide-react": "0.438.0",
@@ -117,72 +99,7 @@
   "devDependencies": {
     "@types/socket.io": "^3.0.1",
     "@types/uuid": "10.0.0",
-    "concurrently": "^9.1.2",
     "drizzle-kit": "^0.31.5",
-    "electron": "35.7.5",
-    "electron-builder": "^26.0.12",
-    "eslint": "^9.39.0",
-    "png-to-ico": "^3.0.1",
-    "wait-on": "^8.0.3"
-  },
-  "build": {
-    "appId": "com.gardrealms.inaccord",
-    "productName": "In-Accord",
-    "icon": "Desktop/builder-assets/app-icon.ico",
-    "artifactName": "In-Accord-Setup-v${version}-${arch}.${ext}",
-    "afterPack": "scripts/electron-after-pack-copy-next-external-aliases.cjs",
-    "asar": true,
-    "asarUnpack": [
-      "node_modules/**/*.node"
-    ],
-    "files": [
-      "electron/**/*",
-      "Images/**/*",
-      ".next/**/*",
-      "public/**/*",
-      "package.json",
-      "next.config.js",
-      "node_modules/**/*"
-    ],
-    "directories": {
-      "output": "Desktop/win64"
-    },
-    "extraResources": [
-      {
-        "from": ".env",
-        "to": ".env"
-      },
-      {
-        "from": ".data",
-        "to": ".data"
-      }
-    ],
-    "win": {
-      "icon": "Desktop/builder-assets/app-icon.ico",
-      "executableName": "In-Accord",
-      "signAndEditExecutable": false,
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        }
-      ]
-    },
-    "nsis": {
-      "guid": "5a0f84d4-5250-4b4f-a071-c2031f6f6936",
-      "oneClick": false,
-      "runAfterFinish": false,
-      "buildUniversalInstaller": false,
-      "perMachine": false,
-      "allowElevation": true,
-      "allowToChangeInstallationDirectory": false,
-      "createDesktopShortcut": true,
-      "shortcutName": "In-Accord",
-      "installerIcon": "Desktop/builder-assets/app-icon.ico",
-      "installerHeaderIcon": "Desktop/builder-assets/app-icon.ico",
-      "uninstallerIcon": "Desktop/builder-assets/app-icon.ico"
-    }
+    "eslint": "^9.39.0"
   }
 }

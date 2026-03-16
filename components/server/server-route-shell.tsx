@@ -3,11 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
-  ArrowUpCircle,
   Bell,
-  CheckCircle2,
   Hash,
-  Loader2,
   Mic,
   PanelRightClose,
   PanelRightOpen,
@@ -15,7 +12,6 @@ import {
   SlidersHorizontal,
   ShieldAlert,
   ShieldCheck,
-  TriangleAlert,
   UserPlus,
   Video,
   X,
@@ -24,15 +20,6 @@ import {
 import { ServerSearch } from "@/components/server/server-search";
 import { SupportHelpControls } from "@/components/topbar/support-help-controls";
 import { MemberRole } from "@/lib/db/types";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { buildServerPath, matchesRouteParam } from "@/lib/route-slugs";
 
 type SearchItem = {
@@ -44,25 +31,6 @@ type OnlineUserItem = {
   id: string;
   name: string;
   role: MemberRole;
-};
-
-type UpdaterState = {
-  enabled?: boolean;
-  status?: string;
-  currentVersion?: string;
-  latestVersion?: string;
-  currentInternalVersion?: string;
-  latestInternalVersion?: string;
-  releaseNotes?: string;
-  progress?: number;
-  requiresRestart?: boolean;
-  message?: string;
-};
-
-type RuntimeMeta = {
-  isPackaged?: boolean;
-  runtimeMode?: "development" | "production" | "localhost" | "web-thin-client" | string;
-  appVersion?: string;
 };
 
 type ServerTabItem = {
@@ -132,7 +100,6 @@ export const ServerRouteShell = ({
   const [isMembersCollapsed, setIsMembersCollapsed] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
   const [hasLoadedTabsFromStorage, setHasLoadedTabsFromStorage] = useState(false);
-  const [isUpdaterModalOpen, setIsUpdaterModalOpen] = useState(false);
   const [isTabCustomizePanelOpen, setIsTabCustomizePanelOpen] = useState(false);
   const [serverTabs, setServerTabs] = useState<ServerTabItem[]>([]);
   const [tabBarPreferences, setTabBarPreferences] = useState<TabBarPreferences>({
@@ -146,18 +113,6 @@ export const ServerRouteShell = ({
   });
   const [customTabPresets, setCustomTabPresets] = useState<Array<CustomTabBarPreset | null>>([null, null]);
   const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
-  const [runtimeMeta, setRuntimeMeta] = useState<RuntimeMeta>({
-    isPackaged: false,
-    runtimeMode: "development",
-    appVersion: "",
-  });
-  const [updaterState, setUpdaterState] = useState<UpdaterState>({
-    enabled: false,
-    status: "disabled",
-    progress: 0,
-    message: "Updater unavailable.",
-  });
-  const [isUpdaterActionPending, setIsUpdaterActionPending] = useState(false);
   const TAB_BAR_PRESETS: TabBarPreset[] = [
     {
       id: "classic",
@@ -405,8 +360,6 @@ export const ServerRouteShell = ({
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   };
 
-  const electronApi = typeof window !== "undefined" ? (window as any).electronAPI : null;
-
   useEffect(() => {
     setIsHydrated(true);
   }, []);
@@ -584,38 +537,6 @@ export const ServerRouteShell = ({
     });
   }, [defaultChannelId, hasLoadedTabsFromStorage, isHydrated, serverId, serverName]);
 
-  useEffect(() => {
-    if (!electronApi) {
-      return;
-    }
-
-    let unlisten = () => undefined;
-
-    void electronApi.getUpdaterStatus?.().then((state: UpdaterState) => {
-      if (state) {
-        setUpdaterState(state);
-      }
-    });
-
-    if (typeof electronApi.onUpdaterState === "function") {
-      unlisten = electronApi.onUpdaterState((state: UpdaterState) => {
-        if (state) {
-          setUpdaterState(state);
-        }
-      });
-    }
-
-    void electronApi.getRuntimeMeta?.().then((meta: RuntimeMeta) => {
-      if (meta) {
-        setRuntimeMeta(meta);
-      }
-    });
-
-    return () => {
-      unlisten();
-    };
-  }, [electronApi]);
-
   const roleIconMap = {
     [MemberRole.GUEST]: null,
     [MemberRole.MODERATOR]: <ShieldCheck className="h-4 w-4 mr-2 text-indigo-500" />,
@@ -629,64 +550,6 @@ export const ServerRouteShell = ({
     }),
     []
   );
-
-  const updaterStatus = updaterState.status || "idle";
-  const hasAvailableUpdate =
-    updaterStatus === "update-available" ||
-    updaterStatus === "downloading" ||
-    updaterStatus === "ready-to-restart" ||
-    updaterStatus === "installing";
-  const isUpdaterBusy = updaterStatus === "checking" || updaterStatus === "downloading" || updaterStatus === "installing";
-  const updaterButtonTitle = hasAvailableUpdate ? "Open updater" : "Check updater";
-
-  const updateProgress = Math.max(0, Math.min(100, Number(updaterState.progress || 0)));
-  const canUpgradeNow = updaterStatus === "update-available";
-  const canRestartNow = updaterStatus === "ready-to-restart" && updaterState.requiresRestart;
-
-  const handleCheckForUpdates = async () => {
-    if (!electronApi?.checkForUpdatesNow) {
-      return;
-    }
-
-    setIsUpdaterActionPending(true);
-    try {
-      const nextState = await electronApi.checkForUpdatesNow();
-      if (nextState) {
-        setUpdaterState(nextState);
-      }
-    } finally {
-      setIsUpdaterActionPending(false);
-    }
-  };
-
-  const handleUpgradeNow = async () => {
-    if (!electronApi?.upgradeNow) {
-      return;
-    }
-
-    setIsUpdaterActionPending(true);
-    try {
-      const nextState = await electronApi.upgradeNow();
-      if (nextState) {
-        setUpdaterState(nextState);
-      }
-    } finally {
-      setIsUpdaterActionPending(false);
-    }
-  };
-
-  const handleRestartNow = async () => {
-    if (!electronApi?.restartNow) {
-      return;
-    }
-
-    setIsUpdaterActionPending(true);
-    try {
-      await electronApi.restartNow();
-    } finally {
-      setIsUpdaterActionPending(false);
-    }
-  };
 
   const onStartChannelsRailResize = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -743,29 +606,7 @@ export const ServerRouteShell = ({
         <SupportHelpControls
           panelTop={TOPBAR_HEIGHT + TOP_TO_CONTENT_GAP}
           showInvisibleBoxes={showInvisibleBoxes}
-          showUpdaterIcon={true}
-          updaterBusy={isUpdaterBusy}
-          updaterTitle={updaterButtonTitle}
-          onOpenUpdater={() => setIsUpdaterModalOpen(true)}
         />
-
-        {hasAvailableUpdate ? (
-          <div className="absolute left-76 top-1/2 z-20 -translate-y-1/2">
-            <button
-              type="button"
-              onClick={() => setIsUpdaterModalOpen(true)}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-emerald-400/40 bg-emerald-500/20 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.45)] transition hover:bg-emerald-500/30 hover:text-emerald-100"
-              title="Update available"
-              aria-label="Open updater"
-            >
-              {updaterStatus === "downloading" || updaterStatus === "installing" ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <ArrowUpCircle className="h-4 w-4" />
-              )}
-            </button>
-          </div>
-        ) : null}
 
         <h1
           className="absolute inset-y-0 z-10 flex -translate-x-1/2 items-center truncate text-center text-sm font-bold uppercase tracking-[0.08em] text-foreground"
@@ -1336,114 +1177,6 @@ export const ServerRouteShell = ({
       >
         {children}
       </main>
-
-      <Dialog open={isUpdaterModalOpen} onOpenChange={setIsUpdaterModalOpen}>
-        <DialogContent className="settings-theme-scope settings-scrollbar max-w-xl rounded-2xl border-black/30 bg-[#2b2d31] text-[#dbdee1]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-white">
-              <ArrowUpCircle className="h-5 w-5 text-emerald-400" />
-              In-Accord Updater
-            </DialogTitle>
-            <DialogDescription className="text-[#b5bac1]">
-              Keep your client up to date with live updates.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3 rounded-xl border border-black/20 bg-[#1e1f22] p-4">
-            <div className="grid grid-cols-2 gap-2 text-xs text-[#b5bac1]">
-              <p>
-                <span className="text-[#949ba4]">Current app version:</span> {updaterState.currentVersion || "unknown"}
-              </p>
-              <p>
-                <span className="text-[#949ba4]">Latest app version:</span> {updaterState.latestVersion || "unknown"}
-              </p>
-              <p>
-                <span className="text-[#949ba4]">Current shell build:</span> {updaterState.currentInternalVersion || "unknown"}
-              </p>
-              <p>
-                <span className="text-[#949ba4]">Latest shell build:</span> {updaterState.latestInternalVersion || "unknown"}
-              </p>
-            </div>
-
-            <div className="rounded-lg border border-black/20 bg-[#15161a] px-3 py-2 text-xs text-[#b5bac1]">
-              {updaterStatus === "error" ? (
-                <span className="inline-flex items-center gap-2 text-rose-300">
-                  <TriangleAlert className="h-4 w-4" />
-                  {updaterState.message || "Update failed."}
-                </span>
-              ) : updaterStatus === "ready-to-restart" ? (
-                <span className="inline-flex items-center gap-2 text-emerald-300">
-                  <CheckCircle2 className="h-4 w-4" />
-                  Update downloaded. Restart required to complete install.
-                </span>
-              ) : (
-                updaterState.message || "Waiting for update check..."
-              )}
-            </div>
-
-            {(updaterStatus === "downloading" || updaterStatus === "ready-to-restart" || updateProgress > 0) ? (
-              <div className="space-y-2">
-                <div className="h-2 w-full overflow-hidden rounded-full bg-black/25">
-                  <div
-                    className="h-full rounded-full bg-emerald-500 transition-all"
-                    style={{ width: `${updateProgress}%` }}
-                  />
-                </div>
-                <p className="text-right text-[11px] text-[#949ba4]">{updateProgress}%</p>
-              </div>
-            ) : null}
-
-            {updaterState.releaseNotes ? (
-              <div className="rounded-lg border border-black/20 bg-[#15161a] px-3 py-2 text-xs text-[#b5bac1]">
-                <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">Release notes</p>
-                <p className="whitespace-pre-wrap wrap-break-word">{updaterState.releaseNotes}</p>
-              </div>
-            ) : null}
-          </div>
-
-          <DialogFooter className="gap-2 sm:justify-between sm:space-x-0">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={handleCheckForUpdates}
-              disabled={isUpdaterActionPending || updaterStatus === "downloading" || updaterStatus === "installing"}
-            >
-              Check for updates
-            </Button>
-
-            <div className="flex items-center gap-2">
-              {canUpgradeNow ? (
-                <Button
-                  type="button"
-                  variant="primary"
-                  onClick={handleUpgradeNow}
-                  disabled={isUpdaterActionPending}
-                >
-                  {isUpdaterActionPending ? (
-                    <span className="inline-flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Starting...
-                    </span>
-                  ) : (
-                    "Upgrade Now"
-                  )}
-                </Button>
-              ) : null}
-
-              {canRestartNow ? (
-                <Button
-                  type="button"
-                  variant="primary"
-                  onClick={handleRestartNow}
-                  disabled={isUpdaterActionPending}
-                >
-                  {isUpdaterActionPending ? "Restarting..." : "OK - Restart App"}
-                </Button>
-              ) : null}
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

@@ -3,7 +3,11 @@ import { and, eq, or } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { conversation, db, directMessage, member, MemberRole } from "@/lib/db";
-import { publishRealtimeRefresh } from "@/lib/realtime-events-server";
+import { publishRealtimeEvent } from "@/lib/realtime-events-server";
+import {
+  REALTIME_DIRECT_MESSAGES_REFRESH_EVENT,
+  REALTIME_DM_RAIL_REFRESH_EVENT,
+} from "@/lib/realtime-events";
 
 type RouteParams = { directMessageId: string };
 
@@ -131,12 +135,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<RoutePar
 
     const participantProfileIds = await getConversationProfileIds(conversationId);
 
-    await publishRealtimeRefresh(
+    await publishRealtimeEvent(
+      REALTIME_DIRECT_MESSAGES_REFRESH_EVENT,
       {
         conversationId,
-        profileIds: participantProfileIds,
       },
       { entity: "direct-message", action: "updated" }
+    );
+
+    await publishRealtimeEvent(
+      REALTIME_DM_RAIL_REFRESH_EVENT,
+      {
+        profileIds: participantProfileIds,
+      },
+      { entity: "direct-message", action: "updated", scope: "rail" }
     );
 
     return NextResponse.json(updated[0] ?? null);
@@ -216,12 +228,20 @@ export async function DELETE(req: Request, { params }: { params: Promise<RoutePa
 
     const participantProfileIds = await getConversationProfileIds(conversationId);
 
-    await publishRealtimeRefresh(
+    await publishRealtimeEvent(
+      REALTIME_DIRECT_MESSAGES_REFRESH_EVENT,
       {
         conversationId,
-        profileIds: participantProfileIds,
       },
       { entity: "direct-message", action: "deleted" }
+    );
+
+    await publishRealtimeEvent(
+      REALTIME_DM_RAIL_REFRESH_EVENT,
+      {
+        profileIds: participantProfileIds,
+      },
+      { entity: "direct-message", action: "deleted", scope: "rail" }
     );
 
     return NextResponse.json(updated[0] ?? null);

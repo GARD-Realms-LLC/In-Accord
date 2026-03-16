@@ -83,11 +83,6 @@ const applyAdvancedPreferencesToDocument = (preferences: AdvancedPreferences) =>
   } catch {
     // ignore storage failures
   }
-
-  const electronApi = typeof window !== "undefined" ? (window as any)?.electronAPI : null;
-  if (electronApi && typeof electronApi.setSpellCheckEnabled === "function") {
-    void electronApi.setSpellCheckEnabled(preferences.enableSpellCheck).catch(() => undefined);
-  }
 };
 
 export const AdvancedPreferencesProvider = () => {
@@ -166,8 +161,7 @@ export const AdvancedPreferencesProvider = () => {
   }, []);
 
   useEffect(() => {
-    const isDesktopRuntime = typeof window !== "undefined" && Boolean((window as any)?.electronAPI);
-    if (!confirmBeforeQuitEnabled || isDesktopRuntime) {
+    if (!confirmBeforeQuitEnabled) {
       return;
     }
 

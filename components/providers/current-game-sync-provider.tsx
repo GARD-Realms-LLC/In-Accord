@@ -90,44 +90,15 @@ const normalizeRegisteredGamesPreferences = (value: unknown): RegisteredGamesPre
   };
 };
 
-const normalizeAlias = (value: string) =>
-  value
-    .trim()
-    .toLowerCase()
-    .replace(/\.exe$/i, "")
-    .replace(/[^a-z0-9]+/g, "");
-
-const createAliasCandidates = (raw: string) => {
-  const base = String(raw || "").trim();
-  if (!base) {
-    return [] as string[];
-  }
-
-  const variants = new Set<string>();
-  variants.add(base);
-  variants.add(base.replace(/[:]/g, " "));
-  variants.add(base.replace(/[-_]/g, " "));
-
-  const normalized = Array.from(variants)
-    .map((entry) => normalizeAlias(entry))
-    .filter((entry) => entry.length > 0);
-
-  return Array.from(new Set(normalized));
-};
-
-const getRuntimeActivityFromElectron = async (): Promise<RuntimeActivity> => {
+const getRuntimeActivity = async (): Promise<RuntimeActivity> => {
   if (typeof window === "undefined") {
     return null;
   }
 
-  const electronApi = (window as any)?.electronAPI;
   try {
-    const payload =
-      electronApi && typeof electronApi.getRuntimeActivity === "function"
-        ? await electronApi.getRuntimeActivity()
-        : await fetch("/api/profile/runtime-activity", { cache: "no-store" }).then((response) =>
-            response.ok ? response.json() : null
-          );
+    const payload = await fetch("/api/profile/runtime-activity", { cache: "no-store" }).then((response) =>
+      response.ok ? response.json() : null
+    );
     if (!payload || typeof payload !== "object") {
       return null;
     }
@@ -195,113 +166,9 @@ export const CurrentGameSyncProvider = () => {
     }
   }, []);
 
-  const syncRuntimeGameCatalog = useCallback(async () => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const electronApi = (window as any)?.electronAPI;
-    if (!electronApi || typeof electronApi.setRuntimeGameCatalog !== "function") {
-      return;
-    }
-
-    try {
-      const hidden = new Set(registeredGamesPreferences.hiddenGameIds);
-
-      const manualCatalog = registeredGamesPreferences.manualGames
-        .filter((game) => !hidden.has(game.id))
-        .map((game) => {
-          const aliases = [
-            ...createAliasCandidates(game.name),
-            ...createAliasCandidates(game.id),
-            ...createAliasCandidates(`${game.provider ?? ""} ${game.name}`),
-          ];
-
-          return {
-            label: game.name || game.id,
-            aliases,
-          };
-        })
-        .filter((entry) => entry.label.trim().length > 0 && entry.aliases.length > 0);
-
-      const detectedCatalog = await (async () => {
-            if (electronApi && typeof electronApi.getInstalledGames === "function") {
-              try {
-                const payload = (await electronApi.getInstalledGames()) as {
-                  games?: Array<{
-                    id?: string;
-                    name?: string;
-                    provider?: string;
-                    processName?: string;
-                    processAliases?: string[];
-                  }>;
-                };
-
-                const games = Array.isArray(payload?.games) ? payload.games : [];
-                return games
-                  .filter((game) => {
-                    const id = String(game?.id ?? "").trim();
-                    return id.length > 0 && !hidden.has(id);
-                  })
-                  .map((game) => {
-                    const id = String(game?.id ?? "").trim();
-                    const name = String(game?.name ?? "").trim();
-                    const provider = String(game?.provider ?? "").trim();
-                    const processName = String(game?.processName ?? "").trim();
-                    const processAliases = Array.isArray(game?.processAliases)
-                      ? game.processAliases.map((value) => String(value ?? "").trim()).filter((value) => value.length > 0)
-                      : [];
-
-                    return {
-                      label: name || id,
-                      aliases: [
-                        ...createAliasCandidates(name),
-                        ...createAliasCandidates(id),
-                        ...createAliasCandidates(`${provider} ${name}`),
-                        ...createAliasCandidates(processName),
-                        ...processAliases.flatMap((alias) => createAliasCandidates(alias)),
-                      ],
-                    };
-                  })
-                  .filter((entry) => entry.label.length > 0 && entry.aliases.length > 0);
-              } catch {
-                return [] as Array<{ label: string; aliases: string[] }>;
-              }
-            }
-
-            return [] as Array<{ label: string; aliases: string[] }>;
-          })();
-
-      const catalogByLabel = new Map<string, { label: string; aliases: string[] }>();
-
-      for (const entry of [...manualCatalog, ...detectedCatalog]) {
-        const labelKey = entry.label.trim().toLowerCase();
-        if (!labelKey) {
-          continue;
-        }
-
-        const existing = catalogByLabel.get(labelKey);
-        if (!existing) {
-          catalogByLabel.set(labelKey, {
-            label: entry.label.trim(),
-            aliases: Array.from(new Set(entry.aliases)),
-          });
-          continue;
-        }
-
-        existing.aliases = Array.from(new Set([...existing.aliases, ...entry.aliases]));
-      }
-
-      const games = Array.from(catalogByLabel.values()).filter((entry) => entry.aliases.length > 0);
-      await electronApi.setRuntimeGameCatalog(games);
-    } catch {
-      // best effort
-    }
-  }, [registeredGamesPreferences]);
-
   const syncCurrentGame = useCallback(async () => {
     try {
-      const runtimeActivity = await getRuntimeActivityFromElectron();
+      const runtimeActivity = await getRuntimeActivity();
       const nextCurrentGame = resolveCurrentGame(activityPrivacyPreferences, runtimeActivity);
 
       if (nextCurrentGame === lastSyncedGameRef.current) {
@@ -378,10 +245,6 @@ export const CurrentGameSyncProvider = () => {
       );
     };
   }, []);
-
-  useEffect(() => {
-    void syncRuntimeGameCatalog();
-  }, [syncRuntimeGameCatalog]);
 
   useEffect(() => {
     void syncCurrentGame();

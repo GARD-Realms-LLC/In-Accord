@@ -341,6 +341,7 @@ const ThreadPage = async ({ params }: ThreadPageProps) => {
           initialMessages={initialLiveMessages}
           initialReactionsByMessageId={initialLiveReactions}
           currentMember={access.currentMember!}
+          currentProfile={profile}
           socketUrl="/api/socket/messages"
           socketQuery={{ channelId, serverId, threadId }}
           serverId={serverId}

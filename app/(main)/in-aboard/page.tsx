@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { BannerImage } from "@/components/ui/banner-image";
 import { readLastInAccordLocation } from "@/components/navigation/last-location-tracker";
 import { toInAboardImageUrl } from "@/lib/in-aboard-image-url";
 
@@ -352,12 +353,10 @@ export default function InAboardPage() {
                 <article key={entry.serverId} className="overflow-hidden rounded-xl border border-[#3f4452] bg-[#2b2d31] shadow-lg shadow-black/25">
                   {entry.bannerUrl ? (
                     <div className="relative h-28 w-full border-b border-[#3f4452] bg-[#232428] sm:h-32">
-                      <Image
+                      <BannerImage
                         src={toInAboardImageUrl(entry.bannerUrl) || "/in-accord-steampunk-logo.png"}
                         alt={`${entry.serverName} banner`}
-                        fill
                         className="object-cover"
-                        unoptimized
                       />
                     </div>
                   ) : null}

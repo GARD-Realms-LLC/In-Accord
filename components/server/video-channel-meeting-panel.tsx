@@ -387,14 +387,6 @@ export const VideoChannelMeetingPanel = ({
     }
 
     const url = `${normalizedMeetingPopoutPath}?live=true`;
-    const electronApi = (window as any).electronAPI;
-
-    if (typeof electronApi?.openMeetingPopout === "function") {
-      void electronApi.openMeetingPopout(url);
-      router.replace(`${normalizedChannelPath}?popoutChat=true`);
-      return;
-    }
-
     const width = 1280;
     const height = 820;
     const left = Math.max(0, Math.round((window.screen.width - width) / 2));
@@ -405,8 +397,6 @@ export const VideoChannelMeetingPanel = ({
       `inaccord-meeting-${channelId}`,
       `popup=yes,width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
     );
-
-    window.alert("Browser popouts always keep the address bar. In desktop app mode, popout opens as a native window without it.");
 
     router.replace(`${normalizedChannelPath}?popoutChat=true`);
   };
@@ -524,25 +514,9 @@ export const VideoChannelMeetingPanel = ({
     window.addEventListener("message", onPopbackMessage);
     window.addEventListener("storage", onPopbackStorage);
 
-    const electronApi = (window as any).electronAPI;
-    const disposePopoutClosed =
-      typeof electronApi?.onMeetingPopoutClosed === "function"
-        ? electronApi.onMeetingPopoutClosed((payload: { serverId?: string | null; channelId?: string | null }) => {
-            if (payload?.serverId !== serverId || payload?.channelId !== channelId) {
-              return;
-            }
-
-            setShowPopbackNotice(true);
-            router.replace(`${normalizedChannelPath}?live=true`);
-          })
-        : null;
-
     return () => {
       window.removeEventListener("message", onPopbackMessage);
       window.removeEventListener("storage", onPopbackStorage);
-      if (typeof disposePopoutClosed === "function") {
-        disposePopoutClosed();
-      }
     };
   }, [channelId, isPopoutView, normalizedChannelPath, router, serverId]);
 
@@ -562,12 +536,6 @@ export const VideoChannelMeetingPanel = ({
 
   const onMinimizePopout = () => {
     if (typeof window === "undefined") {
-      return;
-    }
-
-    const electronApi = (window as any).electronAPI;
-    if (electronApi?.minimizeCurrentWindow) {
-      void electronApi.minimizeCurrentWindow();
       return;
     }
 

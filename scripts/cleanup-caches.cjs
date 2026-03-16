@@ -2,7 +2,6 @@
 /*
  * Safe workspace cache cleanup helper.
  * - Default: removes regenerable caches only
- * - Optional: --include-win64 to remove large build output folder Win-64
  * - Optional: --dry-run to preview actions
  */
 
@@ -12,12 +11,7 @@ const path = require("path");
 const root = process.cwd();
 const args = new Set(process.argv.slice(2));
 const dryRun = args.has("--dry-run");
-const includeWin64 = args.has("--include-win64");
-
-const targets = [".next", ".next-dev", ".electron-cache"];
-if (includeWin64) {
-  targets.push("Win-64");
-}
+const targets = [".next", ".next-dev"];
 
 function getSizeBytes(targetPath) {
   if (!fs.existsSync(targetPath)) return 0;

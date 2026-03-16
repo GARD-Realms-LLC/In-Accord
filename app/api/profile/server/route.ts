@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 
+import { appendBannerDebugEvent } from "@/lib/banner-debug";
+import { resolveBannerUrl } from "@/lib/asset-url";
 import { currentProfile } from "@/lib/current-profile";
 import { db } from "@/lib/db";
 import {
@@ -59,31 +61,49 @@ const buildResponse = async (
     order by lower(s."name") asc
   `);
 
-  const servers = ((result as unknown as { rows?: MemberServerRow[] }).rows ?? []).map((row) => ({
-    serverId: row.serverId,
-    serverName: row.serverName,
-    profileName: row.profileName,
-    profileNameStyle: row.profileNameStyle,
-    comment: row.comment,
-    nameplateLabel: row.nameplateLabel,
-    nameplateColor: row.nameplateColor,
-    nameplateImageUrl: row.nameplateImageUrl,
-    avatarDecorationUrl: row.avatarDecorationUrl,
-    bannerUrl: row.bannerUrl,
-    effectiveProfileName: row.profileName ?? globalDefaults.profileName,
-    effectiveProfileNameStyle:
-      row.profileNameStyle && isProfileNameStyleValue(row.profileNameStyle)
-        ? normalizeProfileNameStyleValue(row.profileNameStyle)
-        : globalDefaults.profileNameStyle && isProfileNameStyleValue(globalDefaults.profileNameStyle)
-        ? normalizeProfileNameStyleValue(globalDefaults.profileNameStyle)
-        : DEFAULT_PROFILE_NAME_STYLE,
-    effectiveComment: row.comment ?? globalDefaults.comment,
-    effectiveNameplateLabel: row.nameplateLabel ?? globalDefaults.nameplateLabel,
-    effectiveNameplateColor: row.nameplateColor ?? globalDefaults.nameplateColor,
-    effectiveNameplateImageUrl: row.nameplateImageUrl ?? globalDefaults.nameplateImageUrl,
-    effectiveAvatarDecorationUrl: row.avatarDecorationUrl ?? globalDefaults.avatarDecorationUrl,
-    effectiveBannerUrl: row.bannerUrl ?? globalDefaults.bannerUrl,
-  }));
+  const servers = ((result as unknown as { rows?: MemberServerRow[] }).rows ?? []).map((row) => {
+    const resolvedBannerUrl = resolveBannerUrl(row.bannerUrl);
+    const effectiveBannerUrl = resolveBannerUrl(row.bannerUrl ?? globalDefaults.bannerUrl);
+
+    void appendBannerDebugEvent({
+      source: "api/profile/server",
+      stage: "response-row",
+      rawValue: row.bannerUrl,
+      resolvedValue: resolvedBannerUrl,
+      metadata: {
+        userId,
+        serverId: row.serverId,
+        effectiveRawValue: row.bannerUrl ?? globalDefaults.bannerUrl,
+        effectiveResolvedValue: effectiveBannerUrl,
+      },
+    });
+
+    return {
+      serverId: row.serverId,
+      serverName: row.serverName,
+      profileName: row.profileName,
+      profileNameStyle: row.profileNameStyle,
+      comment: row.comment,
+      nameplateLabel: row.nameplateLabel,
+      nameplateColor: row.nameplateColor,
+      nameplateImageUrl: row.nameplateImageUrl,
+      avatarDecorationUrl: row.avatarDecorationUrl,
+      bannerUrl: resolvedBannerUrl,
+      effectiveProfileName: row.profileName ?? globalDefaults.profileName,
+      effectiveProfileNameStyle:
+        row.profileNameStyle && isProfileNameStyleValue(row.profileNameStyle)
+          ? normalizeProfileNameStyleValue(row.profileNameStyle)
+          : globalDefaults.profileNameStyle && isProfileNameStyleValue(globalDefaults.profileNameStyle)
+          ? normalizeProfileNameStyleValue(globalDefaults.profileNameStyle)
+          : DEFAULT_PROFILE_NAME_STYLE,
+      effectiveComment: row.comment ?? globalDefaults.comment,
+      effectiveNameplateLabel: row.nameplateLabel ?? globalDefaults.nameplateLabel,
+      effectiveNameplateColor: row.nameplateColor ?? globalDefaults.nameplateColor,
+      effectiveNameplateImageUrl: row.nameplateImageUrl ?? globalDefaults.nameplateImageUrl,
+      effectiveAvatarDecorationUrl: row.avatarDecorationUrl ?? globalDefaults.avatarDecorationUrl,
+      effectiveBannerUrl,
+    };
+  });
 
   return { servers };
 };
@@ -105,7 +125,7 @@ export async function GET() {
         nameplateColor: profile.nameplateColor ?? null,
         nameplateImageUrl: (profile as { nameplateImageUrl?: string | null }).nameplateImageUrl ?? null,
         avatarDecorationUrl: profile.avatarDecorationUrl ?? null,
-        bannerUrl: profile.bannerUrl ?? null,
+        bannerUrl: resolveBannerUrl(profile.bannerUrl),
       })
     );
   } catch (error) {
@@ -217,6 +237,18 @@ export async function PATCH(req: Request) {
     const normalizedNameplateImageUrl = nameplateImageUrl.length > 0 ? nameplateImageUrl : null;
     const normalizedAvatarDecorationUrl = avatarDecorationUrl.length > 0 ? avatarDecorationUrl : null;
     const normalizedBannerUrl = bannerUrl.length > 0 ? bannerUrl : null;
+    const resolvedBannerUrl = resolveBannerUrl(normalizedBannerUrl);
+
+    void appendBannerDebugEvent({
+      source: "api/profile/server",
+      stage: "patch",
+      rawValue: normalizedBannerUrl,
+      resolvedValue: resolvedBannerUrl,
+      metadata: {
+        profileId: profile.id,
+        serverId,
+      },
+    });
 
     if (
       !normalizedProfileName &&
@@ -285,7 +317,7 @@ export async function PATCH(req: Request) {
       nameplateColor: normalizedNameplateColor,
       nameplateImageUrl: normalizedNameplateImageUrl,
       avatarDecorationUrl: normalizedAvatarDecorationUrl,
-      bannerUrl: normalizedBannerUrl,
+      bannerUrl: resolvedBannerUrl,
       ...(await buildResponse(profile.id, {
         profileName: profile.name ?? null,
         profileNameStyle: profile.profileNameStyle ?? null,
@@ -294,7 +326,7 @@ export async function PATCH(req: Request) {
         nameplateColor: profile.nameplateColor ?? null,
         nameplateImageUrl: (profile as { nameplateImageUrl?: string | null }).nameplateImageUrl ?? null,
         avatarDecorationUrl: profile.avatarDecorationUrl ?? null,
-        bannerUrl: profile.bannerUrl ?? null,
+        bannerUrl: resolveBannerUrl(profile.bannerUrl),
       })),
     });
   } catch (error) {

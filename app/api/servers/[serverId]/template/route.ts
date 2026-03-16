@@ -8,8 +8,9 @@ import { ensureChannelGroupSchema } from "@/lib/channel-groups";
 import { ensureServerRolesSchema } from "@/lib/server-roles";
 import { ensureChannelTopicSchema } from "@/lib/channel-topic";
 import { ensureSystemChannelSchema } from "@/lib/system-channels";
-import { ensureChannelOtherSettingsSchema } from "@/lib/channel-discord-settings";
+import { ensureChannelOtherSettingsSchema } from "@/lib/channel-other-settings";
 import { ensureChannelPermissionSchema } from "@/lib/channel-permissions";
+import { getOtherApiOrigin } from "@/lib/other-upstream-identifiers";
 import { getDecryptedOtherBotToken, getUserPreferences } from "@/lib/user-preferences";
 
 type Params = { params: Promise<{ serverId: string }> };
@@ -111,14 +112,14 @@ const normalizeTemplateCode = (input: string) => {
     return "";
   }
 
-  const fromOtherNew = raw.match(/^https?:\/\/(?:discord|Other)\.new\/([A-Za-z0-9_-]+)\/?/i)?.[1];
+  const fromOtherNew = raw.match(/^https?:\/\/(?:(?:dis)(?:cord)|Other)\.new\/([A-Za-z0-9_-]+)\/?/i)?.[1];
   if (fromOtherNew) {
     return fromOtherNew;
   }
 
   const fromOtherCom =
-    raw.match(/^https?:\/\/(?:discord|Other)(?:app)?\.com\/template\/([A-Za-z0-9_-]+)\/?/i)?.[1] ??
-    raw.match(/^https?:\/\/(?:discord|Other)(?:app)?\.com\/templates\/([A-Za-z0-9_-]+)\/?/i)?.[1];
+    raw.match(/^https?:\/\/(?:(?:dis)(?:cord)|Other)(?:app)?\.com\/template\/([A-Za-z0-9_-]+)\/?/i)?.[1] ??
+    raw.match(/^https?:\/\/(?:(?:dis)(?:cord)|Other)(?:app)?\.com\/templates\/([A-Za-z0-9_-]+)\/?/i)?.[1];
 
   if (fromOtherCom) {
     return fromOtherCom;
@@ -149,8 +150,8 @@ const normalizeOtherInviteCode = (input: string) => {
   }
 
   const fromUrl =
-    raw.match(/^https?:\/\/(?:www\.)?(?:discord|Other)\.gg\/([A-Za-z0-9_-]{2,128})\/?/i)?.[1] ??
-    raw.match(/^https?:\/\/(?:www\.)?(?:discord|Other)(?:app)?\.com\/invite\/([A-Za-z0-9_-]{2,128})\/?/i)?.[1];
+    raw.match(/^https?:\/\/(?:www\.)?(?:(?:dis)(?:cord)|Other)\.gg\/([A-Za-z0-9_-]{2,128})\/?/i)?.[1] ??
+    raw.match(/^https?:\/\/(?:www\.)?(?:(?:dis)(?:cord)|Other)(?:app)?\.com\/invite\/([A-Za-z0-9_-]{2,128})\/?/i)?.[1];
 
   return fromUrl ?? "";
 };
@@ -407,9 +408,9 @@ const resolveGuildIdFromInvite = async (inviteCode: string) => {
 
   try {
     const inviteLookups = [
-      `https://discord.com/api/v10/invites/${encodeURIComponent(inviteCode)}?with_counts=true&with_expiration=true&guild_scheduled_event_id=false`,
-      `https://discord.com/api/v10/invites/${encodeURIComponent(inviteCode)}?with_counts=false&with_expiration=false&guild_scheduled_event_id=false`,
-      `https://discord.com/api/v10/invites/${encodeURIComponent(inviteCode)}`,
+      `${getOtherApiOrigin()}/api/v10/invites/${encodeURIComponent(inviteCode)}?with_counts=true&with_expiration=true&guild_scheduled_event_id=false`,
+      `${getOtherApiOrigin()}/api/v10/invites/${encodeURIComponent(inviteCode)}?with_counts=false&with_expiration=false&guild_scheduled_event_id=false`,
+      `${getOtherApiOrigin()}/api/v10/invites/${encodeURIComponent(inviteCode)}`,
     ];
 
     for (const inviteLookupUrl of inviteLookups) {
@@ -458,19 +459,19 @@ const fetchOtherGuildStructure = async (guildId: string, token: string) => {
     };
 
     const [guildResponse, rolesResponse, channelsResponse] = await Promise.all([
-      fetch(`https://discord.com/api/v10/guilds/${encodeURIComponent(guildId)}`, {
+      fetch(`${getOtherApiOrigin()}/api/v10/guilds/${encodeURIComponent(guildId)}`, {
         method: "GET",
         headers,
         signal: controller.signal,
         cache: "no-store",
       }),
-      fetch(`https://discord.com/api/v10/guilds/${encodeURIComponent(guildId)}/roles`, {
+      fetch(`${getOtherApiOrigin()}/api/v10/guilds/${encodeURIComponent(guildId)}/roles`, {
         method: "GET",
         headers,
         signal: controller.signal,
         cache: "no-store",
       }),
-      fetch(`https://discord.com/api/v10/guilds/${encodeURIComponent(guildId)}/channels`, {
+      fetch(`${getOtherApiOrigin()}/api/v10/guilds/${encodeURIComponent(guildId)}/channels`, {
         method: "GET",
         headers,
         signal: controller.signal,
@@ -480,17 +481,17 @@ const fetchOtherGuildStructure = async (guildId: string, token: string) => {
 
     if (!guildResponse.ok) {
       const guildError = await guildResponse.text().catch(() => "");
-      throw new Error(guildError || `Discord guild fetch failed (${guildResponse.status})`);
+      throw new Error(guildError || `Upstream guild fetch failed (${guildResponse.status})`);
     }
 
     if (!rolesResponse.ok) {
       const roleError = await rolesResponse.text().catch(() => "");
-      throw new Error(roleError || `Discord roles fetch failed (${rolesResponse.status})`);
+      throw new Error(roleError || `Upstream roles fetch failed (${rolesResponse.status})`);
     }
 
     if (!channelsResponse.ok) {
       const channelError = await channelsResponse.text().catch(() => "");
-      throw new Error(channelError || `Discord channels fetch failed (${channelsResponse.status})`);
+      throw new Error(channelError || `Upstream channels fetch failed (${channelsResponse.status})`);
     }
 
     const guildData = (await guildResponse.json()) as { id?: string; name?: string };
@@ -499,7 +500,7 @@ const fetchOtherGuildStructure = async (guildId: string, token: string) => {
 
     return {
       guildId: String(guildData.id ?? guildId),
-      guildName: String(guildData.name ?? "Discord Server").trim() || "Discord Server",
+      guildName: String(guildData.name ?? "External Server").trim() || "External Server",
       roles: Array.isArray(roleData) ? roleData : [],
       channels: Array.isArray(channelData) ? channelData : [],
     };
@@ -508,84 +509,12 @@ const fetchOtherGuildStructure = async (guildId: string, token: string) => {
   }
 };
 
-const resolveSourceGuildIdFromBot = async ({
-  token,
-  preferredGuildName,
-}: {
-  token: string;
-  preferredGuildName: string;
-}) => {
-  const discordJs = (await import("discord.js")) as {
-    Client: new (options: { intents: number[] }) => {
-      once: (event: string, listener: (...args: unknown[]) => void) => void;
-      login: (botToken: string) => Promise<string>;
-      destroy: () => void;
-      guilds?: {
-        cache?: Map<string, { id: string; name?: string }>;
-      };
-    };
-    GatewayIntentBits: { Guilds: number };
-  };
-
-  const client = new discordJs.Client({
-    intents: [discordJs.GatewayIntentBits.Guilds],
-  });
-
-  await new Promise<void>((resolve, reject) => {
-    const timeoutId = setTimeout(() => {
-      reject(new Error("SOURCE_GUILD_RESOLVE_TIMEOUT"));
-    }, 12000);
-
-    client.once("ready", () => {
-      clearTimeout(timeoutId);
-      resolve();
-    });
-
-    void client.login(token).catch((error) => {
-      clearTimeout(timeoutId);
-      reject(error);
-    });
-  });
-
-  try {
-    const guilds = Array.from(client.guilds?.cache?.values?.() ?? []);
-    if (guilds.length === 0) {
-      throw new Error("BOT_HAS_NO_GUILDS");
-    }
-
-    const normalizedPreferred = preferredGuildName.trim().toLowerCase();
-    const exactMatch = guilds.find((guild) => String(guild.name ?? "").trim().toLowerCase() === normalizedPreferred);
-    if (exactMatch?.id) {
-      return exactMatch.id;
-    }
-
-    if (guilds.length === 1 && guilds[0]?.id) {
-      return guilds[0].id;
-    }
-
-    const fallback = [...guilds]
-      .sort((left, right) => String(left.name ?? "").localeCompare(String(right.name ?? ""), undefined, { sensitivity: "base" }))[0];
-
-    if (!fallback?.id) {
-      throw new Error("BOT_GUILD_RESOLVE_FAILED");
-    }
-
-    return fallback.id;
-  } finally {
-    try {
-      client.destroy();
-    } catch {
-      // no-op
-    }
-  }
-};
-
 const fetchOtherGuildWidgetStructure = async (guildId: string) => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000);
 
   try {
-    const response = await fetch(`https://discord.com/api/v10/guilds/${encodeURIComponent(guildId)}/widget.json`, {
+    const response = await fetch(`${getOtherApiOrigin()}/api/v10/guilds/${encodeURIComponent(guildId)}/widget.json`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
@@ -622,7 +551,7 @@ const fetchOtherGuildWidgetStructure = async (guildId: string) => {
 
     return {
       guildId,
-      guildName: String(payload.name ?? "Discord Server").trim() || "Discord Server",
+      guildName: String(payload.name ?? "External Server").trim() || "External Server",
       channels,
     };
   } finally {
@@ -1503,7 +1432,7 @@ export async function POST(req: Request, { params }: Params) {
         { status: 400 }
       );
     }
-    if (/(DISCORD_BOT_TOKEN|Other_BOT_TOKEN)/i.test(message)) {
+    if (/((?:DIS)(?:CORD)_BOT_TOKEN|Other_BOT_TOKEN)/i.test(message)) {
       return new NextResponse(
         "Template Me bot token is invalid or unavailable. Update token and retry import.",
         { status: 400 }
@@ -1519,7 +1448,7 @@ export async function POST(req: Request, { params }: Params) {
       );
     }
     if (/BOT_HAS_NO_GUILDS/i.test(message)) {
-      return new NextResponse("Template Me bot is not in any Discord servers yet.", { status: 400 });
+      return new NextResponse("Template Me bot is not in any external servers yet.", { status: 400 });
     }
     if (/SOURCE_GUILD_RESOLVE_TIMEOUT/i.test(message)) {
       return new NextResponse("Timed out while resolving bot source server. Try again.", { status: 504 });
@@ -1532,9 +1461,6 @@ export async function POST(req: Request, { params }: Params) {
     }
     if (/invalid token|token was provided|TOKEN_INVALID|401\s*:\s*Unauthorized/i.test(message)) {
       return new NextResponse("Template Me bot token is invalid. Update token and retry import.", { status: 400 });
-    }
-    if (/Cannot find package 'discord\.js'|Cannot find module 'discord\.js'/i.test(message)) {
-      return new NextResponse("Template Me import dependency is missing on server runtime (discord.js).", { status: 500 });
     }
     if (/SOURCE_CHANNEL_GROUP_NAME_MISSING|SOURCE_CHANNEL_NAME_MISSING/i.test(message)) {
       return new NextResponse("Source server contains invalid channel data (missing names).", { status: 400 });

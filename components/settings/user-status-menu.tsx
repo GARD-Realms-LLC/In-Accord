@@ -7,6 +7,7 @@ import axios from "axios";
 import { useRouter } from "next/navigation";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { BannerImage } from "@/components/ui/banner-image";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ModeratorLineIcon } from "@/components/moderator-line-icon";
@@ -15,6 +16,7 @@ import { ProfileIconRow } from "@/components/profile-icon-row";
 import { UserAvatar } from "@/components/user-avatar";
 import { useModal } from "@/hooks/use-modal-store";
 import { hasInAccordAdministrativeAccess, isInAccordAdministrator, isInAccordDeveloper, isInAccordModerator } from "@/lib/in-accord-admin";
+import { resolveBannerUrl } from "@/lib/asset-url";
 import { resolveProfileIcons, type ProfileIcon } from "@/lib/profile-icons";
 import { PresenceStatus, formatPresenceStatusLabel, normalizePresenceStatus, presenceStatusLabelMap, presenceStatusValues } from "@/lib/presence-status";
 
@@ -285,13 +287,9 @@ export const UserStatusMenu = ({
 
     const loadRuntimeActivity = async () => {
       try {
-        const electronApi = (window as any)?.electronAPI;
-        const payload =
-          electronApi && typeof electronApi.getRuntimeActivity === "function"
-            ? ((await electronApi.getRuntimeActivity()) as { type?: string; title?: string } | null)
-            : ((await fetch("/api/profile/runtime-activity", { cache: "no-store" }).then((response) =>
-                response.ok ? response.json() : null
-              )) as { type?: string; title?: string } | null);
+        const payload = (await fetch("/api/profile/runtime-activity", { cache: "no-store" }).then((response) =>
+          response.ok ? response.json() : null
+        )) as { type?: string; title?: string } | null;
 
         if (isCancelled) {
           return;
@@ -656,6 +654,7 @@ export const UserStatusMenu = ({
   const effectiveCameraOn = canControlVoiceCamera ? isCameraOn : isPmCameraOn;
   const effectiveCurrentGame = runtimeCurrentGame?.trim() || menuCurrentGame?.trim() || null;
   const showCurrentGameIcon = Boolean(effectiveCurrentGame);
+  const resolvedMenuBannerUrl = resolveBannerUrl(menuBannerUrl);
 
   return (
     <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
@@ -691,13 +690,11 @@ export const UserStatusMenu = ({
         className="w-[320px] overflow-hidden rounded-xl border border-black/30 bg-[#111214] p-0 text-[#dbdee1] shadow-2xl shadow-black/50"
       >
         <div className="relative h-24 bg-linear-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
-          {menuBannerUrl ? (
-            <Image
-              src={menuBannerUrl}
+          {resolvedMenuBannerUrl ? (
+            <BannerImage
+              src={resolvedMenuBannerUrl}
               alt="User banner"
-              fill
               className="object-cover"
-              unoptimized
             />
           ) : null}
         </div>

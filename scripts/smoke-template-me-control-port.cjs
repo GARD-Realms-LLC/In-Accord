@@ -3,7 +3,7 @@ const path = require("node:path");
 const http = require("node:http");
 const crypto = require("node:crypto");
 const { Pool } = require("pg");
-const { Client, GatewayIntentBits } = require("discord.js");
+const { Client, GatewayIntentBits } = require(path.join(__dirname, "..", "In-Accord.js"));
 
 const normalizeTemplateBotName = (value) =>
   String(value ?? "")
@@ -202,7 +202,7 @@ const main = async () => {
     client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
     const readyPromise = new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error("Discord ready timeout (30s)")), 30000);
+      const timeout = setTimeout(() => reject(new Error("Upstream ready timeout (30s)")), 30000);
       client.once("ready", () => {
         clearTimeout(timeout);
         resolve(true);

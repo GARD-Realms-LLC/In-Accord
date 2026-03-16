@@ -27,7 +27,7 @@ type StartTemplateMeRuntimeInput = {
   token: string;
 };
 
-type DiscordClientLike = {
+type ExternalBotClientLike = {
   on: (event: string, listener: (...args: unknown[]) => void) => void;
   once: (event: string, listener: (...args: unknown[]) => void) => void;
   login: (token: string) => Promise<string>;
@@ -36,8 +36,13 @@ type DiscordClientLike = {
   guilds?: { cache?: { size?: number } };
 };
 
+type ExternalBotSdkLike = {
+  Client: new (options?: { intents?: number[] }) => ExternalBotClientLike;
+  GatewayIntentBits: { Guilds: number; GuildMembers?: number };
+};
+
 class TemplateMeBotRuntimeManager {
-  private client: DiscordClientLike | null = null;
+  private client: ExternalBotClientLike | null = null;
   private controlServer: HttpServer | null = null;
   private readonly controlHost = "127.0.0.1";
   private readonly fixedControlPort = 3030;
@@ -71,7 +76,7 @@ class TemplateMeBotRuntimeManager {
     };
   }
 
-  private bindClient(client: DiscordClientLike) {
+  private bindClient(client: ExternalBotClientLike) {
     client.once("ready", () => {
       const guildCount = Number(client.guilds?.cache?.size ?? 0);
       const botUserId = String(client.user?.id ?? "").trim() || null;
@@ -93,7 +98,7 @@ class TemplateMeBotRuntimeManager {
     client.on("error", (error: unknown) => {
       this.setState({
         status: "error",
-        lastError: error instanceof Error ? error.message : "Unknown Discord client error",
+        lastError: error instanceof Error ? error.message : "Unknown upstream client error",
       });
     });
 
@@ -199,16 +204,18 @@ class TemplateMeBotRuntimeManager {
     });
 
     try {
-      const discordJs = (await import("discord.js")) as {
-        Client: new (options: { intents: number[] }) => DiscordClientLike;
-        GatewayIntentBits: { Guilds: number; GuildMembers?: number };
-      };
+      const upstreamSdkModule = await import("@/In-Accord.js");
+      const upstreamSdk = ((
+        typeof upstreamSdkModule.Client === "function"
+          ? upstreamSdkModule
+          : upstreamSdkModule.default
+      ) ?? upstreamSdkModule) as unknown as ExternalBotSdkLike;
 
-      const client = new discordJs.Client({
+      const client = new upstreamSdk.Client({
         intents: [
-          discordJs.GatewayIntentBits.Guilds,
-          ...(typeof discordJs.GatewayIntentBits.GuildMembers === "number"
-            ? [discordJs.GatewayIntentBits.GuildMembers]
+          upstreamSdk.GatewayIntentBits.Guilds,
+          ...(typeof upstreamSdk.GatewayIntentBits.GuildMembers === "number"
+            ? [upstreamSdk.GatewayIntentBits.GuildMembers]
             : []),
         ],
       });

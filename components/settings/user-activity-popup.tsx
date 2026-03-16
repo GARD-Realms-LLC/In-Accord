@@ -216,13 +216,9 @@ export const UserActivityPopup = ({ initialCurrentGame }: UserActivityPopupProps
   useEffect(() => {
     const loadRuntimeActivity = async () => {
       try {
-        const electronApi = (window as any)?.electronAPI;
-        const payload =
-          electronApi && typeof electronApi.getRuntimeActivity === "function"
-            ? ((await electronApi.getRuntimeActivity()) as RuntimeActivity)
-            : ((await fetch("/api/profile/runtime-activity", { cache: "no-store" }).then((response) =>
-                response.ok ? response.json() : null
-              )) as RuntimeActivity);
+        const payload = (await fetch("/api/profile/runtime-activity", { cache: "no-store" }).then((response) =>
+          response.ok ? response.json() : null
+        )) as RuntimeActivity;
         const runtimeType = String(payload?.type ?? "").trim().toLowerCase();
         const runtimeTitle = String(payload?.title ?? "").trim();
 

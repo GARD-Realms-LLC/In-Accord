@@ -151,7 +151,7 @@ const resolveLanguagePreference = (value: string) => {
   return languageOptions.some((option) => option.value === value) ? value : "en-US";
 };
 
-type DesktopSignInFormProps = {
+type SignInFormProps = {
   forcedNextPath?: string;
   contextMessage?: string | null;
 };
@@ -160,6 +160,11 @@ type SessionDiagnosticsPayload = {
   ok?: boolean;
   code?: string;
   message?: string;
+};
+
+const isSafeInternalPath = (value: string) => {
+  const normalized = String(value || "").trim();
+  return normalized.startsWith("/") && !normalized.startsWith("//") && !normalized.startsWith("/\\");
 };
 
 const readResponsePayload = async (response: Response, fallback: string): Promise<SessionDiagnosticsPayload> => {
@@ -183,17 +188,17 @@ const readResponseMessage = async (response: Response, fallback: string) => {
   return payload.message || fallback;
 };
 
-export function DesktopSignInForm({ forcedNextPath, contextMessage = null }: DesktopSignInFormProps) {
+export function SignInForm({ forcedNextPath, contextMessage = null }: SignInFormProps) {
   const router = useRouter();
   const search = useSearchParams();
 
   const searchNextPath = useMemo(() => {
     const raw = String(search?.get("next") || "").trim();
-    return raw.startsWith("/") ? raw : "";
+    return isSafeInternalPath(raw) ? raw : "";
   }, [search]);
 
   const resolvedFallbackPath = useMemo(() => {
-    if (forcedNextPath && forcedNextPath.startsWith("/")) {
+    if (forcedNextPath && isSafeInternalPath(forcedNextPath)) {
       return forcedNextPath;
     }
 
@@ -215,7 +220,6 @@ export function DesktopSignInForm({ forcedNextPath, contextMessage = null }: Des
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
-  const [buildLabel, setBuildLabel] = useState<string | null>(null);
   const [authStatus, setAuthStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -237,36 +241,7 @@ export function DesktopSignInForm({ forcedNextPath, contextMessage = null }: Des
       // ignore local storage failures
     }
 
-    const electronApi = (window as typeof window & {
-      electronAPI?: {
-        getRuntimeMeta?: () => Promise<{ appVersion?: string; internalVersion?: string } | null>;
-      };
-    }).electronAPI;
-
     let cancelled = false;
-
-    if (electronApi?.getRuntimeMeta) {
-      void electronApi
-        .getRuntimeMeta()
-        .then((meta) => {
-          if (cancelled) {
-            return;
-          }
-
-          const displayVersion = String(meta?.appVersion || "").trim();
-          const internalVersion = String(meta?.internalVersion || "").trim();
-          if (!displayVersion && !internalVersion) {
-            return;
-          }
-
-          setBuildLabel(
-            internalVersion && internalVersion !== displayVersion
-              ? `Build ${displayVersion} (${internalVersion})`
-              : `Build ${displayVersion || internalVersion}`
-          );
-        })
-        .catch(() => undefined);
-    }
 
     void fetch(`/api/auth/session?diagnostics=1&_t=${Date.now()}`, {
       method: "GET",
@@ -286,17 +261,17 @@ export function DesktopSignInForm({ forcedNextPath, contextMessage = null }: Des
           return;
         }
 
-        const payload = await readResponsePayload(response, "Desktop session validation failed. Please sign in again.");
+        const payload = await readResponsePayload(response, "Session validation failed. Please sign in again.");
         if (payload.code === "no-session-cookie") {
           setAuthStatus(null);
           return;
         }
 
-        setAuthStatus(payload.message || "Desktop session validation failed. Please sign in again.");
+        setAuthStatus(payload.message || "Session validation failed. Please sign in again.");
       })
       .catch(() => {
         if (!cancelled) {
-          setAuthStatus("Desktop session validation could not be completed. Please sign in again.");
+          setAuthStatus("Session validation could not be completed. Please sign in again.");
         }
       });
 
@@ -335,7 +310,7 @@ export function DesktopSignInForm({ forcedNextPath, contextMessage = null }: Des
         | { redirectTo?: string }
         | null;
       const redirectTo =
-        payload?.redirectTo && payload.redirectTo.startsWith("/")
+        payload?.redirectTo && isSafeInternalPath(payload.redirectTo)
           ? payload.redirectTo
           : resolvedFallbackPath;
 
@@ -349,12 +324,7 @@ export function DesktopSignInForm({ forcedNextPath, contextMessage = null }: Des
       });
 
       if (!sessionResponse.ok) {
-        setError(await readResponseMessage(sessionResponse, "Desktop session validation failed after sign-in."));
-        return;
-      }
-
-      if (typeof window !== "undefined") {
-        window.location.assign(redirectTo);
+        setError(await readResponseMessage(sessionResponse, "Session validation failed after sign-in."));
         return;
       }
 
@@ -383,7 +353,7 @@ export function DesktopSignInForm({ forcedNextPath, contextMessage = null }: Des
       <div className="space-y-1">
         <div className="flex items-start justify-between gap-3">
           <h1 className="text-xl font-bold">{copy.title}</h1>
-          <label className="flex min-w-[150px] flex-col gap-1 text-xs text-zinc-300">
+          <label className="flex min-w-37.5 flex-col gap-1 text-xs text-zinc-300">
             <span>{copy.language}</span>
             <select
               value={languagePreference}
@@ -398,7 +368,6 @@ export function DesktopSignInForm({ forcedNextPath, contextMessage = null }: Des
             </select>
           </label>
         </div>
-        {buildLabel ? <p className="text-xs text-zinc-400">{buildLabel}</p> : null}
       </div>
       {contextMessage ? (
         <div className="rounded-md border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-sm text-sky-100">

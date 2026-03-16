@@ -344,7 +344,7 @@ body,
   filter: none !important;
 }
 
-/* Keep text rendering crisp and Discord-like (no global 3D shadow treatment). */
+/* Keep text rendering crisp and chat-app-like (no global 3D shadow treatment). */
 .floating-3d-text {
   text-shadow: none !important;
   -webkit-text-stroke: 0 !important;
@@ -674,7 +674,7 @@ body,
   background-color: hsl(var(--card));
 }
 
-/* Keep server rail controls flat like Discord. */
+/* Keep server rail controls flat like the app shell design. */
 .theme-servers-rail :is(button, a, [role="button"]) {
   box-shadow: none !important;
 }

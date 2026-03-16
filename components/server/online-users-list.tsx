@@ -8,6 +8,7 @@ import axios from "axios";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ActionTooltip } from "@/components/action-tooltip";
+import { BannerImage } from "@/components/ui/banner-image";
 import { BotAppBadge } from "@/components/bot-app-badge";
 import { ModeratorLineIcon } from "@/components/moderator-line-icon";
 import { NewUserCloverBadge } from "@/components/new-user-clover-badge";
@@ -18,6 +19,7 @@ import { BotCommandsDialog } from "@/components/bot-commands-dialog";
 import { MemberRole } from "@/lib/db/types";
 import { isInAccordAdministrator, isInAccordDeveloper, isInAccordModerator } from "@/lib/in-accord-admin";
 import { isBotUser } from "@/lib/is-bot-user";
+import { resolveBannerUrl } from "@/lib/asset-url";
 import { resolveProfileIcons, type ProfileIcon } from "@/lib/profile-icons";
 import { formatPresenceStatusLabel, normalizePresenceStatus, presenceStatusDotClassMap } from "@/lib/presence-status";
 
@@ -626,15 +628,13 @@ export const OnlineUsersList = ({
           className="w-[320px] overflow-hidden rounded-xl border border-black/30 bg-[#111214] p-0 text-[#dbdee1] shadow-2xl shadow-black/50"
         >
           <div className="relative h-24 bg-linear-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
-            {(profileCard?.effectiveBannerUrl || member.bannerUrl) ? (
-              <Image
-                src={profileCard?.effectiveBannerUrl || member.bannerUrl || ""}
-                alt="User banner"
-                fill
-                className="object-cover"
-                unoptimized
-              />
-            ) : null}
+            {(() => {
+              const resolvedBannerUrl = resolveBannerUrl(profileCard?.effectiveBannerUrl || member.bannerUrl || null);
+
+              return resolvedBannerUrl ? (
+              <BannerImage src={resolvedBannerUrl} alt="User banner" className="object-cover" />
+              ) : null;
+            })()}
           </div>
 
           <div className="relative p-3 pt-9">

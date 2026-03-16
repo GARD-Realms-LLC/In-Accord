@@ -23,6 +23,7 @@ import { listThreadsForMessages } from "@/lib/channel-threads";
 import { listActiveVoiceMembersForChannel, pruneStaleVoiceStates } from "@/lib/voice-states";
 import { resolveChannelRouteContext, resolveServerRouteContext } from "@/lib/route-slug-resolver";
 import { buildChannelPath, buildServerPath } from "@/lib/route-slugs";
+import { pickDefaultServerChannel } from "@/lib/default-server-channel";
 
 interface ChannelIdPageProps {
   params: Promise<{
@@ -107,10 +108,7 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
     });
 
     const visibleChannels = channels.filter((item) => visibleIds.has(item.id));
-    const defaultChannel =
-      visibleChannels.find((item) => item.type === ChannelType.TEXT) ??
-      visibleChannels[0] ??
-      null;
+    const defaultChannel = pickDefaultServerChannel(visibleChannels);
 
     if (!defaultChannel) {
       return null;
@@ -657,6 +655,7 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
                   initialReactionsByMessageId={initialLiveReactions}
                   initialThreadsBySourceMessageId={initialLiveThreads}
                   currentMember={currentMember}
+                  currentProfile={profile}
                   socketUrl="/api/socket/messages"
                   socketQuery={{ channelId: currentChannel.id, serverId: currentChannel.serverId }}
                   serverId={currentChannel.serverId}
@@ -697,6 +696,7 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
             initialReactionsByMessageId={initialLiveReactions}
             initialThreadsBySourceMessageId={initialLiveThreads}
             currentMember={currentMember}
+            currentProfile={profile}
             socketUrl="/api/socket/messages"
             socketQuery={{ channelId: currentChannel.id, serverId: currentChannel.serverId }}
             serverId={currentChannel.serverId}

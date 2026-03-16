@@ -8,10 +8,6 @@ type SupportHelpControlsProps = {
   supportUrl?: string;
   panelTop?: number;
   openBugCount?: number;
-  showUpdaterIcon?: boolean;
-  updaterBusy?: boolean;
-  updaterTitle?: string;
-  onOpenUpdater?: () => void;
   profileId?: string;
   profileName?: string;
   profileRole?: string;
@@ -24,10 +20,6 @@ export const SupportHelpControls = ({
   supportUrl,
   panelTop = 56,
   openBugCount = 0,
-  showUpdaterIcon = false,
-  updaterBusy = false,
-  updaterTitle = "Open updater",
-  onOpenUpdater,
   profileId,
   profileName,
   profileRole,
@@ -82,10 +74,6 @@ export const SupportHelpControls = ({
           <NavigationBetaBugRow
             showBugReportsIcon={true}
             openBugCount={openBugCount}
-            showUpdaterIcon={showUpdaterIcon}
-            updaterBusy={updaterBusy}
-            updaterTitle={updaterTitle}
-            onOpenUpdater={onOpenUpdater}
             profileId={profileId}
             profileName={profileName}
             profileRole={profileRole}

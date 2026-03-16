@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { Readable, Transform } from "node:stream";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 
+import { appendBannerDebugEvent } from "@/lib/banner-debug";
+
 const accountId = process.env.CLOUDFLARE_R2_ACCOUNT_ID;
 const accessKeyId = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID;
 const secretAccessKey = process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY;
@@ -79,6 +81,8 @@ export async function GET(req: Request) {
 
     const { searchParams } = new URL(req.url);
     const key = searchParams.get("key");
+    const userAgent = req.headers.get("user-agent");
+    const referer = req.headers.get("referer");
 
     if (!key) {
       return new NextResponse("key is required", { status: 400 });
@@ -129,6 +133,19 @@ export async function GET(req: Request) {
     const shouldGuardAtRuntime = contentLength === null;
 
     if (body instanceof Readable) {
+      void appendBannerDebugEvent({
+        source: "api/r2/object",
+        stage: "stream",
+        requestUrl: req.url,
+        key,
+        status: 200,
+        metadata: {
+          contentType,
+          contentLength,
+          userAgent,
+          referer,
+        },
+      });
       const effectiveBody = shouldGuardAtRuntime ? guardReadableByteLimit(body, MAX_R2_OBJECT_BYTES) : body;
       logPerf("r2.object.get", startedAtMs, `status=200 mode=node-readable guarded=${shouldGuardAtRuntime}`);
       return new Response(Readable.toWeb(effectiveBody) as unknown as ReadableStream, {
@@ -141,6 +158,19 @@ export async function GET(req: Request) {
       const webStream = (body as { transformToWebStream: () => NodeReadableStream }).transformToWebStream();
       const nodeBody = Readable.fromWeb(webStream);
       const effectiveBody = shouldGuardAtRuntime ? guardReadableByteLimit(nodeBody, MAX_R2_OBJECT_BYTES) : nodeBody;
+      void appendBannerDebugEvent({
+        source: "api/r2/object",
+        stage: "stream",
+        requestUrl: req.url,
+        key,
+        status: 200,
+        metadata: {
+          contentType,
+          contentLength,
+          userAgent,
+          referer,
+        },
+      });
       logPerf("r2.object.get", startedAtMs, `status=200 mode=web-stream guarded=${shouldGuardAtRuntime}`);
       return new Response(Readable.toWeb(effectiveBody) as unknown as ReadableStream, {
         status: 200,
@@ -150,6 +180,18 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ error: "Unsupported object stream type" }, { status: 500 });
   } catch (error) {
+    void appendBannerDebugEvent({
+      source: "api/r2/object",
+      stage: "error",
+      requestUrl: req.url,
+      key: new URL(req.url).searchParams.get("key"),
+      status: 404,
+      detail: error instanceof Error ? error.message : String(error ?? "Unknown error"),
+      metadata: {
+        userAgent: req.headers.get("user-agent"),
+        referer: req.headers.get("referer"),
+      },
+    });
     logPerf("r2.object.get", startedAtMs, "status=404");
     console.error("[R2_OBJECT_GET]", error);
     return new NextResponse("Not found", { status: 404 });

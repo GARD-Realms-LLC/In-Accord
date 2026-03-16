@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { appendBannerDebugEvent } from "@/lib/banner-debug";
+import { resolveBannerUrl } from "@/lib/asset-url";
 import { currentProfile } from "@/lib/current-profile";
 import { hasSucceededPatronage } from "@/lib/patronage";
 import { resolveProfileIcons } from "@/lib/profile-icons";
@@ -13,6 +15,17 @@ export async function GET() {
     }
 
     const isPatron = await hasSucceededPatronage(profile.id);
+    const resolvedBannerUrl = resolveBannerUrl(profile.bannerUrl);
+
+    void appendBannerDebugEvent({
+      source: "api/profile/me",
+      stage: "response",
+      rawValue: profile.bannerUrl,
+      resolvedValue: resolvedBannerUrl,
+      metadata: {
+        profileId: profile.id,
+      },
+    });
 
     return NextResponse.json({
       id: profile.id,
@@ -28,7 +41,7 @@ export async function GET() {
       avatarDecorationUrl: profile.avatarDecorationUrl ?? null,
       phoneNumber: profile.phoneNumber ?? null,
       dateOfBirth: profile.dateOfBirth ?? null,
-      bannerUrl: profile.bannerUrl ?? null,
+      bannerUrl: resolvedBannerUrl,
       presenceStatus: profile.presenceStatus ?? "ONLINE",
       currentGame: profile.currentGame ?? null,
       role: profile.role ?? null,

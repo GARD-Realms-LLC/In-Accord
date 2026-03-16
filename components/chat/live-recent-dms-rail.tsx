@@ -9,6 +9,7 @@ import {
   type LocalChatMutationDetail,
 } from "@/lib/chat-live-events";
 import { resolveAbsoluteAppUrl, resolveRuntimeAppOrigin } from "@/lib/client-runtime-url";
+import { REALTIME_DM_RAIL_REFRESH_EVENT } from "@/lib/realtime-events";
 
 type RecentDmRailItem = {
   conversationId: string;
@@ -32,8 +33,6 @@ type LiveRecentDmsRailProps = {
   selectedConversationId?: string | null;
   selectedServerId?: string | null;
 };
-
-const REALTIME_REFRESH_EVENT = "inaccord:refresh";
 
 export const LiveRecentDmsRail = ({
   initialItems,
@@ -117,9 +116,18 @@ export const LiveRecentDmsRail = ({
       socket.emit?.("inaccord:join", roomPayload);
     };
 
+    const onConnect = () => {
+      joinRoom();
+      void refreshRail();
+    };
+
     const onLocalMutation = (event: Event) => {
       const detail = (event as CustomEvent<LocalChatMutationDetail>).detail;
       if (detail?.scope !== "conversation") {
+        return;
+      }
+
+      if (detail.state === "optimistic" || detail.state === "failed") {
         return;
       }
 
@@ -135,14 +143,15 @@ export const LiveRecentDmsRail = ({
     }
 
     joinRoom();
-    socket.on?.(REALTIME_REFRESH_EVENT, onRefresh);
-    socket.on?.("connect", joinRoom);
+    void refreshRail();
+    socket.on?.(REALTIME_DM_RAIL_REFRESH_EVENT, onRefresh);
+    socket.on?.("connect", onConnect);
 
     return () => {
       window.removeEventListener(LOCAL_CHAT_MUTATION_EVENT, onLocalMutation as EventListener);
       socket.emit?.("inaccord:leave", roomPayload);
-      socket.off?.(REALTIME_REFRESH_EVENT, onRefresh);
-      socket.off?.("connect", joinRoom);
+      socket.off?.(REALTIME_DM_RAIL_REFRESH_EVENT, onRefresh);
+      socket.off?.("connect", onConnect);
     };
   }, [refreshRail, roomPayload, socket]);
 

@@ -2,6 +2,8 @@ import { v4 as uuidv4 } from "uuid";
 import { NextResponse } from "next/server";
 import { eq, sql } from "drizzle-orm";
 
+import { appendBannerDebugEvent } from "@/lib/banner-debug";
+import { resolveBannerUrl } from "@/lib/asset-url";
 import { currentProfile } from "@/lib/current-profile";
 import { channel, ChannelType, db, MemberRole, member, server } from "@/lib/db";
 import { getServerBannerConfig, setServerBannerConfig } from "@/lib/server-banner-store";
@@ -163,12 +165,24 @@ export async function POST(req: Request) {
     });
 
     const resolvedBanner = await getServerBannerConfig(serverId);
+    const resolvedBannerUrl = resolveBannerUrl(resolvedBanner?.url ?? null);
+
+    void appendBannerDebugEvent({
+      source: "api/servers",
+      stage: "post-create",
+      rawValue: resolvedBanner?.url ?? null,
+      resolvedValue: resolvedBannerUrl,
+      metadata: {
+        serverId,
+        ownerProfileId: profile.id,
+      },
+    });
 
     return NextResponse.json(
       createdServer
         ? {
             ...createdServer,
-            bannerUrl: resolvedBanner?.url ?? null,
+            bannerUrl: resolvedBannerUrl,
             bannerFit: resolvedBanner?.fit ?? "cover",
             bannerScale: resolvedBanner?.scale ?? 1,
           }

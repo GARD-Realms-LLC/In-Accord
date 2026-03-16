@@ -8,11 +8,13 @@ import { ensureChannelThreadSchema, markThreadRead, touchThreadActivity } from "
 import { computeChannelPermissionForRole } from "@/lib/channel-permissions";
 import { executeServerSlashCommand } from "@/lib/slash-commands";
 import { parseMentionSegments } from "@/lib/mentions";
-import { publishRealtimeEvent, publishRealtimeRefresh } from "@/lib/realtime-events-server";
+import { publishRealtimeEvent } from "@/lib/realtime-events-server";
+import {
+  REALTIME_CHANNEL_MESSAGE_CREATED_EVENT,
+  REALTIME_CHANNEL_REFRESH_EVENT,
+} from "@/lib/realtime-events";
 import { getUserProfileNameMap } from "@/lib/user-profile";
 import { listThreadsForMessages } from "@/lib/channel-threads";
-
-const CHANNEL_MESSAGE_CREATED_EVENT = "inaccord:message-created";
 
 const formatTimestamp = (value: Date | string) => {
   const parsed = value instanceof Date ? value : new Date(value);
@@ -346,7 +348,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const profile = await currentProfile();
-    const { content, fileUrl } = await req.json();
+    const { content, fileUrl, clientMutationId } = await req.json();
     const { searchParams } = new URL(req.url);
 
     const serverId = searchParams.get("serverId");
@@ -505,7 +507,8 @@ export async function POST(req: Request) {
           });
         }
 
-        await publishRealtimeRefresh(
+        await publishRealtimeEvent(
+          REALTIME_CHANNEL_REFRESH_EVENT,
           {
             serverId,
             channelId: currentChannel.id,
@@ -514,7 +517,20 @@ export async function POST(req: Request) {
           { entity: "message", action: "created" }
         );
 
-        return NextResponse.json(insertedResponse);
+        const serializedInsertedResponse = await getSerializedChannelMessageById(insertedResponse.id);
+        const normalizedClientMutationId =
+          typeof clientMutationId === "string" && clientMutationId.trim().length > 0
+            ? clientMutationId.trim()
+            : undefined;
+
+        return NextResponse.json(
+          serializedInsertedResponse
+            ? {
+                ...serializedInsertedResponse,
+                clientMutationId: normalizedClientMutationId,
+              }
+            : insertedResponse
+        );
       }
     }
 
@@ -569,10 +585,14 @@ export async function POST(req: Request) {
 
     try {
       const serializedInserted = await getSerializedChannelMessageById(inserted.id);
+      const normalizedClientMutationId =
+        typeof clientMutationId === "string" && clientMutationId.trim().length > 0
+          ? clientMutationId.trim()
+          : undefined;
 
       if (serializedInserted) {
         await publishRealtimeEvent(
-          CHANNEL_MESSAGE_CREATED_EVENT,
+          REALTIME_CHANNEL_MESSAGE_CREATED_EVENT,
           {
             serverId,
             channelId: currentChannel.id,
@@ -581,7 +601,10 @@ export async function POST(req: Request) {
           {
             entity: "message",
             action: "created",
-            message: serializedInserted,
+            message: {
+              ...serializedInserted,
+              clientMutationId: normalizedClientMutationId,
+            },
             thread: normalizedThreadId
               ? {
                   id: normalizedThreadId,
@@ -590,7 +613,8 @@ export async function POST(req: Request) {
           }
         );
       } else {
-        await publishRealtimeRefresh(
+        await publishRealtimeEvent(
+          REALTIME_CHANNEL_REFRESH_EVENT,
           {
             serverId,
             channelId: currentChannel.id,
@@ -601,7 +625,8 @@ export async function POST(req: Request) {
       }
     } catch (realtimeError) {
       console.error("[SOCKET_MESSAGES_POST_REALTIME]", realtimeError);
-      await publishRealtimeRefresh(
+      await publishRealtimeEvent(
+        REALTIME_CHANNEL_REFRESH_EVENT,
         {
           serverId,
           channelId: currentChannel.id,
@@ -611,7 +636,20 @@ export async function POST(req: Request) {
       );
     }
 
-    return NextResponse.json(inserted);
+    const serializedInserted = await getSerializedChannelMessageById(inserted.id);
+    const normalizedClientMutationId =
+      typeof clientMutationId === "string" && clientMutationId.trim().length > 0
+        ? clientMutationId.trim()
+        : undefined;
+
+    return NextResponse.json(
+      serializedInserted
+        ? {
+            ...serializedInserted,
+            clientMutationId: normalizedClientMutationId,
+          }
+        : inserted
+    );
   } catch (error) {
     console.error("[SOCKET_MESSAGES_POST]", error);
     return new NextResponse("Internal Error", { status: 500 });

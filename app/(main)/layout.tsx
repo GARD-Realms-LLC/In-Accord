@@ -1,6 +1,6 @@
 import { NavigationSidebar } from "@/components/navigation/navigation-sidebar";
 import { LastLocationTracker } from "@/components/navigation/last-location-tracker";
-import { DesktopSignInForm } from "@/components/auth/desktop-sign-in-form";
+import { SignInForm } from "@/components/auth/sign-in-form";
 
 import { currentProfile } from "@/lib/current-profile";
 import { UserActivityPopup } from "@/components/settings/user-activity-popup";
@@ -11,7 +11,7 @@ const MainLayout = async ({ children }: { children: React.ReactNode }) => {
   const profile = await currentProfile();
 
   if (!profile) {
-    return <DesktopSignInForm contextMessage="Sign in is required to open this desktop page." />;
+    return <SignInForm contextMessage="Sign in is required to open this page." />;
   }
 
   return (

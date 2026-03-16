@@ -1,13 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   distDir: process.env.NEXT_DIST_DIR || ".next",
-  serverExternalPackages: [
-    "discord.js",
-    "@discordjs/ws",
-    "zlib-sync",
-    "bufferutil",
-    "utf-8-validate",
-  ],
+  serverExternalPackages: ["zlib-sync", "bufferutil", "utf-8-validate"],
   typescript: {
     ignoreBuildErrors: process.env.NEXT_IGNORE_TYPE_ERRORS === "1",
   },
@@ -50,8 +44,6 @@ const nextConfig = {
   },
   turbopack: {
     resolveAlias: {
-      "discord.js": "./lib/shims/discord-client-shim.js",
-      "@discordjs/ws": "./lib/shims/empty-client-module.js",
       "zlib-sync": "./lib/shims/empty-client-module.js",
       bufferutil: "./lib/shims/empty-client-module.js",
       "utf-8-validate": "./lib/shims/empty-client-module.js",
@@ -68,8 +60,6 @@ const nextConfig = {
       config.resolve = config.resolve || {};
       config.resolve.alias = {
         ...(config.resolve.alias || {}),
-        "discord.js": require("node:path").resolve(__dirname, "./lib/shims/discord-client-shim.js"),
-        "@discordjs/ws": require("node:path").resolve(__dirname, "./lib/shims/empty-client-module.js"),
         "zlib-sync": require("node:path").resolve(__dirname, "./lib/shims/empty-client-module.js"),
         bufferutil: require("node:path").resolve(__dirname, "./lib/shims/empty-client-module.js"),
         "utf-8-validate": require("node:path").resolve(__dirname, "./lib/shims/empty-client-module.js"),

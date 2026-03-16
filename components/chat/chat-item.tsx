@@ -24,6 +24,7 @@ import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { BannerImage } from "@/components/ui/banner-image";
 import { useModal } from "@/hooks/use-modal-store";
 import { getInAccordStaffLabel, isInAccordAdministrator, isInAccordDeveloper, isInAccordModerator } from "@/lib/in-accord-admin";
 import { isBotUser } from "@/lib/is-bot-user";
@@ -32,6 +33,7 @@ import { parseMentionSegments } from "@/lib/mentions";
 import { extractUrlsFromText, splitTextWithUrls } from "@/lib/link-previews";
 import { resolveProfileIcons, type ProfileIcon } from "@/lib/profile-icons";
 import { emitLocalChatMutationForRoute } from "@/lib/chat-live-events";
+import { resolveBannerUrl } from "@/lib/asset-url";
 
 interface ChatItemProps {
   id: string;
@@ -1388,7 +1390,9 @@ export const ChatItem = ({
     : isInAccordModerator(member.role)
       ? "Moderator"
       : String(member.role ?? "User");
-  const effectiveBannerUrl = profileCard?.effectiveBannerUrl ?? profileCard?.bannerUrl ?? null;
+  const effectiveBannerUrl = resolveBannerUrl(
+    profileCard?.effectiveBannerUrl ?? profileCard?.bannerUrl ?? null
+  );
   const effectiveAvatarDecorationUrl =
     profileCard?.effectiveAvatarDecorationUrl ?? profileCard?.avatarDecorationUrl ?? null;
   const effectiveProfileIcons =
@@ -1803,12 +1807,10 @@ export const ChatItem = ({
           >
             <div className="relative h-24 bg-linear-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
               {effectiveBannerUrl ? (
-                <Image
+                <BannerImage
                   src={effectiveBannerUrl}
                   alt="User banner"
-                  fill
                   className="object-cover"
-                  unoptimized
                 />
               ) : null}
             </div>

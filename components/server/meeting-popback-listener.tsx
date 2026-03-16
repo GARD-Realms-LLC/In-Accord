@@ -82,27 +82,12 @@ export const MeetingPopbackListener = ({
       }
     };
 
-    const electronApi = (window as any).electronAPI;
-    const disposePopoutClosed =
-      typeof electronApi?.onMeetingPopoutClosed === "function"
-        ? electronApi.onMeetingPopoutClosed((payload: { serverId?: string | null; channelId?: string | null }) => {
-            if (payload?.serverId !== serverId || payload?.channelId !== channelId) {
-              return;
-            }
-
-            syncBackToMeeting();
-          })
-        : null;
-
     window.addEventListener("message", onPopbackMessage);
     window.addEventListener("storage", onPopbackStorage);
 
     return () => {
       window.removeEventListener("message", onPopbackMessage);
       window.removeEventListener("storage", onPopbackStorage);
-      if (typeof disposePopoutClosed === "function") {
-        disposePopoutClosed();
-      }
     };
   }, [channelId, channelPath, enabled, router, serverId]);
 

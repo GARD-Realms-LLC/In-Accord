@@ -1,7 +1,6 @@
 "use client";
 
-import Image from "next/image";
-
+import { BannerImage } from "@/components/ui/banner-image";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { UserAvatar } from "@/components/user-avatar";
 import { resolveBannerUrl } from "@/lib/asset-url";
@@ -61,12 +60,10 @@ export const ServerProfilePopover = ({ server }: ServerProfilePopoverProps) => {
       >
         <div className="relative h-24 bg-gradient-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
           {resolvedBannerUrl ? (
-            <Image
+            <BannerImage
               src={resolvedBannerUrl}
               alt="Server banner"
-              fill
               className="object-cover"
-              unoptimized
             />
           ) : null}
         </div>

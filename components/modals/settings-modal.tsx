@@ -61,9 +61,10 @@ import { loadStripe, type StripeElementsOptions } from "@stripe/stripe-js";
 import { ModeToggle } from "@/components/mode-toggle";
 import { ModeratorLineIcon } from "@/components/moderator-line-icon";
 import { BusinessMemberIcon } from "@/components/business-member-icon";
-import { OtherDeveloperPanel } from "@/components/settings/discord-developer-panel";
+import { OtherDeveloperPanel } from "@/components/settings/other-developer-panel";
 import { FileUpload } from "@/components/file-upload";
 import { Button } from "@/components/ui/button";
+import { BannerImage } from "@/components/ui/banner-image";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { NameplatePill } from "@/components/nameplate-pill";
 import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
@@ -95,6 +96,7 @@ import {
 } from "@/lib/profile-name-styles";
 import { formatPresenceStatusLabel, normalizePresenceStatus, presenceStatusLabelMap } from "@/lib/presence-status";
 import { resolveProfileIcons } from "@/lib/profile-icons";
+import { resolveBannerUrl } from "@/lib/asset-url";
 import type {
   AdvancedPreferences,
   ActivityPrivacyPreferences,
@@ -4585,31 +4587,6 @@ export const SettingsModal = () => {
     try {
       setIsLoadingDetectedRegisteredGames(true);
 
-      const electronApi = typeof window !== "undefined" ? (window as any)?.electronAPI : null;
-      if (electronApi && typeof electronApi.getInstalledGames === "function") {
-        const nativeResponse = (await electronApi.getInstalledGames()) as {
-          games?: RegisteredConnectionGame[];
-          source?: RegisteredGamesProviderState["source"];
-        };
-
-        const nativeGames = Array.isArray(nativeResponse?.games)
-          ? nativeResponse.games.filter(
-              (entry): entry is RegisteredConnectionGame => Boolean(entry && typeof entry === "object")
-            )
-          : [];
-
-        const source = nativeResponse?.source ?? "native-installed-scan";
-        setDetectedRegisteredGames(nativeGames);
-        setRegisteredGamesProviderStates({
-          local: {
-            source,
-            count: nativeGames.length,
-          },
-        });
-        return;
-      }
-
-      // Native bridge unavailable: fetch native-only local installed scan from server API.
       const response = await axios.get<{
         detectedGames?: RegisteredConnectionGame[];
         providerStates?: Record<string, RegisteredGamesProviderState>;
@@ -4655,29 +4632,8 @@ export const SettingsModal = () => {
     try {
       setIsLoadingRunningApps(true);
 
-      const electronApi = typeof window !== "undefined" ? (window as any)?.electronAPI : null;
-      if (!electronApi || typeof electronApi.getRunningApps !== "function") {
-        setRunningApps([]);
-        setSelectedRunningAppId("");
-        return;
-      }
-
-      const response = (await electronApi.getRunningApps()) as {
-        apps?: RunningAppEntry[];
-      };
-
-      const apps = Array.isArray(response?.apps)
-        ? response.apps.filter((entry): entry is RunningAppEntry => Boolean(entry && typeof entry === "object"))
-        : [];
-
-      setRunningApps(apps);
-      setSelectedRunningAppId((current) => {
-        if (current && apps.some((entry) => entry.id === current)) {
-          return current;
-        }
-
-        return apps[0]?.id ?? "";
-      });
+      setRunningApps([]);
+      setSelectedRunningAppId("");
     } catch {
       setRunningApps([]);
       setSelectedRunningAppId("");
@@ -7386,6 +7342,10 @@ export const SettingsModal = () => {
         null;
       const previewBannerUrl =
         serverProfileBannerInput.trim() || selectedServer?.effectiveBannerUrl || bannerUrl || null;
+      const resolvedPreviewBannerUrl = resolveBannerUrl(previewBannerUrl);
+      const resolvedServerBannerPanelPreviewUrl = resolveBannerUrl(
+        serverProfileBannerInput.trim() || selectedServer?.effectiveBannerUrl || bannerUrl || null
+      );
 
       return (
         <div className="space-y-4">
@@ -7432,13 +7392,11 @@ export const SettingsModal = () => {
 
                     <div className="mt-2 overflow-hidden rounded-xl border border-white/10 bg-[#111214] text-[#dbdee1] shadow-lg shadow-black/40">
                       <div className="relative h-24 bg-linear-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
-                        {previewBannerUrl ? (
-                          <Image
-                            src={previewBannerUrl}
+                        {resolvedPreviewBannerUrl ? (
+                          <BannerImage
+                            src={resolvedPreviewBannerUrl}
                             alt="Profile preview banner"
-                            fill
                             className="object-cover"
-                            unoptimized
                           />
                         ) : null}
                       </div>
@@ -7675,13 +7633,11 @@ export const SettingsModal = () => {
 
                         <div className="overflow-hidden rounded-xl border border-white/10 bg-[#111214]">
                           <div className="relative h-28 bg-linear-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
-                            {(serverProfileBannerInput.trim() || selectedServer?.effectiveBannerUrl || bannerUrl) ? (
-                              <Image
-                                src={serverProfileBannerInput.trim() || selectedServer?.effectiveBannerUrl || bannerUrl || ""}
+                            {resolvedServerBannerPanelPreviewUrl ? (
+                              <BannerImage
+                                src={resolvedServerBannerPanelPreviewUrl}
                                 alt="Server banner preview"
-                                fill
                                 className="object-cover"
-                                unoptimized
                               />
                             ) : null}
                           </div>
@@ -7725,12 +7681,10 @@ export const SettingsModal = () => {
                                   title="Use this uploaded banner"
                                 >
                                   <div className="relative h-10 w-full">
-                                    <Image
+                                    <BannerImage
                                       src={thumbnailUrl}
                                       alt="Uploaded banner thumbnail"
-                                      fill
                                       className="object-cover"
-                                      unoptimized
                                     />
                                   </div>
                                 </button>
@@ -12835,13 +12789,11 @@ export const SettingsModal = () => {
 
                         <div className="mt-2 overflow-hidden rounded-xl border border-white/10 bg-[#111214] text-[#dbdee1] shadow-lg shadow-black/40">
                           <div className="relative h-24 bg-linear-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
-                            {bannerUrl ? (
-                              <Image
-                                src={bannerUrl}
+                            {resolveBannerUrl(bannerUrl) ? (
+                              <BannerImage
+                                src={resolveBannerUrl(bannerUrl) as string}
                                 alt="Default profile preview banner"
-                                fill
                                 className="object-cover"
-                                unoptimized
                               />
                             ) : null}
                           </div>
@@ -13248,13 +13200,11 @@ export const SettingsModal = () => {
                             <div className="space-y-4">
                               <div className="overflow-hidden rounded-xl border border-white/10 bg-[#111214]">
                                 <div className="relative h-28 bg-linear-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
-                                  {bannerUrl ? (
-                                    <Image
-                                      src={bannerUrl}
+                                  {resolveBannerUrl(bannerUrl) ? (
+                                    <BannerImage
+                                      src={resolveBannerUrl(bannerUrl) as string}
                                       alt="Default profile banner preview"
-                                      fill
                                       className="object-cover"
-                                      unoptimized
                                     />
                                   ) : null}
                                 </div>
@@ -13286,12 +13236,10 @@ export const SettingsModal = () => {
                                         title="Use this uploaded banner"
                                       >
                                         <div className="relative h-10 w-full">
-                                          <Image
-                                            src={thumbnailUrl}
+                                          <BannerImage
+                                            src={resolveBannerUrl(thumbnailUrl) ?? thumbnailUrl}
                                             alt="Uploaded banner thumbnail"
-                                            fill
                                             className="object-cover"
-                                            unoptimized
                                           />
                                         </div>
                                       </button>

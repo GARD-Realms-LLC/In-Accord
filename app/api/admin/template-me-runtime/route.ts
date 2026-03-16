@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { currentProfile } from "@/lib/current-profile";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
+import { getOtherApiOrigin } from "@/lib/other-upstream-identifiers";
 import { ensureTemplateMeBotConfigForUser } from "@/lib/template-me-bot-config";
 import { getTemplateMeBotRuntimeManager } from "@/lib/template-me-bot-runtime";
 import { getDecryptedOtherBotToken, getUserPreferences } from "@/lib/user-preferences";
@@ -41,7 +42,7 @@ const toInviteUrl = (applicationId: string) => {
     return null;
   }
 
-  return `https://discord.com/oauth2/authorize?client_id=${encodeURIComponent(normalized)}&scope=bot%20applications.commands&permissions=8`;
+  return `${getOtherApiOrigin()}/oauth2/authorize?client_id=${encodeURIComponent(normalized)}&scope=bot%20applications.commands&permissions=8`;
 };
 
 export async function GET() {

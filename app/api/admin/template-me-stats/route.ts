@@ -5,6 +5,7 @@ import { currentProfile } from "@/lib/current-profile";
 import { db, member, server } from "@/lib/db";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 import { makeIntegrationBotProfileId } from "@/lib/integration-bot-profile";
+import { getOtherApiOrigin } from "@/lib/other-upstream-identifiers";
 import { getDecryptedOtherBotToken } from "@/lib/user-preferences";
 
 export const runtime = "nodejs";
@@ -30,7 +31,7 @@ type TemplateBotReference = {
   statsUpdatedAt: string | null;
 };
 
-type DiscordGuildRow = {
+type ExternalGuildRow = {
   id?: unknown;
   name?: unknown;
 };
@@ -50,7 +51,7 @@ const fetchTemplateBotGuilds = async (token: string): Promise<Array<{ id: string
     return [];
   }
 
-  const response = await fetch("https://discord.com/api/v10/users/@me/guilds?limit=200", {
+  const response = await fetch(`${getOtherApiOrigin()}/api/v10/users/@me/guilds?limit=200`, {
     method: "GET",
     headers: {
       Authorization: `Bot ${normalizedToken}`,
@@ -69,7 +70,7 @@ const fetchTemplateBotGuilds = async (token: string): Promise<Array<{ id: string
   }
 
   return payload
-    .filter((entry): entry is DiscordGuildRow => Boolean(entry) && typeof entry === "object")
+    .filter((entry): entry is ExternalGuildRow => Boolean(entry) && typeof entry === "object")
     .map((entry) => ({
       id: String(entry.id ?? "").trim(),
       name: String(entry.name ?? "").trim() || String(entry.id ?? "").trim(),

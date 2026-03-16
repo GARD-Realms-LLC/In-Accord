@@ -6,6 +6,7 @@ import { channel, ChannelType, db, member, server } from "@/lib/db";
 import { visibleChannelIdsForRole } from "@/lib/channel-permissions";
 import { resolveServerRouteContext } from "@/lib/route-slug-resolver";
 import { buildChannelPath } from "@/lib/route-slugs";
+import { pickDefaultServerChannel } from "@/lib/default-server-channel";
 
 interface ServerIdPageProps {
   params: Promise<{
@@ -80,10 +81,7 @@ const ServerIdPage = async ({ params }: ServerIdPageProps) => {
   });
 
   const visibleChannels = serverChannels.filter((item) => visibleIds.has(item.id));
-  const initialChannel =
-    visibleChannels.find((item) => item.type === ChannelType.TEXT) ??
-    visibleChannels[0] ??
-    null;
+  const initialChannel = pickDefaultServerChannel(visibleChannels);
 
   if (!initialChannel?.id) {
     return redirect("/");

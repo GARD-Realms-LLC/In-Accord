@@ -1,6 +1,7 @@
 import { getDecryptedOtherBotToken, getUserPreferences, updateOtherBotCommands } from "@/lib/user-preferences";
+import { getOtherApiOrigin } from "@/lib/other-upstream-identifiers";
 
-type DiscordApplicationCommand = {
+type OtherPlatformApplicationCommand = {
   id?: string;
   name?: string;
   type?: number;
@@ -42,7 +43,7 @@ export const importOtherBotCommandsForOwner = async ({
     throw new Error("Bot is missing an Application ID.");
   }
 
-  const response = await fetch(`https://discord.com/api/v10/applications/${applicationId}/commands`, {
+  const response = await fetch(`${getOtherApiOrigin()}/api/v10/applications/${applicationId}/commands`, {
     headers: {
       Authorization: `Bot ${token}`,
     },
@@ -50,7 +51,7 @@ export const importOtherBotCommandsForOwner = async ({
   });
 
   if (!response.ok) {
-    const fallback = response.status === 401 ? "Discord rejected the bot token." : "Discord command import failed.";
+    const fallback = response.status === 401 ? "Upstream service rejected the bot token." : "Upstream command import failed.";
     const detail = await response.text().catch(() => "");
     throw new Error(detail.trim().length > 0 ? `${fallback} (${detail.slice(0, 180)})` : fallback);
   }
@@ -58,7 +59,7 @@ export const importOtherBotCommandsForOwner = async ({
   const payload = (await response.json().catch(() => [])) as unknown;
   const commands = Array.isArray(payload)
     ? payload
-        .filter((item): item is DiscordApplicationCommand => Boolean(item) && typeof item === "object")
+        .filter((item): item is OtherPlatformApplicationCommand => Boolean(item) && typeof item === "object")
         .filter((item) => item.type === 1 || typeof item.type !== "number")
         .map((item) => (typeof item.name === "string" ? item.name : ""))
         .filter((name) => name.trim().length > 0)

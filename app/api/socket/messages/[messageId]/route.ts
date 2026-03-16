@@ -6,7 +6,8 @@ import { channel, db, member, MemberRole, message, server } from "@/lib/db";
 import { computeChannelPermissionForRole, resolveMemberContext } from "@/lib/channel-permissions";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 import { parseMentionSegments } from "@/lib/mentions";
-import { publishRealtimeRefresh } from "@/lib/realtime-events-server";
+import { publishRealtimeEvent } from "@/lib/realtime-events-server";
+import { REALTIME_CHANNEL_REFRESH_EVENT } from "@/lib/realtime-events";
 
 type RouteParams = { messageId: string };
 
@@ -167,7 +168,8 @@ export async function PATCH(
       .where(and(eq(message.id, messageId), eq(message.channelId, channelId)))
       .returning();
 
-    await publishRealtimeRefresh(
+    await publishRealtimeEvent(
+      REALTIME_CHANNEL_REFRESH_EVENT,
       {
         serverId,
         channelId,
@@ -312,7 +314,8 @@ export async function DELETE(
         .delete(message)
         .where(and(eq(message.id, messageId), eq(message.channelId, channelId)));
 
-      await publishRealtimeRefresh(
+      await publishRealtimeEvent(
+        REALTIME_CHANNEL_REFRESH_EVENT,
         {
           serverId,
           channelId,
@@ -337,7 +340,8 @@ export async function DELETE(
       .where(and(eq(message.id, messageId), eq(message.channelId, channelId)))
       .returning();
 
-    await publishRealtimeRefresh(
+    await publishRealtimeEvent(
+      REALTIME_CHANNEL_REFRESH_EVENT,
       {
         serverId,
         channelId,
