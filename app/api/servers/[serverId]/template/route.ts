@@ -67,6 +67,12 @@ type ImportRequestBody = {
   replaceRoles?: boolean;
 };
 
+type OtherRateLimitPayload = {
+  message?: string;
+  retry_after?: number | string;
+  global?: boolean;
+};
+
 const Other_PERMISSION_FLAGS = {
   CREATE_INSTANT_INVITE: BigInt(1) << BigInt(0),
   KICK_MEMBERS: BigInt(1) << BigInt(1),
@@ -154,6 +160,136 @@ const normalizeOtherInviteCode = (input: string) => {
     raw.match(/^https?:\/\/(?:www\.)?(?:(?:dis)(?:cord)|Other)(?:app)?\.com\/invite\/([A-Za-z0-9_-]{2,128})\/?/i)?.[1];
 
   return fromUrl ?? "";
+};
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const clampRateLimitDelayMs = (value: number) => {
+  if (!Number.isFinite(value) || value <= 0) {
+    return 1500;
+  }
+
+  return Math.min(15000, Math.max(500, Math.ceil(value)));
+};
+
+const parseRetryAfterMs = (value: string | null) => {
+  const normalized = String(value ?? "").trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const numeric = Number(normalized);
+  if (Number.isFinite(numeric) && numeric > 0) {
+    return clampRateLimitDelayMs(numeric >= 100 ? numeric : numeric * 1000);
+  }
+
+  return null;
+};
+
+const parseOtherRateLimitDelayMs = (response: Response, rawText: string) => {
+  const headerDelay = parseRetryAfterMs(response.headers.get("retry-after"));
+  if (headerDelay) {
+    return headerDelay;
+  }
+
+  const normalizedText = String(rawText ?? "").trim();
+  if (!normalizedText) {
+    return 1500;
+  }
+
+  try {
+    const payload = JSON.parse(normalizedText) as OtherRateLimitPayload;
+    const retryAfter = Number(payload.retry_after ?? 0);
+    if (Number.isFinite(retryAfter) && retryAfter > 0) {
+      return clampRateLimitDelayMs(retryAfter >= 100 ? retryAfter : retryAfter * 1000);
+    }
+  } catch {
+    // Non-JSON body. Ignore and use default delay.
+  }
+
+  return 1500;
+};
+
+const isOtherRateLimitedResponse = (response: Response, rawText: string) => {
+  if (response.status === 429) {
+    return true;
+  }
+
+  return /rate limited|too many requests/i.test(String(rawText ?? ""));
+};
+
+const normalizeOtherUpstreamErrorMessage = (rawText: string, fallback: string) => {
+  const normalizedText = String(rawText ?? "").trim();
+  if (!normalizedText) {
+    return fallback;
+  }
+
+  try {
+    const payload = JSON.parse(normalizedText) as OtherRateLimitPayload & { error?: string };
+    const message =
+      String(payload.message ?? "").trim() ||
+      String(payload.error ?? "").trim();
+
+    return message || fallback;
+  } catch {
+    return normalizedText;
+  }
+};
+
+const fetchOtherJson = async <TJson>({
+  url,
+  headers,
+  fallbackLabel,
+  timeoutMs = 12000,
+  maxRateLimitRetries = 2,
+}: {
+  url: string;
+  headers: Record<string, string>;
+  fallbackLabel: string;
+  timeoutMs?: number;
+  maxRateLimitRetries?: number;
+}) => {
+  for (let attempt = 0; attempt <= maxRateLimitRetries; attempt += 1) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        headers,
+        signal: controller.signal,
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+
+        if (isOtherRateLimitedResponse(response, errorText)) {
+          const retryDelayMs = parseOtherRateLimitDelayMs(response, errorText);
+          if (attempt < maxRateLimitRetries) {
+            await sleep(retryDelayMs);
+            continue;
+          }
+
+          throw new Error(`TEMPLATE_ME_RATE_LIMITED:${retryDelayMs}`);
+        }
+
+        throw new Error(
+          normalizeOtherUpstreamErrorMessage(errorText, `${fallbackLabel} failed (${response.status})`)
+        );
+      }
+
+      try {
+        return (await response.json()) as TJson;
+      } catch {
+        throw new Error(`${fallbackLabel} returned invalid JSON.`);
+      }
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  throw new Error(`TEMPLATE_ME_RATE_LIMITED:1500`);
 };
 
 const asBigIntPermissions = (value: string | number | undefined): bigint => {
@@ -407,6 +543,11 @@ const resolveGuildIdFromInvite = async (inviteCode: string) => {
   const timeoutId = setTimeout(() => controller.abort(), 10000);
 
   try {
+    const headers = {
+      "Content-Type": "application/json",
+      "User-Agent": "In-Accord/ServerTemplateImport",
+    };
+
     const inviteLookups = [
       `${getOtherApiOrigin()}/api/v10/invites/${encodeURIComponent(inviteCode)}?with_counts=true&with_expiration=true&guild_scheduled_event_id=false`,
       `${getOtherApiOrigin()}/api/v10/invites/${encodeURIComponent(inviteCode)}?with_counts=false&with_expiration=false&guild_scheduled_event_id=false`,
@@ -416,19 +557,31 @@ const resolveGuildIdFromInvite = async (inviteCode: string) => {
     for (const inviteLookupUrl of inviteLookups) {
       const response = await fetch(inviteLookupUrl, {
         method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "User-Agent": "In-Accord/ServerTemplateImport",
-        },
+        headers,
         signal: controller.signal,
         cache: "no-store",
       });
 
+      const rawText = await response.text().catch(() => "");
       if (!response.ok) {
+        if (isOtherRateLimitedResponse(response, rawText)) {
+          const retryDelayMs = parseOtherRateLimitDelayMs(response, rawText);
+          await sleep(retryDelayMs);
+        }
         continue;
       }
 
-      const payload = (await response.json()) as { guild?: { id?: string }; guild_id?: string };
+      const payload = (() => {
+        try {
+          return JSON.parse(rawText) as { guild?: { id?: string }; guild_id?: string };
+        } catch {
+          return null;
+        }
+      })();
+      if (!payload) {
+        continue;
+      }
+
       const guildId =
         normalizeOtherGuildId(String(payload.guild?.id ?? "")) ||
         normalizeOtherGuildId(String(payload.guild_id ?? ""));
@@ -447,116 +600,72 @@ const resolveGuildIdFromInvite = async (inviteCode: string) => {
 };
 
 const fetchOtherGuildStructure = async (guildId: string, token: string) => {
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: `Bot ${token}`,
+    "User-Agent": "In-Accord/ServerTemplateImport",
+  };
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 12000);
+  const [guildData, roleData, channelData] = await Promise.all([
+    fetchOtherJson<{ id?: string; name?: string }>({
+      url: `${getOtherApiOrigin()}/api/v10/guilds/${encodeURIComponent(guildId)}`,
+      headers,
+      fallbackLabel: "Upstream guild fetch",
+    }),
+    fetchOtherJson<OtherTemplateRole[]>({
+      url: `${getOtherApiOrigin()}/api/v10/guilds/${encodeURIComponent(guildId)}/roles`,
+      headers,
+      fallbackLabel: "Upstream roles fetch",
+    }),
+    fetchOtherJson<OtherTemplateChannel[]>({
+      url: `${getOtherApiOrigin()}/api/v10/guilds/${encodeURIComponent(guildId)}/channels`,
+      headers,
+      fallbackLabel: "Upstream channels fetch",
+    }),
+  ]);
 
-  try {
-    const headers = {
-      "Content-Type": "application/json",
-      Authorization: `Bot ${token}`,
-      "User-Agent": "In-Accord/ServerTemplateImport",
-    };
-
-    const [guildResponse, rolesResponse, channelsResponse] = await Promise.all([
-      fetch(`${getOtherApiOrigin()}/api/v10/guilds/${encodeURIComponent(guildId)}`, {
-        method: "GET",
-        headers,
-        signal: controller.signal,
-        cache: "no-store",
-      }),
-      fetch(`${getOtherApiOrigin()}/api/v10/guilds/${encodeURIComponent(guildId)}/roles`, {
-        method: "GET",
-        headers,
-        signal: controller.signal,
-        cache: "no-store",
-      }),
-      fetch(`${getOtherApiOrigin()}/api/v10/guilds/${encodeURIComponent(guildId)}/channels`, {
-        method: "GET",
-        headers,
-        signal: controller.signal,
-        cache: "no-store",
-      }),
-    ]);
-
-    if (!guildResponse.ok) {
-      const guildError = await guildResponse.text().catch(() => "");
-      throw new Error(guildError || `Upstream guild fetch failed (${guildResponse.status})`);
-    }
-
-    if (!rolesResponse.ok) {
-      const roleError = await rolesResponse.text().catch(() => "");
-      throw new Error(roleError || `Upstream roles fetch failed (${rolesResponse.status})`);
-    }
-
-    if (!channelsResponse.ok) {
-      const channelError = await channelsResponse.text().catch(() => "");
-      throw new Error(channelError || `Upstream channels fetch failed (${channelsResponse.status})`);
-    }
-
-    const guildData = (await guildResponse.json()) as { id?: string; name?: string };
-    const roleData = (await rolesResponse.json()) as OtherTemplateRole[];
-    const channelData = (await channelsResponse.json()) as OtherTemplateChannel[];
-
-    return {
-      guildId: String(guildData.id ?? guildId),
-      guildName: String(guildData.name ?? "External Server").trim() || "External Server",
-      roles: Array.isArray(roleData) ? roleData : [],
-      channels: Array.isArray(channelData) ? channelData : [],
-    };
-  } finally {
-    clearTimeout(timeoutId);
-  }
+  return {
+    guildId: String(guildData.id ?? guildId),
+    guildName: String(guildData.name ?? "External Server").trim() || "External Server",
+    roles: Array.isArray(roleData) ? roleData : [],
+    channels: Array.isArray(channelData) ? channelData : [],
+  };
 };
 
 const fetchOtherGuildWidgetStructure = async (guildId: string) => {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  const payload = await fetchOtherJson<{
+    name?: string;
+    channels?: Array<{ id?: string; name?: string; position?: number }>;
+  }>({
+    url: `${getOtherApiOrigin()}/api/v10/guilds/${encodeURIComponent(guildId)}/widget.json`,
+    headers: {
+      "Content-Type": "application/json",
+      "User-Agent": "In-Accord/ServerTemplateImport",
+    },
+    fallbackLabel: "WIDGET_UNAVAILABLE",
+    timeoutMs: 10000,
+  });
 
-  try {
-    const response = await fetch(`${getOtherApiOrigin()}/api/v10/guilds/${encodeURIComponent(guildId)}/widget.json`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent": "In-Accord/ServerTemplateImport",
-      },
-      signal: controller.signal,
-      cache: "no-store",
-    });
+  const channels = Array.isArray(payload.channels)
+    ? payload.channels
+        .map((channel) => ({
+          id: typeof channel.id === "string" ? channel.id : undefined,
+          type: 0,
+          name: typeof channel.name === "string" ? channel.name : undefined,
+          position: typeof channel.position === "number" ? channel.position : 0,
+        }))
+        .filter((channel) => String(channel.name ?? "").trim().length > 0)
+    : [];
 
-    if (!response.ok) {
-      const widgetError = await response.text().catch(() => "");
-      throw new Error(widgetError || `WIDGET_UNAVAILABLE (${response.status})`);
-    }
-
-    const payload = (await response.json()) as {
-      name?: string;
-      channels?: Array<{ id?: string; name?: string; position?: number }>;
-    };
-
-    const channels = Array.isArray(payload.channels)
-      ? payload.channels
-          .map((channel) => ({
-            id: typeof channel.id === "string" ? channel.id : undefined,
-            type: 0,
-            name: typeof channel.name === "string" ? channel.name : undefined,
-            position: typeof channel.position === "number" ? channel.position : 0,
-          }))
-          .filter((channel) => String(channel.name ?? "").trim().length > 0)
-      : [];
-
-    if (channels.length === 0) {
-      throw new Error("WIDGET_NO_CHANNELS");
-    }
-
-    return {
-      guildId,
-      guildName: String(payload.name ?? "External Server").trim() || "External Server",
-      channels,
-    };
-  } finally {
-    clearTimeout(timeoutId);
+  if (channels.length === 0) {
+    throw new Error("WIDGET_NO_CHANNELS");
   }
+
+  return {
+    guildId,
+    guildName: String(payload.name ?? "External Server").trim() || "External Server",
+    channels,
+  };
 };
 
 export async function GET(_req: Request, { params }: Params) {
@@ -1461,6 +1570,22 @@ export async function POST(req: Request, { params }: Params) {
     }
     if (/invalid token|token was provided|TOKEN_INVALID|401\s*:\s*Unauthorized/i.test(message)) {
       return new NextResponse("Template Me bot token is invalid. Update token and retry import.", { status: 400 });
+    }
+    const rateLimitMatch = message.match(/TEMPLATE_ME_RATE_LIMITED:(\d+)/i);
+    if (rateLimitMatch) {
+      const retryAfterMs = Number(rateLimitMatch[1] ?? 0);
+      const retryAfterSeconds = Number.isFinite(retryAfterMs) && retryAfterMs > 0
+        ? Math.max(1, Math.ceil(retryAfterMs / 1000))
+        : 2;
+      return new NextResponse(
+        `Template Me upstream is rate limiting requests right now. Wait about ${retryAfterSeconds} second(s) and retry import.`,
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(retryAfterSeconds),
+          },
+        }
+      );
     }
     if (/SOURCE_CHANNEL_GROUP_NAME_MISSING|SOURCE_CHANNEL_NAME_MISSING/i.test(message)) {
       return new NextResponse("Source server contains invalid channel data (missing names).", { status: 400 });

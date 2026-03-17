@@ -4,7 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Activity, ExternalLink, Loader2, Mic, Pin, PinOff, ScreenShare, ScreenShareOff, Users, Video, VideoOff } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { Socket } from "socket.io-client";
 import { UserAvatar } from "@/components/user-avatar";
+import { useSocket } from "@/components/providers/socket-provider";
+import { getStreamBadgeText, getStreamStageText, getStreamTooltipText } from "@/lib/streaming-display";
+import { getCachedVoiceState, VOICE_STATE_SYNC_EVENT, type VoiceStateSyncDetail } from "@/lib/voice-state-sync";
 
 type MeetingMember = {
   memberId: string;
@@ -40,7 +44,203 @@ interface VideoChannelMeetingPanelProps {
   meetingCreatorProfileId?: string;
   connectedMembers: MeetingMember[];
   availableMembers: AvailableMember[];
+  disableVoiceStatePolling?: boolean;
+  onDebugProbeUpdate?: (snapshot: MeetingPanelDebugSnapshot) => void;
 }
+
+export type MeetingPanelDebugSnapshot = {
+  currentProfileId: string;
+  socketConnected: boolean;
+  captureIntent: "none" | "camera" | "stream";
+  meshRemoteVideoLimit: number;
+  subscribedRemoteVideoCount: number;
+  totalRemoteVideoCandidates: number;
+  isCameraEnabled: boolean;
+  isStreaming: boolean;
+  cameraError: string | null;
+  localVideoTrackReady: boolean;
+  localVideoTrackState: string | null;
+  stageMemberProfileId: string | null;
+  stageMemberStatusText: string;
+  hasStageRemoteStream: boolean;
+  remoteTransportMembers: Array<{
+    profileId: string;
+    displayName: string;
+    isSubscribed: boolean;
+    status: {
+      connectionState: string;
+      iceConnectionState: string;
+      signalingState: string;
+      hasRemoteVideo: boolean;
+    } | null;
+    telemetry: PeerTraceTelemetry | null;
+    signalDebug: PeerSignalDebug | null;
+    videoTransceivers: Array<{
+      mid: string | null;
+      direction: string;
+      currentDirection: string | null;
+      senderTrackId: string | null;
+      senderTrackState: string | null;
+      receiverTrackId: string | null;
+      receiverTrackState: string | null;
+    }>;
+  }>;
+};
+
+type ElectronMeetingPopoutApi = {
+  openMeetingPopout?: (meetingPath: string) => Promise<unknown>;
+};
+
+type WebRtcSignalPayload = {
+  senderProfileId: string;
+  targetProfileId: string;
+  serverId: string;
+  channelId: string;
+  signal: {
+    description?: RTCSessionDescriptionInit;
+    candidate?: RTCIceCandidateInit;
+    renegotiate?: boolean;
+  };
+};
+
+type WebRtcPeerPresencePayload = {
+  profileId: string;
+  serverId: string;
+  channelId: string;
+  state?: "join" | "leave";
+};
+
+type WebRtcPeerSnapshotPayload = {
+  serverId: string;
+  channelId: string;
+  profileIds?: string[];
+};
+
+const serializeSessionDescription = (description: RTCSessionDescription | RTCSessionDescriptionInit) => ({
+  type: description.type,
+  sdp: typeof description.sdp === "string" ? description.sdp : "",
+});
+
+const serializeIceCandidate = (candidate: RTCIceCandidate) => ({
+  candidate: candidate.candidate,
+  sdpMid: candidate.sdpMid ?? null,
+  sdpMLineIndex: candidate.sdpMLineIndex ?? null,
+  usernameFragment: candidate.usernameFragment ?? null,
+});
+
+const shouldInitiateInitialOffer = (currentProfileId: string, remoteProfileId: string) => {
+  return currentProfileId.localeCompare(remoteProfileId) < 0;
+};
+
+const isPolitePeer = (currentProfileId: string, remoteProfileId: string) => {
+  return currentProfileId.localeCompare(remoteProfileId) > 0;
+};
+
+const parseIceServerUrls = (value: string | undefined) => {
+  return String(value ?? "")
+    .split(/[\s,]+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+};
+
+const buildIceServers = (): RTCIceServer[] => {
+  const stunUrls = parseIceServerUrls(process.env.NEXT_PUBLIC_WEBRTC_STUN_URLS).filter((entry) =>
+    entry.toLowerCase().startsWith("stun:")
+  );
+  const turnUrls = parseIceServerUrls(process.env.NEXT_PUBLIC_WEBRTC_TURN_URLS).filter((entry) =>
+    /^(turn|turns):/i.test(entry)
+  );
+  const turnUsername = String(process.env.NEXT_PUBLIC_WEBRTC_TURN_USERNAME ?? "").trim();
+  const turnCredential = String(process.env.NEXT_PUBLIC_WEBRTC_TURN_CREDENTIAL ?? "").trim();
+
+  const iceServers: RTCIceServer[] = [];
+
+  if (stunUrls.length > 0) {
+    iceServers.push({ urls: stunUrls });
+  } else {
+    iceServers.push({ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] });
+  }
+
+  if (turnUrls.length > 0) {
+    iceServers.push({
+      urls: turnUrls,
+      username: turnUsername,
+      credential: turnCredential,
+    });
+  }
+
+  return iceServers;
+};
+
+const WEBRTC_SIGNAL_EVENT = "inaccord:webrtc-signal";
+const WEBRTC_PEER_EVENT = "inaccord:webrtc-peer";
+const WEBRTC_PEER_SNAPSHOT_EVENT = "inaccord:webrtc-peer-snapshot";
+const WEBRTC_SOCKET_PATH = "/api/socket/io";
+const WEBRTC_ICE_SERVERS: RTCIceServer[] = buildIceServers();
+const WEBRTC_MAX_SIMULTANEOUS_REMOTE_VIDEO_PEERS = parsePositiveInteger(
+  process.env.NEXT_PUBLIC_WEBRTC_MAX_SIMULTANEOUS_REMOTE_VIDEO_PEERS,
+  6
+);
+const WEBRTC_HAS_TURN = WEBRTC_ICE_SERVERS.some((server) => {
+  const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
+  return urls.some((value) => /^(turn|turns):/i.test(String(value ?? "").trim()));
+});
+
+const getStatsMediaKind = (report: any) => {
+  const kind = String(report?.kind ?? report?.mediaType ?? "").trim().toLowerCase();
+  return kind;
+};
+
+const toFiniteNumberOrNull = (value: unknown) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+function parsePositiveInteger(value: string | undefined, fallback: number, minimum = 1, maximum = 16) {
+  const parsed = Number.parseInt(String(value ?? "").trim(), 10);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  return Math.min(Math.max(parsed, minimum), maximum);
+}
+
+type PeerTraceStats = {
+  bytesReceived: number;
+  framesDecoded: number;
+  bytesSent: number;
+  framesSent: number;
+  timestamp: number;
+};
+
+type PeerTraceTelemetry = {
+  flowState: "flowing" | "stalled" | "idle";
+  signalStrength: "excellent" | "good" | "weak" | "none";
+  bitrateKbps: number | null;
+  framesPerSecond: number | null;
+  framesDecoded: number;
+  sendBitrateKbps: number | null;
+  framesSentPerSecond: number | null;
+  framesSent: number;
+  packetsLost: number | null;
+  jitterMs: number | null;
+  rttMs: number | null;
+  resolution: string | null;
+  updatedAt: number;
+};
+
+type PeerSignalDebug = {
+  inboundSignals: number;
+  outboundSignals: number;
+  inboundCandidates: number;
+  outboundCandidates: number;
+  lastInboundDescriptionType: string | null;
+  lastOutboundDescriptionType: string | null;
+  lastInboundAt: number | null;
+  lastOutboundAt: number | null;
+  lastError: string | null;
+  lastErrorAt: number | null;
+};
 
 export const VideoChannelMeetingPanel = ({
   serverId,
@@ -58,6 +258,8 @@ export const VideoChannelMeetingPanel = ({
   meetingCreatorProfileId,
   connectedMembers,
   availableMembers,
+  disableVoiceStatePolling = false,
+  onDebugProbeUpdate,
 }: VideoChannelMeetingPanelProps) => {
     const normalizedChannelPath =
       typeof channelPath === "string" && channelPath.trim().length > 0
@@ -69,13 +271,64 @@ export const VideoChannelMeetingPanel = ({
         : `/meeting-popout/${serverId}/${channelId}`;
 
   const router = useRouter();
-  const VOICE_STATE_SYNC_EVENT = "inaccord:voice-state-sync";
+    const { socket: sharedSocket } = useSocket();
   const VOICE_TOGGLE_STREAM_EVENT = "inaccord:voice-toggle-stream";
+  const VOICE_TOGGLE_CAMERA_EVENT = "inaccord:voice-toggle-camera";
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteStageVideoRef = useRef<HTMLVideoElement | null>(null);
+  const socketRef = useRef<Socket | null>(null);
+  const socketConnectedRef = useRef(false);
+  const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
+  const peerVideoTransceiversRef = useRef<Map<string, RTCRtpTransceiver>>(new Map());
+  const remoteStreamsRef = useRef<Map<string, MediaStream>>(new Map());
+  const pendingSignalsRef = useRef<Map<string, WebRtcSignalPayload["signal"][]>>(new Map());
+  const emitSignalRef = useRef<(targetProfileId: string, signal: WebRtcSignalPayload["signal"]) => void>(() => {});
+  const requestRemoteOfferRef = useRef<(remoteProfileId: string, minimumIntervalMs?: number) => boolean>(() => false);
+  const cleanupPeerRef = useRef<(remoteProfileId: string, options?: { preserveResetCooldown?: boolean }) => void>(
+    () => {}
+  );
+  const syncLocalTracksRef = useRef<(remoteProfileId: string, peerConnection: RTCPeerConnection) => Promise<void>>(
+    async () => {}
+  );
+  const ensurePeerConnectionRef = useRef<(remoteProfileId: string) => RTCPeerConnection | null>(() => null);
+  const renegotiatePeerRef = useRef<(remoteProfileId: string, peerConnection: RTCPeerConnection) => Promise<void>>(
+    async () => {}
+  );
+  const pendingIceCandidatesRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
+  const makingOfferRef = useRef<Map<string, boolean>>(new Map());
+  const ignoreOfferRef = useRef<Map<string, boolean>>(new Map());
+  const settingRemoteAnswerPendingRef = useRef<Map<string, boolean>>(new Map());
+  const iceRestartAttemptedRef = useRef<Map<string, boolean>>(new Map());
+  const lastOfferSentAtRef = useRef<Map<string, number>>(new Map());
+  const lastRenegotiateRequestedAtRef = useRef<Map<string, number>>(new Map());
+  const lastPeerResetAtRef = useRef<Map<string, number>>(new Map());
+  const pendingRenegotiateRef = useRef<Map<string, boolean>>(new Map());
+  const lastPeerTraceStatsRef = useRef<Map<string, PeerTraceStats>>(new Map());
+  const peerSignalDebugRef = useRef<Map<string, PeerSignalDebug>>(new Map());
+  const subscribedRemoteProfileIdsRef = useRef<Set<string>>(new Set());
+  const localMediaStreamRef = useRef<MediaStream | null>(null);
+  const lastLocalVideoTrackTokenRef = useRef<string | null>(null);
+  const updatePeerStatusRef = useRef<(remoteProfileId: string, peerConnection: RTCPeerConnection) => void>(() => {});
   const [localMediaStream, setLocalMediaStream] = useState<MediaStream | null>(null);
+  const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
+  const [peerTelemetry, setPeerTelemetry] = useState<Record<string, PeerTraceTelemetry>>({});
+  const [peerStatuses, setPeerStatuses] = useState<
+    Record<
+      string,
+      {
+        connectionState: string;
+        iceConnectionState: string;
+        signalingState: string;
+        hasRemoteVideo: boolean;
+      }
+    >
+  >({});
+  const [, setPeerSignalDebugTick] = useState(0);
+  const [peerRecoveryTick, setPeerRecoveryTick] = useState(0);
   const [cameraError, setCameraError] = useState<string | null>(null);
-  const [isCameraEnabled, setIsCameraEnabled] = useState(true);
+  const [isCameraEnabled, setIsCameraEnabled] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [captureIntent, setCaptureIntent] = useState<"none" | "camera" | "stream">("none");
   const [streamLabel, setStreamLabel] = useState<string | null>(null);
   const [contextMenuState, setContextMenuState] = useState<{
     memberId: string;
@@ -93,7 +346,7 @@ export const VideoChannelMeetingPanel = ({
   }, [connectedMembers]);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
+    if (typeof window === "undefined" || disableVoiceStatePolling) {
       return;
     }
 
@@ -146,7 +399,7 @@ export const VideoChannelMeetingPanel = ({
       cancelled = true;
       window.clearInterval(pollTimer);
     };
-  }, [channelId, isPopoutView, serverId]);
+  }, [channelId, disableVoiceStatePolling, isPopoutView, serverId]);
 
   const [presentingMemberId, setPresentingMemberId] = useState<string | null>(null);
   const currentConnectedMember = useMemo(
@@ -171,19 +424,34 @@ export const VideoChannelMeetingPanel = ({
       ? connectedMembersView.find((item) => item.memberId === presentingMemberId)
       : null;
 
+    const memberWithRemoteStream = Object.keys(remoteStreams).find((profileId) => {
+      const stream = remoteStreams[profileId];
+      return Boolean(stream && stream.getVideoTracks().length > 0);
+    });
+    const streamedMember = memberWithRemoteStream
+      ? connectedMembersView.find((item) => item.profileId === memberWithRemoteStream)
+      : null;
+
     const creatorMember = meetingCreatorProfileId
       ? connectedMembersView.find((item) => item.profileId === meetingCreatorProfileId)
       : null;
 
     return (
       pinned ??
-      creatorMember ??
+      streamedMember ??
       connectedMembersView.find((item) => item.isStreaming) ??
       connectedMembersView.find((item) => item.isCameraOn) ??
+      creatorMember ??
       connectedMembersView[0] ??
       null
     );
-  }, [connectedMembersView, meetingCreatorProfileId, presentingMemberId]);
+  }, [connectedMembersView, meetingCreatorProfileId, presentingMemberId, remoteStreams]);
+
+  const firstRemoteStreamEntry = useMemo(() => {
+    return (
+      Object.entries(remoteStreams).find(([, stream]) => Boolean(stream && stream.getVideoTracks().length > 0)) ?? null
+    );
+  }, [remoteStreams]);
 
   useEffect(() => {
     if (!presentingMemberId) {
@@ -200,19 +468,67 @@ export const VideoChannelMeetingPanel = ({
   const isPresentingMode = Boolean(stageMember && presentingMemberId && stageMember.memberId === presentingMemberId);
 
   useEffect(() => {
-    const onVoiceStateSync = (event: Event) => {
-      const customEvent = event as CustomEvent<{
-        isCameraOn?: boolean;
-        isStreaming?: boolean;
-        streamLabel?: string | null;
-      }>;
-
-      if (typeof customEvent.detail?.isCameraOn === "boolean") {
-        setIsCameraEnabled(customEvent.detail.isCameraOn);
+    const applyVoiceState = (detail?: VoiceStateSyncDetail | null) => {
+      if (!detail) {
+        return;
       }
 
+      if (typeof detail.isCameraOn === "boolean") {
+        setIsCameraEnabled(detail.isCameraOn);
+        if (detail.isCameraOn) {
+          setCaptureIntent("camera");
+        }
+      }
+
+      if (typeof detail.isStreaming === "boolean") {
+        setIsStreaming(detail.isStreaming);
+        if (detail.isStreaming) {
+          setIsCameraEnabled(false);
+          setCaptureIntent("stream");
+        }
+        if (!detail.isStreaming) {
+          setStreamLabel(null);
+        }
+      }
+
+      if (typeof detail.streamLabel === "string") {
+        const normalized = detail.streamLabel.trim().slice(0, 255);
+        setStreamLabel(normalized.length ? normalized : null);
+      }
+
+      if (detail.streamLabel === null) {
+        setStreamLabel(null);
+      }
+    };
+
+    applyVoiceState(getCachedVoiceState());
+
+    const onVoiceStateSync = (event: Event) => {
+      applyVoiceState((event as CustomEvent<VoiceStateSyncDetail>).detail);
+    };
+
+    const onCameraToggle = (event: Event) => {
+      const customEvent = event as CustomEvent<{ isCameraOn?: boolean }>;
+      if (typeof customEvent.detail?.isCameraOn !== "boolean") {
+        return;
+      }
+
+      setIsCameraEnabled(customEvent.detail.isCameraOn);
+      if (customEvent.detail.isCameraOn) {
+        setCaptureIntent("camera");
+        setIsStreaming(false);
+        setStreamLabel(null);
+      }
+    };
+
+    const onStreamToggle = (event: Event) => {
+      const customEvent = event as CustomEvent<{ isStreaming?: boolean; streamLabel?: string | null }>;
       if (typeof customEvent.detail?.isStreaming === "boolean") {
         setIsStreaming(customEvent.detail.isStreaming);
+        if (customEvent.detail.isStreaming) {
+          setCaptureIntent("stream");
+          setIsCameraEnabled(false);
+        }
         if (!customEvent.detail.isStreaming) {
           setStreamLabel(null);
         }
@@ -229,14 +545,18 @@ export const VideoChannelMeetingPanel = ({
     };
 
     window.addEventListener(VOICE_STATE_SYNC_EVENT, onVoiceStateSync as EventListener);
+    window.addEventListener(VOICE_TOGGLE_CAMERA_EVENT, onCameraToggle as EventListener);
+    window.addEventListener(VOICE_TOGGLE_STREAM_EVENT, onStreamToggle as EventListener);
 
     return () => {
       window.removeEventListener(VOICE_STATE_SYNC_EVENT, onVoiceStateSync as EventListener);
+      window.removeEventListener(VOICE_TOGGLE_CAMERA_EVENT, onCameraToggle as EventListener);
+      window.removeEventListener(VOICE_TOGGLE_STREAM_EVENT, onStreamToggle as EventListener);
     };
-  }, [VOICE_STATE_SYNC_EVENT]);
+  }, [VOICE_TOGGLE_CAMERA_EVENT, VOICE_TOGGLE_STREAM_EVENT]);
 
   useEffect(() => {
-    const wantsVideoCapture = isStreaming || isCameraEnabled;
+    const wantsVideoCapture = captureIntent !== "none";
 
     if (!isLiveSession || !canConnect || !wantsVideoCapture) {
       setCameraError(null);
@@ -250,6 +570,16 @@ export const VideoChannelMeetingPanel = ({
     }
 
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      if (captureIntent === "camera") {
+        syncCameraState(false);
+        setCaptureIntent("none");
+      }
+
+      if (captureIntent === "stream") {
+        syncStreamingState(false, null);
+        setCaptureIntent("none");
+      }
+
       setCameraError("Camera is not supported in this browser.");
       return;
     }
@@ -258,7 +588,7 @@ export const VideoChannelMeetingPanel = ({
 
     const start = async () => {
       try {
-        const stream = isStreaming
+        const stream = captureIntent === "stream"
           ? await navigator.mediaDevices.getDisplayMedia({
               video: true,
               audio: false,
@@ -275,7 +605,7 @@ export const VideoChannelMeetingPanel = ({
           return;
         }
 
-        if (isStreaming) {
+        if (captureIntent === "stream") {
           const [videoTrack] = stream.getVideoTracks();
           const detectedLabel =
             typeof videoTrack?.label === "string" && videoTrack.label.trim().length
@@ -283,10 +613,22 @@ export const VideoChannelMeetingPanel = ({
               : null;
 
           syncStreamingState(true, detectedLabel);
+          setCaptureIntent("stream");
 
           if (videoTrack) {
             videoTrack.onended = () => {
+              setCaptureIntent("none");
               syncStreamingState(false, null);
+            };
+          }
+        } else {
+          const [videoTrack] = stream.getVideoTracks();
+          syncCameraState(true);
+          setCaptureIntent("camera");
+          if (videoTrack) {
+            videoTrack.onended = () => {
+              setCaptureIntent("none");
+              syncCameraState(false);
             };
           }
         }
@@ -299,11 +641,14 @@ export const VideoChannelMeetingPanel = ({
           return stream;
         });
       } catch {
-        if (isStreaming) {
+        if (captureIntent === "stream") {
           syncStreamingState(false, null);
+        } else {
+          syncCameraState(false);
         }
+        setCaptureIntent("none");
         setCameraError(
-          isStreaming
+          captureIntent === "stream"
             ? "Screen share was blocked. Allow display capture to stream."
             : "Camera access was blocked. Allow camera permissions to start video."
         );
@@ -321,7 +666,7 @@ export const VideoChannelMeetingPanel = ({
         return null;
       });
     };
-  }, [canConnect, isCameraEnabled, isLiveSession, isStreaming, VOICE_TOGGLE_STREAM_EVENT]);
+  }, [canConnect, captureIntent, isLiveSession, VOICE_TOGGLE_STREAM_EVENT]);
 
   useEffect(() => {
     if (!localVideoRef.current) {
@@ -329,10 +674,27 @@ export const VideoChannelMeetingPanel = ({
     }
 
     localVideoRef.current.srcObject = localMediaStream;
+    void localVideoRef.current.play().catch(() => {
+      // autoplay can be blocked until the media element is interacted with
+    });
+  }, [localMediaStream]);
+
+  useEffect(() => {
+    localMediaStreamRef.current = localMediaStream;
   }, [localMediaStream]);
 
   const isLocalStage = stageMember?.profileId === currentProfileId;
-  const shouldShowLocalPreview = isLiveSession && (!stageMember || isLocalStage);
+  const stageRemoteStream = stageMember && stageMember.profileId !== currentProfileId
+    ? remoteStreams[stageMember.profileId] ?? firstRemoteStreamEntry?.[1] ?? null
+    : firstRemoteStreamEntry?.[1] ?? null;
+  const stageRemoteStreamProfileId = firstRemoteStreamEntry?.[0] ?? null;
+  const shouldShowRemoteStage = isLiveSession && Boolean(stageRemoteStream);
+  const stageRemoteMember = stageMember && stageRemoteStream
+    ? stageMember.profileId !== currentProfileId
+      ? stageMember
+      : connectedMembersView.find((item) => item.profileId === stageRemoteStreamProfileId) ?? null
+    : null;
+  const shouldShowLocalPreview = isLiveSession && !shouldShowRemoteStage && (!stageMember || isLocalStage);
   const isConnectingVideo = shouldShowLocalPreview && !localMediaStream && !cameraError;
   const cameraOnMembers = useMemo(
     () => connectedMembersView.filter((item) => item.isCameraOn || item.isStreaming),
@@ -344,6 +706,1125 @@ export const VideoChannelMeetingPanel = ({
   );
   const stageCameraPreviewMembers = stageCameraMembers.slice(0, 6);
   const hiddenStageCameraCount = Math.max(0, stageCameraMembers.length - stageCameraPreviewMembers.length);
+  const remoteVideoCandidateMembers = useMemo(() => {
+    return connectedMembersView.filter((item) => {
+      if (!item.profileId || item.profileId === currentProfileId) {
+        return false;
+      }
+
+      const existingStatus = peerStatuses[item.profileId] ?? null;
+      const existingTelemetry = peerTelemetry[item.profileId] ?? null;
+
+      return Boolean(
+        item.isCameraOn ||
+          item.isStreaming ||
+          item.profileId === stageMember?.profileId ||
+          item.memberId === presentingMemberId ||
+          item.isSpeaking ||
+          existingStatus?.hasRemoteVideo ||
+          existingTelemetry
+      );
+    });
+  }, [connectedMembersView, currentProfileId, peerStatuses, peerTelemetry, presentingMemberId, stageMember?.profileId]);
+  const subscribedRemoteMembers = useMemo(() => {
+    const scoreMember = (member: MeetingMember) => {
+      let score = 0;
+      const status = peerStatuses[member.profileId] ?? null;
+      const telemetry = peerTelemetry[member.profileId] ?? null;
+
+      if (member.profileId === stageMember?.profileId) {
+        score += 100000;
+      }
+
+      if (member.memberId === presentingMemberId) {
+        score += 75000;
+      }
+
+      if (member.isStreaming) {
+        score += 50000;
+      }
+
+      if (member.isSpeaking) {
+        score += 25000;
+      }
+
+      if (member.isCameraOn) {
+        score += 15000;
+      }
+
+      if (telemetry?.flowState === "flowing") {
+        score += 8000;
+      } else if (telemetry?.flowState === "stalled") {
+        score += 4000;
+      }
+
+      if (status?.hasRemoteVideo) {
+        score += 2000;
+      }
+
+      if (status?.connectionState === "connected") {
+        score += 1000;
+      }
+
+      if (meetingCreatorProfileId && member.profileId === meetingCreatorProfileId) {
+        score += 250;
+      }
+
+      return score;
+    };
+
+    return [...remoteVideoCandidateMembers]
+      .sort((left, right) => {
+        const scoreDelta = scoreMember(right) - scoreMember(left);
+        if (scoreDelta !== 0) {
+          return scoreDelta;
+        }
+
+        return left.displayName.localeCompare(right.displayName) || left.profileId.localeCompare(right.profileId);
+      })
+      .slice(0, WEBRTC_MAX_SIMULTANEOUS_REMOTE_VIDEO_PEERS);
+  }, [meetingCreatorProfileId, peerStatuses, peerTelemetry, presentingMemberId, remoteVideoCandidateMembers, stageMember?.profileId]);
+  const subscribedRemoteProfileIds = useMemo(
+    () => new Set(subscribedRemoteMembers.map((item) => item.profileId)),
+    [subscribedRemoteMembers]
+  );
+  const remoteVideoCandidateCount = remoteVideoCandidateMembers.length;
+  const unsubscribedRemoteVideoCount = Math.max(0, remoteVideoCandidateCount - subscribedRemoteMembers.length);
+  const remoteTransportMembers = useMemo(() => {
+    return connectedMembersView
+      .filter((item) => item.profileId && item.profileId !== currentProfileId)
+      .map((item) => ({
+        member: item,
+        isSubscribed: subscribedRemoteProfileIds.has(item.profileId),
+        status: peerStatuses[item.profileId] ?? null,
+        telemetry: peerTelemetry[item.profileId] ?? null,
+      }))
+      .filter(({ isSubscribed, status, telemetry }) => isSubscribed || Boolean(status) || Boolean(telemetry));
+  }, [connectedMembersView, currentProfileId, peerStatuses, peerTelemetry, subscribedRemoteProfileIds]);
+  const hasRemoteTransportFailure = useMemo(() => {
+    return remoteTransportMembers.some(({ status }) => {
+      if (!status) {
+        return false;
+      }
+
+      return status.iceConnectionState === "failed" || status.connectionState === "failed";
+    });
+  }, [remoteTransportMembers]);
+
+  useEffect(() => {
+    subscribedRemoteProfileIdsRef.current = subscribedRemoteProfileIds;
+  }, [subscribedRemoteProfileIds]);
+
+  useEffect(() => {
+    if (!remoteStageVideoRef.current) {
+      return;
+    }
+
+    remoteStageVideoRef.current.srcObject = stageRemoteStream;
+    void remoteStageVideoRef.current.play().catch(() => {
+      // autoplay can be blocked until the media element is interacted with
+    });
+  }, [stageRemoteStream]);
+
+  useEffect(() => {
+    if (!isLiveSession || typeof window === "undefined") {
+      return;
+    }
+
+    let disposed = false;
+
+    const updatePeerTrace = async () => {
+      const entries = Array.from(peerConnectionsRef.current.entries());
+      if (!entries.length) {
+        return;
+      }
+
+      const telemetryEntries = await Promise.all(
+        entries.map(async ([remoteProfileId, peerConnection]) => {
+          try {
+            const stats = await peerConnection.getStats();
+            let inboundVideo: any = null;
+            let outboundVideo: any = null;
+            let candidatePair: any = null;
+
+            stats.forEach((report: any) => {
+              const mediaKind = getStatsMediaKind(report);
+
+              if (report?.type === "inbound-rtp" && mediaKind === "video") {
+                inboundVideo = report;
+              }
+
+              if (report?.type === "outbound-rtp" && mediaKind === "video") {
+                outboundVideo = report;
+              }
+
+              if (report?.type === "candidate-pair" && (report.nominated || report.selected)) {
+                candidatePair = report;
+              }
+            });
+
+            const bytesReceived = Number(inboundVideo?.bytesReceived ?? 0);
+            const framesDecoded = Number(inboundVideo?.framesDecoded ?? 0);
+            const bytesSent = Number(outboundVideo?.bytesSent ?? 0);
+            const framesSent = Number(outboundVideo?.framesSent ?? 0);
+            const timestamp = Date.now();
+            const previous = lastPeerTraceStatsRef.current.get(remoteProfileId);
+            const elapsedSeconds = previous ? Math.max((timestamp - previous.timestamp) / 1000, 0.001) : 0;
+            const bytesDelta = previous ? Math.max(bytesReceived - previous.bytesReceived, 0) : 0;
+            const framesDelta = previous ? Math.max(framesDecoded - previous.framesDecoded, 0) : 0;
+            const bytesSentDelta = previous ? Math.max(bytesSent - previous.bytesSent, 0) : 0;
+            const framesSentDelta = previous ? Math.max(framesSent - previous.framesSent, 0) : 0;
+            const hasFlowingVideo = bytesDelta > 0 || framesDelta > 0;
+            const hasAnyVideoHistory = bytesReceived > 0 || framesDecoded > 0;
+            const bitrateKbps = previous && elapsedSeconds > 0 ? Math.round((bytesDelta * 8) / elapsedSeconds / 1000) : null;
+            const framesPerSecond = previous && elapsedSeconds > 0 ? Math.round((framesDelta / elapsedSeconds) * 10) / 10 : null;
+            const sendBitrateKbps = previous && elapsedSeconds > 0 ? Math.round((bytesSentDelta * 8) / elapsedSeconds / 1000) : null;
+            const framesSentPerSecond = previous && elapsedSeconds > 0 ? Math.round((framesSentDelta / elapsedSeconds) * 10) / 10 : null;
+            const rttMs = Number.isFinite(Number(candidatePair?.currentRoundTripTime))
+              ? Math.round(Number(candidatePair.currentRoundTripTime) * 1000)
+              : null;
+            const packetsLost = Number.isFinite(Number(inboundVideo?.packetsLost)) ? Number(inboundVideo.packetsLost) : null;
+            const jitterMs = Number.isFinite(Number(inboundVideo?.jitter)) ? Math.round(Number(inboundVideo.jitter) * 1000) : null;
+            const frameWidth = Number.isFinite(Number(inboundVideo?.frameWidth)) ? Number(inboundVideo.frameWidth) : 0;
+            const frameHeight = Number.isFinite(Number(inboundVideo?.frameHeight)) ? Number(inboundVideo.frameHeight) : 0;
+            const resolution = frameWidth > 0 && frameHeight > 0 ? `${frameWidth}x${frameHeight}` : null;
+
+            lastPeerTraceStatsRef.current.set(remoteProfileId, {
+              bytesReceived,
+              framesDecoded,
+              bytesSent,
+              framesSent,
+              timestamp,
+            });
+
+            let signalStrength: PeerTraceTelemetry["signalStrength"] = "none";
+            if (hasAnyVideoHistory || hasFlowingVideo) {
+              if (rttMs !== null && rttMs <= 120 && (packetsLost ?? 0) <= 2) {
+                signalStrength = "excellent";
+              } else if (rttMs !== null && rttMs <= 220 && (packetsLost ?? 0) <= 8) {
+                signalStrength = "good";
+              } else {
+                signalStrength = "weak";
+              }
+            }
+
+            const flowState: PeerTraceTelemetry["flowState"] = hasFlowingVideo
+              ? "flowing"
+              : hasAnyVideoHistory
+                ? "stalled"
+                : "idle";
+
+            return [
+              remoteProfileId,
+              {
+                flowState,
+                signalStrength,
+                bitrateKbps: toFiniteNumberOrNull(bitrateKbps),
+                framesPerSecond: toFiniteNumberOrNull(framesPerSecond),
+                framesDecoded,
+                sendBitrateKbps: toFiniteNumberOrNull(sendBitrateKbps),
+                framesSentPerSecond: toFiniteNumberOrNull(framesSentPerSecond),
+                framesSent,
+                packetsLost,
+                jitterMs,
+                rttMs,
+                resolution,
+                updatedAt: Date.now(),
+              } satisfies PeerTraceTelemetry,
+            ] as const;
+          } catch {
+            return [remoteProfileId, null] as const;
+          }
+        })
+      );
+
+      if (disposed) {
+        return;
+      }
+
+      setPeerTelemetry((current) => {
+        let changed = false;
+        const next = { ...current };
+
+        for (const [remoteProfileId, telemetry] of telemetryEntries) {
+          if (!telemetry) {
+            continue;
+          }
+
+          const previous = current[remoteProfileId];
+          if (
+            previous &&
+            previous.flowState === telemetry.flowState &&
+            previous.signalStrength === telemetry.signalStrength &&
+            previous.bitrateKbps === telemetry.bitrateKbps &&
+            previous.framesPerSecond === telemetry.framesPerSecond &&
+            previous.framesDecoded === telemetry.framesDecoded &&
+            previous.sendBitrateKbps === telemetry.sendBitrateKbps &&
+            previous.framesSentPerSecond === telemetry.framesSentPerSecond &&
+            previous.framesSent === telemetry.framesSent &&
+            previous.packetsLost === telemetry.packetsLost &&
+            previous.jitterMs === telemetry.jitterMs &&
+            previous.rttMs === telemetry.rttMs &&
+            previous.resolution === telemetry.resolution
+          ) {
+            continue;
+          }
+
+          next[remoteProfileId] = telemetry;
+          changed = true;
+        }
+
+        return changed ? next : current;
+      });
+    };
+
+    void updatePeerTrace();
+    const timer = window.setInterval(() => {
+      void updatePeerTrace();
+    }, 1500);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [isLiveSession]);
+
+  useEffect(() => {
+    if (!isLiveSession || !canConnect || typeof window === "undefined") {
+      return;
+    }
+
+    let disposed = false;
+
+    const updatePeerStatus = (remoteProfileId: string, peerConnection: RTCPeerConnection) => {
+      const hasRemoteVideo = Boolean(
+        remoteStreamsRef.current.get(remoteProfileId)?.getVideoTracks().some((track) => track.readyState !== "ended") ??
+          peerConnection
+            .getReceivers()
+            .some((receiver) => receiver.track?.kind === "video" && receiver.track.readyState !== "ended")
+      );
+
+      setPeerStatuses((current) => {
+        const nextStatus = {
+          connectionState: String(peerConnection.connectionState ?? "new"),
+          iceConnectionState: String(peerConnection.iceConnectionState ?? "new"),
+          signalingState: String(peerConnection.signalingState ?? "stable"),
+          hasRemoteVideo,
+        };
+        const previousStatus = current[remoteProfileId];
+
+        if (
+          previousStatus &&
+          previousStatus.connectionState === nextStatus.connectionState &&
+          previousStatus.iceConnectionState === nextStatus.iceConnectionState &&
+          previousStatus.signalingState === nextStatus.signalingState &&
+          previousStatus.hasRemoteVideo === nextStatus.hasRemoteVideo
+        ) {
+          return current;
+        }
+
+        return {
+          ...current,
+          [remoteProfileId]: nextStatus,
+        };
+      });
+    };
+
+    const cleanupPeer = (remoteProfileId: string, options?: { preserveResetCooldown?: boolean }) => {
+      const peerConnection = peerConnectionsRef.current.get(remoteProfileId);
+      if (peerConnection) {
+        peerConnection.onicecandidate = null;
+        peerConnection.ontrack = null;
+        peerConnection.onconnectionstatechange = null;
+        peerConnection.oniceconnectionstatechange = null;
+        peerConnection.onnegotiationneeded = null;
+        peerConnection.close();
+      }
+
+      peerConnectionsRef.current.delete(remoteProfileId);
+      peerVideoTransceiversRef.current.delete(remoteProfileId);
+      makingOfferRef.current.delete(remoteProfileId);
+      ignoreOfferRef.current.delete(remoteProfileId);
+      settingRemoteAnswerPendingRef.current.delete(remoteProfileId);
+      pendingIceCandidatesRef.current.delete(remoteProfileId);
+      iceRestartAttemptedRef.current.delete(remoteProfileId);
+      lastOfferSentAtRef.current.delete(remoteProfileId);
+      lastRenegotiateRequestedAtRef.current.delete(remoteProfileId);
+      if (!options?.preserveResetCooldown) {
+        lastPeerResetAtRef.current.delete(remoteProfileId);
+      }
+      pendingRenegotiateRef.current.delete(remoteProfileId);
+      lastPeerTraceStatsRef.current.delete(remoteProfileId);
+      peerSignalDebugRef.current.delete(remoteProfileId);
+      remoteStreamsRef.current.delete(remoteProfileId);
+      setPeerSignalDebugTick((value) => value + 1);
+      setPeerTelemetry((current) => {
+        if (!(remoteProfileId in current)) {
+          return current;
+        }
+
+        const next = { ...current };
+        delete next[remoteProfileId];
+        return next;
+      });
+      setPeerStatuses((current) => {
+        if (!(remoteProfileId in current)) {
+          return current;
+        }
+
+        const next = { ...current };
+        delete next[remoteProfileId];
+        return next;
+      });
+      setRemoteStreams((current) => {
+        if (!(remoteProfileId in current)) {
+          return current;
+        }
+
+        const next = { ...current };
+        delete next[remoteProfileId];
+        return next;
+      });
+    };
+
+    const emitSignal = (targetProfileId: string, signal: WebRtcSignalPayload["signal"]) => {
+      const currentSignalDebug = peerSignalDebugRef.current.get(targetProfileId) ?? {
+        inboundSignals: 0,
+        outboundSignals: 0,
+        inboundCandidates: 0,
+        outboundCandidates: 0,
+        lastInboundDescriptionType: null,
+        lastOutboundDescriptionType: null,
+        lastInboundAt: null,
+        lastOutboundAt: null,
+        lastError: null,
+        lastErrorAt: null,
+      };
+      peerSignalDebugRef.current.set(targetProfileId, {
+        ...currentSignalDebug,
+        outboundSignals: currentSignalDebug.outboundSignals + 1,
+        outboundCandidates: currentSignalDebug.outboundCandidates + (signal.candidate ? 1 : 0),
+        lastOutboundDescriptionType: signal.description?.type ?? currentSignalDebug.lastOutboundDescriptionType,
+        lastOutboundAt: Date.now(),
+      });
+      setPeerSignalDebugTick((value) => value + 1);
+
+      const socket = socketRef.current;
+      if (!socket || !socketConnectedRef.current) {
+        const pendingSignals = pendingSignalsRef.current.get(targetProfileId) ?? [];
+        pendingSignals.push(signal);
+        pendingSignalsRef.current.set(targetProfileId, pendingSignals);
+        return;
+      }
+
+      socket.emit(WEBRTC_SIGNAL_EVENT, {
+        senderProfileId: currentProfileId,
+        targetProfileId,
+        serverId,
+        channelId,
+        signal,
+      } satisfies WebRtcSignalPayload);
+    };
+
+    const requestRemoteOffer = (remoteProfileId: string, minimumIntervalMs = 3000) => {
+      const now = Date.now();
+      const lastRequestedAt = lastRenegotiateRequestedAtRef.current.get(remoteProfileId) ?? 0;
+
+      if (now - lastRequestedAt < minimumIntervalMs) {
+        return false;
+      }
+
+      lastRenegotiateRequestedAtRef.current.set(remoteProfileId, now);
+      emitSignal(remoteProfileId, { renegotiate: true });
+      return true;
+    };
+
+    const syncLocalTracks = async (remoteProfileId: string, peerConnection: RTCPeerConnection) => {
+      const localStream = localMediaStreamRef.current;
+      const localVideoTrack = localStream?.getVideoTracks()[0] ?? null;
+      const shouldInitiateOffer = shouldInitiateInitialOffer(currentProfileId, remoteProfileId);
+
+      const existingTransceivers = peerConnection.getTransceivers();
+      let videoTransceiver = peerVideoTransceiversRef.current.get(remoteProfileId);
+
+      if (!videoTransceiver || !existingTransceivers.includes(videoTransceiver)) {
+        videoTransceiver =
+          existingTransceivers.find((transceiver) => {
+            return (
+              transceiver.sender.track?.kind === "video" ||
+              transceiver.receiver.track?.kind === "video" ||
+              (transceiver as { kind?: string | null }).kind === "video"
+            );
+          }) ??
+          existingTransceivers[0];
+      }
+
+      if (!videoTransceiver) {
+        if (!shouldInitiateOffer && !peerConnection.remoteDescription) {
+          return;
+        }
+
+        videoTransceiver = peerConnection.addTransceiver("video", {
+          direction: localVideoTrack ? "sendrecv" : "recvonly",
+        });
+      }
+
+      peerVideoTransceiversRef.current.set(remoteProfileId, videoTransceiver);
+
+      const sender = videoTransceiver.sender;
+
+      if (localVideoTrack) {
+        if (videoTransceiver.direction !== "sendrecv") {
+          videoTransceiver.direction = "sendrecv";
+        }
+
+        if (sender.track?.id !== localVideoTrack.id || sender.track.readyState === "ended") {
+          await sender.replaceTrack(localVideoTrack);
+        }
+
+        return;
+      }
+
+      if (sender.track) {
+        await sender.replaceTrack(null);
+      }
+
+      if (videoTransceiver.direction !== "recvonly") {
+        videoTransceiver.direction = "recvonly";
+      }
+    };
+
+    const renegotiatePeer = async (remoteProfileId: string, peerConnection: RTCPeerConnection) => {
+      if (makingOfferRef.current.get(remoteProfileId) === true || peerConnection.signalingState !== "stable") {
+        pendingRenegotiateRef.current.set(remoteProfileId, true);
+        return;
+      }
+
+      try {
+        pendingRenegotiateRef.current.set(remoteProfileId, false);
+        makingOfferRef.current.set(remoteProfileId, true);
+        await syncLocalTracks(remoteProfileId, peerConnection);
+        const shouldRestartIce = iceRestartAttemptedRef.current.get(remoteProfileId) === true;
+        const offer = await peerConnection.createOffer(shouldRestartIce ? { iceRestart: true } : undefined);
+        await peerConnection.setLocalDescription(offer);
+        lastOfferSentAtRef.current.set(remoteProfileId, Date.now());
+        updatePeerStatusRef.current(remoteProfileId, peerConnection);
+
+        if (peerConnection.localDescription) {
+          emitSignal(remoteProfileId, { description: serializeSessionDescription(peerConnection.localDescription) });
+        }
+      } catch (error) {
+        const currentSignalDebug = peerSignalDebugRef.current.get(remoteProfileId) ?? {
+          inboundSignals: 0,
+          outboundSignals: 0,
+          inboundCandidates: 0,
+          outboundCandidates: 0,
+          lastInboundDescriptionType: null,
+          lastOutboundDescriptionType: null,
+          lastInboundAt: null,
+          lastOutboundAt: null,
+          lastError: null,
+          lastErrorAt: null,
+        };
+        peerSignalDebugRef.current.set(remoteProfileId, {
+          ...currentSignalDebug,
+          lastError: error instanceof Error ? error.message : String(error ?? "Unknown renegotiation error"),
+          lastErrorAt: Date.now(),
+        });
+        setPeerSignalDebugTick((value) => value + 1);
+        // best effort renegotiation; connection state handlers will clean up failures
+      } finally {
+        makingOfferRef.current.set(remoteProfileId, false);
+
+        if (pendingRenegotiateRef.current.get(remoteProfileId) && peerConnection.signalingState === "stable") {
+          pendingRenegotiateRef.current.set(remoteProfileId, false);
+          void renegotiatePeer(remoteProfileId, peerConnection);
+        }
+      }
+    };
+
+    const flushPendingSignals = () => {
+      if (!socketRef.current || !socketConnectedRef.current) {
+        return;
+      }
+
+      for (const [targetProfileId, signals] of Array.from(pendingSignalsRef.current.entries())) {
+        if (!signals.length) {
+          pendingSignalsRef.current.delete(targetProfileId);
+          continue;
+        }
+
+        for (const signal of signals) {
+          socketRef.current.emit(WEBRTC_SIGNAL_EVENT, {
+            senderProfileId: currentProfileId,
+            targetProfileId,
+            serverId,
+            channelId,
+            signal,
+          } satisfies WebRtcSignalPayload);
+        }
+
+        pendingSignalsRef.current.delete(targetProfileId);
+      }
+    };
+
+    const ensurePeerConnection = (remoteProfileId: string) => {
+      const existing = peerConnectionsRef.current.get(remoteProfileId);
+      if (existing) {
+        return existing;
+      }
+
+      const peerConnection = new RTCPeerConnection({ iceServers: WEBRTC_ICE_SERVERS });
+      peerConnectionsRef.current.set(remoteProfileId, peerConnection);
+      if (shouldInitiateInitialOffer(currentProfileId, remoteProfileId)) {
+        const videoTransceiver = peerConnection.addTransceiver("video", { direction: "recvonly" });
+        peerVideoTransceiversRef.current.set(remoteProfileId, videoTransceiver);
+      }
+      ignoreOfferRef.current.set(remoteProfileId, false);
+      makingOfferRef.current.set(remoteProfileId, false);
+      settingRemoteAnswerPendingRef.current.set(remoteProfileId, false);
+      pendingIceCandidatesRef.current.set(remoteProfileId, []);
+      iceRestartAttemptedRef.current.set(remoteProfileId, false);
+
+      peerConnection.onicecandidate = (event) => {
+        if (!event.candidate) {
+          return;
+        }
+
+        emitSignal(remoteProfileId, { candidate: serializeIceCandidate(event.candidate) });
+      };
+
+      peerConnection.ontrack = (event) => {
+        const [eventStream] = event.streams;
+        const stream = eventStream ?? (() => {
+          const existing = remoteStreamsRef.current.get(remoteProfileId) ?? new MediaStream();
+          if (!existing.getTracks().some((track) => track.id === event.track.id)) {
+            existing.addTrack(event.track);
+          }
+          return existing;
+        })();
+
+        remoteStreamsRef.current.set(remoteProfileId, stream);
+        setRemoteStreams((current) => ({
+          ...current,
+          [remoteProfileId]: stream,
+        }));
+        updatePeerStatusRef.current(remoteProfileId, peerConnection);
+      };
+
+      peerConnection.onconnectionstatechange = () => {
+        updatePeerStatusRef.current(remoteProfileId, peerConnection);
+
+        if (peerConnection.connectionState === "closed") {
+          cleanupPeer(remoteProfileId);
+        }
+      };
+
+      peerConnection.oniceconnectionstatechange = () => {
+        updatePeerStatusRef.current(remoteProfileId, peerConnection);
+
+        if (["connected", "completed"].includes(peerConnection.iceConnectionState)) {
+          iceRestartAttemptedRef.current.set(remoteProfileId, false);
+          return;
+        }
+
+        if (peerConnection.iceConnectionState !== "failed") {
+          return;
+        }
+
+        if (iceRestartAttemptedRef.current.get(remoteProfileId) === true) {
+          return;
+        }
+
+        iceRestartAttemptedRef.current.set(remoteProfileId, true);
+
+        if (shouldInitiateInitialOffer(currentProfileId, remoteProfileId)) {
+          try {
+            peerConnection.restartIce();
+          } catch {
+            // browser support varies; renegotiation below still retries transport setup
+          }
+
+          void renegotiatePeerRef.current(remoteProfileId, peerConnection);
+          return;
+        }
+
+        emitSignalRef.current(remoteProfileId, { renegotiate: true });
+      };
+
+      updatePeerStatus(remoteProfileId, peerConnection);
+
+      return peerConnection;
+    };
+
+    emitSignalRef.current = emitSignal;
+    requestRemoteOfferRef.current = requestRemoteOffer;
+    cleanupPeerRef.current = cleanupPeer;
+    syncLocalTracksRef.current = syncLocalTracks;
+    ensurePeerConnectionRef.current = ensurePeerConnection;
+    renegotiatePeerRef.current = renegotiatePeer;
+    updatePeerStatusRef.current = updatePeerStatus;
+
+    const handleSignal = async (payload: WebRtcSignalPayload) => {
+      if (disposed) {
+        return;
+      }
+
+      if (
+        payload.targetProfileId !== currentProfileId ||
+        payload.senderProfileId === currentProfileId ||
+        payload.serverId !== serverId ||
+        payload.channelId !== channelId
+      ) {
+        return;
+      }
+
+      const remoteProfileId = payload.senderProfileId;
+      const isSubscribedRemote = subscribedRemoteProfileIdsRef.current.has(remoteProfileId);
+      const hasExistingPeer = peerConnectionsRef.current.has(remoteProfileId);
+      const hasSubscriptionCapacity =
+        subscribedRemoteProfileIdsRef.current.size < WEBRTC_MAX_SIMULTANEOUS_REMOTE_VIDEO_PEERS;
+
+      if (!isSubscribedRemote && !hasExistingPeer && !hasSubscriptionCapacity) {
+        return;
+      }
+
+      if (!isSubscribedRemote && hasExistingPeer && !hasSubscriptionCapacity) {
+        cleanupPeerRef.current(remoteProfileId);
+        return;
+      }
+
+      const peerConnection = ensurePeerConnectionRef.current(remoteProfileId);
+      if (!peerConnection) {
+        return;
+      }
+      const incomingDescription = payload.signal.description;
+      const incomingCandidate = payload.signal.candidate;
+      const incomingRenegotiate = payload.signal.renegotiate === true;
+      const currentSignalDebug = peerSignalDebugRef.current.get(remoteProfileId) ?? {
+        inboundSignals: 0,
+        outboundSignals: 0,
+        inboundCandidates: 0,
+        outboundCandidates: 0,
+        lastInboundDescriptionType: null,
+        lastOutboundDescriptionType: null,
+        lastInboundAt: null,
+        lastOutboundAt: null,
+        lastError: null,
+        lastErrorAt: null,
+      };
+      peerSignalDebugRef.current.set(remoteProfileId, {
+        ...currentSignalDebug,
+        inboundSignals: currentSignalDebug.inboundSignals + 1,
+        inboundCandidates: currentSignalDebug.inboundCandidates + (incomingCandidate ? 1 : 0),
+        lastInboundDescriptionType: incomingDescription?.type ?? currentSignalDebug.lastInboundDescriptionType,
+        lastInboundAt: Date.now(),
+      });
+      setPeerSignalDebugTick((value) => value + 1);
+      const flushPendingIceCandidates = async () => {
+        const pendingCandidates = pendingIceCandidatesRef.current.get(remoteProfileId) ?? [];
+        if (!pendingCandidates.length) {
+          return;
+        }
+
+        pendingIceCandidatesRef.current.set(remoteProfileId, []);
+
+        for (const candidate of pendingCandidates) {
+          await peerConnection.addIceCandidate(candidate);
+        }
+      };
+
+      try {
+        if (incomingRenegotiate) {
+          await renegotiatePeerRef.current(remoteProfileId, peerConnection);
+          return;
+        }
+
+        if (incomingDescription) {
+          if (incomingDescription.type === "offer") {
+            const polite = isPolitePeer(currentProfileId, remoteProfileId);
+            const makingOffer = makingOfferRef.current.get(remoteProfileId) === true;
+            const settingRemoteAnswerPending = settingRemoteAnswerPendingRef.current.get(remoteProfileId) === true;
+            const readyForOffer = !makingOffer && (peerConnection.signalingState === "stable" || settingRemoteAnswerPending);
+            const offerCollision = !readyForOffer;
+            const shouldIgnoreOffer = !polite && offerCollision;
+
+            ignoreOfferRef.current.set(remoteProfileId, shouldIgnoreOffer);
+            if (shouldIgnoreOffer) {
+              return;
+            }
+
+            if (offerCollision && peerConnection.signalingState !== "stable") {
+              await peerConnection.setLocalDescription({ type: "rollback" });
+            }
+
+            await peerConnection.setRemoteDescription(incomingDescription);
+            lastOfferSentAtRef.current.delete(remoteProfileId);
+            settingRemoteAnswerPendingRef.current.set(remoteProfileId, false);
+            await flushPendingIceCandidates();
+            await syncLocalTracks(remoteProfileId, peerConnection);
+            await peerConnection.setLocalDescription(await peerConnection.createAnswer());
+            updatePeerStatusRef.current(remoteProfileId, peerConnection);
+
+            if (pendingRenegotiateRef.current.get(remoteProfileId) && peerConnection.signalingState === "stable") {
+              pendingRenegotiateRef.current.set(remoteProfileId, false);
+              void renegotiatePeerRef.current(remoteProfileId, peerConnection);
+            }
+
+            if (peerConnection.localDescription) {
+              emitSignal(remoteProfileId, { description: serializeSessionDescription(peerConnection.localDescription) });
+            }
+          } else if (incomingDescription.type === "answer") {
+            ignoreOfferRef.current.set(remoteProfileId, false);
+            settingRemoteAnswerPendingRef.current.set(remoteProfileId, true);
+            await peerConnection.setRemoteDescription(incomingDescription);
+            lastOfferSentAtRef.current.delete(remoteProfileId);
+            settingRemoteAnswerPendingRef.current.set(remoteProfileId, false);
+            await flushPendingIceCandidates();
+            updatePeerStatusRef.current(remoteProfileId, peerConnection);
+
+            if (pendingRenegotiateRef.current.get(remoteProfileId) && peerConnection.signalingState === "stable") {
+              pendingRenegotiateRef.current.set(remoteProfileId, false);
+              void renegotiatePeerRef.current(remoteProfileId, peerConnection);
+            }
+          } else {
+            ignoreOfferRef.current.set(remoteProfileId, false);
+            await peerConnection.setRemoteDescription(incomingDescription);
+            lastOfferSentAtRef.current.delete(remoteProfileId);
+            settingRemoteAnswerPendingRef.current.set(remoteProfileId, false);
+            await flushPendingIceCandidates();
+            updatePeerStatusRef.current(remoteProfileId, peerConnection);
+
+            if (pendingRenegotiateRef.current.get(remoteProfileId) && peerConnection.signalingState === "stable") {
+              pendingRenegotiateRef.current.set(remoteProfileId, false);
+              void renegotiatePeerRef.current(remoteProfileId, peerConnection);
+            }
+          }
+        } else if (incomingCandidate) {
+          if (ignoreOfferRef.current.get(remoteProfileId)) {
+            return;
+          }
+
+          if (!peerConnection.remoteDescription) {
+            const pendingCandidates = pendingIceCandidatesRef.current.get(remoteProfileId) ?? [];
+            pendingCandidates.push(incomingCandidate);
+            pendingIceCandidatesRef.current.set(remoteProfileId, pendingCandidates);
+            return;
+          }
+
+          await peerConnection.addIceCandidate(incomingCandidate);
+        }
+      } catch (error) {
+        peerSignalDebugRef.current.set(remoteProfileId, {
+          ...(peerSignalDebugRef.current.get(remoteProfileId) ?? currentSignalDebug),
+          lastError: error instanceof Error ? error.message : String(error ?? "Unknown signal handling error"),
+          lastErrorAt: Date.now(),
+        });
+        setPeerSignalDebugTick((value) => value + 1);
+        cleanupPeer(remoteProfileId);
+      }
+    };
+
+    const socket = sharedSocket as Socket | null;
+    if (!socket) {
+      return () => {
+        disposed = true;
+        socketRef.current = null;
+        socketConnectedRef.current = false;
+      };
+    }
+
+    socketRef.current = socket;
+
+    const joinMeetingRooms = () => {
+      socketConnectedRef.current = true;
+      socket.emit("inaccord:join", {
+        serverId,
+        channelId,
+        profileId: currentProfileId,
+        meeting: true,
+      });
+
+      flushPendingSignals();
+
+      for (const [remoteProfileId, peerConnection] of Array.from(peerConnectionsRef.current.entries())) {
+        if (!shouldInitiateInitialOffer(currentProfileId, remoteProfileId)) {
+          continue;
+        }
+
+        void renegotiatePeer(remoteProfileId, peerConnection);
+      }
+    };
+
+    const onConnect = () => {
+      joinMeetingRooms();
+    };
+
+    const onDisconnect = () => {
+      socketConnectedRef.current = false;
+    };
+
+    const onSignal = (payload: WebRtcSignalPayload) => {
+      void handleSignal(payload);
+    };
+
+    const onPeerPresence = (payload: WebRtcPeerPresencePayload) => {
+      if (
+        !payload ||
+        payload.serverId !== serverId ||
+        payload.channelId !== channelId ||
+        payload.profileId === currentProfileId
+      ) {
+        return;
+      }
+
+      if (payload.state === "leave") {
+        cleanupPeerRef.current(payload.profileId);
+        return;
+      }
+
+      const isSubscribedRemote = subscribedRemoteProfileIdsRef.current.has(payload.profileId);
+      const hasSubscriptionCapacity =
+        subscribedRemoteProfileIdsRef.current.size < WEBRTC_MAX_SIMULTANEOUS_REMOTE_VIDEO_PEERS;
+
+      if (!isSubscribedRemote && !hasSubscriptionCapacity) {
+        return;
+      }
+
+      const peerConnection = ensurePeerConnectionRef.current(payload.profileId);
+      if (!peerConnection) {
+        return;
+      }
+
+      if (shouldInitiateInitialOffer(currentProfileId, payload.profileId)) {
+        void renegotiatePeerRef.current(payload.profileId, peerConnection);
+      }
+    };
+
+    const onPeerSnapshot = (payload: WebRtcPeerSnapshotPayload) => {
+      if (!payload || payload.serverId !== serverId || payload.channelId !== channelId) {
+        return;
+      }
+
+      for (const profileId of payload.profileIds ?? []) {
+        const remoteProfileId = String(profileId ?? "").trim();
+        if (!remoteProfileId || remoteProfileId === currentProfileId) {
+          continue;
+        }
+
+        const isSubscribedRemote = subscribedRemoteProfileIdsRef.current.has(remoteProfileId);
+        const hasSubscriptionCapacity =
+          subscribedRemoteProfileIdsRef.current.size < WEBRTC_MAX_SIMULTANEOUS_REMOTE_VIDEO_PEERS;
+
+        if (!isSubscribedRemote && !hasSubscriptionCapacity) {
+          continue;
+        }
+
+        const peerConnection = ensurePeerConnectionRef.current(remoteProfileId);
+        if (!peerConnection) {
+          continue;
+        }
+
+        if (shouldInitiateInitialOffer(currentProfileId, remoteProfileId)) {
+          void renegotiatePeerRef.current(remoteProfileId, peerConnection);
+          continue;
+        }
+
+        requestRemoteOfferRef.current(remoteProfileId, 0);
+      }
+    };
+
+    socket.on("connect", onConnect);
+    socket.on("disconnect", onDisconnect);
+    socket.on(WEBRTC_SIGNAL_EVENT, onSignal);
+    socket.on(WEBRTC_PEER_EVENT, onPeerPresence);
+    socket.on(WEBRTC_PEER_SNAPSHOT_EVENT, onPeerSnapshot);
+
+    if (socket.connected) {
+      joinMeetingRooms();
+    }
+
+    return () => {
+      disposed = true;
+      socket.emit("inaccord:leave", {
+          serverId,
+          channelId,
+          profileId: currentProfileId,
+          meeting: true,
+      });
+      socket.off("connect", onConnect);
+      socket.off("disconnect", onDisconnect);
+      socket.off(WEBRTC_SIGNAL_EVENT, onSignal);
+      socket.off(WEBRTC_PEER_EVENT, onPeerPresence);
+      socket.off(WEBRTC_PEER_SNAPSHOT_EVENT, onPeerSnapshot);
+      if (socketRef.current === socket) {
+        socketRef.current = null;
+      }
+      socketConnectedRef.current = false;
+      pendingSignalsRef.current.clear();
+
+      for (const remoteProfileId of Array.from(peerConnectionsRef.current.keys())) {
+        cleanupPeerRef.current(remoteProfileId);
+      }
+    };
+  }, [canConnect, channelId, currentProfileId, isLiveSession, serverId, sharedSocket]);
+
+  useEffect(() => {
+    if (!isLiveSession) {
+      return;
+    }
+
+    const recoveryTimer = window.setInterval(() => {
+      setPeerRecoveryTick((value) => value + 1);
+    }, 2000);
+
+    return () => {
+      window.clearInterval(recoveryTimer);
+    };
+  }, [isLiveSession]);
+
+  useEffect(() => {
+    if (!isLiveSession) {
+      return;
+    }
+
+    const remoteMembers = subscribedRemoteMembers;
+    const remoteProfileIds = subscribedRemoteProfileIds;
+
+    for (const remoteMember of remoteMembers) {
+      const remoteProfileId = remoteMember.profileId;
+      const hadPeerConnection = peerConnectionsRef.current.has(remoteProfileId);
+      const peerConnection = ensurePeerConnectionRef.current(remoteProfileId);
+      if (peerConnection) {
+        const shouldInitiateOffer = shouldInitiateInitialOffer(currentProfileId, remoteProfileId);
+
+        if (!hadPeerConnection) {
+          if (shouldInitiateOffer) {
+            void renegotiatePeerRef.current(remoteProfileId, peerConnection);
+          } else {
+            requestRemoteOfferRef.current(remoteProfileId, 0);
+          }
+
+          continue;
+        }
+
+        if (
+          shouldInitiateOffer &&
+          !peerConnection.remoteDescription &&
+          peerConnection.signalingState === "stable"
+        ) {
+          const lastOfferSentAt = lastOfferSentAtRef.current.get(remoteProfileId) ?? 0;
+          if (Date.now() - lastOfferSentAt >= 3000) {
+            void renegotiatePeerRef.current(remoteProfileId, peerConnection);
+          }
+        }
+
+        if (
+          !shouldInitiateOffer &&
+          !peerConnection.remoteDescription &&
+          peerConnection.signalingState === "stable"
+        ) {
+          requestRemoteOfferRef.current(remoteProfileId);
+        }
+
+        const remoteStatus = peerStatuses[remoteProfileId] ?? null;
+        const remoteTelemetry = peerTelemetry[remoteProfileId] ?? null;
+        const expectsRemoteVideo = remoteMember.isCameraOn || remoteMember.isStreaming;
+        if (
+          expectsRemoteVideo &&
+          !remoteStatus?.hasRemoteVideo &&
+          shouldInitiateOffer &&
+          peerConnection.signalingState === "stable"
+        ) {
+          const lastOfferSentAt = lastOfferSentAtRef.current.get(remoteProfileId) ?? 0;
+          if (Date.now() - lastOfferSentAt >= 3000) {
+            void renegotiatePeerRef.current(remoteProfileId, peerConnection);
+          }
+        }
+
+        if (
+          expectsRemoteVideo &&
+          !remoteStatus?.hasRemoteVideo &&
+          !shouldInitiateOffer &&
+          peerConnection.signalingState === "stable"
+        ) {
+          requestRemoteOfferRef.current(remoteProfileId);
+        }
+
+        const staleOfferAgeMs = Date.now() - (lastOfferSentAtRef.current.get(remoteProfileId) ?? 0);
+        const staleLocalOffer =
+          remoteStatus?.signalingState === "have-local-offer" &&
+          remoteTelemetry?.flowState !== "flowing" &&
+          staleOfferAgeMs >= 6000;
+
+        const peerLooksPoisoned =
+          expectsRemoteVideo &&
+          ((
+            !remoteStatus?.hasRemoteVideo &&
+            (!peerConnection.remoteDescription ||
+              remoteStatus?.iceConnectionState === "failed" ||
+              remoteStatus?.connectionState === "failed")
+          ) ||
+            staleLocalOffer);
+
+        if (peerLooksPoisoned) {
+          const lastPeerResetAt = lastPeerResetAtRef.current.get(remoteProfileId) ?? 0;
+          if (Date.now() - lastPeerResetAt >= 8000) {
+            lastPeerResetAtRef.current.set(remoteProfileId, Date.now());
+            cleanupPeerRef.current(remoteProfileId, { preserveResetCooldown: true });
+
+            const nextPeerConnection = ensurePeerConnectionRef.current(remoteProfileId);
+            if (nextPeerConnection) {
+              if (shouldInitiateInitialOffer(currentProfileId, remoteProfileId)) {
+                void renegotiatePeerRef.current(remoteProfileId, nextPeerConnection);
+              } else {
+                emitSignalRef.current(remoteProfileId, { renegotiate: true });
+              }
+            }
+          }
+        }
+      }
+    }
+
+    for (const remoteProfileId of Array.from(peerConnectionsRef.current.keys())) {
+      if (!remoteProfileIds.has(remoteProfileId)) {
+        cleanupPeerRef.current(remoteProfileId);
+      }
+    }
+  }, [currentProfileId, isLiveSession, peerRecoveryTick, peerStatuses, peerTelemetry, subscribedRemoteMembers, subscribedRemoteProfileIds]);
+
+  useEffect(() => {
+    if (!isLiveSession) {
+      return;
+    }
+
+    const currentVideoTrack = localMediaStream?.getVideoTracks()[0] ?? null;
+    const nextTrackToken = currentVideoTrack ? `${currentVideoTrack.id}:${currentVideoTrack.readyState}` : "none";
+
+    const previousTrackToken = lastLocalVideoTrackTokenRef.current;
+    if (previousTrackToken === nextTrackToken) {
+      return;
+    }
+
+    lastLocalVideoTrackTokenRef.current = nextTrackToken;
+
+    if (previousTrackToken === null && nextTrackToken === "none") {
+      return;
+    }
+
+    for (const [remoteProfileId, peerConnection] of Array.from(peerConnectionsRef.current.entries())) {
+      void syncLocalTracksRef.current(remoteProfileId, peerConnection).catch(() => {
+        // renegotiation below remains the authoritative recovery path
+      });
+
+      if (shouldInitiateInitialOffer(currentProfileId, remoteProfileId)) {
+        void renegotiatePeerRef.current(remoteProfileId, peerConnection);
+        continue;
+      }
+
+      emitSignalRef.current(remoteProfileId, { renegotiate: true });
+    }
+  }, [channelId, currentProfileId, isLiveSession, localMediaStream, serverId]);
 
   useEffect(() => {
     if (!isPopoutView || typeof document === "undefined") {
@@ -391,6 +1872,20 @@ export const VideoChannelMeetingPanel = ({
     const height = 820;
     const left = Math.max(0, Math.round((window.screen.width - width) / 2));
     const top = Math.max(0, Math.round((window.screen.height - height) / 2));
+    const electronApi = (window as Window & { electronAPI?: ElectronMeetingPopoutApi }).electronAPI;
+
+    if (typeof electronApi?.openMeetingPopout === "function") {
+      void electronApi.openMeetingPopout(url).catch(() => {
+        window.open(
+          url,
+          `inaccord-meeting-${channelId}`,
+          `popup=yes,width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
+        );
+      });
+
+      router.replace(`${normalizedChannelPath}?popoutChat=true`);
+      return;
+    }
 
     window.open(
       url,
@@ -414,7 +1909,7 @@ export const VideoChannelMeetingPanel = ({
       return;
     }
 
-    router.replace(normalizedChannelPath);
+    router.replace(`${normalizedChannelPath}?live=false`);
   };
 
   const onClosePopout = () => {
@@ -423,16 +1918,8 @@ export const VideoChannelMeetingPanel = ({
     }
 
     const fallbackUrl = `${normalizedChannelPath}?live=true`;
-    const popbackStorageKey = "inaccord:meeting-popback";
-    const popbackPayload = JSON.stringify({
-      serverId,
-      channelId,
-      timestamp: Date.now(),
-    });
 
     try {
-      window.localStorage.setItem(popbackStorageKey, popbackPayload);
-
       if (window.opener && !window.opener.closed) {
         window.opener.postMessage(
           {
@@ -460,7 +1947,16 @@ export const VideoChannelMeetingPanel = ({
       return;
     }
 
-    const popbackStorageKey = "inaccord:meeting-popback";
+    const syncBackToMeeting = () => {
+      const targetUrl = `${normalizedChannelPath}?live=true`;
+      const currentUrl = `${window.location.pathname}${window.location.search}`;
+      if (currentUrl === targetUrl) {
+        return;
+      }
+
+      setShowPopbackNotice(true);
+      router.replace(targetUrl);
+    };
 
     const onPopbackMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) {
@@ -483,40 +1979,13 @@ export const VideoChannelMeetingPanel = ({
         return;
       }
 
-      setShowPopbackNotice(true);
-      router.replace(`${normalizedChannelPath}?live=true`);
-    };
-
-    const onPopbackStorage = (event: StorageEvent) => {
-      if (event.key !== popbackStorageKey || !event.newValue) {
-        return;
-      }
-
-      try {
-        const payload = JSON.parse(event.newValue) as
-          | {
-              serverId?: string;
-              channelId?: string;
-            }
-          | undefined;
-
-        if (payload?.serverId !== serverId || payload?.channelId !== channelId) {
-          return;
-        }
-
-        setShowPopbackNotice(true);
-        router.replace(`${normalizedChannelPath}?live=true`);
-      } catch {
-        // ignore invalid payloads
-      }
+      syncBackToMeeting();
     };
 
     window.addEventListener("message", onPopbackMessage);
-    window.addEventListener("storage", onPopbackStorage);
 
     return () => {
       window.removeEventListener("message", onPopbackMessage);
-      window.removeEventListener("storage", onPopbackStorage);
     };
   }, [channelId, isPopoutView, normalizedChannelPath, router, serverId]);
 
@@ -542,8 +2011,19 @@ export const VideoChannelMeetingPanel = ({
     window.blur();
   };
 
-  const syncStreamingState = (nextStreaming: boolean, nextStreamLabel: string | null = null) => {
+  const syncStreamingState = (
+    nextStreaming: boolean,
+    nextStreamLabel: string | null = null,
+    options?: { preserveCaptureIntent?: boolean }
+  ) => {
     setIsStreaming(nextStreaming);
+    if (!options?.preserveCaptureIntent) {
+      setCaptureIntent(nextStreaming ? "stream" : "none");
+    }
+    if (nextStreaming) {
+      setIsCameraEnabled(false);
+      window.dispatchEvent(new CustomEvent(VOICE_TOGGLE_CAMERA_EVENT, { detail: { isCameraOn: false } }));
+    }
     setStreamLabel(nextStreaming ? nextStreamLabel : null);
     window.dispatchEvent(
       new CustomEvent(VOICE_TOGGLE_STREAM_EVENT, {
@@ -555,6 +2035,58 @@ export const VideoChannelMeetingPanel = ({
     );
   };
 
+  const syncCameraState = (nextCameraEnabled: boolean, options?: { preserveCaptureIntent?: boolean }) => {
+    setIsCameraEnabled(nextCameraEnabled);
+    if (!options?.preserveCaptureIntent) {
+      setCaptureIntent(nextCameraEnabled ? "camera" : "none");
+    }
+    if (nextCameraEnabled) {
+      setIsStreaming(false);
+      setStreamLabel(null);
+      window.dispatchEvent(
+        new CustomEvent(VOICE_TOGGLE_STREAM_EVENT, {
+          detail: {
+            isStreaming: false,
+            streamLabel: null,
+          },
+        })
+      );
+    }
+
+    window.dispatchEvent(
+      new CustomEvent(VOICE_TOGGLE_CAMERA_EVENT, {
+        detail: {
+          isCameraOn: nextCameraEnabled,
+        },
+      })
+    );
+  };
+
+  const toggleCameraCapture = () => {
+    const next = !(isCameraEnabled || captureIntent === "camera");
+    if (next) {
+      setCaptureIntent("camera");
+      setCameraError(null);
+      syncStreamingState(false, null, { preserveCaptureIntent: true });
+      return;
+    }
+
+    setCaptureIntent("none");
+    syncCameraState(false);
+  };
+
+  const toggleStreamCapture = () => {
+    const next = !(isStreaming || captureIntent === "stream");
+    if (next) {
+      setCaptureIntent("stream");
+      setCameraError(null);
+      syncCameraState(false, { preserveCaptureIntent: true });
+      return;
+    }
+
+    setCaptureIntent("none");
+    syncStreamingState(false, null);
+  };
   const runParticipantAction = async (
     action: "mute" | "unmute" | "kick" | "hidevideo" | "showvideo" | "hidestream" | "showstream",
     targetMemberId: string
@@ -615,6 +2147,109 @@ export const VideoChannelMeetingPanel = ({
   const contextMenuMember = contextMenuState
     ? connectedMembersView.find((member) => member.memberId === contextMenuState.memberId) ?? null
     : null;
+  const stageMemberTransportStatus = stageMember?.profileId ? peerStatuses[stageMember.profileId] ?? null : null;
+  const stageMemberTelemetry = stageMember?.profileId ? peerTelemetry[stageMember.profileId] ?? null : null;
+  const stageMemberStatusText = !stageMember
+    ? ""
+    : stageMember.profileId === currentProfileId
+      ? stageMember.isStreaming
+        ? getStreamStageText(stageMember.streamLabel)
+        : stageMember.isCameraOn
+          ? "Camera live"
+          : "Audio only"
+      : stageRemoteStream
+        ? stageMember.isStreaming
+          ? getStreamStageText(stageMember.streamLabel)
+          : stageMember.isCameraOn
+            ? "Camera live"
+            : "Audio only"
+        : stageMemberTelemetry?.flowState === "flowing"
+          ? stageMember.isStreaming
+            ? `${getStreamStageText(stageMember.streamLabel)} • ${stageMemberTelemetry.signalStrength}`
+            : `Camera live • ${stageMemberTelemetry.signalStrength}`
+          : stageMemberTelemetry?.flowState === "stalled"
+            ? stageMember.isStreaming
+              ? "Stream stalled"
+              : "Camera stalled"
+        : stageMemberTransportStatus?.iceConnectionState === "failed" || stageMemberTransportStatus?.connectionState === "failed"
+          ? stageMember.isStreaming
+            ? "Stream transport failed"
+            : stageMember.isCameraOn
+              ? "Camera transport failed"
+              : "Audio transport failed"
+          : stageMember.isStreaming
+            ? "Connecting stream..."
+            : stageMember.isCameraOn
+              ? "Connecting camera..."
+              : "Audio only";
+
+    useEffect(() => {
+      if (!onDebugProbeUpdate) {
+        return;
+      }
+
+      const localVideoTrack = localMediaStream?.getVideoTracks()?.[0] ?? null;
+      onDebugProbeUpdate({
+        currentProfileId,
+        socketConnected: Boolean(socketRef.current?.connected),
+        captureIntent,
+        meshRemoteVideoLimit: WEBRTC_MAX_SIMULTANEOUS_REMOTE_VIDEO_PEERS,
+        subscribedRemoteVideoCount: subscribedRemoteMembers.length,
+        totalRemoteVideoCandidates: remoteVideoCandidateCount,
+        isCameraEnabled,
+        isStreaming,
+        cameraError,
+        localVideoTrackReady: Boolean(localVideoTrack && localVideoTrack.readyState === "live"),
+        localVideoTrackState: localVideoTrack?.readyState ?? null,
+        stageMemberProfileId: stageMember?.profileId ?? null,
+        stageMemberStatusText,
+        hasStageRemoteStream: Boolean(stageRemoteStream?.getVideoTracks().length),
+        remoteTransportMembers: remoteTransportMembers.map(({ member, isSubscribed, status, telemetry }) => {
+          const peerConnection = peerConnectionsRef.current.get(member.profileId);
+          const videoTransceivers = (peerConnection?.getTransceivers() ?? [])
+            .filter((transceiver) => {
+              return (
+                transceiver.sender.track?.kind === "video" ||
+                transceiver.receiver.track?.kind === "video" ||
+                (transceiver as { kind?: string | null }).kind === "video"
+              );
+            })
+            .map((transceiver) => ({
+              mid: transceiver.mid ?? null,
+              direction: String(transceiver.direction ?? "unknown"),
+              currentDirection: transceiver.currentDirection ?? null,
+              senderTrackId: transceiver.sender.track?.id ?? null,
+              senderTrackState: transceiver.sender.track?.readyState ?? null,
+              receiverTrackId: transceiver.receiver.track?.id ?? null,
+              receiverTrackState: transceiver.receiver.track?.readyState ?? null,
+            }));
+
+          return {
+            profileId: member.profileId,
+            displayName: member.displayName,
+            isSubscribed,
+            status,
+            telemetry,
+            signalDebug: peerSignalDebugRef.current.get(member.profileId) ?? null,
+            videoTransceivers,
+          };
+        }),
+      });
+    }, [
+      cameraError,
+      captureIntent,
+      currentProfileId,
+      isCameraEnabled,
+      isStreaming,
+      localMediaStream,
+      onDebugProbeUpdate,
+      remoteVideoCandidateCount,
+      remoteTransportMembers,
+      subscribedRemoteMembers.length,
+      stageMember?.profileId,
+      stageMemberStatusText,
+      stageRemoteStream,
+    ]);
 
   return (
     <div
@@ -634,9 +2269,108 @@ export const VideoChannelMeetingPanel = ({
           </div>
         ) : null}
 
+        {isLiveSession && isMeetingCreator && hasRemoteTransportFailure && !WEBRTC_HAS_TURN ? (
+          <div className="rounded-md border border-amber-400/45 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-100">
+            TURN relay is not configured. Remote camera and screen-share between different networks can fail until relay credentials are provided.
+          </div>
+        ) : null}
+
+        {isLiveSession && remoteTransportMembers.length ? (
+          <div className="rounded-md border border-border/60 bg-background/70 px-3 py-2 text-[11px] text-zinc-300">
+            <div className="mb-1 flex flex-wrap items-center justify-between gap-2 font-semibold uppercase tracking-[0.08em] text-zinc-400">
+              <span>Media transport</span>
+              <span className="text-[10px] text-zinc-500">
+                {remoteTransportMembers.length}/{remoteVideoCandidateCount || remoteTransportMembers.length} active feeds
+              </span>
+            </div>
+            {unsubscribedRemoteVideoCount > 0 ? (
+              <div className="mb-2 rounded-md border border-amber-400/30 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-100">
+                Mesh mode is bounded to {WEBRTC_MAX_SIMULTANEOUS_REMOTE_VIDEO_PEERS} remote video transports per client. {unsubscribedRemoteVideoCount} lower-priority feed{unsubscribedRemoteVideoCount === 1 ? " is" : "s are"} currently not attached.
+              </div>
+            ) : null}
+            <div className="space-y-1.5">
+              {remoteTransportMembers.map(({ member, isSubscribed, status, telemetry }) => {
+                const statusLabel = !status
+                  ? isSubscribed
+                    ? "waiting"
+                    : "budgeted"
+                  : telemetry?.flowState === "flowing"
+                    ? "live"
+                    : telemetry?.flowState === "stalled"
+                      ? "stalled"
+                      : status.hasRemoteVideo
+                        ? "received"
+                    : status.iceConnectionState === "failed" || status.connectionState === "failed"
+                      ? "failed"
+                      : status.connectionState === "connected"
+                        ? "connected"
+                        : status.connectionState === "connecting" || status.iceConnectionState === "checking"
+                          ? "connecting"
+                          : status.signalingState === "stable"
+                            ? "stable"
+                            : status.signalingState;
+
+                return (
+                  <div key={`transport-${member.memberId}`} className="flex items-center justify-between gap-2 rounded-md border border-border/50 bg-black/15 px-2 py-1.5">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-zinc-100">{member.displayName}</div>
+                      <div className="mt-0.5 truncate text-[10px] text-zinc-400">
+                        {!isSubscribed
+                          ? "not attached in current mesh budget"
+                          : telemetry
+                          ? [
+                              `flow:${telemetry.flowState}`,
+                              `signal:${telemetry.signalStrength}`,
+                              typeof telemetry.sendBitrateKbps === "number" ? `up:${telemetry.sendBitrateKbps} kbps` : null,
+                              typeof telemetry.bitrateKbps === "number" ? `down:${telemetry.bitrateKbps} kbps` : null,
+                              typeof telemetry.framesSentPerSecond === "number" ? `upfps:${telemetry.framesSentPerSecond}` : null,
+                              typeof telemetry.framesPerSecond === "number" ? `downfps:${telemetry.framesPerSecond}` : null,
+                              telemetry.resolution,
+                              telemetry.rttMs !== null ? `${telemetry.rttMs} ms` : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" • ")
+                          : "awaiting trace"}
+                      </div>
+                    </div>
+                    <span
+                      className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                        statusLabel === "live"
+                          ? "border-emerald-400/50 bg-emerald-500/15 text-emerald-200"
+                          : statusLabel === "stalled"
+                            ? "border-amber-400/50 bg-amber-500/15 text-amber-200"
+                            : statusLabel === "failed"
+                              ? "border-rose-400/50 bg-rose-500/15 text-rose-200"
+                              : statusLabel === "budgeted"
+                                ? "border-amber-300/40 bg-amber-500/10 text-amber-100"
+                              : statusLabel === "connecting"
+                                ? "border-indigo-400/50 bg-indigo-500/15 text-indigo-200"
+                                : "border-zinc-500/50 bg-zinc-500/10 text-zinc-300"
+                      }`}
+                      title={status ? `pc=${status.connectionState} ice=${status.iceConnectionState} signal=${status.signalingState}` : "Peer connection not created yet"}
+                    >
+                      {statusLabel}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
         <div className="rounded-2xl border border-border/70 bg-[#1f232b] p-3">
           <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-xl border border-border/60 bg-linear-to-br from-[#2e323c] to-[#1b1f26]">
-            {shouldShowLocalPreview && localMediaStream ? (
+            {shouldShowRemoteStage ? (
+              <video
+                key={`remote-stage-${stageRemoteStreamProfileId ?? stageRemoteMember?.memberId ?? "unknown"}`}
+                ref={remoteStageVideoRef}
+                autoPlay
+                playsInline
+                muted
+                className="h-full w-full object-cover"
+                aria-label={`${stageRemoteMember?.displayName ?? "Remote participant"} live video`}
+              />
+            ) : shouldShowLocalPreview && localMediaStream ? (
               <video
                 ref={localVideoRef}
                 autoPlay
@@ -651,13 +2385,7 @@ export const VideoChannelMeetingPanel = ({
                   {stageMember.profileId === currentProfileId ? "You" : stageMember.displayName}
                 </p>
                 <p className="mt-1 text-xs text-zinc-300">
-                  {isPresentingMode
-                    ? "Presenting"
-                    : stageMember.isStreaming
-                      ? `Streaming${stageMember.streamLabel ? ` • ${stageMember.streamLabel}` : ""}`
-                    : stageMember.isCameraOn
-                      ? "Camera live"
-                      : "Audio only"}
+                  {isPresentingMode ? "Presenting" : stageMemberStatusText}
                 </p>
               </div>
             ) : (
@@ -796,19 +2524,32 @@ export const VideoChannelMeetingPanel = ({
             {isLiveSession ? (
               <button
                 type="button"
-                onClick={() => {
-                  const next = !isStreaming;
-                  syncStreamingState(next, next ? streamLabel : null);
-                }}
+                onClick={toggleCameraCapture}
                 className={`inline-flex h-9 items-center gap-1 rounded-md border px-3 text-xs font-semibold transition ${
-                  isStreaming
+                  isCameraEnabled || captureIntent === "camera"
+                    ? "border-emerald-300/60 bg-emerald-500/30 text-emerald-100 hover:bg-emerald-500/40"
+                    : "border-white/20 bg-black/25 text-zinc-100 hover:bg-black/35"
+                }`}
+                title={isCameraEnabled || captureIntent === "camera" ? "Turn camera off" : "Turn camera on"}
+              >
+                {isCameraEnabled || captureIntent === "camera" ? <Video suppressHydrationWarning className="h-3.5 w-3.5" /> : <VideoOff suppressHydrationWarning className="h-3.5 w-3.5" />}
+                {isCameraEnabled || captureIntent === "camera" ? "Stop camera" : "Start camera"}
+              </button>
+            ) : null}
+
+            {isLiveSession ? (
+              <button
+                type="button"
+                onClick={toggleStreamCapture}
+                className={`inline-flex h-9 items-center gap-1 rounded-md border px-3 text-xs font-semibold transition ${
+                  isStreaming || captureIntent === "stream"
                     ? "border-indigo-300/60 bg-indigo-500/30 text-indigo-100 hover:bg-indigo-500/40"
                     : "border-white/20 bg-black/25 text-zinc-100 hover:bg-black/35"
                 }`}
-                title={isStreaming ? "Stop streaming" : "Start screen sharing"}
+                title={isStreaming || captureIntent === "stream" ? "Stop stream" : "Start stream"}
               >
-                {isStreaming ? <ScreenShareOff suppressHydrationWarning className="h-3.5 w-3.5" /> : <ScreenShare suppressHydrationWarning className="h-3.5 w-3.5" />}
-                {isStreaming ? "Stop stream" : "Go Live"}
+                {isStreaming || captureIntent === "stream" ? <ScreenShareOff suppressHydrationWarning className="h-3.5 w-3.5" /> : <ScreenShare suppressHydrationWarning className="h-3.5 w-3.5" />}
+                {isStreaming || captureIntent === "stream" ? "Stop stream" : "Start stream"}
               </button>
             ) : null}
 
@@ -877,19 +2618,30 @@ export const VideoChannelMeetingPanel = ({
                   <>
                     <button
                       type="button"
-                      onClick={() => {
-                        const next = !isStreaming;
-                        syncStreamingState(next, next ? streamLabel : null);
-                      }}
+                      onClick={toggleCameraCapture}
                       className={`inline-flex h-9 items-center gap-1 rounded-md border px-3 text-xs font-semibold transition ${
-                        isStreaming
+                        isCameraEnabled || captureIntent === "camera"
+                          ? "border-emerald-300/60 bg-emerald-500/30 text-emerald-100 hover:bg-emerald-500/40"
+                          : "border-white/20 bg-black/25 text-zinc-100 hover:bg-black/35"
+                      }`}
+                      title={isCameraEnabled || captureIntent === "camera" ? "Turn camera off" : "Turn camera on"}
+                    >
+                      {isCameraEnabled || captureIntent === "camera" ? <Video suppressHydrationWarning className="h-3.5 w-3.5" /> : <VideoOff suppressHydrationWarning className="h-3.5 w-3.5" />}
+                      {isCameraEnabled || captureIntent === "camera" ? "Stop camera" : "Start camera"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={toggleStreamCapture}
+                      className={`inline-flex h-9 items-center gap-1 rounded-md border px-3 text-xs font-semibold transition ${
+                        isStreaming || captureIntent === "stream"
                           ? "border-indigo-300/60 bg-indigo-500/30 text-indigo-100 hover:bg-indigo-500/40"
                           : "border-white/20 bg-black/25 text-zinc-100 hover:bg-black/35"
                       }`}
-                      title={isStreaming ? "Stop streaming" : "Start screen sharing"}
+                      title={isStreaming || captureIntent === "stream" ? "Stop stream" : "Start stream"}
                     >
-                      {isStreaming ? <ScreenShareOff suppressHydrationWarning className="h-3.5 w-3.5" /> : <ScreenShare suppressHydrationWarning className="h-3.5 w-3.5" />}
-                      {isStreaming ? "Stop stream" : "Go Live"}
+                      {isStreaming || captureIntent === "stream" ? <ScreenShareOff suppressHydrationWarning className="h-3.5 w-3.5" /> : <ScreenShare suppressHydrationWarning className="h-3.5 w-3.5" />}
+                      {isStreaming || captureIntent === "stream" ? "Stop stream" : "Start stream"}
                     </button>
 
                     <button
@@ -982,7 +2734,7 @@ export const VideoChannelMeetingPanel = ({
                         <>
                           <span>•</span>
                           <span className="group relative inline-flex max-w-full items-center gap-1 rounded-full border border-indigo-300/45 bg-indigo-500/20 px-1.5 py-0.5 text-[10px] font-medium text-indigo-100">
-                            <ScreenShare className="h-3 w-3 shrink-0" />
+                            <ScreenShare suppressHydrationWarning className="h-3 w-3 shrink-0" />
                             <span className="max-w-36 truncate">
                               {item.streamLabel ? `Live: ${item.streamLabel}` : "Live"}
                             </span>
@@ -1080,9 +2832,7 @@ export const VideoChannelMeetingPanel = ({
                         }`}
                         title={
                           item.isStreaming
-                            ? item.streamLabel
-                              ? `Streaming: ${item.streamLabel}`
-                              : "Streaming"
+                            ? getStreamTooltipText(item.streamLabel)
                             : "Not streaming"
                         }
                       >
@@ -1093,9 +2843,9 @@ export const VideoChannelMeetingPanel = ({
                   {item.isStreaming ? (
                     <div className="mt-1">
                       <span className="group relative inline-flex max-w-full items-center gap-1 rounded-full border border-indigo-300/45 bg-indigo-500/20 px-2 py-0.5 text-[10px] font-medium text-indigo-100">
-                        <ScreenShare className="h-3 w-3 shrink-0" />
+                        <ScreenShare suppressHydrationWarning className="h-3 w-3 shrink-0" />
                         <span className="max-w-40 truncate">
-                          {item.streamLabel ? `Source: ${item.streamLabel}` : "Live"}
+                          {getStreamBadgeText(item.streamLabel)}
                         </span>
                         {item.streamLabel ? (
                           <span className="pointer-events-none absolute bottom-full left-0 z-20 mb-1 hidden max-w-56 rounded-md border border-indigo-300/45 bg-[#151a2a] px-2 py-1 text-[10px] text-indigo-50 shadow-lg group-hover:block group-focus-within:block">

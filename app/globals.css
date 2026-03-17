@@ -7,6 +7,36 @@ body,
   height: 100%;
 }
 
+html,
+body {
+  max-width: 100vw;
+  overflow-x: clip;
+}
+
+[data-radix-popper-content-wrapper] {
+  max-width: calc(100vw - 1rem) !important;
+  max-height: calc(100vh - 1rem) !important;
+}
+
+[data-radix-popper-content-wrapper] > * {
+  max-width: calc(100vw - 1rem) !important;
+  max-height: calc(100vh - 1rem) !important;
+}
+
+[data-sonner-toaster] {
+  max-width: calc(100vw - 1rem) !important;
+}
+
+[data-sonner-toast] {
+  max-width: calc(100vw - 1rem) !important;
+  width: min(32rem, calc(100vw - 1rem)) !important;
+  overflow: hidden !important;
+}
+
+[data-sonner-toast] * {
+  max-width: 100%;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -167,67 +197,6 @@ body,
     --border: 0 7% 56%;
     --input: 0 7% 56%;
     --ring: 0 68% 48%;
-  }
-
-  :root.transparent-theme {
-    --background: 222 20% 12%;
-    --foreground: 210 40% 98%;
-    --card: 222 20% 16%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222 20% 16%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217 82% 60%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 220 16% 20%;
-    --secondary-foreground: 210 40% 96%;
-    --muted: 220 12% 24%;
-    --muted-foreground: 215 20% 72%;
-    --accent: 220 14% 28%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 35%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 220 12% 32%;
-    --input: 220 12% 32%;
-    --ring: 217 82% 60%;
-  }
-
-  :root.transparent-theme,
-  :root.transparent-theme body {
-    background-attachment: fixed;
-    background-size: cover;
-    background-position: center;
-  }
-
-  :root.transparent-theme[data-transparent-bg="aurora-blue"] body {
-    background-image:
-      radial-gradient(circle at 15% 20%, rgba(56, 189, 248, 0.35), transparent 40%),
-      radial-gradient(circle at 85% 15%, rgba(59, 130, 246, 0.3), transparent 42%),
-      linear-gradient(135deg, #0f172a 0%, #111827 45%, #1e293b 100%);
-  }
-
-  :root.transparent-theme[data-transparent-bg="sunset-red"] body {
-    background-image:
-      radial-gradient(circle at 18% 24%, rgba(251, 113, 133, 0.35), transparent 42%),
-      radial-gradient(circle at 82% 18%, rgba(239, 68, 68, 0.3), transparent 40%),
-      linear-gradient(135deg, #1f1115 0%, #31141a 42%, #4a1c24 100%);
-  }
-
-  :root.transparent-theme[data-transparent-bg="graphite"] body {
-    background-image:
-      radial-gradient(circle at 20% 22%, rgba(148, 163, 184, 0.24), transparent 38%),
-      radial-gradient(circle at 80% 20%, rgba(100, 116, 139, 0.22), transparent 40%),
-      linear-gradient(135deg, #111318 0%, #1b1f27 45%, #252b35 100%);
-  }
-
-  :root.transparent-theme[data-transparent-bg="forest"] body {
-    background-image:
-      radial-gradient(circle at 20% 20%, rgba(52, 211, 153, 0.28), transparent 42%),
-      radial-gradient(circle at 82% 18%, rgba(16, 185, 129, 0.22), transparent 40%),
-      linear-gradient(135deg, #0f1f1a 0%, #112b21 44%, #1a3b2e 100%);
-  }
-
-  :root.transparent-theme[data-transparent-bg="uploaded"] body {
-    background-image: var(--transparent-uploaded-bg);
   }
 
   :root.dark-red {
@@ -431,7 +400,7 @@ body,
 }
 
 .settings-theme-scope .bg-\[\#2b2d31\]\/95 {
-  background-color: hsl(var(--background) / 0.95) !important;
+  background-color: hsl(var(--background)) !important;
 }
 
 .settings-theme-scope .bg-\[\#232428\],
@@ -495,7 +464,7 @@ body,
 }
 
 /* Global theme bridge for hard-coded rails/modals/panels/popups/chat/DM surfaces. */
-:root:where(.light, .dark-blue, .dark-teal, .light-blue, .light-red, .dark-red, .light-gray, .dark-gray, .custom-theme, .transparent-theme)
+:root:where(.light, .dark-blue, .dark-teal, .light-blue, .light-red, .dark-red, .light-gray, .dark-gray, .custom-theme)
   :is(
     .bg-\[\#313338\],
     .bg-\[\#2b2d31\],
@@ -506,7 +475,7 @@ body,
   background-color: hsl(var(--background)) !important;
 }
 
-:root:where(.light, .dark-blue, .dark-teal, .light-blue, .light-red, .dark-red, .light-gray, .dark-gray, .custom-theme, .transparent-theme)
+:root:where(.light, .dark-blue, .dark-teal, .light-blue, .light-red, .dark-red, .light-gray, .dark-gray, .custom-theme)
   :is(
     .bg-\[\#232428\],
     .bg-\[\#1e1f22\],
@@ -527,7 +496,7 @@ body,
   background-color: hsl(var(--card)) !important;
 }
 
-:root:where(.light, .dark-blue, .dark-teal, .light-blue, .light-red, .dark-red, .light-gray, .dark-gray, .custom-theme, .transparent-theme)
+:root:where(.light, .dark-blue, .dark-teal, .light-blue, .light-red, .dark-red, .light-gray, .dark-gray, .custom-theme)
   :is(
     .bg-\[\#404249\],
     .bg-\[\#3f4248\],
@@ -548,7 +517,7 @@ body,
   background-color: hsl(var(--accent)) !important;
 }
 
-:root:where(.light, .dark-blue, .dark-teal, .light-blue, .light-red, .dark-red, .light-gray, .dark-gray, .custom-theme, .transparent-theme)
+:root:where(.light, .dark-blue, .dark-teal, .light-blue, .light-red, .dark-red, .light-gray, .dark-gray, .custom-theme)
   :is(
     .text-\[\#f2f3f5\],
     .text-\[\#dbdee1\],
@@ -558,7 +527,7 @@ body,
   color: hsl(var(--foreground)) !important;
 }
 
-:root:where(.light, .dark-blue, .dark-teal, .light-blue, .light-red, .dark-red, .light-gray, .dark-gray, .custom-theme, .transparent-theme)
+:root:where(.light, .dark-blue, .dark-teal, .light-blue, .light-red, .dark-red, .light-gray, .dark-gray, .custom-theme)
   :is(
     .text-\[\#949ba4\],
     .text-\[\#b5bac1\],
@@ -567,7 +536,7 @@ body,
   color: hsl(var(--muted-foreground)) !important;
 }
 
-:root:where(.light, .dark-blue, .dark-teal, .light-blue, .light-red, .dark-red, .light-gray, .dark-gray, .custom-theme, .transparent-theme)
+:root:where(.light, .dark-blue, .dark-teal, .light-blue, .light-red, .dark-red, .light-gray, .dark-gray, .custom-theme)
   :is(
     .border-black\/40,
     .border-black\/30,
@@ -581,87 +550,6 @@ body,
     .dark\:border-black\/20
   ) {
   border-color: hsl(var(--border)) !important;
-}
-
-/* Transparent-theme surface treatment (keeps text readable while making panels translucent). */
-:root.transparent-theme .bg-\[\#313338\],
-:root.transparent-theme .bg-\[\#2b2d31\],
-:root.transparent-theme .bg-\[\#2b2d31\]\/95 {
-  background-color: hsl(var(--background) / 0.58) !important;
-  backdrop-filter: blur(10px);
-}
-
-:root.transparent-theme .bg-\[\#232428\],
-:root.transparent-theme .bg-\[\#1e1f22\],
-:root.transparent-theme .bg-\[\#1f2024\],
-:root.transparent-theme .bg-\[\#16171a\],
-:root.transparent-theme .bg-\[\#1a1b1e\],
-:root.transparent-theme .bg-\[\#141518\] {
-  background-color: hsl(var(--card) / 0.48) !important;
-  backdrop-filter: blur(8px);
-}
-
-:root.transparent-theme .bg-\[\#404249\],
-:root.transparent-theme .bg-\[\#3f4248\],
-:root.transparent-theme .hover\:bg-\[\#3f4248\]:hover,
-:root.transparent-theme .hover\:bg-\[\#404249\]:hover {
-  background-color: hsl(var(--accent) / 0.48) !important;
-}
-
-:root.transparent-theme .text-\[\#f2f3f5\],
-:root.transparent-theme .text-\[\#dbdee1\],
-:root.transparent-theme .text-\[\#dcddde\] {
-  color: hsl(var(--foreground)) !important;
-}
-
-:root.transparent-theme .text-\[\#949ba4\],
-:root.transparent-theme .text-\[\#b5bac1\],
-:root.transparent-theme .text-\[\#7f8690\] {
-  color: #dbe5f4 !important;
-}
-
-/* Transparent-theme readability boost on image backgrounds. */
-:root.transparent-theme body,
-:root.transparent-theme p,
-:root.transparent-theme span,
-:root.transparent-theme a,
-:root.transparent-theme label,
-:root.transparent-theme small,
-:root.transparent-theme strong,
-:root.transparent-theme em,
-:root.transparent-theme li,
-:root.transparent-theme dt,
-:root.transparent-theme dd,
-:root.transparent-theme blockquote,
-:root.transparent-theme code,
-:root.transparent-theme pre,
-:root.transparent-theme h1,
-:root.transparent-theme h2,
-:root.transparent-theme h3,
-:root.transparent-theme h4,
-:root.transparent-theme h5,
-:root.transparent-theme h6,
-:root.transparent-theme button,
-:root.transparent-theme input,
-:root.transparent-theme textarea,
-:root.transparent-theme select,
-:root.transparent-theme [class*="text-"] {
-  color: #f8fbff !important;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.72);
-}
-
-:root.transparent-theme input::placeholder,
-:root.transparent-theme textarea::placeholder {
-  color: #d8e3f4 !important;
-  opacity: 1;
-}
-
-:root.transparent-theme .border-black\/30,
-:root.transparent-theme .border-black\/25,
-:root.transparent-theme .border-black\/20,
-:root.transparent-theme .border-white\/15,
-:root.transparent-theme .border-white\/10 {
-  border-color: hsl(var(--border) / 0.62) !important;
 }
 
 /* Explicit server/chat surface colors per custom theme to avoid fallback-looking dark rails. */
@@ -827,24 +715,6 @@ body,
   background-color: hsl(var(--card)) !important;
 }
 
-:root.transparent-theme .theme-servers-rail,
-:root.transparent-theme .theme-server-topbar {
-  background-color: hsl(var(--background) / 0.56) !important;
-  backdrop-filter: blur(10px);
-}
-
-:root.transparent-theme .theme-channels-rail,
-:root.transparent-theme .theme-server-search-shell,
-:root.transparent-theme .theme-server-chat-bar {
-  background-color: hsl(var(--card) / 0.48) !important;
-  backdrop-filter: blur(8px);
-}
-
-:root.transparent-theme .theme-server-chat-surface {
-  background-color: hsl(var(--background) / 0.34) !important;
-  backdrop-filter: blur(8px);
-}
-
 /* Explicit users-area surface colors per custom theme. */
 .theme-users-shell,
 .theme-users-left-rail,
@@ -983,21 +853,6 @@ body,
   background-color: hsl(var(--card)) !important;
 }
 
-:root.transparent-theme .theme-users-shell,
-:root.transparent-theme .theme-users-main-panel,
-:root.transparent-theme .theme-users-chat-surface {
-  background-color: hsl(var(--background) / 0.36) !important;
-  backdrop-filter: blur(8px);
-}
-
-:root.transparent-theme .theme-users-left-rail,
-:root.transparent-theme .theme-users-right-rail,
-:root.transparent-theme .theme-users-main-header,
-:root.transparent-theme .theme-users-chat-bar {
-  background-color: hsl(var(--card) / 0.48) !important;
-  backdrop-filter: blur(8px);
-}
-
 /* Explicit user-settings modal surface colors per custom theme. */
 .theme-settings-shell,
 .theme-settings-rail,
@@ -1114,17 +969,98 @@ body,
   background-color: hsl(var(--card)) !important;
 }
 
-:root.transparent-theme .theme-settings-shell,
-:root.transparent-theme .theme-settings-content,
-:root.transparent-theme .theme-settings-content-body {
-  background-color: hsl(var(--background) / 0.36) !important;
-  backdrop-filter: blur(8px);
+/* Explicit members modal surface colors per custom theme. */
+.theme-members-shell,
+.theme-members-card,
+.theme-members-tile {
+  background-color: hsl(var(--card));
 }
 
-:root.transparent-theme .theme-settings-rail,
-:root.transparent-theme .theme-settings-content-header {
-  background-color: hsl(var(--card) / 0.48) !important;
-  backdrop-filter: blur(8px);
+:root.light .theme-members-shell {
+  background-color: #ecf1f7 !important;
+}
+
+:root.light .theme-members-card,
+:root.light .theme-members-tile {
+  background-color: #dde5ee !important;
+}
+
+:root.dark .theme-members-shell {
+  background-color: #13161c !important;
+}
+
+:root.dark .theme-members-card,
+:root.dark .theme-members-tile {
+  background-color: #1a1f28 !important;
+}
+
+:root.dark-blue .theme-members-shell {
+  background-color: #143056 !important;
+}
+
+:root.dark-blue .theme-members-card,
+:root.dark-blue .theme-members-tile {
+  background-color: #173760 !important;
+}
+
+:root.dark-teal .theme-members-shell {
+  background-color: #145154 !important;
+}
+
+:root.dark-teal .theme-members-card,
+:root.dark-teal .theme-members-tile {
+  background-color: #1a6367 !important;
+}
+
+:root.light-blue .theme-members-shell {
+  background-color: #b4e4df !important;
+}
+
+:root.light-blue .theme-members-card,
+:root.light-blue .theme-members-tile {
+  background-color: #c4ece8 !important;
+}
+
+:root.light-red .theme-members-shell {
+  background-color: #d9b2b2 !important;
+}
+
+:root.light-red .theme-members-card,
+:root.light-red .theme-members-tile {
+  background-color: #e2c0c0 !important;
+}
+
+:root.dark-red .theme-members-shell {
+  background-color: #4a141c !important;
+}
+
+:root.dark-red .theme-members-card,
+:root.dark-red .theme-members-tile {
+  background-color: #5a1a24 !important;
+}
+
+:root.light-gray .theme-members-shell {
+  background-color: #c1c3c7 !important;
+}
+
+:root.light-gray .theme-members-card,
+:root.light-gray .theme-members-tile {
+  background-color: #cdced1 !important;
+}
+
+:root.dark-gray .theme-members-shell {
+  background-color: #252a33 !important;
+}
+
+:root.dark-gray .theme-members-card,
+:root.dark-gray .theme-members-tile {
+  background-color: #2f3540 !important;
+}
+
+:root.custom-theme .theme-members-shell,
+:root.custom-theme .theme-members-card,
+:root.custom-theme .theme-members-tile {
+  background-color: hsl(var(--card)) !important;
 }
 
 /* Final settings palette enforcement (wins over mixed hard-coded utility colors). */
@@ -1236,16 +1172,6 @@ body,
   --settings-text-primary: hsl(var(--custom-foreground));
   --settings-text-muted: hsl(var(--custom-muted-foreground));
   --settings-border: hsl(var(--custom-border) / 0.45);
-}
-
-:root.transparent-theme {
-  --settings-bg-main: rgba(22, 30, 44, 0.5);
-  --settings-bg-card: rgba(27, 36, 52, 0.44);
-  --settings-bg-secondary: rgba(31, 41, 58, 0.38);
-  --settings-bg-accent: rgba(47, 62, 87, 0.42);
-  --settings-text-primary: #f8fbff;
-  --settings-text-muted: #dbe5f4;
-  --settings-border: rgba(167, 186, 216, 0.35);
 }
 
 .settings-theme-scope .bg-\[\#2b2d31\],

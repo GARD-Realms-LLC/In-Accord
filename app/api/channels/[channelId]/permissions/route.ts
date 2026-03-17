@@ -9,6 +9,13 @@ import {
   resolveMemberContext,
 } from "@/lib/channel-permissions";
 
+type PermissionCandidate = {
+  targetType: "ROLE" | "MEMBER";
+  targetId: string;
+  label: string;
+  subtitle?: string | null;
+};
+
 type Params = {
   params: Promise<{
     channelId: string;
@@ -69,16 +76,38 @@ export async function GET(req: Request, { params }: Params) {
       from "ChannelPermission"
       where "serverId" = ${serverId}
         and "channelId" = ${channelId}
-        and "targetType" in ('EVERYONE','ROLE')
+        and "targetType" in ('EVERYONE','ROLE','MEMBER')
     `);
 
     const overwriteRows = (overwriteRowsResult as unknown as {
       rows?: Array<{
-        targetType: "EVERYONE" | "ROLE";
+        targetType: "EVERYONE" | "ROLE" | "MEMBER";
         targetId: string;
         allowView: boolean | null;
         allowSend: boolean | null;
         allowConnect: boolean | null;
+      }>;
+    }).rows ?? [];
+
+    const memberRowsResult = await db.execute(sql`
+      select
+        m."id" as "memberId",
+        m."profileId" as "profileId",
+        coalesce(nullif(trim(up."profileName"), ''), nullif(trim(u."name"), ''), nullif(trim(u."email"), ''), m."profileId") as "displayName",
+        nullif(trim(u."email"), '') as "email"
+      from "Member" m
+      left join "Users" u on u."userId" = m."profileId"
+      left join "UserProfile" up on up."userId" = m."profileId"
+      where m."serverId" = ${serverId}
+      order by coalesce(nullif(trim(up."profileName"), ''), nullif(trim(u."name"), ''), nullif(trim(u."email"), ''), m."profileId") asc
+    `);
+
+    const memberRows = (memberRowsResult as unknown as {
+      rows?: Array<{
+        memberId: string;
+        profileId: string;
+        displayName: string;
+        email: string | null;
       }>;
     }).rows ?? [];
 
@@ -121,9 +150,40 @@ export async function GET(req: Request, { params }: Params) {
           permissions: value,
         };
       }),
+      ...overwriteRows
+        .filter((row) => row.targetType === "MEMBER")
+        .map((row) => {
+          const memberMatch = memberRows.find((memberRow) => memberRow.memberId === row.targetId);
+          return {
+            targetType: "MEMBER" as const,
+            targetId: row.targetId,
+            label: memberMatch?.displayName ?? `Member ${row.targetId}`,
+            subtitle: memberMatch?.email ?? null,
+            permissions: {
+              allowView: row.allowView,
+              allowSend: row.allowSend,
+              allowConnect: row.allowConnect,
+            },
+          };
+        }),
     ];
 
-    return NextResponse.json({ overwrites });
+    const candidates: PermissionCandidate[] = [
+      ...roleRows.map((role) => ({
+        targetType: "ROLE" as const,
+        targetId: role.id,
+        label: role.name,
+        subtitle: "Role",
+      })),
+      ...memberRows.map((memberRow) => ({
+        targetType: "MEMBER" as const,
+        targetId: memberRow.memberId,
+        label: memberRow.displayName,
+        subtitle: memberRow.email ?? memberRow.profileId,
+      })),
+    ];
+
+    return NextResponse.json({ overwrites, candidates });
   } catch (error) {
     console.error("[CHANNEL_PERMISSIONS_GET]", error);
     return new NextResponse("Internal Error", { status: 500 });
@@ -143,7 +203,7 @@ export async function PATCH(req: Request, { params }: Params) {
       | {
           serverId?: string;
           overwrites?: Array<{
-            targetType?: "EVERYONE" | "ROLE";
+            targetType?: "EVERYONE" | "ROLE" | "MEMBER";
             targetId?: string;
             permissions?: Partial<{
               allowView: boolean | null;
@@ -186,7 +246,12 @@ export async function PATCH(req: Request, { params }: Params) {
 
     const normalized = incoming
       .map((item) => {
-        const targetType = item.targetType === "EVERYONE" ? "EVERYONE" : "ROLE";
+        const targetType =
+          item.targetType === "EVERYONE"
+            ? "EVERYONE"
+            : item.targetType === "MEMBER"
+              ? "MEMBER"
+              : "ROLE";
         const rawTargetId = String(item.targetId ?? "").trim();
         const targetId = targetType === "EVERYONE" ? "EVERYONE" : rawTargetId;
 
@@ -211,7 +276,7 @@ export async function PATCH(req: Request, { params }: Params) {
         };
       })
       .filter((item): item is {
-        targetType: "EVERYONE" | "ROLE";
+        targetType: "EVERYONE" | "ROLE" | "MEMBER";
         targetId: string;
         allowView: boolean | null;
         allowSend: boolean | null;
@@ -219,6 +284,12 @@ export async function PATCH(req: Request, { params }: Params) {
       } => Boolean(item));
 
     await db.transaction(async (tx) => {
+      await tx.execute(sql`
+        delete from "ChannelPermission"
+        where "serverId" = ${serverId}
+          and "channelId" = ${channelId}
+      `);
+
       for (const item of normalized) {
         await tx.execute(sql`
           insert into "ChannelPermission" (

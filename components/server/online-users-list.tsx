@@ -1,17 +1,20 @@
 "use client";
 
-import { Ban, Crown, Flag, MessageCircle, UserPlus, Wrench } from "lucide-react";
+import { Ban, Crown, Flag, MessageCircle, Network, UserPlus, Users as UsersIcon, Wrench } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import axios from "axios";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ActionTooltip } from "@/components/action-tooltip";
 import { BannerImage } from "@/components/ui/banner-image";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { BotAppBadge } from "@/components/bot-app-badge";
 import { ModeratorLineIcon } from "@/components/moderator-line-icon";
 import { NewUserCloverBadge } from "@/components/new-user-clover-badge";
+import { ProfileEffectLayer } from "@/components/profile-effect-layer";
 import { ProfileIconRow } from "@/components/profile-icon-row";
 import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
 import { UserAvatar } from "@/components/user-avatar";
@@ -42,14 +45,65 @@ type OnlineRailUser = {
   lastLogonAt: string | null;
 };
 
+type OnlineMutualProfileData = {
+  isDirectFriend?: boolean;
+  directFriendStatus?: "self" | "friends" | "not_friends";
+  mutualServersPercent?: number;
+  mutualServersCount?: number;
+  mutualFriendsCount?: number;
+  mutualServers?: Array<{ id: string; name: string; imageUrl: string }>;
+  mutualFriends?: Array<{
+    profileId: string;
+    memberId: string | null;
+    serverId: string | null;
+    displayName: string;
+    email: string | null;
+    imageUrl: string;
+  }>;
+};
+
+const createEmptyOnlineMutualProfileData = (): OnlineMutualProfileData => ({
+  isDirectFriend: false,
+  directFriendStatus: "not_friends",
+  mutualServersPercent: 0,
+  mutualServersCount: 0,
+  mutualFriendsCount: 0,
+  mutualServers: [],
+  mutualFriends: [],
+});
+
+const getProfileCardLoadErrorMessage = (error: unknown) => {
+  if (axios.isAxiosError(error)) {
+    const status = Number(error.response?.status ?? 0);
+    if (status === 401) {
+      return "Live profile data is unauthorized.";
+    }
+
+    if (status === 403) {
+      return "Live profile data is forbidden.";
+    }
+
+    if (status >= 500) {
+      return "Live profile data failed on the server.";
+    }
+
+    if (error.code === "ECONNABORTED") {
+      return "Live profile data timed out.";
+    }
+  }
+
+  return "Live profile data is unavailable.";
+};
+
 interface OnlineUsersListProps {
   users: OnlineRailUser[];
   roleGroups?: Array<{ id: string; name: string; position?: number }>;
   serverId?: string;
+  viewerProfileId?: string | null;
+  viewerMemberId?: string | null;
   canReorderRoleGroups?: boolean;
 }
 
-const PROFILE_CARD_CACHE_LIMIT = 600;
 const BOT_COMMANDS_CACHE_LIMIT = 300;
 
 const formatDate = (value: string | null) => {
@@ -69,35 +123,52 @@ export const OnlineUsersList = ({
   users,
   roleGroups = [],
   serverId,
+  viewerProfileId = null,
+  viewerMemberId = null,
   canReorderRoleGroups = false,
 }: OnlineUsersListProps) => {
+  const profileCardRequestSequenceRef = useRef(0);
   const params = useParams();
   const router = useRouter();
-  const [profileCardCache, setProfileCardCache] = useState<
-    Record<
-      string,
-      {
-        pronouns: string | null;
-        comment: string | null;
-        nameplateLabel?: string | null;
-        nameplateColor?: string | null;
-        nameplateImageUrl?: string | null;
-        effectiveNameplateLabel?: string | null;
-        effectiveNameplateColor?: string | null;
-        effectiveNameplateImageUrl?: string | null;
-        profileIcons?: ProfileIcon[];
-        effectiveAvatarDecorationUrl?: string | null;
-        effectiveBannerUrl?: string | null;
-        selectedServerTag: {
-          serverId: string;
-          serverName: string;
-          tagCode: string;
-          iconKey: string;
-          iconEmoji: string;
-        } | null;
-      }
-    >
-  >({});
+  const [activeProfileCardProfileId, setActiveProfileCardProfileId] = useState<string | null>(null);
+  const [activeProfileCardLoadError, setActiveProfileCardLoadError] = useState<string | null>(null);
+  const [activeProfileCard, setActiveProfileCard] = useState<{
+    pronouns: string | null;
+    comment: string | null;
+    effectiveImageUrl?: string | null;
+    nameplateLabel?: string | null;
+    nameplateColor?: string | null;
+    nameplateImageUrl?: string | null;
+    effectiveNameplateLabel?: string | null;
+    effectiveNameplateColor?: string | null;
+    effectiveNameplateImageUrl?: string | null;
+    profileIcons?: ProfileIcon[];
+    profileEffectUrl?: string | null;
+    effectiveAvatarDecorationUrl?: string | null;
+    effectiveProfileEffectUrl?: string | null;
+    effectiveBannerUrl?: string | null;
+    isDirectFriend?: boolean;
+    directFriendStatus?: "self" | "friends" | "not_friends";
+    mutualServersPercent?: number;
+    selectedServerTag: {
+      serverId: string;
+      serverName: string;
+      tagCode: string;
+      iconKey: string;
+      iconEmoji: string;
+    } | null;
+    mutualServersCount?: number;
+    mutualFriendsCount?: number;
+    mutualServers?: Array<{ id: string; name: string; imageUrl: string }>;
+    mutualFriends?: Array<{
+      profileId: string;
+      memberId: string | null;
+      serverId: string | null;
+      displayName: string;
+      email: string | null;
+      imageUrl: string;
+    }>;
+  } | null>(null);
   const [loadingProfileCardId, setLoadingProfileCardId] = useState<string | null>(null);
   const [botCommandsByProfileId, setBotCommandsByProfileId] = useState<
     Record<string, { botName: string; commands: string[] }>
@@ -110,8 +181,20 @@ export const OnlineUsersList = ({
   const [dragOverGroupId, setDragOverGroupId] = useState<string | null>(null);
   const [isSavingGroupOrder, setIsSavingGroupOrder] = useState(false);
   const isDraggingGroupRef = useRef(false);
-  const loadingProfileCardIdsRef = useRef(new Set<string>());
   const loadingBotCommandIdsRef = useRef(new Set<string>());
+  const [openMutualDetails, setOpenMutualDetails] = useState<{
+    type: "servers" | "friends";
+    displayName: string;
+    mutualServers: Array<{ id: string; name: string; imageUrl: string }>;
+    mutualFriends: Array<{
+      profileId: string;
+      memberId: string | null;
+      serverId: string | null;
+      displayName: string;
+      email: string | null;
+      imageUrl: string;
+    }>;
+  } | null>(null);
 
   const putBoundedRecordEntry = <TValue,>(
     current: Record<string, TValue>,
@@ -137,17 +220,45 @@ export const OnlineUsersList = ({
   };
 
   const loadProfileCard = async (memberId: string, profileId: string) => {
-    if (!profileId || profileCardCache[profileId] || loadingProfileCardIdsRef.current.has(profileId)) {
+    if (!profileId) {
       return;
     }
 
+    const requestSequence = profileCardRequestSequenceRef.current + 1;
+    profileCardRequestSequenceRef.current = requestSequence;
+    const loadingTimeout = window.setTimeout(() => {
+      if (profileCardRequestSequenceRef.current !== requestSequence) {
+        return;
+      }
+
+      setActiveProfileCard(null);
+      setActiveProfileCardLoadError("Live profile data timed out.");
+      setLoadingProfileCardId((prev) => (prev === profileId ? null : prev));
+    }, 5500);
+
     try {
-      loadingProfileCardIdsRef.current.add(profileId);
+      setActiveProfileCardProfileId(profileId);
+      setActiveProfileCard(null);
+      setActiveProfileCardLoadError(null);
       setLoadingProfileCardId(profileId);
 
-      const response = await axios.get<{
+      const requestConfig = {
+        timeout: 5000,
+        withCredentials: true,
+        params: { memberId, viewerProfileId, viewerMemberId, _t: Date.now() },
+        headers: {
+          "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate",
+          Pragma: "no-cache",
+        },
+      } as const;
+
+      const [cardResult, mutualsResult] = await Promise.allSettled([
+        axios.get<{
         pronouns?: string | null;
         comment?: string | null;
+          effectiveImageUrl?: string | null;
+          isDirectFriend?: boolean;
+          directFriendStatus?: "self" | "friends" | "not_friends";
           nameplateLabel?: string | null;
           nameplateColor?: string | null;
           nameplateImageUrl?: string | null;
@@ -155,8 +266,22 @@ export const OnlineUsersList = ({
           effectiveNameplateColor?: string | null;
           effectiveNameplateImageUrl?: string | null;
         profileIcons?: ProfileIcon[];
+        profileEffectUrl?: string | null;
         effectiveAvatarDecorationUrl?: string | null;
+        effectiveProfileEffectUrl?: string | null;
         effectiveBannerUrl?: string | null;
+        mutualServersPercent?: number;
+        mutualServersCount?: number;
+        mutualFriendsCount?: number;
+        mutualServers?: Array<{ id: string; name: string; imageUrl: string }>;
+        mutualFriends?: Array<{
+          profileId: string;
+          memberId: string | null;
+          serverId: string | null;
+          displayName: string;
+          email: string | null;
+          imageUrl: string;
+        }>;
         selectedServerTag?: {
           serverId: string;
           serverName: string;
@@ -164,12 +289,56 @@ export const OnlineUsersList = ({
           iconKey: string;
           iconEmoji: string;
         } | null;
-      }>(
-        `/api/profile/${encodeURIComponent(profileId)}/card`,
-        {
-          params: { memberId },
-        }
-      );
+      }>(`/api/profile/${encodeURIComponent(profileId)}/card`, requestConfig),
+        axios.get<OnlineMutualProfileData>(`/api/profile/${encodeURIComponent(profileId)}/mutuals`, requestConfig),
+      ]);
+
+      const response = cardResult.status === "fulfilled"
+        ? cardResult.value
+        : { data: {} as {
+            pronouns?: string | null;
+            comment?: string | null;
+            effectiveImageUrl?: string | null;
+            isDirectFriend?: boolean;
+            directFriendStatus?: "self" | "friends" | "not_friends";
+            nameplateLabel?: string | null;
+            nameplateColor?: string | null;
+            nameplateImageUrl?: string | null;
+            effectiveNameplateLabel?: string | null;
+            effectiveNameplateColor?: string | null;
+            effectiveNameplateImageUrl?: string | null;
+            profileIcons?: ProfileIcon[];
+            profileEffectUrl?: string | null;
+            effectiveAvatarDecorationUrl?: string | null;
+            effectiveProfileEffectUrl?: string | null;
+            effectiveBannerUrl?: string | null;
+            mutualServersPercent?: number;
+            mutualServersCount?: number;
+            mutualFriendsCount?: number;
+            mutualServers?: Array<{ id: string; name: string; imageUrl: string }>;
+            mutualFriends?: Array<{
+              profileId: string;
+              memberId: string | null;
+              serverId: string | null;
+              displayName: string;
+              email: string | null;
+              imageUrl: string;
+            }>;
+            selectedServerTag?: {
+              serverId: string;
+              serverName: string;
+              tagCode: string;
+              iconKey: string;
+              iconEmoji: string;
+            } | null;
+          } };
+      const mutualData = mutualsResult.status === "fulfilled"
+        ? mutualsResult.value.data
+        : null;
+
+      if (cardResult.status === "rejected" && mutualsResult.status === "rejected") {
+        throw mutualsResult.reason ?? cardResult.reason ?? new Error("Live profile data is unavailable.");
+      }
 
       const selectedServerTag =
         response.data?.selectedServerTag &&
@@ -186,77 +355,110 @@ export const OnlineUsersList = ({
           ? response.data.comment.trim()
           : null;
 
-      setProfileCardCache((prev) =>
-        putBoundedRecordEntry(
-          prev,
-          profileId,
-          {
-            pronouns,
-            comment,
-            nameplateLabel:
-              typeof response.data?.nameplateLabel === "string" && response.data.nameplateLabel.trim().length > 0
-                ? response.data.nameplateLabel.trim()
-                : null,
-            nameplateColor:
-              typeof response.data?.nameplateColor === "string" && response.data.nameplateColor.trim().length > 0
-                ? response.data.nameplateColor.trim()
-                : null,
-            nameplateImageUrl:
-              typeof response.data?.nameplateImageUrl === "string" && response.data.nameplateImageUrl.trim().length > 0
-                ? response.data.nameplateImageUrl.trim()
-                : null,
-            effectiveNameplateLabel:
-              typeof response.data?.effectiveNameplateLabel === "string" && response.data.effectiveNameplateLabel.trim().length > 0
-                ? response.data.effectiveNameplateLabel.trim()
-                : null,
-            effectiveNameplateColor:
-              typeof response.data?.effectiveNameplateColor === "string" && response.data.effectiveNameplateColor.trim().length > 0
-                ? response.data.effectiveNameplateColor.trim()
-                : null,
-            effectiveNameplateImageUrl:
-              typeof response.data?.effectiveNameplateImageUrl === "string" && response.data.effectiveNameplateImageUrl.trim().length > 0
-                ? response.data.effectiveNameplateImageUrl.trim()
-                : null,
-            profileIcons: Array.isArray(response.data?.profileIcons) ? response.data.profileIcons : [],
-            effectiveAvatarDecorationUrl:
-              typeof response.data?.effectiveAvatarDecorationUrl === "string" &&
-              response.data.effectiveAvatarDecorationUrl.trim().length > 0
-                ? response.data.effectiveAvatarDecorationUrl.trim()
-                : null,
-            effectiveBannerUrl:
-              typeof response.data?.effectiveBannerUrl === "string" &&
-              response.data.effectiveBannerUrl.trim().length > 0
-                ? response.data.effectiveBannerUrl.trim()
-                : null,
-            selectedServerTag,
-          },
-          PROFILE_CARD_CACHE_LIMIT
-        )
-      );
-    } catch {
-      setProfileCardCache((prev) =>
-        putBoundedRecordEntry(
-          prev,
-          profileId,
-          {
-            pronouns: null,
-            comment: null,
-            nameplateLabel: null,
-            nameplateColor: null,
-            nameplateImageUrl: null,
-            effectiveNameplateLabel: null,
-            effectiveNameplateColor: null,
-            effectiveNameplateImageUrl: null,
-            effectiveAvatarDecorationUrl: null,
-            effectiveBannerUrl: null,
-            selectedServerTag: null,
-          },
-          PROFILE_CARD_CACHE_LIMIT
-        )
-      );
+      if (profileCardRequestSequenceRef.current === requestSequence) {
+        setActiveProfileCard({
+          pronouns,
+          comment,
+          effectiveImageUrl:
+            typeof response.data?.effectiveImageUrl === "string" && response.data.effectiveImageUrl.trim().length > 0
+              ? response.data.effectiveImageUrl.trim()
+              : null,
+          nameplateLabel:
+            typeof response.data?.nameplateLabel === "string" && response.data.nameplateLabel.trim().length > 0
+              ? response.data.nameplateLabel.trim()
+              : null,
+          nameplateColor:
+            typeof response.data?.nameplateColor === "string" && response.data.nameplateColor.trim().length > 0
+              ? response.data.nameplateColor.trim()
+              : null,
+          nameplateImageUrl:
+            typeof response.data?.nameplateImageUrl === "string" && response.data.nameplateImageUrl.trim().length > 0
+              ? response.data.nameplateImageUrl.trim()
+              : null,
+          effectiveNameplateLabel:
+            typeof response.data?.effectiveNameplateLabel === "string" && response.data.effectiveNameplateLabel.trim().length > 0
+              ? response.data.effectiveNameplateLabel.trim()
+              : null,
+          effectiveNameplateColor:
+            typeof response.data?.effectiveNameplateColor === "string" && response.data.effectiveNameplateColor.trim().length > 0
+              ? response.data.effectiveNameplateColor.trim()
+              : null,
+          effectiveNameplateImageUrl:
+            typeof response.data?.effectiveNameplateImageUrl === "string" && response.data.effectiveNameplateImageUrl.trim().length > 0
+              ? response.data.effectiveNameplateImageUrl.trim()
+              : null,
+          profileIcons: Array.isArray(response.data?.profileIcons) ? response.data.profileIcons : [],
+          profileEffectUrl:
+            typeof response.data?.profileEffectUrl === "string" &&
+            response.data.profileEffectUrl.trim().length > 0
+              ? response.data.profileEffectUrl.trim()
+              : null,
+          effectiveAvatarDecorationUrl:
+            typeof response.data?.effectiveAvatarDecorationUrl === "string" &&
+            response.data.effectiveAvatarDecorationUrl.trim().length > 0
+              ? response.data.effectiveAvatarDecorationUrl.trim()
+              : null,
+          effectiveProfileEffectUrl:
+            typeof response.data?.effectiveProfileEffectUrl === "string" &&
+            response.data.effectiveProfileEffectUrl.trim().length > 0
+              ? response.data.effectiveProfileEffectUrl.trim()
+              : null,
+          effectiveBannerUrl:
+            typeof response.data?.effectiveBannerUrl === "string" &&
+            response.data.effectiveBannerUrl.trim().length > 0
+              ? response.data.effectiveBannerUrl.trim()
+              : null,
+          isDirectFriend: mutualData
+            ? Boolean(mutualData.isDirectFriend)
+            : Boolean(response.data?.isDirectFriend),
+          directFriendStatus:
+            mutualData?.directFriendStatus === "friends" || mutualData?.directFriendStatus === "self"
+              ? mutualData.directFriendStatus
+              : response.data?.directFriendStatus === "friends" || response.data?.directFriendStatus === "self"
+                ? response.data.directFriendStatus
+                : "not_friends",
+          mutualServersPercent:
+            typeof mutualData?.mutualServersPercent === "number"
+              ? mutualData.mutualServersPercent
+              : typeof response.data?.mutualServersPercent === "number"
+                ? response.data.mutualServersPercent
+                : 0,
+          mutualServersCount:
+            typeof mutualData?.mutualServersCount === "number"
+              ? mutualData.mutualServersCount
+              : typeof response.data?.mutualServersCount === "number"
+                ? response.data.mutualServersCount
+                : 0,
+          mutualFriendsCount:
+            typeof mutualData?.mutualFriendsCount === "number"
+              ? mutualData.mutualFriendsCount
+              : typeof response.data?.mutualFriendsCount === "number"
+                ? response.data.mutualFriendsCount
+                : 0,
+          mutualServers: Array.isArray(mutualData?.mutualServers)
+            ? mutualData?.mutualServers ?? []
+            : Array.isArray(response.data?.mutualServers)
+              ? response.data.mutualServers
+              : [],
+          mutualFriends: Array.isArray(mutualData?.mutualFriends)
+            ? mutualData?.mutualFriends ?? []
+            : Array.isArray(response.data?.mutualFriends)
+              ? response.data.mutualFriends
+              : [],
+          selectedServerTag,
+        });
+        setActiveProfileCardLoadError(null);
+      }
+    } catch (error) {
+      if (profileCardRequestSequenceRef.current === requestSequence) {
+        setActiveProfileCard(null);
+        setActiveProfileCardLoadError(getProfileCardLoadErrorMessage(error));
+      }
     } finally {
-      loadingProfileCardIdsRef.current.delete(profileId);
-      setLoadingProfileCardId((prev) => (prev === profileId ? null : prev));
+      window.clearTimeout(loadingTimeout);
+      if (profileCardRequestSequenceRef.current === requestSequence) {
+        setLoadingProfileCardId((prev) => (prev === profileId ? null : prev));
+      }
     }
   };
 
@@ -464,7 +666,24 @@ export const OnlineUsersList = ({
   };
 
   const renderMember = (member: OnlineRailUser) => {
-    const profileCard = profileCardCache[member.profileId];
+    const profileCard = activeProfileCardProfileId === member.profileId ? activeProfileCard : null;
+    const profileCardLoadError = activeProfileCardProfileId === member.profileId ? activeProfileCardLoadError : null;
+    const mutualServersCount = profileCard?.mutualServers?.length || (typeof profileCard?.mutualServersCount === "number" ? profileCard.mutualServersCount : 0);
+    const mutualFriendsCount = profileCard?.mutualFriends?.length || (typeof profileCard?.mutualFriendsCount === "number" ? profileCard.mutualFriendsCount : 0);
+    const mutualServersPercent = typeof profileCard?.mutualServersPercent === "number" ? profileCard.mutualServersPercent : 0;
+    const hasProfileCardLoadError = Boolean(profileCardLoadError);
+    const isSelfProfileCard = profileCard?.directFriendStatus === "self";
+    const mutualServersLabel = mutualServersCount > 0
+      ? `${mutualServersPercent}% in common · ${mutualServersCount}`
+      : "NOT WORKING";
+    const mutualFriendsLabel = mutualFriendsCount > 0
+      ? `${mutualFriendsCount} in common`
+      : "NOT WORKING";
+    const directFriendRelationshipLabel = profileCard?.directFriendStatus === "self"
+      ? "This is you"
+      : profileCard?.isDirectFriend
+        ? "Direct friends"
+        : "Not direct friends";
     const normalizedPresenceStatus = normalizePresenceStatus(member.presenceStatus);
     const memberCurrentGame = member.currentGame?.trim() || null;
     const isGlobalAdmin = isInAccordAdministrator(member.globalRole);
@@ -580,12 +799,27 @@ export const OnlineUsersList = ({
       }
     };
 
+    const onOpenMutualDetailsForMember = (type: "servers" | "friends") => {
+      setOpenMutualDetails({
+        type,
+        displayName: member.profileName || member.realName || member.displayName || "Unknown User",
+        mutualServers: profileCard?.mutualServers ?? [],
+        mutualFriends: profileCard?.mutualFriends ?? [],
+      });
+    };
+
     return (
       <Popover
         key={`online-${member.profileId}`}
         onOpenChange={(open) => {
           if (open) {
             void loadProfileCard(member.id, member.profileId);
+          } else if (activeProfileCardProfileId === member.profileId) {
+            profileCardRequestSequenceRef.current += 1;
+            setActiveProfileCardProfileId(null);
+            setActiveProfileCard(null);
+            setActiveProfileCardLoadError(null);
+            setLoadingProfileCardId((prev) => (prev === member.profileId ? null : prev));
           }
         }}
       >
@@ -597,7 +831,7 @@ export const OnlineUsersList = ({
           >
             <span className="relative inline-flex h-6 w-6 shrink-0">
               <UserAvatar
-                src={member.imageUrl ?? undefined}
+                src={profileCard?.effectiveImageUrl ?? member.imageUrl ?? undefined}
                 decorationSrc={profileCard?.effectiveAvatarDecorationUrl}
                 className="h-6 w-6"
               />
@@ -625,8 +859,9 @@ export const OnlineUsersList = ({
         <PopoverContent
           side="left"
           align="start"
-          className="w-[320px] overflow-hidden rounded-xl border border-black/30 bg-[#111214] p-0 text-[#dbdee1] shadow-2xl shadow-black/50"
+          className="relative w-[320px] overflow-hidden rounded-xl border border-black/30 bg-[#111214] p-0 text-[#dbdee1] shadow-2xl shadow-black/50"
         >
+          <ProfileEffectLayer src={profileCard?.effectiveProfileEffectUrl ?? profileCard?.profileEffectUrl ?? null} />
           <div className="relative h-24 bg-linear-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
             {(() => {
               const resolvedBannerUrl = resolveBannerUrl(profileCard?.effectiveBannerUrl || member.bannerUrl || null);
@@ -640,7 +875,7 @@ export const OnlineUsersList = ({
           <div className="relative p-3 pt-9">
             <div className="absolute -top-10 left-3 rounded-full border-4 border-[#111214]">
               <UserAvatar
-                src={member.imageUrl ?? undefined}
+                src={profileCard?.effectiveImageUrl ?? member.imageUrl ?? undefined}
                 decorationSrc={profileCard?.effectiveAvatarDecorationUrl}
                 className="h-20 w-20"
               />
@@ -654,6 +889,7 @@ export const OnlineUsersList = ({
                   profileId={member.profileId}
                   memberId={member.id}
                   pronouns={profileCard?.pronouns || null}
+                  disableCardFetch
                   containerClassName="w-full min-w-0"
                   nameClassName="text-base font-bold text-white"
                   showNameplate
@@ -663,7 +899,7 @@ export const OnlineUsersList = ({
                 />
               </div>
             </div>
-            <div className="mt-2 min-h-36 w-full max-w-55 resize-y overflow-auto rounded-md border border-white/10 bg-[#1a1b1e] px-2.5 py-2">
+            <div className="mt-3 h-40 w-full overflow-y-auto rounded-md border border-white/10 bg-[#1a1b1e] px-3 py-2.5">
               <p
                 className="whitespace-pre-wrap wrap-break-word align-top text-[11px] text-[#dbdee1]"
                 style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
@@ -701,6 +937,59 @@ export const OnlineUsersList = ({
                 </div>
               </div>
             ) : null}
+
+            <div className={`mt-3 grid gap-2 ${isSelfProfileCard ? "grid-cols-1" : "grid-cols-2"}`}>
+              <div className="col-span-2 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-xs text-[#dbdee1]">
+                <span className="font-medium">Relationship: </span>
+                <span className="text-[#949ba4]">
+                  {loadingProfileCardId === member.profileId
+                    ? "Loading..."
+                    : hasProfileCardLoadError
+                      ? profileCardLoadError
+                      : directFriendRelationshipLabel}
+                </span>
+              </div>
+              {!isSelfProfileCard ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => onOpenMutualDetailsForMember("servers")}
+                    disabled={loadingProfileCardId === member.profileId || hasProfileCardLoadError}
+                    className="flex items-center gap-2 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-left text-xs text-[#dbdee1] transition hover:bg-[#232428] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Network className="h-4 w-4 shrink-0 text-[#949ba4]" />
+                    <div className="min-w-0">
+                      <p className="font-medium">Mutual servers</p>
+                      <p className="text-[#949ba4]">
+                        {loadingProfileCardId === member.profileId
+                          ? "Loading..."
+                          : hasProfileCardLoadError
+                            ? profileCardLoadError
+                            : mutualServersLabel}
+                      </p>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenMutualDetailsForMember("friends")}
+                    disabled={loadingProfileCardId === member.profileId || hasProfileCardLoadError}
+                    className="flex items-center gap-2 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-left text-xs text-[#dbdee1] transition hover:bg-[#232428] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <UsersIcon className="h-4 w-4 shrink-0 text-[#949ba4]" />
+                    <div className="min-w-0">
+                      <p className="font-medium">Mutual friends</p>
+                      <p className="text-[#949ba4]">
+                        {loadingProfileCardId === member.profileId
+                          ? "Loading..."
+                          : hasProfileCardLoadError
+                            ? profileCardLoadError
+                            : mutualFriendsLabel}
+                      </p>
+                    </div>
+                  </button>
+                </>
+              ) : null}
+            </div>
 
             <div className="mt-3 flex items-center gap-2 border-t border-white/10 pt-3">
               {canShowBotCommands ? (
@@ -808,6 +1097,34 @@ export const OnlineUsersList = ({
     });
   }, [orderedRoleGroups]);
 
+  const onOpenMutualServer = (serverId: string) => {
+    const normalizedServerId = String(serverId ?? "").trim();
+    if (!normalizedServerId) {
+      return;
+    }
+
+    setOpenMutualDetails(null);
+    router.push(`/servers/${encodeURIComponent(normalizedServerId)}`);
+  };
+
+  const onOpenPrivateMessageByRoute = ({
+    serverId,
+    memberId,
+  }: {
+    serverId: string | null | undefined;
+    memberId: string | null | undefined;
+  }) => {
+    const normalizedServerId = String(serverId ?? "").trim();
+    const normalizedMemberId = String(memberId ?? "").trim();
+
+    if (!normalizedServerId || !normalizedMemberId) {
+      return;
+    }
+
+    setOpenMutualDetails(null);
+    router.push(`/users?serverId=${encodeURIComponent(normalizedServerId)}&memberId=${encodeURIComponent(normalizedMemberId)}`);
+  };
+
   const { usersByRoleGroup, unassignedUsers } = useMemo(() => {
     const groupedUsers = new Map<string, OnlineRailUser[]>();
     for (const group of orderedGroups) {
@@ -855,8 +1172,66 @@ export const OnlineUsersList = ({
   }, [orderedGroups, sortedUsers]);
 
   return (
-    <div className="space-y-3">
-      {orderedGroups.map((group) => {
+    <>
+      <Dialog open={Boolean(openMutualDetails)} onOpenChange={(open) => {
+        if (!open) {
+          setOpenMutualDetails(null);
+        }
+      }}>
+        <DialogContent className="max-w-lg overflow-hidden border-black/30 bg-[#111214] p-0 text-[#dbdee1]">
+          <DialogHeader className="px-6 pt-6">
+            <DialogTitle>{openMutualDetails?.type === "servers" ? "Mutual Servers" : "Mutual Friends"}</DialogTitle>
+            <DialogDescription className="text-[#949ba4]">
+              Shared with {openMutualDetails?.displayName || "this user"}
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-[min(60vh,28rem)] px-6 pb-6">
+            <div className="space-y-2">
+              {openMutualDetails?.type === "servers" ? (
+                openMutualDetails.mutualServers.length ? openMutualDetails.mutualServers.map((serverItem) => (
+                  <button
+                    key={serverItem.id}
+                    type="button"
+                    onClick={() => onOpenMutualServer(serverItem.id)}
+                    className="flex w-full items-center gap-3 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-left transition hover:bg-[#232428]"
+                  >
+                    <img src={serverItem.imageUrl} alt={serverItem.name} className="h-10 w-10 rounded-full object-cover" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-[#dbdee1]">{serverItem.name}</p>
+                    </div>
+                  </button>
+                )) : (
+                  <div className="rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-4 text-sm text-[#949ba4]">
+                    No mutual servers found.
+                  </div>
+                )
+              ) : (
+                openMutualDetails?.mutualFriends.length ? openMutualDetails.mutualFriends.map((friendItem) => (
+                  <button
+                    key={friendItem.profileId}
+                    type="button"
+                    onClick={() => onOpenPrivateMessageByRoute({ serverId: friendItem.serverId, memberId: friendItem.memberId })}
+                    disabled={!friendItem.serverId || !friendItem.memberId}
+                    className="flex w-full items-center gap-3 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-left transition hover:bg-[#232428] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <UserAvatar src={friendItem.imageUrl} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-[#dbdee1]">{friendItem.displayName}</p>
+                      <p className="truncate text-xs text-[#949ba4]">{friendItem.email || friendItem.profileId}</p>
+                    </div>
+                  </button>
+                )) : (
+                  <div className="rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-4 text-sm text-[#949ba4]">
+                    No mutual friends found.
+                  </div>
+                )
+              )}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+      <div className="space-y-3">
+        {orderedGroups.map((group) => {
         const groupUsers = usersByRoleGroup.get(group.id) ?? [];
         const isCollapsed = Boolean(collapsedByGroup[group.id]);
 
@@ -895,7 +1270,7 @@ export const OnlineUsersList = ({
         );
       })}
 
-      <div className="space-y-1.5">
+        <div className="space-y-1.5">
         <button
           type="button"
           onClick={() =>
@@ -913,8 +1288,9 @@ export const OnlineUsersList = ({
           <span className="text-xs text-[#949ba4]">{collapsedByGroup.__unassigned ? "▸" : "▾"}</span>
         </button>
 
-        {collapsedByGroup.__unassigned ? null : unassignedUsers.map((member) => renderMember(member))}
+          {collapsedByGroup.__unassigned ? null : unassignedUsers.map((member) => renderMember(member))}
+        </div>
       </div>
-    </div>
+    </>
   );
 };

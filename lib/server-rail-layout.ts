@@ -6,6 +6,12 @@ export type ServerRailFolder = {
   id: string;
   name: string;
   serverIds: string[];
+  background?: string;
+};
+
+const normalizeFolderBackground = (value: unknown) => {
+  const normalized = String(value ?? "").trim();
+  return /^#([0-9a-fA-F]{6})$/.test(normalized) ? normalized.toLowerCase() : undefined;
 };
 
 let serverRailLayoutSchemaReady = false;
@@ -16,29 +22,32 @@ export const normalizeServerRailFolders = (input: unknown): ServerRailFolder[] =
     return [];
   }
 
-  return input
-    .map((item) => {
-      if (!item || typeof item !== "object") {
-        return null;
-      }
+  const folders: ServerRailFolder[] = [];
 
-      const maybeFolder = item as Partial<ServerRailFolder>;
+  for (const item of input) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
 
-      if (typeof maybeFolder.id !== "string" || typeof maybeFolder.name !== "string") {
-        return null;
-      }
+    const maybeFolder = item as Partial<ServerRailFolder>;
 
-      const serverIds = Array.isArray(maybeFolder.serverIds)
-        ? Array.from(new Set(maybeFolder.serverIds.filter((id): id is string => typeof id === "string")))
-        : [];
+    if (typeof maybeFolder.id !== "string" || typeof maybeFolder.name !== "string") {
+      continue;
+    }
 
-      return {
-        id: maybeFolder.id,
-        name: maybeFolder.name,
-        serverIds,
-      };
-    })
-    .filter((item): item is ServerRailFolder => item !== null);
+    const serverIds = Array.isArray(maybeFolder.serverIds)
+      ? Array.from(new Set(maybeFolder.serverIds.filter((id): id is string => typeof id === "string")))
+      : [];
+
+    folders.push({
+      id: maybeFolder.id,
+      name: maybeFolder.name,
+      serverIds,
+      background: normalizeFolderBackground(maybeFolder.background),
+    });
+  }
+
+  return folders;
 };
 
 export const ensureServerRailLayoutSchema = async () => {

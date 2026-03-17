@@ -30,6 +30,8 @@ export type ModalType =
 interface ModalData {
   server?: Server;
   channel?: Channel;
+  viewerProfileId?: string | null;
+  viewerMemberId?: string | null;
   boosterCount?: number;
   channelGroup?: {
     id: string;
@@ -45,6 +47,7 @@ interface ModalData {
   profileEmail?: string | null;
   profileImageUrl?: string | null;
   profileAvatarDecorationUrl?: string | null;
+  profileEffectUrl?: string | null;
   profileNameplateLabel?: string | null;
   profileNameplateColor?: string | null;
   profileNameplateImageUrl?: string | null;

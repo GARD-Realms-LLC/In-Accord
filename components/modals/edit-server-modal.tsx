@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { BannerImage } from "@/components/ui/banner-image";
 import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
+import { ServerBackupSettingsPanel } from "@/components/modals/server-backup-settings-panel";
 import { UserAvatar } from "@/components/user-avatar";
 import { useModal } from "@/hooks/use-modal-store";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -73,6 +74,7 @@ type ServerSettingsSection =
   | "safetyAlerts"
   | "communityOverview"
   | "eventsManagement"
+  | "backups"
   | "safetySetup"
   | "serverInsights"
   | "partnerProgram"
@@ -98,6 +100,7 @@ const SETTINGS_SECTIONS: Array<{
       { key: "members", label: "Members" },
       { key: "invites", label: "Invites" },
       { key: "integrations", label: "Manage Bots" },
+      { key: "backups", label: "Backups" },
       { key: "ourBoard", label: "In-Aboard" },
       { key: "serverGuide", label: "Server Guide" },
       { key: "emoji", label: "Emoji" },
@@ -183,6 +186,7 @@ const SECTION_TITLES: Record<ServerSettingsSection, string> = {
   serverTemplate: "Server Template",
   communityOverview: "Community Overview",
   eventsManagement: "Events Management",
+  backups: "Backups",
   widget: "Widget",
   deleteServer: "Delete Server",
 };
@@ -212,6 +216,7 @@ const GENERIC_SECTION_DESCRIPTIONS: Partial<Record<ServerSettingsSection, string
   safetyAlerts: "Configure safety alert delivery and severity handling.",
   communityOverview: "Manage community-level server settings.",
   eventsManagement: "Manage scheduled events for this server.",
+  backups: "Create portable server backups and route them to file, cloud, or FTP destinations.",
   safetySetup: "Configure recommended safety defaults.",
   serverInsights: "Adjust server metrics and insights preferences.",
   partnerProgram: "Manage partner program visibility and settings.",
@@ -249,6 +254,7 @@ const SERVER_GUIDE_USAGE: Partial<Record<ServerSettingsSection, string>> = {
   safetyAlerts: "Configure alert visibility and review high-priority server safety notices.",
   communityOverview: "Manage community feature readiness and participation standards.",
   eventsManagement: "Create events and review upcoming and past event activity for your server.",
+  backups: "Choose a destination, save credentials if needed, and run per-server backups whenever you need a snapshot.",
   safetySetup: "Walk through baseline safety recommendations for your server.",
   serverInsights: "Review growth and engagement analytics to guide server improvements.",
   partnerProgram: "Manage partner-related settings, eligibility visibility, and readiness.",
@@ -1106,6 +1112,7 @@ export const EditServerModal = () => {
       "safetyAlerts",
       "communityOverview",
       "eventsManagement",
+      "backups",
       "safetySetup",
       "serverInsights",
       "partnerProgram",
@@ -3484,6 +3491,7 @@ export const EditServerModal = () => {
     activeSection === "onboarding" ||
     activeSection === "serverTemplate" ||
     activeSection === "serverGuide" ||
+    activeSection === "backups" ||
     activeSection === "integrations" ||
     activeSection === "ourBoard" ||
     activeSection === "soundboard" ||
@@ -5190,6 +5198,8 @@ export const EditServerModal = () => {
                           </div>
                         </div>
                       </div>
+                    ) : activeSection === "backups" ? (
+                      <ServerBackupSettingsPanel serverId={server?.id} />
                     ) : activeSection === "onboarding" ? (
                       <div className="space-y-4">
                         <div className="grid gap-3 sm:grid-cols-3">

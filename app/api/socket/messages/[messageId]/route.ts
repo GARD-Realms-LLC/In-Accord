@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { and, eq, sql } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
-import { channel, db, member, MemberRole, message, server } from "@/lib/db";
-import { computeChannelPermissionForRole, resolveMemberContext } from "@/lib/channel-permissions";
+import { channel, db, member, MemberRole, message } from "@/lib/db";
+import { computeChannelPermissionForMember, resolveMemberContext } from "@/lib/channel-permissions";
+import { emitChannelWebhookEvent, getChannelFeatureSettings } from "@/lib/channel-feature-settings";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 import { parseMentionSegments } from "@/lib/mentions";
 import { publishRealtimeEvent } from "@/lib/realtime-events-server";
@@ -67,6 +68,40 @@ const sanitizeRoleMentions = async (content: string, serverId: string) => {
     .join("");
 };
 
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const applyBlockedWordModeration = ({
+  content,
+  blockedWords,
+  action,
+}: {
+  content: string;
+  blockedWords: string[];
+  action: "warn" | "block";
+}) => {
+  let nextContent = content;
+  const matchedWords = blockedWords.filter((word) => {
+    const normalized = String(word ?? "").trim();
+    if (!normalized) {
+      return false;
+    }
+
+    return new RegExp(escapeRegExp(normalized), "i").test(content);
+  });
+
+  if (matchedWords.length === 0) {
+    return { nextContent, matchedWords };
+  }
+
+  if (action === "warn") {
+    for (const word of matchedWords) {
+      nextContent = nextContent.replace(new RegExp(escapeRegExp(word), "gi"), "[blocked]");
+    }
+  }
+
+  return { nextContent, matchedWords };
+};
+
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<RouteParams> }
@@ -98,12 +133,6 @@ export async function PATCH(
       return new NextResponse("Content is required", { status: 400 });
     }
 
-    const sanitizedContent = await sanitizeRoleMentions(content, serverId);
-
-    if (!sanitizedContent) {
-      return new NextResponse("Content is required", { status: 400 });
-    }
-
     const currentMember = await db.query.member.findFirst({
       where: and(eq(member.serverId, serverId), eq(member.profileId, profile.id)),
     });
@@ -125,11 +154,14 @@ export async function PATCH(
       serverId,
     });
 
-    const permissions = await computeChannelPermissionForRole({
+    if (!memberContext) {
+      return new NextResponse("Member not found", { status: 404 });
+    }
+
+    const permissions = await computeChannelPermissionForMember({
       serverId,
       channelId,
-      role: currentMember.role,
-      isServerOwner: memberContext?.isServerOwner ?? false,
+      memberContext,
     });
 
     if (!permissions.allowView) {
@@ -144,8 +176,7 @@ export async function PATCH(
       return new NextResponse("Message not found", { status: 404 });
     }
 
-    const isOwner = currentMessage.memberId === currentMember.id;
-    if (!isOwner) {
+    if (currentMessage.memberId !== currentMember.id) {
       return new NextResponse("Forbidden", { status: 403 });
     }
 
@@ -157,12 +188,33 @@ export async function PATCH(
       return new NextResponse("Attachment messages cannot be edited", { status: 400 });
     }
 
+    const featureSettings = await getChannelFeatureSettings({ serverId, channelId });
+
+    if (featureSettings.moderation.requireVerifiedEmail && !String(profile.email ?? "").trim()) {
+      return new NextResponse("This channel requires an account email before you can participate.", { status: 403 });
+    }
+
+    const sanitizedContent = await sanitizeRoleMentions(content, serverId);
+    const moderated = applyBlockedWordModeration({
+      content: sanitizedContent,
+      blockedWords: featureSettings.moderation.blockedWords,
+      action: featureSettings.moderation.flaggedWordsAction,
+    });
+
+    if (moderated.matchedWords.length > 0 && featureSettings.moderation.flaggedWordsAction === "block") {
+      return new NextResponse("This message contains blocked words for this channel.", { status: 400 });
+    }
+
+    if (!moderated.nextContent) {
+      return new NextResponse("Content is required", { status: 400 });
+    }
+
     const now = new Date();
 
     const updated = await db
       .update(message)
       .set({
-        content: sanitizedContent,
+        content: moderated.nextContent,
         updatedAt: now,
       })
       .where(and(eq(message.id, messageId), eq(message.channelId, channelId)))
@@ -177,6 +229,20 @@ export async function PATCH(
       },
       { entity: "message", action: "updated" }
     );
+
+    await emitChannelWebhookEvent({
+      serverId,
+      channelId,
+      channelName: currentChannel.name,
+      eventType: "MESSAGE_UPDATED",
+      actorProfileId: profile.id,
+      payload: {
+        messageId,
+        content: moderated.nextContent,
+        blockedWordMatches: moderated.matchedWords,
+        threadId: currentMessage.threadId,
+      },
+    });
 
     return NextResponse.json(updated[0] ?? null);
   } catch (error) {
@@ -231,11 +297,14 @@ export async function DELETE(
       serverId,
     });
 
-    const permissions = await computeChannelPermissionForRole({
+    if (!memberContext) {
+      return new NextResponse("Member not found", { status: 404 });
+    }
+
+    const permissions = await computeChannelPermissionForMember({
       serverId,
       channelId,
-      role: currentMember.role,
-      isServerOwner: memberContext?.isServerOwner ?? false,
+      memberContext,
     });
 
     if (!permissions.allowView) {
@@ -251,7 +320,7 @@ export async function DELETE(
     }
 
     const isOwner = currentMessage.memberId === currentMember.id;
-    const isServerOwner = Boolean(memberContext?.isServerOwner);
+    const isServerOwner = Boolean(memberContext.isServerOwner);
     const isAdministrator = currentMember.role === MemberRole.ADMIN;
     const isInAccordStaff = hasInAccordAdministrativeAccess(profile.role);
     const canModerate = isServerOwner || isAdministrator || currentMember.role === MemberRole.MODERATOR || isInAccordStaff;
@@ -324,6 +393,19 @@ export async function DELETE(
         { entity: "message", action: "deleted" }
       );
 
+      await emitChannelWebhookEvent({
+        serverId,
+        channelId,
+        channelName: currentChannel.name,
+        eventType: "MESSAGE_DELETED",
+        actorProfileId: profile.id,
+        payload: {
+          messageId,
+          hardDeleted: true,
+          threadId: currentMessage.threadId,
+        },
+      });
+
       return NextResponse.json({ ok: true, hardDeleted: true });
     }
 
@@ -349,6 +431,19 @@ export async function DELETE(
       },
       { entity: "message", action: "deleted" }
     );
+
+    await emitChannelWebhookEvent({
+      serverId,
+      channelId,
+      channelName: currentChannel.name,
+      eventType: "MESSAGE_DELETED",
+      actorProfileId: profile.id,
+      payload: {
+        messageId,
+        hardDeleted: false,
+        threadId: currentMessage.threadId,
+      },
+    });
 
     return NextResponse.json(updated[0] ?? null);
   } catch (error) {

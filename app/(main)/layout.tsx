@@ -26,11 +26,11 @@ const MainLayout = async ({ children }: { children: React.ReactNode }) => {
         profileRealName={profile.realName ?? null}
         profileName={profile.profileName ?? null}
         profilePronouns={profile.pronouns ?? null}
-        profileComment={profile.comment ?? null}
         profileRole={profile.role}
         profileEmail={profile.email}
         profileImageUrl={profile.imageUrl}
         profileAvatarDecorationUrl={profile.avatarDecorationUrl ?? null}
+        profileEffectUrl={(profile as { profileEffectUrl?: string | null }).profileEffectUrl ?? null}
         profileNameplateLabel={profile.nameplateLabel ?? null}
         profileNameplateColor={profile.nameplateColor ?? null}
         profileNameplateImageUrl={(profile as { nameplateImageUrl?: string | null }).nameplateImageUrl ?? null}

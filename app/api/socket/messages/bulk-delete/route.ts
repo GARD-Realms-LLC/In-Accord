@@ -4,7 +4,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { currentProfile } from "@/lib/current-profile";
 import { channel, db, member, message } from "@/lib/db";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
-import { computeChannelPermissionForRole, resolveMemberContext } from "@/lib/channel-permissions";
+import { computeChannelPermissionForMember, resolveMemberContext } from "@/lib/channel-permissions";
 import { publishRealtimeEvent } from "@/lib/realtime-events-server";
 import { REALTIME_CHANNEL_REFRESH_EVENT } from "@/lib/realtime-events";
 
@@ -66,11 +66,14 @@ export async function POST(req: Request) {
       serverId,
     });
 
-    const permissions = await computeChannelPermissionForRole({
+    if (!memberContext) {
+      return new NextResponse("Member not found", { status: 404 });
+    }
+
+    const permissions = await computeChannelPermissionForMember({
       serverId,
       channelId,
-      role: currentMember.role,
-      isServerOwner: memberContext?.isServerOwner ?? false,
+      memberContext,
     });
 
     if (!permissions.allowView) {

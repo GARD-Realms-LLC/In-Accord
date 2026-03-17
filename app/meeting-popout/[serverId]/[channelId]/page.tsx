@@ -4,9 +4,10 @@ import { and, eq } from "drizzle-orm";
 import { currentProfile } from "@/lib/current-profile";
 import { channel, db, member } from "@/lib/db";
 import { ChannelType } from "@/lib/db/types";
-import { resolveMemberContext, computeChannelPermissionForRole } from "@/lib/channel-permissions";
+import { resolveMemberContext, computeChannelPermissionForMember } from "@/lib/channel-permissions";
 import { pruneStaleVoiceStates, listActiveVoiceMembersForChannel } from "@/lib/voice-states";
 import { VoiceStateSession } from "@/components/server/voice-state-session";
+import { MeetingPopoutWindowControls } from "@/components/server/meeting-popout-window-controls";
 import { VideoChannelMeetingPanel } from "@/components/server/video-channel-meeting-panel";
 import { resolveChannelRouteContext, resolveServerRouteContext } from "@/lib/route-slug-resolver";
 import { buildChannelPath, buildServerPath } from "@/lib/route-slugs";
@@ -84,12 +85,13 @@ const MeetingPopoutPage = async ({ params, searchParams }: MeetingPopoutPageProp
     serverId,
   });
 
-  const channelPermissions = await computeChannelPermissionForRole({
-    serverId,
-    channelId: currentChannel.id,
-    role: currentMember.role,
-    isServerOwner: memberContext?.isServerOwner ?? false,
-  });
+  const channelPermissions = memberContext
+    ? await computeChannelPermissionForMember({
+        serverId,
+        channelId: currentChannel.id,
+        memberContext,
+      })
+    : { allowView: false, allowSend: false, allowConnect: false };
 
   if (!channelPermissions.allowView) {
     return redirect(buildServerPath({ id: resolvedServer.id, name: resolvedServer.name }));
@@ -108,6 +110,8 @@ const MeetingPopoutPage = async ({ params, searchParams }: MeetingPopoutPageProp
 
   return (
     <div className="fixed inset-0 z-200 bg-[#0f1013] p-2">
+      <MeetingPopoutWindowControls />
+
       <VoiceStateSession
         serverId={serverId}
         channelId={currentChannel.id}

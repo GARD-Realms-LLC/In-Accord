@@ -11,6 +11,8 @@ import { cn } from "@/lib/utils";
 
 type Props = {
   server: ServerWithMembersWithProfiles;
+  viewerProfileId?: string | null;
+  viewerMemberId?: string | null;
   eventsCount: number;
   invitesCount?: number;
   boostersCount?: number;
@@ -21,6 +23,8 @@ type Props = {
 
 export const ServerEventsMenu = ({
   server,
+  viewerProfileId = null,
+  viewerMemberId = null,
   eventsCount,
   invitesCount = 0,
   boostersCount = 0,
@@ -140,7 +144,7 @@ export const ServerEventsMenu = ({
 
       <button
         type="button"
-        onClick={() => onOpen("members", { server })}
+        onClick={() => onOpen("members", { server, viewerProfileId, viewerMemberId })}
         className={cn(
           "group flex w-full items-center gap-x-2 rounded px-2 py-1.5 text-left transition hover:bg-[#3a3c43]",
           isMembersActive && "bg-[#404249]"

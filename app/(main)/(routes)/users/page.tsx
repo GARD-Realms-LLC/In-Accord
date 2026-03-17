@@ -202,6 +202,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
     displayName: string;
     email: string | null;
     imageUrl: string | null;
+    avatarDecorationUrl: string | null;
     profileCreatedAt: Date | string | null;
     presenceStatus: string | null;
     currentGame: string | null;
@@ -218,6 +219,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
     displayName: string;
     email: string | null;
     imageUrl: string | null;
+    avatarDecorationUrl: string | null;
     profileCreatedAt: Date | string | null;
     status: ReturnType<typeof resolveAutoPresenceStatus>;
     currentGame: string | null;
@@ -236,6 +238,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
     displayName: string;
     email: string | null;
     imageUrl: string | null;
+    avatarDecorationUrl: string | null;
     isIncoming: boolean;
     isSpam: boolean;
   }> = [];
@@ -252,6 +255,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
     callerProfileId: string;
     callerDisplayName: string;
     callerImageUrl: string | null;
+    callerAvatarDecorationUrl: string | null;
     createdAt: Date | string;
   };
 
@@ -336,6 +340,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
         coalesce(nullif(trim(up."profileName"), ''), u."name", u."email", 'User') as "displayName",
         u."email" as "email",
         coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
+        up."avatarDecorationUrl" as "avatarDecorationUrl",
         u."account.created" as "profileCreatedAt",
         up."presenceStatus" as "presenceStatus",
         nullif(trim(to_jsonb(up)->>'currentGame'), '') as "currentGame",
@@ -385,6 +390,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
         displayName: row.displayName,
         email: row.email,
         imageUrl: row.imageUrl,
+        avatarDecorationUrl: row.avatarDecorationUrl ?? null,
         profileCreatedAt: row.profileCreatedAt,
         status: resolveAutoPresenceStatus(row.presenceStatus, row.presenceUpdatedAt),
         currentGame: row.currentGame ?? null,
@@ -448,6 +454,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
           ) as "displayName",
           u."email" as "email",
           coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
+          up."avatarDecorationUrl" as "avatarDecorationUrl",
           exists (
             select 1
             from "BlockedProfile" bp
@@ -477,6 +484,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
           displayName: string;
           email: string | null;
           imageUrl: string | null;
+          avatarDecorationUrl: string | null;
           isSpam: boolean;
         }>;
       }).rows ?? [];
@@ -508,6 +516,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
       caller."profileId" as "callerProfileId",
       coalesce(nullif(trim(caller_up."profileName"), ''), caller_u."name", caller_u."email", caller."profileId") as "callerDisplayName",
       coalesce(caller_u."avatarUrl", caller_u."avatar", caller_u."icon") as "callerImageUrl",
+      caller_up."avatarDecorationUrl" as "callerAvatarDecorationUrl",
       c."createdAt" as "createdAt"
     from "PrivateMessageCall" c
     inner join "Member" callee on callee."id" = c."calleeMemberId"
@@ -547,6 +556,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
           profileId: string;
           name: string;
           imageUrl: string;
+          avatarDecorationUrl: string | null;
           email: string;
           createdAt: Date | string | null;
         };
@@ -613,7 +623,10 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
         );
 
         const uniqueMessageProfileIds = Array.from(
-          new Set(messageRows.map((item) => item.member.profileId).filter(Boolean))
+          new Set([
+            ...messageRows.map((item) => item.member.profileId).filter(Boolean),
+            otherMemberData.profileId,
+          ])
         );
 
         const profileRoleRows = uniqueMessageProfileIds.length
@@ -630,9 +643,24 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
           }).rows ?? []).map((row) => [row.userId, row.role ?? null])
         );
 
+        const profileDecorationRows = uniqueMessageProfileIds.length
+          ? await db.execute(sql`
+              select "userId", "avatarDecorationUrl"
+              from "UserProfile"
+              where "userId" in (${sql.join(uniqueMessageProfileIds.map((id) => sql`${id}`), sql`, `)})
+            `)
+          : { rows: [] };
+
+        const profileDecorationMap = new Map<string, string | null>(
+          ((profileDecorationRows as unknown as {
+            rows?: Array<{ userId: string; avatarDecorationUrl: string | null }>;
+          }).rows ?? []).map((row) => [row.userId, row.avatarDecorationUrl ?? null])
+        );
+
         const hydratedRows = messageRows.map((item) => {
           const profileName = profileNameMap.get(item.member.profileId);
           const profileRole = profileRoleMap.get(item.member.profileId) ?? null;
+          const profileAvatarDecorationUrl = profileDecorationMap.get(item.member.profileId) ?? null;
 
           return {
             ...item,
@@ -642,6 +670,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                 ...item.member.profile,
                 name: profileName ?? item.member.profile.name,
                 role: profileRole,
+                avatarDecorationUrl: profileAvatarDecorationUrl,
               },
             },
           };
@@ -656,6 +685,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
             profileId: otherMemberData.profileId,
             name: otherMemberData.profile.name,
             imageUrl: otherMemberData.profile.imageUrl,
+            avatarDecorationUrl: profileDecorationMap.get(otherMemberData.profileId) ?? null,
             email: otherMemberData.profile.email,
             createdAt: otherMemberData.profile.createdAt,
           },
@@ -842,6 +872,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
     profileId: dm.profileId,
     displayName: dm.displayName,
     imageUrl: dm.imageUrl,
+    avatarDecorationUrl: dm.avatarDecorationUrl,
     profileCreatedAt: dm.profileCreatedAt ? new Date(dm.profileCreatedAt).toISOString() : null,
     timestampLabel: formatTimestamp(dm.lastMessageAt),
     unreadCount: dm.unreadCount,
@@ -1247,6 +1278,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                     <div className="theme-users-chat-surface flex min-h-0 flex-col overflow-hidden rounded-3xl border border-black/20 bg-white shadow-xl shadow-black/35 dark:bg-[#313338]">
                       <ChatHeader
                         imageUrl={selectedConversation.otherMember.imageUrl}
+                        avatarDecorationUrl={selectedConversation.otherMember.avatarDecorationUrl}
                         name={selectedConversation.otherMember.name}
                         profileId={selectedConversation.otherMember.profileId}
                         memberId={selectedConversation.otherMember.id}
@@ -1305,6 +1337,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                     <div className="theme-users-chat-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-black/20 bg-white shadow-xl shadow-black/35 dark:bg-[#313338]">
                       <ChatHeader
                         imageUrl={selectedConversation.otherMember.imageUrl}
+                        avatarDecorationUrl={selectedConversation.otherMember.avatarDecorationUrl}
                         name={selectedConversation.otherMember.name}
                         profileId={selectedConversation.otherMember.profileId}
                         memberId={selectedConversation.otherMember.id}
@@ -1401,6 +1434,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                               displayName={request.displayName}
                               email={request.email}
                               imageUrl={request.imageUrl}
+                              avatarDecorationUrl={request.avatarDecorationUrl}
                               isIncoming={request.isIncoming}
                               isSpam={request.isSpam}
                             />
@@ -1418,7 +1452,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                           const rowContent = (
                             <>
                               <span className="relative inline-flex h-8 w-8 shrink-0">
-                                <UserAvatar src={friend.imageUrl ?? undefined} className="h-8 w-8" />
+                                <UserAvatar src={friend.imageUrl ?? undefined} decorationSrc={friend.avatarDecorationUrl} className="h-8 w-8" />
                                 <span
                                   className={`absolute -bottom-0.5 -left-0.5 inline-flex h-2.5 w-2.5 rounded-full border border-[#111214] ${presenceStatusDotClassMap[friend.status]}`}
                                   aria-hidden="true"
@@ -1495,7 +1529,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                   aria-hidden="true"
                 />
                 <span className="relative inline-flex h-8 w-8 shrink-0">
-                  <UserAvatar src={profile.imageUrl ?? undefined} className="h-8 w-8" />
+                  <UserAvatar src={profile.imageUrl ?? undefined} decorationSrc={profile.avatarDecorationUrl ?? null} className="h-8 w-8" />
                   <span
                     className={`absolute -bottom-0.5 -left-0.5 inline-flex h-2.5 w-2.5 rounded-full border border-[#111214] ${presenceStatusDotClassMap[currentUserPresenceStatus]}`}
                     aria-hidden="true"
@@ -1560,7 +1594,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                       }`}
                     >
                       <div className="flex items-center gap-2">
-                        <UserAvatar src={request.callerImageUrl ?? undefined} className="h-7 w-7" />
+                        <UserAvatar src={request.callerImageUrl ?? undefined} decorationSrc={request.callerAvatarDecorationUrl} className="h-7 w-7" />
                         <div className="min-w-0">
                           <p className="truncate text-xs font-semibold text-foreground">{request.callerDisplayName}</p>
                           <p className="text-[10px] text-muted-foreground">Incoming {callTypeLabel} PM call</p>
@@ -1621,7 +1655,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                   const rowContent = (
                     <>
                       <span className="relative inline-flex h-7 w-7 shrink-0">
-                        <UserAvatar src={friend.imageUrl ?? undefined} className="h-7 w-7" />
+                        <UserAvatar src={friend.imageUrl ?? undefined} decorationSrc={friend.avatarDecorationUrl} className="h-7 w-7" />
                         <span
                           className={`absolute -bottom-0.5 -left-0.5 inline-flex h-2.5 w-2.5 rounded-full border border-[#111214] ${presenceStatusDotClassMap[friend.status]}`}
                           aria-hidden="true"

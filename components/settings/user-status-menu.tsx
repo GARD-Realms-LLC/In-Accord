@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, Crown, Headphones, LogOut, Mic, MicOff, RefreshCw, Settings, ShieldAlert, Video, VideoOff, VolumeX, Wrench } from "lucide-react";
+import { Copy, Crown, Headphones, LogOut, Mic, MicOff, RefreshCw, ScreenShare, ScreenShareOff, Settings, ShieldAlert, Video, VideoOff, VolumeX, Wrench } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import axios from "axios";
@@ -11,6 +11,7 @@ import { BannerImage } from "@/components/ui/banner-image";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ModeratorLineIcon } from "@/components/moderator-line-icon";
+import { ProfileEffectLayer } from "@/components/profile-effect-layer";
 import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
 import { ProfileIconRow } from "@/components/profile-icon-row";
 import { UserAvatar } from "@/components/user-avatar";
@@ -19,11 +20,13 @@ import { hasInAccordAdministrativeAccess, isInAccordAdministrator, isInAccordDev
 import { resolveBannerUrl } from "@/lib/asset-url";
 import { resolveProfileIcons, type ProfileIcon } from "@/lib/profile-icons";
 import { PresenceStatus, formatPresenceStatusLabel, normalizePresenceStatus, presenceStatusLabelMap, presenceStatusValues } from "@/lib/presence-status";
+import { getStreamSummaryText } from "@/lib/streaming-display";
+import { getCachedVoiceState, VOICE_STATE_SYNC_EVENT, type VoiceStateSyncDetail } from "@/lib/voice-state-sync";
 
 const VOICE_TOGGLE_MUTE_EVENT = "inaccord:voice-toggle-mute";
 const VOICE_TOGGLE_DEAFEN_EVENT = "inaccord:voice-toggle-deafen";
 const VOICE_TOGGLE_CAMERA_EVENT = "inaccord:voice-toggle-camera";
-const VOICE_STATE_SYNC_EVENT = "inaccord:voice-state-sync";
+const VOICE_TOGGLE_STREAM_EVENT = "inaccord:voice-toggle-stream";
 const PM_TOGGLE_CAMERA_EVENT = "inaccord:pm-toggle-camera";
 const PM_CAMERA_STATE_SYNC_EVENT = "inaccord:pm-camera-state-sync";
 
@@ -32,11 +35,11 @@ interface UserStatusMenuProps {
   profileRealName?: string | null;
   profileName?: string | null;
   profilePronouns?: string | null;
-  profileComment?: string | null;
   profileRole?: string | null;
   profileEmail?: string | null;
   profileImageUrl?: string | null;
   profileAvatarDecorationUrl?: string | null;
+  profileEffectUrl?: string | null;
   profileNameplateLabel?: string | null;
   profileNameplateColor?: string | null;
   profileNameplateImageUrl?: string | null;
@@ -52,11 +55,11 @@ export const UserStatusMenu = ({
   profileRealName,
   profileName,
   profilePronouns,
-  profileComment,
   profileRole,
   profileEmail,
   profileImageUrl,
   profileAvatarDecorationUrl,
+  profileEffectUrl,
   profileNameplateLabel,
   profileNameplateColor,
   profileNameplateImageUrl,
@@ -79,13 +82,15 @@ export const UserStatusMenu = ({
   const [isVoiceDeafened, setIsVoiceDeafened] = useState(false);
   const [isVideoSession, setIsVideoSession] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamLabel, setStreamLabel] = useState<string | null>(null);
   const [isPmVideoSessionActive, setIsPmVideoSessionActive] = useState(false);
   const [isPmCameraOn, setIsPmCameraOn] = useState(false);
   const [menuRealName, setMenuRealName] = useState<string | null>(profileRealName ?? null);
   const [menuProfileName, setMenuProfileName] = useState<string | null>(profileName ?? null);
   const [menuPronouns, setMenuPronouns] = useState<string | null>(profilePronouns ?? null);
-  const [menuComment, setMenuComment] = useState<string | null>(profileComment ?? null);
   const [menuAvatarDecorationUrl, setMenuAvatarDecorationUrl] = useState<string | null>(profileAvatarDecorationUrl ?? null);
+  const [menuProfileEffectUrl, setMenuProfileEffectUrl] = useState<string | null>(profileEffectUrl ?? null);
   const [menuNameplateLabel, setMenuNameplateLabel] = useState<string | null>(profileNameplateLabel ?? null);
   const [menuNameplateColor, setMenuNameplateColor] = useState<string | null>(profileNameplateColor ?? null);
   const [menuNameplateImageUrl, setMenuNameplateImageUrl] = useState<string | null>(profileNameplateImageUrl ?? null);
@@ -138,8 +143,8 @@ export const UserStatusMenu = ({
     setMenuRealName(profileRealName ?? null);
     setMenuProfileName(profileName ?? null);
     setMenuPronouns(profilePronouns ?? null);
-    setMenuComment(profileComment ?? null);
     setMenuAvatarDecorationUrl(profileAvatarDecorationUrl ?? null);
+    setMenuProfileEffectUrl(profileEffectUrl ?? null);
     setMenuNameplateLabel(profileNameplateLabel ?? null);
     setMenuNameplateColor(profileNameplateColor ?? null);
     setMenuNameplateImageUrl(profileNameplateImageUrl ?? null);
@@ -155,7 +160,7 @@ export const UserStatusMenu = ({
     setMenuProfileRole(profileRole ?? null);
     setMenuPresenceStatus(normalizePresenceStatus(profilePresenceStatus));
     setMenuCurrentGame(profileCurrentGame?.trim() || null);
-  }, [profileAvatarDecorationUrl, profileBannerUrl, profileComment, profileCurrentGame, profileEmail, profileId, profileJoinedAt, profileName, profileNameplateColor, profileNameplateImageUrl, profileNameplateLabel, profilePresenceStatus, profilePronouns, profileRealName, profileRole]);
+  }, [profileAvatarDecorationUrl, profileBannerUrl, profileCurrentGame, profileEffectUrl, profileEmail, profileId, profileJoinedAt, profileName, profileNameplateColor, profileNameplateImageUrl, profileNameplateLabel, profilePresenceStatus, profilePronouns, profileRealName, profileRole]);
 
   useEffect(() => {
     if (!isPopoverOpen) {
@@ -182,6 +187,7 @@ export const UserStatusMenu = ({
           comment?: string | null;
           profileIcons?: ProfileIcon[];
           avatarDecorationUrl?: string | null;
+          profileEffectUrl?: string | null;
           nameplateLabel?: string | null;
           nameplateColor?: string | null;
           nameplateImageUrl?: string | null;
@@ -195,12 +201,12 @@ export const UserStatusMenu = ({
           setMenuRealName(payload.realName?.trim() || null);
           setMenuProfileName(payload.profileName ?? null);
           setMenuPronouns(payload.pronouns ?? null);
-          setMenuComment(payload.comment ?? null);
           setMenuNameplateLabel(payload.nameplateLabel ?? null);
           setMenuNameplateColor(payload.nameplateColor ?? null);
           setMenuNameplateImageUrl(payload.nameplateImageUrl ?? null);
           setMenuProfileIcons(buildMenuProfileIcons(payload.profileIcons, payload.role ?? profileRole));
           setMenuAvatarDecorationUrl(payload.avatarDecorationUrl ?? null);
+          setMenuProfileEffectUrl(payload.profileEffectUrl ?? null);
           setMenuBannerUrl(payload.bannerUrl ?? null);
           setMenuProfileRole(payload.role ?? profileRole ?? null);
           setMenuPresenceStatus(normalizePresenceStatus(payload.presenceStatus));
@@ -225,6 +231,7 @@ export const UserStatusMenu = ({
         profileName?: string;
         bannerUrl?: string | null;
         avatarDecorationUrl?: string | null;
+        profileEffectUrl?: string | null;
         nameplateLabel?: string | null;
         nameplateColor?: string | null;
         nameplateImageUrl?: string | null;
@@ -247,6 +254,10 @@ export const UserStatusMenu = ({
 
       if (customEvent.detail?.avatarDecorationUrl === null || typeof customEvent.detail?.avatarDecorationUrl === "string") {
         setMenuAvatarDecorationUrl(customEvent.detail.avatarDecorationUrl ?? null);
+      }
+
+      if (customEvent.detail?.profileEffectUrl === null || typeof customEvent.detail?.profileEffectUrl === "string") {
+        setMenuProfileEffectUrl(customEvent.detail.profileEffectUrl ?? null);
       }
 
       if (customEvent.detail?.nameplateLabel === null || typeof customEvent.detail?.nameplateLabel === "string") {
@@ -344,6 +355,7 @@ export const UserStatusMenu = ({
       profileEmail,
       profileImageUrl,
       profileAvatarDecorationUrl: menuAvatarDecorationUrl,
+      profileEffectUrl: menuProfileEffectUrl,
       profileNameplateLabel: menuNameplateLabel,
       profileNameplateColor: menuNameplateColor,
       profileBannerUrl,
@@ -363,6 +375,7 @@ export const UserStatusMenu = ({
       profileEmail,
       profileImageUrl,
       profileAvatarDecorationUrl: menuAvatarDecorationUrl,
+      profileEffectUrl: menuProfileEffectUrl,
       profileNameplateLabel: menuNameplateLabel,
       profileNameplateColor: menuNameplateColor,
       profileBannerUrl,
@@ -385,6 +398,7 @@ export const UserStatusMenu = ({
       profileEmail,
       profileImageUrl,
       profileAvatarDecorationUrl: menuAvatarDecorationUrl,
+      profileEffectUrl: menuProfileEffectUrl,
       profileNameplateLabel: menuNameplateLabel,
       profileNameplateColor: menuNameplateColor,
       profileBannerUrl: menuBannerUrl,
@@ -419,37 +433,58 @@ export const UserStatusMenu = ({
   };
 
   useEffect(() => {
-    const onVoiceStateSync = (event: Event) => {
-      const customEvent = event as CustomEvent<{
-        active?: boolean;
-        isMuted?: boolean;
-        isDeafened?: boolean;
-        isVideoChannel?: boolean;
-        isCameraOn?: boolean;
-      }>;
-
-      if (typeof customEvent.detail?.active === "boolean") {
-        setIsVoiceSessionActive(customEvent.detail.active);
+    const applyVoiceState = (detail?: VoiceStateSyncDetail | null) => {
+      if (!detail) {
+        return;
       }
 
-      if (typeof customEvent.detail?.isMuted === "boolean") {
-        setIsVoiceMuted(customEvent.detail.isMuted);
+      if (typeof detail.active === "boolean") {
+        setIsVoiceSessionActive(detail.active);
       }
 
-      if (typeof customEvent.detail?.isDeafened === "boolean") {
-        setIsVoiceDeafened(customEvent.detail.isDeafened);
+      if (typeof detail.isMuted === "boolean") {
+        setIsVoiceMuted(detail.isMuted);
       }
 
-      if (typeof customEvent.detail?.isVideoChannel === "boolean") {
-        setIsVideoSession(customEvent.detail.isVideoChannel);
+      if (typeof detail.isDeafened === "boolean") {
+        setIsVoiceDeafened(detail.isDeafened);
       }
 
-      if (typeof customEvent.detail?.isCameraOn === "boolean") {
-        setIsCameraOn(customEvent.detail.isCameraOn);
-        if (customEvent.detail.isCameraOn) {
+      if (typeof detail.isVideoChannel === "boolean") {
+        setIsVideoSession(detail.isVideoChannel);
+      }
+
+      if (typeof detail.isCameraOn === "boolean") {
+        setIsCameraOn(detail.isCameraOn);
+        if (detail.isCameraOn) {
           setIsVideoSession(true);
         }
       }
+
+      if (typeof detail.isStreaming === "boolean") {
+        setIsStreaming(detail.isStreaming);
+        if (detail.isStreaming) {
+          setIsVideoSession(true);
+        }
+        if (!detail.isStreaming) {
+          setStreamLabel(null);
+        }
+      }
+
+      if (typeof detail.streamLabel === "string") {
+        const normalized = detail.streamLabel.trim().slice(0, 255);
+        setStreamLabel(normalized.length ? normalized : null);
+      }
+
+      if (detail.streamLabel === null) {
+        setStreamLabel(null);
+      }
+    };
+
+    applyVoiceState(getCachedVoiceState());
+
+    const onVoiceStateSync = (event: Event) => {
+      applyVoiceState((event as CustomEvent<VoiceStateSyncDetail>).detail);
     };
 
     window.addEventListener(VOICE_STATE_SYNC_EVENT, onVoiceStateSync as EventListener);
@@ -495,6 +530,18 @@ export const UserStatusMenu = ({
 
     if (canControlVoiceCamera) {
       setIsCameraOn(next);
+      if (next) {
+        setIsStreaming(false);
+        setStreamLabel(null);
+        window.dispatchEvent(
+          new CustomEvent(VOICE_TOGGLE_STREAM_EVENT, {
+            detail: {
+              isStreaming: false,
+              streamLabel: null,
+            },
+          })
+        );
+      }
       window.dispatchEvent(new CustomEvent(VOICE_TOGGLE_CAMERA_EVENT, { detail: { isCameraOn: next } }));
     }
 
@@ -502,6 +549,34 @@ export const UserStatusMenu = ({
       setIsPmCameraOn(next);
       window.dispatchEvent(new CustomEvent(PM_TOGGLE_CAMERA_EVENT, { detail: { isCameraOn: next } }));
     }
+  };
+
+  const onToggleStream = () => {
+    const canControlStreaming = isVoiceSessionActive && isVideoSession;
+
+    if (!canControlStreaming) {
+      window.alert("Join a live video channel to start streaming.");
+      return;
+    }
+
+    const next = !isStreaming;
+    setIsStreaming(next);
+    if (!next) {
+      setStreamLabel(null);
+    }
+    if (next) {
+      setIsCameraOn(false);
+      window.dispatchEvent(new CustomEvent(VOICE_TOGGLE_CAMERA_EVENT, { detail: { isCameraOn: false } }));
+    }
+
+    window.dispatchEvent(
+      new CustomEvent(VOICE_TOGGLE_STREAM_EVENT, {
+        detail: {
+          isStreaming: next,
+          streamLabel: next ? streamLabel : null,
+        },
+      })
+    );
   };
 
   const onToggleMute = () => {
@@ -651,6 +726,7 @@ export const UserStatusMenu = ({
     "Deleted User";
   const canControlVoiceCamera = isVoiceSessionActive && isVideoSession;
   const canUseCameraControls = canControlVoiceCamera || isPmVideoSessionActive;
+  const canUseStreamingControls = canControlVoiceCamera;
   const effectiveCameraOn = canControlVoiceCamera ? isCameraOn : isPmCameraOn;
   const effectiveCurrentGame = runtimeCurrentGame?.trim() || menuCurrentGame?.trim() || null;
   const showCurrentGameIcon = Boolean(effectiveCurrentGame);
@@ -687,8 +763,9 @@ export const UserStatusMenu = ({
         side="top"
         align="start"
         sideOffset={10}
-        className="w-[320px] overflow-hidden rounded-xl border border-black/30 bg-[#111214] p-0 text-[#dbdee1] shadow-2xl shadow-black/50"
+        className="relative w-[320px] overflow-hidden rounded-xl border border-black/30 bg-[#111214] p-0 text-[#dbdee1] shadow-2xl shadow-black/50"
       >
+        <ProfileEffectLayer src={menuProfileEffectUrl} />
         <div className="relative h-24 bg-linear-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
           {resolvedMenuBannerUrl ? (
             <BannerImage
@@ -721,15 +798,6 @@ export const UserStatusMenu = ({
               plateMetaIcons={roleMetaOnPlate}
             />
           </div>
-          <div className="mt-2 min-h-36 w-full max-w-55 resize-y overflow-auto rounded-md border border-white/10 bg-[#1a1b1e] px-2.5 py-2">
-            <p
-              className="whitespace-pre-wrap wrap-break-word align-top text-[11px] text-[#dbdee1]"
-              style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
-            >
-              {menuComment?.trim() || "No comment set"}
-            </p>
-          </div>
-
           <div className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] p-3 text-xs">
             <div className="space-y-1 text-[#dbdee1]">
               <p>Name: {displayNameForProfileCard}</p>
@@ -746,10 +814,12 @@ export const UserStatusMenu = ({
                 <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">User Status</p>
               </div>
               <p className="mb-2 text-[10px] text-[#949ba4]">
-                {!canUseCameraControls
-                  ? "Camera control unavailable"
+                {!canUseCameraControls && !canUseStreamingControls
+                  ? "Join a live video channel to use camera and streaming controls"
                   : canControlVoiceCamera
-                    ? "Voice video camera control active"
+                    ? isStreaming
+                      ? getStreamSummaryText(streamLabel)
+                      : "Voice video camera and streaming controls active"
                     : "PM camera control active"}
               </p>
               <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -802,6 +872,27 @@ export const UserStatusMenu = ({
                   }
                 >
                   {effectiveCameraOn ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={onToggleStream}
+                  disabled={!canUseStreamingControls}
+                  className={`inline-flex h-8 w-8 items-center justify-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                    isStreaming
+                      ? "border-indigo-300/60 bg-indigo-500/30 text-indigo-100 hover:bg-indigo-500/40"
+                      : "border-zinc-600 bg-zinc-700/70 text-zinc-300 hover:bg-zinc-600"
+                  }`}
+                  aria-label={isStreaming ? "Stop stream" : "Start stream"}
+                  title={
+                    !canUseStreamingControls
+                      ? "Join a live video channel to enable streaming"
+                      : isStreaming
+                        ? "Stop stream"
+                        : "Start stream"
+                  }
+                >
+                  {isStreaming ? <ScreenShare className="h-4 w-4" /> : <ScreenShareOff className="h-4 w-4" />}
                 </button>
 
               </div>

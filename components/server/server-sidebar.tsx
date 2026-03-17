@@ -6,7 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { currentProfile } from "@/lib/current-profile";
 import { channel, db, server } from "@/lib/db";
 import { ensureChannelGroupSchema } from "@/lib/channel-groups";
-import { visibleChannelIdsForRole } from "@/lib/channel-permissions";
+import { resolveMemberContext, visibleChannelIdsForMember } from "@/lib/channel-permissions";
 import { getServerBannerConfig } from "@/lib/server-banner-store";
 import { getServerProfileSettings } from "@/lib/server-profile-settings-store";
 import { listActiveVoiceCountsForServer } from "@/lib/voice-states";
@@ -176,21 +176,33 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
     return null;
   }
 
+  const viewerMemberId = members.find((member) => member.profileId === profile?.id)?.id ?? null;
+
   const role = members.find(
     (member) => member.profileId === profile?.id
   )?.role;
   const isServerOwner = !!profile?.id && currentServer.profileId === profile.id;
 
   const visibleChannelIds = role
-    ? await visibleChannelIdsForRole({
+    ? await visibleChannelIdsForMember({
         serverId,
-        role,
-        isServerOwner,
+        memberContext:
+          (await resolveMemberContext({ profileId: profile?.id ?? "", serverId })) ?? {
+            memberId: "",
+            profileId: profile?.id ?? "",
+            role,
+            assignedRoleIds: [],
+            isServerOwner,
+          },
         channelIds: channels.map((item) => item.id),
       })
     : new Set(channels.map((item) => item.id));
 
-  const visibleChannels = channels.filter((item) => visibleChannelIds.has(item.id));
+  const hiddenChannelIdSet = new Set(serverProfileSettings?.hiddenChannelIds ?? []);
+  const visibleChannels = channels.filter(
+    (item) => visibleChannelIds.has(item.id) && !hiddenChannelIdSet.has(item.id)
+  );
+  const unfilteredVisibleChannels = channels.filter((item) => visibleChannelIds.has(item.id));
 
   const stageChannel =
     visibleChannels.find((item) => String(item.name ?? "").trim().toLowerCase() === "stage") ?? null;
@@ -222,16 +234,16 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
     return left.id.localeCompare(right.id);
   };
 
-  const groupedChannelGroups = channelGroups
-    .map((group) => ({
-      id: group.id,
-      name: group.name,
-      icon: group.icon,
-      channels: visibleChannelsWithoutSpecial
-        .filter((channelItem) => channelItem.channelGroupId === group.id)
-        .sort(sortChannelsForDisplay) as Channel[],
-    }))
-    .filter((group) => group.channels.length > 0);
+  const groupedChannelGroups = channelGroups.map((group) => ({
+    id: group.id,
+    name: group.name,
+    icon: group.icon,
+    channels: visibleChannelsWithoutSpecial
+      .filter((channelItem) => channelItem.channelGroupId === group.id)
+      .sort(sortChannelsForDisplay) as Channel[],
+  }));
+
+  const groupedChannelGroupsWithChannels = groupedChannelGroups.filter((group) => group.channels.length > 0);
 
   const ungroupedChannels = visibleChannelsWithoutSpecial
     .filter((channelItem) => !channelItem.channelGroupId || !channelGroupById.has(channelItem.channelGroupId))
@@ -245,6 +257,18 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
   const stageJoinedCount = stageChannel?.id
     ? connectedVoiceCountsByChannelId.get(stageChannel.id) ?? 0
     : 0;
+  const hasHiddenChannels =
+    serverProfileSettings?.hideAllChannels === true || hiddenChannelIdSet.size > 0;
+  const areChannelsHidden = serverProfileSettings?.hideAllChannels === true;
+  const hasAnyBaseChannels = unfilteredVisibleChannels.some((item) => {
+    const normalizedName = String(item.name ?? "").trim().toLowerCase();
+    return normalizedName !== "stage" && normalizedName !== "rules";
+  });
+  const hasVisibleRenderableChannels =
+    ungroupedChannels.length > 0 ||
+    (serverProfileSettings?.showChannelGroups !== false && groupedChannelGroupsWithChannels.length > 0);
+  const shouldShowHiddenChannelsPlaceholder =
+    areChannelsHidden || (hasHiddenChannels && hasAnyBaseChannels && !hasVisibleRenderableChannels);
 
   const serverWithBanner = {
     ...serverWithMembers,
@@ -259,9 +283,19 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
   return (
     <div className="theme-channels-rail flex h-full w-full flex-col overflow-hidden rounded-2xl border border-border bg-card text-primary">
       <div className="px-3 pt-2 pb-2">
-        <ServerHeader server={serverWithBanner} role={role} isServerOwner={isServerOwner} />
+        <ServerHeader
+          server={serverWithBanner}
+          viewerProfileId={profile?.id ?? null}
+          viewerMemberId={viewerMemberId}
+          role={role}
+          isServerOwner={isServerOwner}
+          channelGroups={groupedChannelGroups}
+          hasHiddenChannels={hasHiddenChannels}
+        />
         <ServerEventsMenu
           server={serverWithMembers}
+          viewerProfileId={profile?.id ?? null}
+          viewerMemberId={viewerMemberId}
           eventsCount={eventsCount}
           invitesCount={invitesCount}
           boostersCount={0}
@@ -271,7 +305,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
         />
       </div>
       <ScrollArea className="settings-scrollbar min-h-0 flex-1 px-3 pt-3">
-        {!!ungroupedChannels?.length && (
+        {!areChannelsHidden && !!ungroupedChannels?.length && (
           <ChannelDropZone serverId={serverId} targetGroupId={null} className="mb-2">
             <ServerSection
               sectionType="channels"
@@ -279,6 +313,8 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
               role={role}
               label="Channels"
               server={serverWithMembers}
+              viewerProfileId={profile?.id ?? null}
+              viewerMemberId={viewerMemberId}
             />
             <div className="space-y-0.5">
               {ungroupedChannels.map((channel) => (
@@ -295,15 +331,26 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
           </ChannelDropZone>
         )}
 
-        {serverProfileSettings?.showChannelGroups !== false && groupedChannelGroups.length > 0 ? (
+        {!areChannelsHidden && serverProfileSettings?.showChannelGroups !== false && groupedChannelGroupsWithChannels.length > 0 ? (
           <div className="mb-2">
             <ChannelGroupsList
               serverId={serverId}
               role={role}
               server={serverWithMembers}
-              groups={groupedChannelGroups}
+              groups={groupedChannelGroupsWithChannels}
               connectedVoiceCountsByChannelId={Object.fromEntries(connectedVoiceCountsByChannelId)}
             />
+          </div>
+        ) : null}
+
+        {shouldShowHiddenChannelsPlaceholder ? (
+          <div className="rounded-xl border border-dashed border-border/70 bg-background/40 px-3 py-4 text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              All channels hidden
+            </p>
+            <p className="mt-1 text-[11px] text-muted-foreground/80">
+              Use the server dropdown menu at the top to show them again or open a channel group from the new groups menu.
+            </p>
           </div>
         ) : null}
 

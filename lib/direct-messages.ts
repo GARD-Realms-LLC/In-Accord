@@ -9,6 +9,7 @@ export interface GlobalRecentDmItem {
   profileId: string;
   displayName: string;
   imageUrl: string | null;
+  avatarDecorationUrl: string | null;
   profileCreatedAt: Date | null;
   lastMessageAt: Date;
   unreadCount: number;
@@ -67,6 +68,7 @@ export const getGlobalRecentDmsForProfile = async ({
       om."profileId" as "profileId",
       coalesce(nullif(trim(up."profileName"), ''), u."name", u."email", 'User') as "displayName",
       coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
+      up."avatarDecorationUrl" as "avatarDecorationUrl",
       u."account.created" as "profileCreatedAt",
       coalesce(max(dm."createdAt"), now()) as "lastMessageAt",
       0::integer as "unreadCount"
@@ -84,6 +86,7 @@ export const getGlobalRecentDmsForProfile = async ({
       om."id",
       coalesce(nullif(trim(up."profileName"), ''), u."name", u."email", 'User'),
       coalesce(u."avatarUrl", u."avatar", u."icon"),
+      up."avatarDecorationUrl",
       u."account.created"
     order by max(dm."createdAt") desc nulls last
     limit 50
@@ -97,6 +100,7 @@ export const getGlobalRecentDmsForProfile = async ({
       profileId: string;
       displayName: string;
       imageUrl: string | null;
+      avatarDecorationUrl: string | null;
       profileCreatedAt: Date | string | null;
       lastMessageAt: Date | string;
       unreadCount: number | string;
@@ -110,6 +114,7 @@ export const getGlobalRecentDmsForProfile = async ({
     profileId: row.profileId,
     displayName: row.displayName,
     imageUrl: row.imageUrl,
+    avatarDecorationUrl: row.avatarDecorationUrl ?? null,
     profileCreatedAt: row.profileCreatedAt ? new Date(row.profileCreatedAt) : null,
     lastMessageAt: new Date(row.lastMessageAt),
     unreadCount: Number(row.unreadCount ?? 0),

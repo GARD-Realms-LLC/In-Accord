@@ -4,6 +4,7 @@ import { Activity, Headphones, Mic, ScreenShare, Video } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { UserAvatar } from "@/components/user-avatar";
+import { getStreamBadgeText, getStreamTooltipText } from "@/lib/streaming-display";
 
 type ConnectedMeetingMember = {
   memberId: string;
@@ -185,9 +186,7 @@ export const MeetingParticipantsRail = ({
                       }`}
                       title={
                         item.isStreaming
-                          ? item.streamLabel
-                            ? `Streaming: ${item.streamLabel}`
-                            : "Streaming"
+                          ? getStreamTooltipText(item.streamLabel)
                           : "Not streaming"
                       }
                     >
@@ -199,7 +198,7 @@ export const MeetingParticipantsRail = ({
                       <span className="group relative inline-flex max-w-full items-center gap-1 rounded-full border border-indigo-300/45 bg-indigo-500/20 px-2 py-0.5 text-[10px] font-medium text-indigo-100">
                         <ScreenShare className="h-3 w-3 shrink-0" />
                         <span className="max-w-44 truncate">
-                          {item.streamLabel ? `Live: ${item.streamLabel}` : "Live"}
+                          {getStreamBadgeText(item.streamLabel)}
                         </span>
                         {item.streamLabel ? (
                           <span className="pointer-events-none absolute bottom-full left-0 z-20 mb-1 hidden max-w-56 rounded-md border border-indigo-300/45 bg-[#151a2a] px-2 py-1 text-[10px] text-indigo-50 shadow-lg group-hover:block group-focus-within:block">

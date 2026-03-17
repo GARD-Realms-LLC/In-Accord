@@ -150,6 +150,7 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
   });
 
   const currentMemberRole = rows.find((row) => row.profileId === profile?.id)?.role;
+  const viewerMemberId = rows.find((row) => row.profileId === profile?.id)?.id ?? null;
   const canSeeInvisibleMembers = hasInAccordAdministrativeAccess(profile?.role) || currentMemberRole === MemberRole.ADMIN;
   const canSeeInvisibleCount = Boolean(ownerRecord) || hasInAccordAdministrativeAccess(profile?.role);
 
@@ -263,6 +264,8 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
               users={onlineUsers}
               roleGroups={roleGroups}
               serverId={serverId}
+              viewerProfileId={profile?.id ?? null}
+              viewerMemberId={viewerMemberId}
               canReorderRoleGroups={Boolean(ownerRecord)}
             />
           )}
@@ -279,6 +282,8 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
                 users={offlineUsers}
                 roleGroups={roleGroups}
                 serverId={serverId}
+                viewerProfileId={profile?.id ?? null}
+                viewerMemberId={viewerMemberId}
                 canReorderRoleGroups={Boolean(ownerRecord)}
               />
             )}

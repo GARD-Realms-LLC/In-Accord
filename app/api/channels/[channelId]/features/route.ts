@@ -1,10 +1,18 @@
 import { NextResponse } from "next/server";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
+import {
+  channelWebhookEventTypes,
+  DEFAULT_CHANNEL_FEATURE_SETTINGS,
+  normalizeChannelFeatureSettings,
+  parseStoredChannelSettings,
+} from "@/lib/channel-feature-settings";
 import { currentProfile } from "@/lib/current-profile";
 import { db, member, server } from "@/lib/db";
 import { MemberRole } from "@/lib/db/types";
 import { ensureChannelOtherSettingsSchema } from "@/lib/channel-other-settings";
+import { integrationProviderKeys, getEffectiveIntegrationProviderCredentials } from "@/lib/integration-provider-config";
+import { getUserPreferences } from "@/lib/user-preferences";
 
 type Params = {
   params: Promise<{
@@ -12,192 +20,13 @@ type Params = {
   }>;
 };
 
-type ChannelFeatureSettings = {
-  integrations: {
-    enabled: boolean;
-    provider: string;
-    syncMentions: boolean;
-  };
-  webhooks: {
-    items: Array<{
-      id: string;
-      name: string;
-      url: string;
-      enabled: boolean;
-    }>;
-  };
-  apps: {
-    allowedAppIds: string[];
-    allowPinnedApps: boolean;
-  };
-  moderation: {
-    requireVerifiedEmail: boolean;
-    blockedWords: string[];
-    slowmodeSeconds: number;
-    flaggedWordsAction: "warn" | "block";
-  };
-};
-
-const DEFAULT_FEATURE_SETTINGS: ChannelFeatureSettings = {
-  integrations: {
-    enabled: false,
-    provider: "",
-    syncMentions: false,
-  },
-  webhooks: {
-    items: [],
-  },
-  apps: {
-    allowedAppIds: [],
-    allowPinnedApps: true,
-  },
-  moderation: {
-    requireVerifiedEmail: false,
-    blockedWords: [],
-    slowmodeSeconds: 0,
-    flaggedWordsAction: "warn",
-  },
-};
-
-const asText = (value: unknown, maxLength = 120) => {
-  if (typeof value !== "string") {
-    return "";
-  }
-
-  return value.trim().slice(0, maxLength);
-};
-
-const asBoolean = (value: unknown, fallback = false) => {
-  return typeof value === "boolean" ? value : fallback;
-};
-
-const asBoundedInt = (value: unknown, min: number, max: number, fallback: number) => {
-  const n =
-    typeof value === "number"
-      ? value
-      : typeof value === "string"
-        ? Number(value.trim())
-        : Number.NaN;
-
-  if (!Number.isFinite(n)) {
-    return fallback;
-  }
-
-  return Math.max(min, Math.min(max, Math.floor(n)));
-};
-
-const asStringArray = (value: unknown, maxItems: number, maxItemLength: number) => {
-  if (!Array.isArray(value)) {
-    return [] as string[];
-  }
-
-  const unique = new Set<string>();
-  for (const entry of value) {
-    const normalized = asText(entry, maxItemLength);
-    if (normalized) {
-      unique.add(normalized);
-    }
-    if (unique.size >= maxItems) {
-      break;
-    }
-  }
-
-  return Array.from(unique);
-};
-
-const normalizeFeatureSettings = (input: unknown): ChannelFeatureSettings => {
-  const record = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
-  const integrationsRaw =
-    record.integrations && typeof record.integrations === "object"
-      ? (record.integrations as Record<string, unknown>)
-      : {};
-  const webhooksRaw =
-    record.webhooks && typeof record.webhooks === "object"
-      ? (record.webhooks as Record<string, unknown>)
-      : {};
-  const appsRaw =
-    record.apps && typeof record.apps === "object" ? (record.apps as Record<string, unknown>) : {};
-  const moderationRaw =
-    record.moderation && typeof record.moderation === "object"
-      ? (record.moderation as Record<string, unknown>)
-      : {};
-
-  const webhookItemsRaw = Array.isArray(webhooksRaw.items) ? webhooksRaw.items : [];
-  const webhookItems = webhookItemsRaw
-    .map((item) => {
-      const row = item && typeof item === "object" ? (item as Record<string, unknown>) : null;
-      if (!row) {
-        return null;
-      }
-
-      const name = asText(row.name, 80);
-      const url = asText(row.url, 512);
-      if (!name || !url) {
-        return null;
-      }
-
-      return {
-        id: asText(row.id, 64) || crypto.randomUUID(),
-        name,
-        url,
-        enabled: asBoolean(row.enabled, true),
-      };
-    })
-    .filter(
-      (item): item is { id: string; name: string; url: string; enabled: boolean } => Boolean(item)
-    )
-    .slice(0, 25);
-
-  const flaggedWordsActionRaw = asText(moderationRaw.flaggedWordsAction, 10).toLowerCase();
-
-  return {
-    integrations: {
-      enabled: asBoolean(integrationsRaw.enabled, DEFAULT_FEATURE_SETTINGS.integrations.enabled),
-      provider: asText(integrationsRaw.provider, 80),
-      syncMentions: asBoolean(
-        integrationsRaw.syncMentions,
-        DEFAULT_FEATURE_SETTINGS.integrations.syncMentions
-      ),
-    },
-    webhooks: {
-      items: webhookItems,
-    },
-    apps: {
-      allowedAppIds: asStringArray(appsRaw.allowedAppIds, 100, 80),
-      allowPinnedApps: asBoolean(appsRaw.allowPinnedApps, DEFAULT_FEATURE_SETTINGS.apps.allowPinnedApps),
-    },
-    moderation: {
-      requireVerifiedEmail: asBoolean(
-        moderationRaw.requireVerifiedEmail,
-        DEFAULT_FEATURE_SETTINGS.moderation.requireVerifiedEmail
-      ),
-      blockedWords: asStringArray(moderationRaw.blockedWords, 100, 80),
-      slowmodeSeconds: asBoundedInt(
-        moderationRaw.slowmodeSeconds,
-        0,
-        21600,
-        DEFAULT_FEATURE_SETTINGS.moderation.slowmodeSeconds
-      ),
-      flaggedWordsAction: flaggedWordsActionRaw === "block" ? "block" : "warn",
-    },
-  };
-};
-
-const parseStoredSettings = (rawSettingsJson: string | null | undefined) => {
-  if (!rawSettingsJson || typeof rawSettingsJson !== "string") {
-    return {} as Record<string, unknown>;
-  }
-
-  try {
-    const parsed = JSON.parse(rawSettingsJson) as unknown;
-    if (parsed && typeof parsed === "object") {
-      return parsed as Record<string, unknown>;
-    }
-  } catch {
-    // noop
-  }
-
-  return {} as Record<string, unknown>;
+const providerLabelMap: Record<string, string> = {
+  github: "GitHub",
+  google: "Google",
+  steam: "Steam",
+  twitch: "Twitch",
+  xbox: "Xbox",
+  youtube: "YouTube",
 };
 
 const getMemberContext = async (profileId: string, serverId: string) => {
@@ -262,10 +91,43 @@ export async function GET(req: Request, { params }: Params) {
     `);
 
     const row = (rowResult as unknown as { rows?: Array<{ rawSettingsJson: string | null }> }).rows?.[0];
-    const parsed = parseStoredSettings(row?.rawSettingsJson);
+    const parsed = parseStoredChannelSettings(row?.rawSettingsJson);
+    const ownerPreferences = await getUserPreferences(
+      context.isServerOwner ? profile.id : (await db.query.server.findFirst({ where: eq(server.id, serverId), columns: { profileId: true } }))?.profileId ?? profile.id
+    );
+    const effectiveProviderConfig = await getEffectiveIntegrationProviderCredentials();
 
     return NextResponse.json({
-      settings: normalizeFeatureSettings(parsed.channelFeatureSettings),
+      settings: normalizeChannelFeatureSettings(parsed.channelFeatureSettings),
+      catalog: {
+        providers: integrationProviderKeys.map((key) => ({
+          key,
+          label: providerLabelMap[key] ?? key,
+          configured: Boolean(effectiveProviderConfig[key].clientId && effectiveProviderConfig[key].clientSecret),
+        })),
+        bots: ownerPreferences.OtherBots.filter((item) => item.enabled).map((item) => ({
+          id: item.id,
+          name: item.name,
+          applicationId: item.applicationId,
+          commands: item.commands ?? [],
+        })),
+        apps: ownerPreferences.OtherApps.filter((item) => item.enabled).map((item) => ({
+          id: item.id,
+          name: item.name,
+          applicationId: item.applicationId,
+          clientId: item.clientId,
+          redirectUri: item.redirectUri,
+          scopes: item.scopes ?? [],
+        })),
+        webhookEventTypes: channelWebhookEventTypes.map((value) => ({
+          value,
+          label: value
+            .toLowerCase()
+            .split("_")
+            .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
+            .join(" "),
+        })),
+      },
     });
   } catch (error) {
     console.error("[CHANNEL_FEATURES_GET]", error);
@@ -331,8 +193,8 @@ export async function PATCH(req: Request, { params }: Params) {
       rows?: Array<{ rawSettingsJson: string | null }>;
     }).rows?.[0];
 
-    const parsed = parseStoredSettings(currentRow?.rawSettingsJson);
-    const nextFeatureSettings = normalizeFeatureSettings(body?.settings);
+    const parsed = parseStoredChannelSettings(currentRow?.rawSettingsJson);
+    const nextFeatureSettings = normalizeChannelFeatureSettings(body?.settings ?? DEFAULT_CHANNEL_FEATURE_SETTINGS);
 
     const nextRaw = JSON.stringify({
       ...parsed,

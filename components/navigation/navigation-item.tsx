@@ -16,6 +16,7 @@ interface NavigationItemProps {
   imageUrl?: string | null;
   updatedAt?: string | Date | null;
   name: string;
+  appearance?: "default" | "foldered";
   draggable?: boolean;
   onDragStart?: () => void;
   onDragEnd?: () => void;
@@ -55,6 +56,7 @@ export const NavigationItem = ({
   imageUrl,
   updatedAt,
   name,
+  appearance = "default",
   draggable = false,
   onDragStart,
   onDragEnd,
@@ -105,6 +107,7 @@ export const NavigationItem = ({
   const initials = (name?.trim()?.[0] ?? "S").toUpperCase();
   const showImage = !!resolvedImageSrc && !imageFailed;
   const isActiveServer = matchesRouteParam(String(params?.serverId ?? ""), { id, name });
+  const isFolderedAppearance = appearance === "foldered";
 
   const onClick = () => {
     router.push(buildServerPath({ id, name }));
@@ -194,25 +197,59 @@ export const NavigationItem = ({
           title={name}
           aria-label={`Open ${name} server`}
         >
-          <div
-            className={cn(
-              "relative mx-3 flex h-12 w-12 overflow-hidden rounded-3xl border border-zinc-500/20 bg-[#2b2d31] transition-all duration-150 group-hover:rounded-2xl group-hover:border-[#5865f2]/55",
-              isActiveServer && "rounded-2xl border-[#5865f2]/80 bg-[#5865f2]/20 ring-2 ring-[#5865f2]/80 ring-offset-2 ring-offset-transparent"
-            )}
-          >
-            {showImage ? (
-              <img
-                src={resolvedImageSrc}
-                alt={name}
-                className="h-full w-full object-cover"
-                onError={() => setImageFailed(true)}
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center bg-[#313338] text-sm font-bold text-[#dbdee1]">
-                {initials}
+          {isFolderedAppearance ? (
+            <div
+              className={cn(
+                "relative mx-3 flex h-12 w-12 overflow-hidden rounded-3xl border border-zinc-500/20 bg-[#2b2d31] transition-all duration-150 group-hover:rounded-2xl group-hover:border-[#5865f2]/55",
+                isActiveServer && "rounded-2xl border-[#5865f2]/80 bg-[#5865f2]/20 ring-2 ring-[#5865f2]/80 ring-offset-2 ring-offset-transparent"
+              )}
+            >
+              {showImage ? (
+                <img
+                  src={resolvedImageSrc}
+                  alt={name}
+                  className="h-full w-full object-cover"
+                  onError={() => setImageFailed(true)}
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center bg-[#313338] text-sm font-bold text-[#dbdee1]">
+                  {initials}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div
+              className={cn(
+                "relative mx-3 flex h-10 w-20 items-center justify-center overflow-hidden rounded-[10px] border border-zinc-500/20 bg-[#3b82f6] transition-all duration-150 group-hover:rounded-[8px] group-hover:border-primary/50 group-hover:ring-2 group-hover:ring-primary/25",
+                isActiveServer && "border-[#93c5fd] ring-2 ring-[#93c5fd]/70"
+              )}
+              onMouseEnter={(event) => {
+                event.currentTarget.style.backgroundColor = "#2563eb";
+              }}
+              onMouseLeave={(event) => {
+                event.currentTarget.style.backgroundColor = "#3b82f6";
+              }}
+            >
+              {showImage ? (
+                <img
+                  src={resolvedImageSrc}
+                  alt={name}
+                  className="h-full w-full object-cover"
+                  onError={() => setImageFailed(true)}
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center bg-[#1d4ed8] text-lg font-bold text-white">
+                  {initials}
+                </div>
+              )}
+
+              <div className="absolute inset-x-0 bottom-0 flex h-[5%] min-h-3.5 items-center justify-center border-t border-zinc-500/20 bg-zinc-900/40 px-1 backdrop-blur-[1px]">
+                <span className="truncate text-[9px] font-semibold uppercase tracking-[0.05em] text-zinc-100">
+                  {name}
+                </span>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </button>
       </PopoverTrigger>
 

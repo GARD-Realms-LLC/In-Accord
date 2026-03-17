@@ -7,12 +7,21 @@ type RealtimeRoomPayload = {
   conversationId?: string | null;
   profileId?: string | null;
   profileIds?: Array<string | null | undefined>;
+  meeting?: boolean | null;
 };
 
 declare global {
   // eslint-disable-next-line no-var
   var inAccordSocketIo: SocketIOServer | undefined;
 }
+
+type RealtimeRoomSocket = {
+  join?: (room: string) => void | Promise<void>;
+  leave?: (room: string) => void | Promise<void>;
+  data?: {
+    inAccordRoomRefs?: Record<string, number>;
+  };
+};
 
 const normalizeId = (value: unknown) => {
   const normalized = String(value ?? "").trim();
@@ -62,7 +71,42 @@ export const buildProfileRoom = (profileId: unknown) => {
   return `profile:${normalizedProfileId}`;
 };
 
+export const buildMeetingChannelRoom = (serverId: unknown, channelId: unknown) => {
+  const normalizedServerId = normalizeId(serverId);
+  const normalizedChannelId = normalizeId(channelId);
+
+  if (!normalizedServerId || !normalizedChannelId) {
+    return "";
+  }
+
+  return `meeting-channel:${normalizedServerId}:${normalizedChannelId}`;
+};
+
+export const buildMeetingProfileRoom = (profileId: unknown) => {
+  const normalizedProfileId = normalizeId(profileId);
+
+  if (!normalizedProfileId) {
+    return "";
+  }
+
+  return `meeting-profile:${normalizedProfileId}`;
+};
+
 export const getRealtimeRooms = (payload: RealtimeRoomPayload) => {
+  if (payload.meeting === true) {
+    const meetingProfileRooms = Array.isArray(payload.profileIds)
+      ? payload.profileIds.map((profileId) => buildMeetingProfileRoom(profileId)).filter(Boolean)
+      : [];
+
+    const rooms = [
+      buildMeetingChannelRoom(payload.serverId, payload.channelId),
+      buildMeetingProfileRoom(payload.profileId),
+      ...meetingProfileRooms,
+    ].filter(Boolean);
+
+    return Array.from(new Set(rooms));
+  }
+
   const profileRooms = Array.isArray(payload.profileIds)
     ? payload.profileIds.map((profileId) => buildProfileRoom(profileId)).filter(Boolean)
     : [];
@@ -85,16 +129,52 @@ export const setRealtimeServer = (io: SocketIOServer) => {
 
 export const getRealtimeServer = () => globalThis.inAccordSocketIo ?? null;
 
-export const joinRealtimeRooms = (socket: { join?: (room: string) => void }, payload: RealtimeRoomPayload) => {
-  for (const room of getRealtimeRooms(payload)) {
-    socket.join?.(room);
+const getSocketRoomRefs = (socket: RealtimeRoomSocket) => {
+  if (!socket.data) {
+    socket.data = {};
   }
+
+  if (!socket.data.inAccordRoomRefs) {
+    socket.data.inAccordRoomRefs = {};
+  }
+
+  return socket.data.inAccordRoomRefs;
 };
 
-export const leaveRealtimeRooms = (socket: { leave?: (room: string) => void }, payload: RealtimeRoomPayload) => {
+export const joinRealtimeRooms = async (socket: RealtimeRoomSocket, payload: RealtimeRoomPayload) => {
+  const roomRefs = getSocketRoomRefs(socket);
+  const joinedRooms: string[] = [];
+
   for (const room of getRealtimeRooms(payload)) {
-    socket.leave?.(room);
+    const nextCount = Number(roomRefs[room] ?? 0) + 1;
+    roomRefs[room] = nextCount;
+
+    if (nextCount === 1) {
+      await Promise.resolve(socket.join?.(room));
+      joinedRooms.push(room);
+    }
   }
+
+  return joinedRooms;
+};
+
+export const leaveRealtimeRooms = async (socket: RealtimeRoomSocket, payload: RealtimeRoomPayload) => {
+  const roomRefs = getSocketRoomRefs(socket);
+  const leftRooms: string[] = [];
+
+  for (const room of getRealtimeRooms(payload)) {
+    const currentCount = Number(roomRefs[room] ?? 0);
+    if (currentCount <= 1) {
+      delete roomRefs[room];
+      await Promise.resolve(socket.leave?.(room));
+      leftRooms.push(room);
+      continue;
+    }
+
+    roomRefs[room] = currentCount - 1;
+  }
+
+  return leftRooms;
 };
 
 export const emitRealtimeRefresh = (

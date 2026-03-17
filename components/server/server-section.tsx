@@ -13,6 +13,8 @@ interface ServerSectionProps {
   sectionType: "channels" | "members";
   channelType?: ChannelType;
   server?: ServerWithMembersWithProfiles;
+  viewerProfileId?: string | null;
+  viewerMemberId?: string | null;
 }
 
 export const ServerSection = ({
@@ -21,6 +23,8 @@ export const ServerSection = ({
   sectionType,
   channelType,
   server,
+  viewerProfileId = null,
+  viewerMemberId = null,
 }: ServerSectionProps) => {
   const { onOpen } = useModal();
   const isChannelGroupsHeader = label.startsWith("Channel Groups");
@@ -64,7 +68,7 @@ export const ServerSection = ({
       {role === MemberRole.ADMIN && sectionType === "members" && (
         <ActionTooltip label="Manage Members" side="top" align="center">
           <button
-            onClick={() => onOpen("members", { server })}
+            onClick={() => onOpen("members", { server, viewerProfileId, viewerMemberId })}
             className="text-zinc-500 hover:text-zinc-600 dark:text-zinc-400 dark:hover:text-zinc-300 transition"
           >
             <Settings className="h-4 w-4" />

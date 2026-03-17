@@ -275,6 +275,19 @@ export const ChatInput = ({
 
     return null;
   }, [query]);
+  const stickerChannelId = useMemo(() => {
+    const raw = query?.channelId;
+    if (typeof raw === "string") {
+      return raw;
+    }
+
+    if (Array.isArray(raw)) {
+      const first = raw.find((value) => typeof value === "string");
+      return typeof first === "string" ? first : null;
+    }
+
+    return null;
+  }, [query]);
 
   useEffect(() => {
     if (type !== "channel" || !stickerServerId) {
@@ -291,7 +304,11 @@ export const ChatInput = ({
           setIsLoadingSlashCommands(true);
         }
 
-        const response = await fetch(resolveAbsoluteAppUrl(appOrigin, `/api/servers/${encodeURIComponent(stickerServerId)}/slash-commands`), {
+        const slashCommandsUrl = stickerChannelId
+          ? `/api/servers/${encodeURIComponent(stickerServerId)}/slash-commands?channelId=${encodeURIComponent(stickerChannelId)}`
+          : `/api/servers/${encodeURIComponent(stickerServerId)}/slash-commands`;
+
+        const response = await fetch(resolveAbsoluteAppUrl(appOrigin, slashCommandsUrl), {
           method: "GET",
           cache: "no-store",
           credentials: "include",
@@ -350,7 +367,7 @@ export const ChatInput = ({
     return () => {
       cancelled = true;
     };
-  }, [stickerServerId, type]);
+  }, [appOrigin, stickerChannelId, stickerServerId, type]);
 
   useEffect(() => {
     let cancelled = false;
@@ -602,7 +619,11 @@ export const ChatInput = ({
 
     if (stickerServerId && Date.now() - lastSlashCommandsLoadedAt > 5000 && !isLoadingSlashCommands) {
       setIsLoadingSlashCommands(true);
-      void fetch(resolveAbsoluteAppUrl(appOrigin, `/api/servers/${encodeURIComponent(stickerServerId)}/slash-commands`), {
+      const slashCommandsUrl = stickerChannelId
+        ? `/api/servers/${encodeURIComponent(stickerServerId)}/slash-commands?channelId=${encodeURIComponent(stickerChannelId)}`
+        : `/api/servers/${encodeURIComponent(stickerServerId)}/slash-commands`;
+
+      void fetch(resolveAbsoluteAppUrl(appOrigin, slashCommandsUrl), {
         method: "GET",
         cache: "no-store",
         credentials: "include",

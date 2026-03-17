@@ -303,7 +303,7 @@ export const PrivateMessageVideoCallPanel = ({
               ) : (
                 <span className="inline-flex items-center gap-1">
                   <CameraOff className="h-3.5 w-3.5" suppressHydrationWarning />
-                  Camera unavailable
+                  Camera off • turn it on to preview
                 </span>
               )}
             </div>

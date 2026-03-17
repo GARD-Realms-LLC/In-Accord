@@ -1,7 +1,7 @@
 import { and, asc, eq, sql } from "drizzle-orm";
 
 import { db, member, message } from "@/lib/db";
-import { computeChannelPermissionForRole, resolveMemberContext } from "@/lib/channel-permissions";
+import { computeChannelPermissionForMember, resolveMemberContext } from "@/lib/channel-permissions";
 
 let channelThreadSchemaReady = false;
 
@@ -152,12 +152,13 @@ export const canAccessChannelAsProfile = async ({
 
   const memberContext = await resolveMemberContext({ profileId, serverId });
 
-  const permissions = await computeChannelPermissionForRole({
-    serverId,
-    channelId,
-    role: currentMember.role,
-    isServerOwner: memberContext?.isServerOwner ?? false,
-  });
+  const permissions = memberContext
+    ? await computeChannelPermissionForMember({
+        serverId,
+        channelId,
+        memberContext,
+      })
+    : { allowView: false, allowSend: false, allowConnect: false };
 
   return {
     allowed: permissions.allowView,

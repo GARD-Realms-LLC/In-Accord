@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   Bell,
+  ChevronLeft,
+  ChevronRight,
   Hash,
   Mic,
   PanelRightClose,
@@ -113,6 +115,10 @@ export const ServerRouteShell = ({
   });
   const [customTabPresets, setCustomTabPresets] = useState<Array<CustomTabBarPreset | null>>([null, null]);
   const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
+  const tabsScrollRef = useRef<HTMLDivElement | null>(null);
+  const [hasTabOverflow, setHasTabOverflow] = useState(false);
+  const [canScrollTabsLeft, setCanScrollTabsLeft] = useState(false);
+  const [canScrollTabsRight, setCanScrollTabsRight] = useState(false);
   const TAB_BAR_PRESETS: TabBarPreset[] = [
     {
       id: "classic",
@@ -344,6 +350,36 @@ export const ServerRouteShell = ({
     });
   };
 
+  const updateTabScrollState = useCallback(() => {
+    const container = tabsScrollRef.current;
+    if (!container) {
+      setHasTabOverflow(false);
+      setCanScrollTabsLeft(false);
+      setCanScrollTabsRight(false);
+      return;
+    }
+
+    const overflow = container.scrollWidth - container.clientWidth > 4;
+    const maxScrollLeft = Math.max(0, container.scrollWidth - container.clientWidth);
+
+    setHasTabOverflow(overflow);
+    setCanScrollTabsLeft(overflow && container.scrollLeft > 4);
+    setCanScrollTabsRight(overflow && container.scrollLeft < maxScrollLeft - 4);
+  }, []);
+
+  const scrollTabsBy = useCallback((direction: "left" | "right") => {
+    const container = tabsScrollRef.current;
+    if (!container) {
+      return;
+    }
+
+    const scrollAmount = Math.max(180, Math.floor(container.clientWidth * 0.6));
+    container.scrollBy({
+      left: direction === "left" ? -scrollAmount : scrollAmount,
+      behavior: "smooth",
+    });
+  }, []);
+
   const isHexColor = (value: unknown): value is string =>
     typeof value === "string" && /^#([0-9a-fA-F]{6})$/.test(value.trim());
 
@@ -375,6 +411,21 @@ export const ServerRouteShell = ({
       document.documentElement.style.removeProperty("--inaccord-chat-left-edge");
     };
   }, [chatWindowLeftEdge]);
+
+  useEffect(() => {
+    updateTabScrollState();
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const handleResize = () => updateTabScrollState();
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [serverTabs, tabBarPreferences, updateTabScrollState]);
 
   useEffect(() => {
     if (!isHydrated || typeof window === "undefined") {
@@ -716,42 +767,80 @@ export const ServerRouteShell = ({
         }`}
         style={{ top: `${TOPBAR_HEIGHT}px`, left: `${CHANNELS_RAIL_LEFT}px` }}
       >
-        <div
-          className="settings-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden py-1"
-          style={{ paddingLeft: "144px" }}
-          onDragOver={(event) => {
-            event.preventDefault();
-            event.dataTransfer.dropEffect = draggedTabId ? "move" : "copy";
-          }}
-          onDrop={(event) => {
-            event.preventDefault();
+        <div className="flex w-full min-w-0 items-center gap-2">
+          <div className="flex shrink-0 items-center justify-start gap-1">
+            {hasTabOverflow ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => scrollTabsBy("left")}
+                  disabled={!canScrollTabsLeft}
+                  className={`inline-flex h-8 w-8 items-center justify-center rounded-md border border-border/70 bg-background/70 text-zinc-200 transition ${
+                    canScrollTabsLeft
+                      ? "hover:bg-background/95"
+                      : "cursor-not-allowed opacity-40"
+                  }`}
+                  title="Scroll tabs left"
+                  aria-label="Scroll tabs left"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => scrollTabsBy("right")}
+                  disabled={!canScrollTabsRight}
+                  className={`inline-flex h-8 w-8 items-center justify-center rounded-md border border-border/70 bg-background/70 text-zinc-200 transition ${
+                    canScrollTabsRight
+                      ? "hover:bg-background/95"
+                      : "cursor-not-allowed opacity-40"
+                  }`}
+                  title="Scroll tabs right"
+                  aria-label="Scroll tabs right"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </>
+            ) : null}
+          </div>
 
-            const parsed = readServerTabDragPayload(event);
-            if (parsed && parsed.source === "server-rail") {
-              addOrActivateServerTab({
-                serverId: parsed.serverId,
-                serverName: parsed.serverName,
-              });
-              setDraggedTabId(null);
-              return;
-            }
+          <div className="flex min-w-0 flex-1 justify-start">
+            <div
+              ref={tabsScrollRef}
+              className="settings-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden py-1"
+              onScroll={updateTabScrollState}
+              onDragOver={(event) => {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = draggedTabId ? "move" : "copy";
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
 
-            if (draggedTabId) {
-              setDraggedTabId(null);
-              return;
-            }
+                const parsed = readServerTabDragPayload(event);
+                if (parsed && parsed.source === "server-rail") {
+                  addOrActivateServerTab({
+                    serverId: parsed.serverId,
+                    serverName: parsed.serverName,
+                  });
+                  setDraggedTabId(null);
+                  return;
+                }
 
-            if (!parsed) {
-              return;
-            }
+                if (draggedTabId) {
+                  setDraggedTabId(null);
+                  return;
+                }
 
-            addOrActivateServerTab({
-              serverId: parsed.serverId,
-              serverName: parsed.serverName,
-            });
-          }}
-        >
-          {serverTabs.map((tab) => {
+                if (!parsed) {
+                  return;
+                }
+
+                addOrActivateServerTab({
+                  serverId: parsed.serverId,
+                  serverName: parsed.serverName,
+                });
+              }}
+            >
+              {serverTabs.map((tab) => {
             const isActive = matchesRouteParam(String(params?.serverId ?? ""), {
               id: tab.serverId,
               name: tab.serverName,
@@ -765,125 +854,128 @@ export const ServerRouteShell = ({
             const inactiveHover = hexToRgba(tabBarPreferences.inactiveTabColor, 0.36);
 
             return (
-              <div
-                key={tab.serverId}
-                draggable
-                onDragStart={(event) => {
-                  setDraggedTabId(tab.serverId);
-                  event.dataTransfer.effectAllowed = "move";
-                  event.dataTransfer.setData(
-                    SERVER_TAB_DRAG_MIME,
-                    JSON.stringify({
-                      serverId: tab.serverId,
-                      serverName: tab.serverName,
-                      source: "tab",
-                    })
-                  );
-                }}
-                onDragEnd={() => setDraggedTabId(null)}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                }}
-                onDrop={(event) => {
-                  event.preventDefault();
-
-                  const parsed = readServerTabDragPayload(event);
-
-                  if (parsed && parsed.source === "server-rail") {
-                    if (parsed.serverId !== tab.serverId) {
-                      addOrActivateServerTab({
-                        serverId: parsed.serverId,
-                        serverName: parsed.serverName,
-                      });
-                    }
-                    setDraggedTabId(null);
-                    return;
-                  }
-
-                  const sourceTabId = String(draggedTabId ?? parsed?.serverId ?? "").trim();
-                  if (!sourceTabId || sourceTabId === tab.serverId) {
-                    return;
-                  }
-
-                  mutateTabsAndPersist((baseTabs) => reorderTabs(baseTabs, sourceTabId, tab.serverId));
-                  setDraggedTabId(null);
-                }}
-                className={`group relative flex min-w-30 max-w-55 flex-none items-center gap-2 rounded-md border text-left transition hover:brightness-110 ${tabHeightClass} ${tabPaddingClass} ${tabTextClass}`}
-                style={{
-                  minWidth: `${tabBarPreferences.tabMinWidth}px`,
-                  maxWidth: `${tabBarPreferences.tabMaxWidth}px`,
-                  borderColor: isActive ? tabBarPreferences.activeTabColor : `${tabBarPreferences.inactiveTabColor}99`,
-                  backgroundColor: isActive ? activeBg : inactiveBg,
-                  color: isActive ? "#ffffff" : "#d4d4d8",
-                }}
-                onMouseEnter={(event) => {
-                  if (!isActive) {
-                    event.currentTarget.style.backgroundColor = inactiveHover;
-                  }
-                }}
-                onMouseLeave={(event) => {
-                  if (!isActive) {
-                    event.currentTarget.style.backgroundColor = inactiveBg;
-                  }
-                }}
-                title={tab.serverName}
-              >
-                <button
-                  type="button"
-                  onClick={() => navigateToServerTab(tab)}
-                  className="min-w-0 flex-1 truncate text-left"
-                >
-                  <span className="truncate font-semibold">{tab.serverName}</span>
-                </button>
-                <button
-                  type="button"
-                  aria-label={`Close ${tab.serverName} tab`}
-                  disabled={!canCloseTab}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-
-                    mutateTabsAndPersist((baseTabs) => {
-                      if (baseTabs.length <= 1) {
-                        return baseTabs;
-                      }
-
-                      const currentIndex = baseTabs.findIndex((item) => item.serverId === tab.serverId);
-                      const nextTabs = baseTabs.filter((item) => item.serverId !== tab.serverId);
-
-                      if (isActive) {
-                        if (nextTabs.length > 0) {
-                          const fallbackIndex = Math.max(0, Math.min(currentIndex, nextTabs.length - 1));
-                          navigateToServerTab(nextTabs[fallbackIndex]);
-                        }
-                      }
-
-                      return nextTabs;
-                    });
+                <div
+                  key={tab.serverId}
+                  draggable
+                  onDragStart={(event) => {
+                    setDraggedTabId(tab.serverId);
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData(
+                      SERVER_TAB_DRAG_MIME,
+                      JSON.stringify({
+                        serverId: tab.serverId,
+                        serverName: tab.serverName,
+                        source: "tab",
+                      })
+                    );
                   }}
-                  className={`ml-auto inline-flex h-5 w-5 shrink-0 items-center justify-center rounded transition ${
-                    canCloseTab
-                      ? `${tabBarPreferences.closeOnHover ? "opacity-0 group-hover:opacity-100" : "opacity-100"} text-zinc-300 hover:bg-black/25 hover:text-white`
-                      : "cursor-not-allowed text-zinc-600 opacity-50"
-                  }`}
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            );
-          })}
-        </div>
+                  onDragEnd={() => setDraggedTabId(null)}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
 
-        <button
-          type="button"
-          onClick={() => setIsTabCustomizePanelOpen((prev) => !prev)}
-          className="ml-2 inline-flex h-8 shrink-0 items-center gap-1 rounded-md border border-border/70 bg-background/70 px-2 text-xs font-semibold text-zinc-200 transition hover:bg-background/95"
-          title="Customise tab bar"
-          aria-label="Customise tab bar"
-        >
-          <SlidersHorizontal className="h-3.5 w-3.5" />
-          Customise
-        </button>
+                    const parsed = readServerTabDragPayload(event);
+
+                    if (parsed && parsed.source === "server-rail") {
+                      if (parsed.serverId !== tab.serverId) {
+                        addOrActivateServerTab({
+                          serverId: parsed.serverId,
+                          serverName: parsed.serverName,
+                        });
+                      }
+                      setDraggedTabId(null);
+                      return;
+                    }
+
+                    const sourceTabId = String(draggedTabId ?? parsed?.serverId ?? "").trim();
+                    if (!sourceTabId || sourceTabId === tab.serverId) {
+                      return;
+                    }
+
+                    mutateTabsAndPersist((baseTabs) => reorderTabs(baseTabs, sourceTabId, tab.serverId));
+                    setDraggedTabId(null);
+                  }}
+                  className={`group relative flex min-w-30 max-w-55 flex-none items-center gap-2 rounded-md border text-left transition hover:brightness-110 ${tabHeightClass} ${tabPaddingClass} ${tabTextClass}`}
+                  style={{
+                    minWidth: `${tabBarPreferences.tabMinWidth}px`,
+                    maxWidth: `${tabBarPreferences.tabMaxWidth}px`,
+                    borderColor: isActive ? tabBarPreferences.activeTabColor : `${tabBarPreferences.inactiveTabColor}99`,
+                    backgroundColor: isActive ? activeBg : inactiveBg,
+                    color: isActive ? "#ffffff" : "#d4d4d8",
+                  }}
+                  onMouseEnter={(event) => {
+                    if (!isActive) {
+                      event.currentTarget.style.backgroundColor = inactiveHover;
+                    }
+                  }}
+                  onMouseLeave={(event) => {
+                    if (!isActive) {
+                      event.currentTarget.style.backgroundColor = inactiveBg;
+                    }
+                  }}
+                  title={tab.serverName}
+                >
+                  <button
+                    type="button"
+                    onClick={() => navigateToServerTab(tab)}
+                    className="min-w-0 flex-1 truncate text-left"
+                  >
+                    <span className="truncate font-semibold">{tab.serverName}</span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Close ${tab.serverName} tab`}
+                    disabled={!canCloseTab}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+
+                      if (serverTabs.length <= 1) {
+                        return;
+                      }
+
+                      const currentIndex = serverTabs.findIndex((item) => item.serverId === tab.serverId);
+                      const nextTabs = serverTabs.filter((item) => item.serverId !== tab.serverId);
+                      const fallbackTab =
+                        isActive && nextTabs.length > 0
+                          ? nextTabs[Math.max(0, Math.min(currentIndex, nextTabs.length - 1))]
+                          : null;
+
+                      mutateTabsAndPersist(() => nextTabs);
+
+                      if (fallbackTab) {
+                        navigateToServerTab(fallbackTab);
+                      }
+                    }}
+                    className={`ml-auto inline-flex h-5 w-5 shrink-0 items-center justify-center rounded transition ${
+                      canCloseTab
+                        ? `${tabBarPreferences.closeOnHover ? "opacity-0 group-hover:opacity-100" : "opacity-100"} text-zinc-300 hover:bg-black/25 hover:text-white`
+                        : "cursor-not-allowed text-zinc-600 opacity-50"
+                    }`}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              );
+            })}
+            </div>
+          </div>
+
+          <div className="flex shrink-0 items-center justify-end">
+            <button
+              type="button"
+              onClick={() => setIsTabCustomizePanelOpen((prev) => !prev)}
+              className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md border border-border/70 bg-background/70 px-2 text-xs font-semibold text-zinc-200 transition hover:bg-background/95"
+              title="Customise tab bar"
+              aria-label="Customise tab bar"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              Customise
+            </button>
+          </div>
+        </div>
       </div>
 
       {isTabCustomizePanelOpen ? (

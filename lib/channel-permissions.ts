@@ -2,6 +2,7 @@ import { and, eq, sql } from "drizzle-orm";
 
 import { db, member, server } from "@/lib/db";
 import { MemberRole } from "@/lib/db/types";
+import { ensureServerRolesSchema } from "@/lib/server-roles";
 
 export type ChannelPermissionSet = {
   allowView: boolean;
@@ -11,11 +12,19 @@ export type ChannelPermissionSet = {
 
 type PermissionRow = {
   channelId: string;
-  targetType: "EVERYONE" | "ROLE";
+  targetType: "EVERYONE" | "ROLE" | "MEMBER";
   targetId: string;
   allowView: boolean | null;
   allowSend: boolean | null;
   allowConnect: boolean | null;
+};
+
+export type ResolvedMemberContext = {
+  memberId: string;
+  profileId: string;
+  role: MemberRole;
+  assignedRoleIds: string[];
+  isServerOwner: boolean;
 };
 
 const defaultPermissions: ChannelPermissionSet = {
@@ -106,6 +115,70 @@ export const ensureChannelPermissionSchema = async () => {
   `);
 };
 
+const applyPermissionValue = (
+  resolved: ChannelPermissionSet,
+  key: keyof ChannelPermissionSet,
+  value: boolean | null | undefined
+) => {
+  if (typeof value === "boolean") {
+    resolved[key] = value;
+  }
+};
+
+const aggregateRolePermission = (
+  rows: PermissionRow[],
+  key: keyof ChannelPermissionSet
+) => {
+  let hasAllow = false;
+  let hasDeny = false;
+
+  for (const row of rows) {
+    const value = row[key];
+    if (value === true) {
+      hasAllow = true;
+    }
+    if (value === false) {
+      hasDeny = true;
+    }
+  }
+
+  return { hasAllow, hasDeny };
+};
+
+const loadChannelPermissionRows = async ({
+  serverId,
+  channelId,
+}: {
+  serverId: string;
+  channelId?: string;
+}) => {
+  const channelFilter = channelId
+    ? sql`and cp."channelId" = ${channelId}`
+    : sql``;
+
+  const result = await db.execute(sql`
+    select
+      cp."channelId" as "channelId",
+      cp."targetType" as "targetType",
+      cp."targetId" as "targetId",
+      cp."allowView" as "allowView",
+      cp."allowSend" as "allowSend",
+      cp."allowConnect" as "allowConnect"
+    from "ChannelPermission" cp
+    where cp."serverId" = ${serverId}
+      ${channelFilter}
+    order by
+      case cp."targetType"
+        when 'EVERYONE' then 1
+        when 'ROLE' then 2
+        else 3
+      end asc,
+      cp."updatedAt" asc
+  `);
+
+  return (result as unknown as { rows: PermissionRow[] }).rows ?? [];
+};
+
 const rolePermissionRows = async ({
   serverId,
   role,
@@ -181,6 +254,59 @@ export const computeChannelPermissionForRole = async ({
   return resolved;
 };
 
+export const computeChannelPermissionForMember = async ({
+  serverId,
+  channelId,
+  memberContext,
+}: {
+  serverId: string;
+  channelId: string;
+  memberContext: ResolvedMemberContext;
+}): Promise<ChannelPermissionSet> => {
+  if (memberContext.isServerOwner || memberContext.role === MemberRole.ADMIN) {
+    return { ...defaultPermissions };
+  }
+
+  const rows = await loadChannelPermissionRows({ serverId, channelId });
+  const relevant = rows.filter((row) => row.channelId === channelId);
+  const resolved = { ...defaultPermissions };
+
+  const everyoneRow = relevant.find(
+    (row) => row.targetType === "EVERYONE" && row.targetId === "EVERYONE"
+  );
+  if (everyoneRow) {
+    applyPermissionValue(resolved, "allowView", everyoneRow.allowView);
+    applyPermissionValue(resolved, "allowSend", everyoneRow.allowSend);
+    applyPermissionValue(resolved, "allowConnect", everyoneRow.allowConnect);
+  }
+
+  const applicableRoleIds = new Set<string>([memberContext.role, ...memberContext.assignedRoleIds]);
+  const applicableRoleRows = relevant.filter(
+    (row) => row.targetType === "ROLE" && applicableRoleIds.has(String(row.targetId ?? "").trim())
+  );
+
+  for (const key of ["allowView", "allowSend", "allowConnect"] as const) {
+    const aggregate = aggregateRolePermission(applicableRoleRows, key);
+    if (aggregate.hasDeny) {
+      resolved[key] = false;
+    }
+    if (aggregate.hasAllow) {
+      resolved[key] = true;
+    }
+  }
+
+  const memberRow = relevant.find(
+    (row) => row.targetType === "MEMBER" && row.targetId === memberContext.memberId
+  );
+  if (memberRow) {
+    applyPermissionValue(resolved, "allowView", memberRow.allowView);
+    applyPermissionValue(resolved, "allowSend", memberRow.allowSend);
+    applyPermissionValue(resolved, "allowConnect", memberRow.allowConnect);
+  }
+
+  return resolved;
+};
+
 export const visibleChannelIdsForRole = async ({
   serverId,
   role,
@@ -217,6 +343,73 @@ export const visibleChannelIdsForRole = async ({
     }
     if (typeof row.allowConnect === "boolean") {
       current.allowConnect = row.allowConnect;
+    }
+  }
+
+  return new Set(
+    Array.from(map.entries())
+      .filter(([, value]) => value.allowView)
+      .map(([channelId]) => channelId)
+  );
+};
+
+export const visibleChannelIdsForMember = async ({
+  serverId,
+  memberContext,
+  channelIds,
+}: {
+  serverId: string;
+  memberContext: ResolvedMemberContext;
+  channelIds: string[];
+}) => {
+  if (memberContext.isServerOwner || memberContext.role === MemberRole.ADMIN) {
+    return new Set(channelIds);
+  }
+
+  const rows = await loadChannelPermissionRows({ serverId });
+  const applicableRoleIds = new Set<string>([memberContext.role, ...memberContext.assignedRoleIds]);
+  const map = new Map<string, ChannelPermissionSet>();
+
+  for (const channelId of channelIds) {
+    map.set(channelId, { ...defaultPermissions });
+  }
+
+  for (const channelId of channelIds) {
+    const current = map.get(channelId);
+    if (!current) {
+      continue;
+    }
+
+    const relevant = rows.filter((row) => row.channelId === channelId);
+    const everyoneRow = relevant.find(
+      (row) => row.targetType === "EVERYONE" && row.targetId === "EVERYONE"
+    );
+    if (everyoneRow) {
+      applyPermissionValue(current, "allowView", everyoneRow.allowView);
+      applyPermissionValue(current, "allowSend", everyoneRow.allowSend);
+      applyPermissionValue(current, "allowConnect", everyoneRow.allowConnect);
+    }
+
+    const applicableRoleRows = relevant.filter(
+      (row) => row.targetType === "ROLE" && applicableRoleIds.has(String(row.targetId ?? "").trim())
+    );
+    for (const key of ["allowView", "allowSend", "allowConnect"] as const) {
+      const aggregate = aggregateRolePermission(applicableRoleRows, key);
+      if (aggregate.hasDeny) {
+        current[key] = false;
+      }
+      if (aggregate.hasAllow) {
+        current[key] = true;
+      }
+    }
+
+    const memberRow = relevant.find(
+      (row) => row.targetType === "MEMBER" && row.targetId === memberContext.memberId
+    );
+    if (memberRow) {
+      applyPermissionValue(current, "allowView", memberRow.allowView);
+      applyPermissionValue(current, "allowSend", memberRow.allowSend);
+      applyPermissionValue(current, "allowConnect", memberRow.allowConnect);
     }
   }
 
@@ -340,9 +533,11 @@ export const resolveMemberContext = async ({
   profileId: string;
   serverId: string;
 }) => {
+  await ensureServerRolesSchema();
+
   const membership = await db.query.member.findFirst({
     where: and(eq(member.serverId, serverId), eq(member.profileId, profileId)),
-    columns: { id: true, role: true },
+    columns: { id: true, role: true, profileId: true },
   });
 
   if (!membership) {
@@ -354,8 +549,24 @@ export const resolveMemberContext = async ({
     columns: { id: true },
   });
 
+  const assignmentRows = await db.execute(sql`
+    select a."roleId" as "roleId"
+    from "ServerRoleAssignment" a
+    where a."serverId" = ${serverId}
+      and a."memberId" = ${membership.id}
+  `);
+
+  const assignedRoleIds = ((assignmentRows as unknown as {
+    rows?: Array<{ roleId: string | null }>;
+  }).rows ?? [])
+    .map((row) => String(row.roleId ?? "").trim())
+    .filter(Boolean);
+
   return {
+    memberId: membership.id,
+    profileId: membership.profileId,
     role: membership.role,
+    assignedRoleIds,
     isServerOwner: !!owner,
   };
 };

@@ -8,6 +8,10 @@ const PUBLIC_PATH_PREFIXES = [
   "/our-board",
   "/api/auth",
   "/api/our-board",
+  "/api/debug/rebind-socket-io",
+  "/api/socket/panel-probe-report",
+  "/api/socket/probe-report",
+  "/api/socket/rebind",
   "/api/uploadthing",
   "/api/r2/object",
 ];
@@ -16,6 +20,10 @@ const isPublicPath = (pathname: string) => {
   return PUBLIC_PATH_PREFIXES.some(
     (path) => pathname === path || pathname.startsWith(`${path}/`)
   );
+};
+
+const isLiveProfilePopupPath = (pathname: string) => {
+  return /^\/api\/profile\/[^/]+\/(card|mutuals)$/i.test(pathname);
 };
 
 const shouldUseSecureCookie = (req: NextRequest) => {
@@ -89,6 +97,10 @@ export default async function proxy(req: NextRequest) {
   }
 
   if (isPublicPath(pathname)) {
+    return NextResponse.next();
+  }
+
+  if (isLiveProfilePopupPath(pathname)) {
     return NextResponse.next();
   }
 

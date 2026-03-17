@@ -7,6 +7,7 @@ import {
   recordOurBoardBump,
   upsertOurBoardEntry,
 } from "@/lib/our-board-store";
+import { getChannelFeatureSettings } from "@/lib/channel-feature-settings";
 import { getUserPreferences } from "@/lib/user-preferences";
 
 export type SlashCommandDefinition = {
@@ -14,6 +15,7 @@ export type SlashCommandDefinition = {
   description: string;
   sourceType: "BOT" | "APP" | "SYSTEM";
   sourceName: string;
+  sourceId?: string;
   commandKey?: string;
   botSlug?: string;
   botConfigId?: string;
@@ -84,7 +86,10 @@ const dedupeCommands = (items: SlashCommandDefinition[]) => {
   return next;
 };
 
-export const listServerSlashCommands = async (serverId: string): Promise<SlashCommandDefinition[]> => {
+export const listServerSlashCommands = async (
+  serverId: string,
+  options?: { channelId?: string | null }
+): Promise<SlashCommandDefinition[]> => {
   const normalizedServerId = String(serverId ?? "").trim();
   if (!normalizedServerId) {
     return [];
@@ -97,6 +102,20 @@ export const listServerSlashCommands = async (serverId: string): Promise<SlashCo
   if (!targetServer) {
     return [];
   }
+
+  const normalizedChannelId = String(options?.channelId ?? "").trim();
+  const channelSettings = normalizedChannelId
+    ? await getChannelFeatureSettings({ serverId: normalizedServerId, channelId: normalizedChannelId })
+    : null;
+  const integrationsEnabled = channelSettings ? channelSettings.integrations.enabled : true;
+  const allowedBotIds = new Set(
+    channelSettings?.integrations.allowedBotIds.map((item) => String(item ?? "").trim()).filter(Boolean) ?? []
+  );
+  const allowedAppIds = new Set(
+    channelSettings?.apps.allowedAppIds.map((item) => String(item ?? "").trim()).filter(Boolean) ?? []
+  );
+  const restrictBotIds = allowedBotIds.size > 0;
+  const restrictAppIds = allowedAppIds.size > 0;
 
   const preferences = await getUserPreferences(targetServer.profileId);
   const enabledBots = preferences.OtherBots.filter((item) => item.enabled);
@@ -140,54 +159,67 @@ export const listServerSlashCommands = async (serverId: string): Promise<SlashCo
     },
   ];
 
-  for (const bot of enabledBots) {
-    const slug = slugifyCommand(bot.name) || "bot";
-    const profileId = makeIntegrationBotProfileId(targetServer.profileId, bot.id);
-    const responseMemberId = botMemberMap.get(profileId);
-    const commandLimit = getIntegrationCommandLimit(bot.name);
+  if (integrationsEnabled) {
+    for (const bot of enabledBots) {
+      const slug = slugifyCommand(bot.name) || "bot";
+      const profileId = makeIntegrationBotProfileId(targetServer.profileId, bot.id);
+      const responseMemberId = botMemberMap.get(profileId);
+      const commandLimit = getIntegrationCommandLimit(bot.name);
 
-    const botCommands = ((bot.commands ?? []).length > 0 ? bot.commands : ["help", "ping", "echo"])
-      .slice(0, commandLimit);
-    for (const commandKey of botCommands) {
-      const normalizedKey = slugifyCommand(commandKey) || "command";
-      commands.push({
-        name: normalizedKey,
-        description: `${bot.name}: /${normalizedKey}`,
-        sourceType: "BOT",
-        sourceName: bot.name,
-        botSlug: slug,
-        commandKey: normalizedKey,
-        botConfigId: bot.id,
-        responseMemberId,
-      });
+      if (restrictBotIds && !allowedBotIds.has(bot.id)) {
+        continue;
+      }
+
+      const botCommands = ((bot.commands ?? []).length > 0 ? bot.commands : ["help", "ping", "echo"])
+        .slice(0, commandLimit);
+      for (const commandKey of botCommands) {
+        const normalizedKey = slugifyCommand(commandKey) || "command";
+        commands.push({
+          name: normalizedKey,
+          description: `${bot.name}: /${normalizedKey}`,
+          sourceType: "BOT",
+          sourceName: bot.name,
+          sourceId: bot.id,
+          botSlug: slug,
+          commandKey: normalizedKey,
+          botConfigId: bot.id,
+          responseMemberId,
+        });
+
+        commands.push({
+          name: `${slug}-${normalizedKey}`,
+          description: `${bot.name}: /${normalizedKey}`,
+          sourceType: "BOT",
+          sourceName: bot.name,
+          sourceId: bot.id,
+          botSlug: slug,
+          commandKey: normalizedKey,
+          botConfigId: bot.id,
+          responseMemberId,
+        });
+      }
+    }
+
+    for (const app of enabledApps) {
+      const slug = slugifyCommand(app.name) || "app";
+      const commandLimit = getIntegrationCommandLimit(app.name);
+
+      if (commandLimit <= 0) {
+        continue;
+      }
+
+      if (restrictAppIds && !allowedAppIds.has(app.id)) {
+        continue;
+      }
 
       commands.push({
-        name: `${slug}-${normalizedKey}`,
-        description: `${bot.name}: /${normalizedKey}`,
-        sourceType: "BOT",
-        sourceName: bot.name,
-        botSlug: slug,
-        commandKey: normalizedKey,
-        botConfigId: bot.id,
-        responseMemberId,
+        name: `${slug}-about`,
+        description: `Show info for ${app.name} app integration.`,
+        sourceType: "APP",
+        sourceName: app.name,
+        sourceId: app.id,
       });
     }
-  }
-
-  for (const app of enabledApps) {
-    const slug = slugifyCommand(app.name) || "app";
-    const commandLimit = getIntegrationCommandLimit(app.name);
-
-    if (commandLimit <= 0) {
-      continue;
-    }
-
-    commands.push({
-      name: `${slug}-about`,
-      description: `Show info for ${app.name} app integration.`,
-      sourceType: "APP",
-      sourceName: app.name,
-    });
   }
 
   return dedupeCommands(commands).slice(0, 1000);
@@ -220,7 +252,7 @@ export const executeServerSlashCommand = async ({
   const [commandNameRaw, ...argParts] = withoutSlash.split(/\s+/g);
   const commandName = commandNameRaw.trim().toLowerCase();
 
-  const commands = await listServerSlashCommands(serverId);
+  const commands = await listServerSlashCommands(serverId, { channelId });
   let command = commands.find((item) => item.name === commandName);
   let args = argParts.join(" ").trim();
 

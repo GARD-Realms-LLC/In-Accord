@@ -41,6 +41,19 @@ type ExternalBotSdkLike = {
   GatewayIntentBits: { Guilds: number; GuildMembers?: number };
 };
 
+const isTemplateMeRateLimitError = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /rate limited|rate limit|too many requests|\b429\b/i.test(message);
+};
+
+const toTemplateMeRuntimeErrorMessage = (error: unknown, fallback: string) => {
+  if (isTemplateMeRateLimitError(error)) {
+    return "Template Me upstream is rate limiting bot traffic. The runtime will keep retrying automatically.";
+  }
+
+  return error instanceof Error ? error.message : fallback;
+};
+
 class TemplateMeBotRuntimeManager {
   private client: ExternalBotClientLike | null = null;
   private controlServer: HttpServer | null = null;
@@ -96,9 +109,13 @@ class TemplateMeBotRuntimeManager {
     });
 
     client.on("error", (error: unknown) => {
+      if (isTemplateMeRateLimitError(error)) {
+        return;
+      }
+
       this.setState({
         status: "error",
-        lastError: error instanceof Error ? error.message : "Unknown upstream client error",
+        lastError: toTemplateMeRuntimeErrorMessage(error, "Unknown upstream client error"),
       });
     });
 
@@ -245,7 +262,7 @@ class TemplateMeBotRuntimeManager {
         stoppedAt: new Date().toISOString(),
         controlPort: null,
         controlUrl: null,
-        lastError: error instanceof Error ? error.message : "Failed to start Template Me bot runtime.",
+        lastError: toTemplateMeRuntimeErrorMessage(error, "Failed to start Template Me bot runtime."),
       });
       throw error;
     }

@@ -4,7 +4,7 @@ import axios from "axios";
 import { type Channel, ChannelType, MemberRole, type Server } from "@/lib/db/types";
 import { Hash, Mic, Settings, Video } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 import { ActionTooltip } from "@/components/action-tooltip";
@@ -38,8 +38,11 @@ export const ServerChannel = ({
 
   const Icon = iconMap[channel.type];
   const isDraggingRef = useRef(false);
+  const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isReordering, setIsReordering] = useState(false);
+  const [isHidingChannel, setIsHidingChannel] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const customIcon = String((channel as { icon?: string | null }).icon ?? "").trim();
   const canReorder = draggable && role !== MemberRole.GUEST;
   const showConnectedCount = (channel.type === ChannelType.AUDIO || channel.type === ChannelType.VIDEO) && connectedCount > 0;
@@ -66,6 +69,73 @@ export const ServerChannel = ({
   const onAction = (e: React.MouseEvent, action: ModalType) => {
     e.stopPropagation();
     onOpen(action, { channel, server });
+  };
+
+  useEffect(() => {
+    if (!contextMenu) {
+      return;
+    }
+
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (contextMenuRef.current && target instanceof Node && contextMenuRef.current.contains(target)) {
+        return;
+      }
+
+      setContextMenu(null);
+    };
+
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setContextMenu(null);
+      }
+    };
+
+    const onScroll = () => {
+      setContextMenu(null);
+    };
+
+    window.addEventListener("mousedown", onPointerDown);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("keydown", onEscape);
+
+    return () => {
+      window.removeEventListener("mousedown", onPointerDown);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("keydown", onEscape);
+    };
+  }, [contextMenu]);
+
+  const onContextMenu = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    setContextMenu({ x: event.clientX, y: event.clientY });
+  };
+
+  const onHideChannel = async () => {
+    if (isHidingChannel) {
+      return;
+    }
+
+    try {
+      setIsHidingChannel(true);
+      setContextMenu(null);
+
+      await axios.patch(`/api/servers/${server.id}/channel-visibility`, {
+        action: "hide",
+        channelId: channel.id,
+      });
+
+      router.refresh();
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? (typeof error.response?.data === "string" ? error.response.data : error.message)
+        : "Failed to hide channel.";
+      window.alert(message || "Failed to hide channel.");
+    } finally {
+      setIsHidingChannel(false);
+    }
   };
 
   const onDragStart = (event: React.DragEvent<HTMLButtonElement>) => {
@@ -158,6 +228,7 @@ export const ServerChannel = ({
     >
       <button
         onClick={onClick}
+        onContextMenu={onContextMenu}
         draggable={canReorder}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
@@ -203,6 +274,23 @@ export const ServerChannel = ({
           )}
         </div>
       </button>
+
+      {contextMenu ? (
+        <div
+          ref={contextMenuRef}
+          className="fixed z-130 min-w-40 rounded-md border border-zinc-700 bg-[#1f2125] p-1 shadow-2xl shadow-black/70"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          <button
+            type="button"
+            onClick={() => void onHideChannel()}
+            disabled={isHidingChannel}
+            className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs text-zinc-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Hide Channel
+          </button>
+        </div>
+      ) : null}
 
       {isDragOver && canReorder ? <div className="mt-1 h-9 w-full" /> : null}
     </div>

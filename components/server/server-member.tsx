@@ -48,6 +48,7 @@ export const ServerMember = ({
     >
       <UserAvatar 
         src={member.profile.imageUrl}
+        decorationSrc={(member.profile as Profile & { avatarDecorationUrl?: string | null }).avatarDecorationUrl ?? null}
         className="h-8 w-8 md:h-8 md:w-8"
       />
       <div className="flex min-w-0 items-center gap-1.5">

@@ -76,6 +76,13 @@ export const ToasterProvider = () => {
       toastOptions={{
         duration: Infinity,
         closeButton: true,
+        classNames: {
+          toast:
+            "max-w-[calc(100vw-1rem)] w-[min(calc(100vw-1rem),32rem)] overflow-hidden break-words",
+          content: "min-w-0 max-w-full overflow-hidden break-words",
+          title: "break-words",
+          description: "break-words",
+        },
       }}
     />
   );

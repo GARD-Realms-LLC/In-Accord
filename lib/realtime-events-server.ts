@@ -12,6 +12,7 @@ type RealtimeRoomPayload = {
   conversationId?: string | null;
   profileId?: string | null;
   profileIds?: Array<string | null | undefined>;
+  meeting?: boolean | null;
 };
 
 type DistributedRealtimeEvent = {

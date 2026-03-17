@@ -3,6 +3,8 @@
 import { Headphones, Mic, MicOff, ScreenShare, ScreenShareOff, Video, VideoOff, VolumeX } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { getCachedVoiceState, VOICE_STATE_SYNC_EVENT, type VoiceStateSyncDetail } from "@/lib/voice-state-sync";
+
 const VOICE_TOGGLE_MUTE_EVENT = "inaccord:voice-toggle-mute";
 const VOICE_TOGGLE_DEAFEN_EVENT = "inaccord:voice-toggle-deafen";
 const VOICE_TOGGLE_CAMERA_EVENT = "inaccord:voice-toggle-camera";
@@ -13,6 +15,7 @@ export const UserAudioControls = () => {
   const [isDeafened, setIsDeafened] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [isVoiceSessionActive, setIsVoiceSessionActive] = useState(false);
   const [isVideoSession, setIsVideoSession] = useState(false);
 
   const onToggleMute = () => {
@@ -34,6 +37,10 @@ export const UserAudioControls = () => {
 
     const next = !isCameraOn;
     setIsCameraOn(next);
+    if (next) {
+      setIsStreaming(false);
+      window.dispatchEvent(new CustomEvent(VOICE_TOGGLE_STREAM_EVENT, { detail: { isStreaming: false, streamLabel: null } }));
+    }
     window.dispatchEvent(new CustomEvent(VOICE_TOGGLE_CAMERA_EVENT, { detail: { isCameraOn: next } }));
   };
 
@@ -44,41 +51,53 @@ export const UserAudioControls = () => {
 
     const next = !isStreaming;
     setIsStreaming(next);
+    if (next) {
+      setIsCameraOn(false);
+      window.dispatchEvent(new CustomEvent(VOICE_TOGGLE_CAMERA_EVENT, { detail: { isCameraOn: false } }));
+    }
     window.dispatchEvent(new CustomEvent(VOICE_TOGGLE_STREAM_EVENT, { detail: { isStreaming: next } }));
   };
 
   useEffect(() => {
-    const syncFromSession = (event: Event) => {
-      const customEvent = event as CustomEvent<{
-        isMuted?: boolean;
-        isDeafened?: boolean;
-        isCameraOn?: boolean;
-        isStreaming?: boolean;
-        isVideoChannel?: boolean;
-      }>;
-      if (typeof customEvent.detail?.isMuted === "boolean") {
-        setIsMuted(customEvent.detail.isMuted);
+    const applyVoiceState = (detail?: VoiceStateSyncDetail | null) => {
+      if (!detail) {
+        return;
       }
-      if (typeof customEvent.detail?.isDeafened === "boolean") {
-        setIsDeafened(customEvent.detail.isDeafened);
+
+      if (typeof detail.active === "boolean") {
+        setIsVoiceSessionActive(detail.active);
       }
-      if (typeof customEvent.detail?.isCameraOn === "boolean") {
-        setIsCameraOn(customEvent.detail.isCameraOn);
+      if (typeof detail.isMuted === "boolean") {
+        setIsMuted(detail.isMuted);
       }
-      if (typeof customEvent.detail?.isStreaming === "boolean") {
-        setIsStreaming(customEvent.detail.isStreaming);
+      if (typeof detail.isDeafened === "boolean") {
+        setIsDeafened(detail.isDeafened);
       }
-      if (typeof customEvent.detail?.isVideoChannel === "boolean") {
-        setIsVideoSession(customEvent.detail.isVideoChannel);
+      if (typeof detail.isCameraOn === "boolean") {
+        setIsCameraOn(detail.isCameraOn);
+      }
+      if (typeof detail.isStreaming === "boolean") {
+        setIsStreaming(detail.isStreaming);
+      }
+      if (typeof detail.isVideoChannel === "boolean") {
+        setIsVideoSession(detail.isVideoChannel);
       }
     };
 
-    window.addEventListener("inaccord:voice-state-sync", syncFromSession as EventListener);
+    applyVoiceState(getCachedVoiceState());
+
+    const syncFromSession = (event: Event) => {
+      applyVoiceState((event as CustomEvent<VoiceStateSyncDetail>).detail);
+    };
+
+    window.addEventListener(VOICE_STATE_SYNC_EVENT, syncFromSession as EventListener);
 
     return () => {
-      window.removeEventListener("inaccord:voice-state-sync", syncFromSession as EventListener);
+      window.removeEventListener(VOICE_STATE_SYNC_EVENT, syncFromSession as EventListener);
     };
   }, []);
+
+  const canUseVideoControls = isVoiceSessionActive && isVideoSession;
 
   return (
     <>
@@ -100,11 +119,11 @@ export const UserAudioControls = () => {
       </button>
       <button
         type="button"
-        title={!isVideoSession ? "Camera unavailable" : isCameraOn ? "Turn camera off" : "Turn camera on"}
+        title={!canUseVideoControls ? "Join a live video channel to use camera" : isCameraOn ? "Turn camera off" : "Turn camera on"}
         onClick={onToggleCamera}
-        disabled={!isVideoSession}
+        disabled={!canUseVideoControls}
         className={`rounded p-1 transition ${
-          !isVideoSession
+          !canUseVideoControls
             ? "cursor-not-allowed bg-black/70 text-zinc-200 opacity-70"
             : isCameraOn
               ? "bg-emerald-500/20 text-emerald-300"
@@ -119,11 +138,11 @@ export const UserAudioControls = () => {
       </button>
       <button
         type="button"
-        title={!isVideoSession ? "Stream unavailable" : isStreaming ? "Stop stream" : "Start stream"}
+        title={!canUseVideoControls ? "Join a live video channel to start streaming" : isStreaming ? "Stop stream" : "Start stream"}
         onClick={onToggleStream}
-        disabled={!isVideoSession}
+        disabled={!canUseVideoControls}
         className={`rounded p-1 transition ${
-          !isVideoSession
+          !canUseVideoControls
             ? "cursor-not-allowed bg-black/70 text-zinc-200 opacity-70"
             : isStreaming
               ? "bg-indigo-500/20 text-indigo-200"

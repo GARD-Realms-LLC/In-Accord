@@ -5,7 +5,8 @@ import { v4 as uuidv4 } from "uuid";
 import { currentProfile } from "@/lib/current-profile";
 import { channel, db, member, message } from "@/lib/db";
 import { ensureChannelThreadSchema, markThreadRead, touchThreadActivity } from "@/lib/channel-threads";
-import { computeChannelPermissionForRole } from "@/lib/channel-permissions";
+import { computeChannelPermissionForMember, resolveMemberContext } from "@/lib/channel-permissions";
+import { emitChannelWebhookEvent, getChannelFeatureSettings } from "@/lib/channel-feature-settings";
 import { executeServerSlashCommand } from "@/lib/slash-commands";
 import { parseMentionSegments } from "@/lib/mentions";
 import { publishRealtimeEvent } from "@/lib/realtime-events-server";
@@ -37,6 +38,40 @@ const normalizeIsoDate = (value: Date | string | null | undefined) => {
   }
 
   return new Date(value ?? 0).toISOString();
+};
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const applyBlockedWordModeration = ({
+  content,
+  blockedWords,
+  action,
+}: {
+  content: string;
+  blockedWords: string[];
+  action: "warn" | "block";
+}) => {
+  let nextContent = content;
+  const matchedWords = blockedWords.filter((word) => {
+    const normalized = String(word ?? "").trim();
+    if (!normalized) {
+      return false;
+    }
+
+    return new RegExp(escapeRegExp(normalized), "i").test(content);
+  });
+
+  if (matchedWords.length === 0) {
+    return { nextContent, matchedWords };
+  }
+
+  if (action === "warn") {
+    for (const word of matchedWords) {
+      nextContent = nextContent.replace(new RegExp(escapeRegExp(word), "gi"), "[blocked]");
+    }
+  }
+
+  return { nextContent, matchedWords };
 };
 
 const sanitizeRoleMentions = async (content: string, serverId: string) => {
@@ -206,11 +241,16 @@ export async function GET(req: Request) {
       return new NextResponse("Channel not found", { status: 404 });
     }
 
-    const permissions = await computeChannelPermissionForRole({
+    const memberContext = await resolveMemberContext({ profileId: profile.id, serverId });
+
+    if (!memberContext) {
+      return new NextResponse("Member not found", { status: 404 });
+    }
+
+    const permissions = await computeChannelPermissionForMember({
       serverId,
       channelId,
-      role: currentMember.role,
-      isServerOwner: profile.id === currentChannel.profileId,
+      memberContext,
     });
 
     if (!permissions.allowView) {
@@ -393,11 +433,16 @@ export async function POST(req: Request) {
       return new NextResponse("Channel not found", { status: 404 });
     }
 
-    const permissions = await computeChannelPermissionForRole({
+    const memberContextResult = await resolveMemberContext({ profileId: profile.id, serverId });
+
+    if (!memberContextResult) {
+      return new NextResponse("Member not found", { status: 404 });
+    }
+
+    const permissions = await computeChannelPermissionForMember({
       serverId,
       channelId,
-      role: currentMember.role,
-      isServerOwner: profile.id === currentChannel.profileId,
+      memberContext: memberContextResult,
     });
 
     if (!permissions.allowView) {
@@ -406,6 +451,12 @@ export async function POST(req: Request) {
 
     if (!permissions.allowSend) {
       return new NextResponse("You cannot send messages in this channel", { status: 403 });
+    }
+
+    const featureSettings = await getChannelFeatureSettings({ serverId, channelId: currentChannel.id });
+
+    if (featureSettings.moderation.requireVerifiedEmail && !String(profile.email ?? "").trim()) {
+      return new NextResponse("This channel requires an account email before you can participate.", { status: 403 });
     }
 
     if (normalizedThreadId) {
@@ -438,8 +489,48 @@ export async function POST(req: Request) {
       ? await sanitizeRoleMentions(normalizedContent, serverId)
       : normalizedContent;
 
-    if (!sanitizedContent && !fileUrl) {
+    const moderated = applyBlockedWordModeration({
+      content: sanitizedContent,
+      blockedWords: featureSettings.moderation.blockedWords,
+      action: featureSettings.moderation.flaggedWordsAction,
+    });
+
+    if (moderated.matchedWords.length > 0 && featureSettings.moderation.flaggedWordsAction === "block") {
+      return new NextResponse("This message contains blocked words for this channel.", { status: 400 });
+    }
+
+    const finalContent = moderated.nextContent;
+
+    if (!finalContent && !fileUrl) {
       return new NextResponse("Content is required", { status: 400 });
+    }
+
+    if (featureSettings.moderation.slowmodeSeconds > 0) {
+      const lastMessageResult = await db.execute(sql`
+        select "createdAt"
+        from "Message"
+        where "channelId" = ${currentChannel.id}
+          and "memberId" = ${currentMember.id}
+          and "deleted" = false
+        order by "createdAt" desc
+        limit 1
+      `);
+
+      const lastMessageCreatedAt = (lastMessageResult as unknown as {
+        rows?: Array<{ createdAt: Date | string | null }>;
+      }).rows?.[0]?.createdAt;
+
+      if (lastMessageCreatedAt) {
+        const elapsedMs = Date.now() - new Date(lastMessageCreatedAt).getTime();
+        const requiredMs = featureSettings.moderation.slowmodeSeconds * 1000;
+
+        if (elapsedMs < requiredMs) {
+          const secondsRemaining = Math.max(1, Math.ceil((requiredMs - elapsedMs) / 1000));
+          return new NextResponse(`Slowmode is enabled in this channel. Try again in ${secondsRemaining}s.`, {
+            status: 429,
+          });
+        }
+      }
     }
 
     const createMessage = async ({
@@ -470,12 +561,12 @@ export async function POST(req: Request) {
       return insertedRows[0];
     };
 
-    const isSlashCommandInput = sanitizedContent.startsWith("/") && !fileUrl;
+    const isSlashCommandInput = finalContent.startsWith("/") && !fileUrl;
 
     if (isSlashCommandInput) {
       const commandResult = await executeServerSlashCommand({
         serverId,
-        rawInput: sanitizedContent,
+        rawInput: finalContent,
         channelId: currentChannel.id,
         actorProfileId: profile.id,
       });
@@ -535,15 +626,15 @@ export async function POST(req: Request) {
     }
 
     const inserted = await createMessage({
-      content: sanitizedContent || "[attachment]",
+      content: finalContent || "[attachment]",
       fileUrl: fileUrl ?? null,
       memberId: currentMember.id,
     });
 
-    if (sanitizedContent.startsWith("/") && !fileUrl) {
+    if (finalContent.startsWith("/") && !fileUrl) {
       const commandResult = await executeServerSlashCommand({
         serverId,
-        rawInput: sanitizedContent,
+        rawInput: finalContent,
         channelId: currentChannel.id,
         actorProfileId: profile.id,
       });
@@ -641,6 +732,22 @@ export async function POST(req: Request) {
       typeof clientMutationId === "string" && clientMutationId.trim().length > 0
         ? clientMutationId.trim()
         : undefined;
+
+    await emitChannelWebhookEvent({
+      serverId,
+      channelId: currentChannel.id,
+      channelName: currentChannel.name,
+      eventType: "MESSAGE_CREATED",
+      actorProfileId: profile.id,
+      payload: {
+        messageId: inserted.id,
+        threadId: normalizedThreadId,
+        content: finalContent || null,
+        fileUrl: fileUrl ?? null,
+        memberId: currentMember.id,
+        blockedWordMatches: moderated.matchedWords,
+      },
+    });
 
     return NextResponse.json(
       serializedInserted

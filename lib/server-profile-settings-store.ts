@@ -12,6 +12,8 @@ export type ServerProfileSettings = {
   bannerColor: string | null;
   inviteMode: ServerInviteMode;
   showChannelGroups: boolean;
+  hideAllChannels: boolean;
+  hiddenChannelIds: string[];
 };
 
 type SettingsMap = Record<string, Partial<ServerProfileSettings> | undefined>;
@@ -26,6 +28,29 @@ const DEFAULT_SETTINGS: ServerProfileSettings = {
   bannerColor: null,
   inviteMode: "normal",
   showChannelGroups: true,
+  hideAllChannels: false,
+  hiddenChannelIds: [],
+};
+
+const normalizeStringIdList = (value: unknown) => {
+  if (!Array.isArray(value)) {
+    return [] as string[];
+  }
+
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const item of value) {
+    const trimmed = String(item ?? "").trim();
+    if (!trimmed || seen.has(trimmed)) {
+      continue;
+    }
+
+    seen.add(trimmed);
+    normalized.push(trimmed);
+  }
+
+  return normalized;
 };
 
 const normalizeHexColor = (value: unknown) => {
@@ -95,6 +120,15 @@ const normalizeShowChannelGroups = (value: unknown) => {
   return true;
 };
 
+const normalizeHideAllChannels = (value: unknown) => {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on";
+};
+
 const normalizeSettings = (value: Partial<ServerProfileSettings> | undefined): ServerProfileSettings => {
   return {
     description: normalizeDescription(value?.description),
@@ -103,6 +137,8 @@ const normalizeSettings = (value: Partial<ServerProfileSettings> | undefined): S
     bannerColor: normalizeHexColor(value?.bannerColor),
     inviteMode: normalizeInviteMode(value?.inviteMode),
     showChannelGroups: normalizeShowChannelGroups(value?.showChannelGroups),
+    hideAllChannels: normalizeHideAllChannels(value?.hideAllChannels),
+    hiddenChannelIds: normalizeStringIdList(value?.hiddenChannelIds),
   };
 };
 

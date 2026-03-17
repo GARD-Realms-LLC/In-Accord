@@ -30,7 +30,19 @@ type ServerFolder = {
   id: string;
   name: string;
   serverIds: string[];
+  background?: string;
 };
+
+const DEFAULT_FOLDER_BACKGROUND = "#64748b";
+
+const normalizeFolderBackground = (value: unknown) => {
+  const normalized = String(value ?? "").trim();
+  return /^#([0-9a-fA-F]{6})$/.test(normalized) ? normalized.toLowerCase() : DEFAULT_FOLDER_BACKGROUND;
+};
+
+const getFolderSurfaceStyle = (background?: string) => ({
+  backgroundColor: normalizeFolderBackground(background),
+});
 
 type NavigationServersCollectionProps = {
   myServers: ServerEntry[];
@@ -63,28 +75,31 @@ const safeParseFolders = (raw: string | null): ServerFolder[] => {
       return [];
     }
 
-    return parsed
-      .map((item) => {
-        if (!item || typeof item !== "object") {
-          return null;
-        }
+    const folders: ServerFolder[] = [];
 
-        const maybeFolder = item as Partial<ServerFolder>;
-        if (typeof maybeFolder.id !== "string" || typeof maybeFolder.name !== "string") {
-          return null;
-        }
+    for (const item of parsed) {
+      if (!item || typeof item !== "object") {
+        continue;
+      }
 
-        const serverIds = Array.isArray(maybeFolder.serverIds)
-          ? maybeFolder.serverIds.filter((id): id is string => typeof id === "string")
-          : [];
+      const maybeFolder = item as Partial<ServerFolder>;
+      if (typeof maybeFolder.id !== "string" || typeof maybeFolder.name !== "string") {
+        continue;
+      }
 
-        return {
-          id: maybeFolder.id,
-          name: maybeFolder.name,
-          serverIds,
-        };
-      })
-      .filter((item): item is ServerFolder => item !== null);
+      const serverIds = Array.isArray(maybeFolder.serverIds)
+        ? maybeFolder.serverIds.filter((id): id is string => typeof id === "string")
+        : [];
+
+      folders.push({
+        id: maybeFolder.id,
+        name: maybeFolder.name,
+        serverIds,
+        background: normalizeFolderBackground(maybeFolder.background),
+      });
+    }
+
+    return folders;
   } catch {
     return [];
   }
@@ -107,6 +122,7 @@ const folderLayoutSignature = (source: ServerFolder[]) =>
       id: folder.id,
       name: folder.name,
       serverIds: folder.serverIds,
+      background: normalizeFolderBackground(folder.background),
     }))
   );
 
@@ -137,6 +153,7 @@ export const NavigationServersCollection = ({
   const [expandedFolderId, setExpandedFolderId] = useState<string | null>(null);
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [editingFolderName, setEditingFolderName] = useState("");
+  const [editingFolderBackground, setEditingFolderBackground] = useState(DEFAULT_FOLDER_BACKGROUND);
   const [recentlyUngroupedServerIds, setRecentlyUngroupedServerIds] = useState<string[]>([]);
   const [draggedServerId, setDraggedServerId] = useState<string | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
@@ -144,9 +161,11 @@ export const NavigationServersCollection = ({
   const [railContextMenu, setRailContextMenu] = useState<RailContextMenuState | null>(null);
   const hasLocalFolderEdits = useRef(false);
   const lastAppliedLayoutSignature = useRef<string>("[]");
+  const railContextMenuRef = useRef<HTMLDivElement | null>(null);
   const dragStartedServerIdRef = useRef<string | null>(null);
   const dragStartedFromFolderRef = useRef(false);
   const dragDropHandledRef = useRef(false);
+  const folderClickTimerRef = useRef<number | null>(null);
 
   const allServers = useMemo(() => [...myServers, ...joinedServers], [myServers, joinedServers]);
   const allServerMap = useMemo(() => {
@@ -234,6 +253,7 @@ export const NavigationServersCollection = ({
       id: folder.id,
       name: folder.name,
       serverIds: Array.from(new Set(folder.serverIds)),
+      background: normalizeFolderBackground(folder.background),
     }));
     const payloadSignature = folderLayoutSignature(payload);
 
@@ -377,6 +397,7 @@ export const NavigationServersCollection = ({
           id: newFolderId,
           name: fallbackName,
           serverIds: [firstServerId, secondServerId],
+          background: DEFAULT_FOLDER_BACKGROUND,
         },
       ].filter((folder) => folder.serverIds.length > 0);
 
@@ -409,11 +430,13 @@ export const NavigationServersCollection = ({
   const openEditFolderPopup = (folder: ServerFolder) => {
     setEditingFolderId(folder.id);
     setEditingFolderName(folder.name);
+    setEditingFolderBackground(normalizeFolderBackground(folder.background));
   };
 
   const closeEditFolderPopup = () => {
     setEditingFolderId(null);
     setEditingFolderName("");
+    setEditingFolderBackground(DEFAULT_FOLDER_BACKGROUND);
   };
 
   const saveFolderName = () => {
@@ -432,6 +455,7 @@ export const NavigationServersCollection = ({
           ? {
               ...folder,
               name: trimmedName,
+              background: normalizeFolderBackground(editingFolderBackground),
             }
           : folder
       )
@@ -487,6 +511,7 @@ export const NavigationServersCollection = ({
   const openFolderContextMenu = (event: MouseEvent, folderId: string) => {
     event.preventDefault();
     event.stopPropagation();
+    clearQueuedFolderToggle();
     setRailContextMenu({
       kind: "folder",
       x: event.clientX,
@@ -500,7 +525,20 @@ export const NavigationServersCollection = ({
       return;
     }
 
-    const onDismiss = () => setRailContextMenu(null);
+    const onDismiss = (event: Event) => {
+      const menuElement = railContextMenuRef.current;
+      const targetNode = event.target instanceof Node ? event.target : null;
+
+      if (menuElement && targetNode && menuElement.contains(targetNode)) {
+        return;
+      }
+
+      setRailContextMenu(null);
+    };
+    const onScrollDismiss = () => {
+      setRailContextMenu(null);
+    };
+
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setRailContextMenu(null);
@@ -508,17 +546,62 @@ export const NavigationServersCollection = ({
     };
 
     document.addEventListener("pointerdown", onDismiss);
-    document.addEventListener("scroll", onDismiss, true);
+    document.addEventListener("scroll", onScrollDismiss, true);
     document.addEventListener("keydown", onKeyDown);
 
     return () => {
       document.removeEventListener("pointerdown", onDismiss);
-      document.removeEventListener("scroll", onDismiss, true);
+      document.removeEventListener("scroll", onScrollDismiss, true);
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [railContextMenu]);
 
-  const renderServerItem = (server: ServerEntry) => (
+  useEffect(() => {
+    return () => {
+      if (folderClickTimerRef.current) {
+        window.clearTimeout(folderClickTimerRef.current);
+        folderClickTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const clearQueuedFolderToggle = () => {
+    if (folderClickTimerRef.current) {
+      window.clearTimeout(folderClickTimerRef.current);
+      folderClickTimerRef.current = null;
+    }
+  };
+
+  const queueFolderToggle = (folderId: string) => {
+    clearQueuedFolderToggle();
+    folderClickTimerRef.current = window.setTimeout(() => {
+      setExpandedFolderId((previous) => (previous === folderId ? null : folderId));
+      folderClickTimerRef.current = null;
+    }, 180);
+  };
+
+  const handleFolderDoubleClick = (event: MouseEvent, folder: ServerFolder) => {
+    event.preventDefault();
+    event.stopPropagation();
+    clearQueuedFolderToggle();
+    openEditFolderPopup(folder);
+  };
+
+  const openFolderEditorFromMenu = (folderId: string) => {
+    clearQueuedFolderToggle();
+    const folder = folders.find((entry) => entry.id === folderId);
+    setRailContextMenu(null);
+
+    if (!folder) {
+      return;
+    }
+
+    window.setTimeout(() => {
+      openEditFolderPopup(folder);
+    }, 0);
+  };
+
+  const renderServerItem = (server: ServerEntry, options?: { inFolder?: boolean }) => (
     <div
       key={server.id}
       onDragOver={(event) => {
@@ -555,6 +638,7 @@ export const NavigationServersCollection = ({
         name={server.name}
         imageUrl={server.imageUrl}
         updatedAt={server.updatedAt}
+        appearance={options?.inFolder ? "foldered" : "default"}
         onContextMenu={(event) => openServerContextMenu(event, server.id)}
         draggable
         onDragStart={() => {
@@ -614,63 +698,110 @@ export const NavigationServersCollection = ({
           }
         }}
       >
-        <DialogContent className="border-zinc-300 bg-zinc-100 text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 sm:max-w-107.5">
-          <DialogHeader>
-            <DialogTitle>Edit Folder</DialogTitle>
-            <DialogDescription>
-              Rename this folder or delete it. Deleting keeps the servers and moves them back to the rail.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-2 py-2">
-            <label
-              htmlFor="folder-name-input"
-              className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400"
-            >
-              Folder Name
-            </label>
-            <Input
-              id="folder-name-input"
-              value={editingFolderName}
-              onChange={(event) => setEditingFolderName(event.target.value)}
-              placeholder="Folder name"
-              maxLength={48}
-              className="border-zinc-300 bg-white text-zinc-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-              autoFocus
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  saveFolderName();
-                }
-              }}
-            />
+        <DialogContent className="overflow-hidden border-zinc-300 bg-zinc-100/96 text-zinc-900 shadow-2xl shadow-black/20 dark:border-zinc-700 dark:bg-zinc-900/96 dark:text-zinc-100 sm:max-w-107.5">
+          <div className="pointer-events-none absolute inset-0">
+            <div className="absolute inset-x-0 top-0 h-32 bg-linear-to-br from-sky-400/25 via-indigo-400/18 to-violet-500/25 dark:from-sky-500/20 dark:via-indigo-500/18 dark:to-violet-600/22" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.75),transparent_55%)] dark:bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_55%)]" />
+            <div className="absolute inset-x-6 top-20 h-px bg-linear-to-r from-transparent via-white/55 to-transparent dark:via-white/15" />
           </div>
 
-          <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={deleteFolder}
-              className="w-full sm:w-auto"
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete Folder
-            </Button>
+          <div className="relative space-y-4">
+            <div className="rounded-xl border border-white/60 bg-white/70 px-4 py-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500 dark:text-zinc-400">
+                Folder Background
+              </p>
+              <div
+                className="mt-2 rounded-lg border border-black/10 px-3 py-3 text-white shadow-sm dark:border-white/10"
+                style={getFolderSurfaceStyle(editingFolderBackground)}
+              >
+                <p className="truncate text-lg font-semibold text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.45)]">
+                  {editingFolderName.trim() || "Untitled Folder"}
+                </p>
+              </div>
+            </div>
 
-            <div className="flex w-full gap-2 sm:w-auto">
-              <Button type="button" variant="outline" onClick={closeEditFolderPopup} className="flex-1">
-                Cancel
-              </Button>
+            <DialogHeader>
+              <DialogTitle>Edit Folder</DialogTitle>
+              <DialogDescription>
+                Rename this folder or delete it. Deleting keeps the servers and moves them back to the rail.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-2 py-2">
+              <label
+                htmlFor="folder-name-input"
+                className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400"
+              >
+                Folder Name
+              </label>
+              <Input
+                id="folder-name-input"
+                value={editingFolderName}
+                onChange={(event) => setEditingFolderName(event.target.value)}
+                placeholder="Folder name"
+                maxLength={48}
+                className="border-zinc-300 bg-white/90 text-zinc-900 dark:border-zinc-700 dark:bg-zinc-800/90 dark:text-zinc-100"
+                autoFocus
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    saveFolderName();
+                  }
+                }}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label
+                htmlFor="folder-background-input"
+                className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400"
+              >
+                Background Color
+              </label>
+              <div className="flex items-center gap-3">
+                <input
+                  id="folder-background-input"
+                  type="color"
+                  value={normalizeFolderBackground(editingFolderBackground)}
+                  onChange={(event) => setEditingFolderBackground(normalizeFolderBackground(event.target.value))}
+                  className="h-10 w-14 cursor-pointer rounded border border-zinc-300 bg-white p-1 dark:border-zinc-700 dark:bg-zinc-800"
+                />
+                <Input
+                  value={editingFolderBackground}
+                  onChange={(event) => setEditingFolderBackground(normalizeFolderBackground(event.target.value))}
+                  placeholder="#64748b"
+                  maxLength={7}
+                  className="border-zinc-300 bg-white/90 text-zinc-900 dark:border-zinc-700 dark:bg-zinc-800/90 dark:text-zinc-100"
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
               <Button
                 type="button"
-                onClick={saveFolderName}
-                className="flex-1 bg-emerald-600 text-white hover:bg-emerald-500"
-                disabled={!editingFolderName.trim()}
+                variant="destructive"
+                onClick={deleteFolder}
+                className="w-full sm:w-auto"
               >
-                Save
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete Folder
               </Button>
-            </div>
-          </DialogFooter>
+
+              <div className="flex w-full gap-2 sm:w-auto">
+                <Button type="button" variant="outline" onClick={closeEditFolderPopup} className="flex-1">
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={saveFolderName}
+                  className="flex-1 bg-emerald-600 text-white hover:bg-emerald-500"
+                  disabled={!editingFolderName.trim()}
+                >
+                  Save
+                </Button>
+              </div>
+            </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -728,18 +859,15 @@ export const NavigationServersCollection = ({
                     className={`w-20 rounded-xl border px-2 py-2 transition-all ${
                       dragOverFolderId === folder.id
                         ? "border-emerald-400 bg-emerald-500/15 ring-2 ring-emerald-400/35"
-                        : "border-zinc-300/70 bg-zinc-100/60 dark:border-zinc-700 dark:bg-zinc-800/60"
+                        : "border-zinc-300/70 dark:border-zinc-700"
                     }`}
+                    style={dragOverFolderId === folder.id ? undefined : getFolderSurfaceStyle(folder.background)}
                   >
                     <button
                       type="button"
-                      onClick={() => setExpandedFolderId(null)}
+                      onClick={() => queueFolderToggle(folder.id)}
                       onContextMenu={(event) => openFolderContextMenu(event, folder.id)}
-                      onDoubleClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        openEditFolderPopup(folder);
-                      }}
+                      onDoubleClick={(event) => handleFolderDoubleClick(event, folder)}
                       className="mx-auto flex w-full items-center justify-center gap-1.5 rounded-md border border-zinc-300/70 bg-zinc-200/80 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.05em] text-zinc-800 transition hover:bg-zinc-200 dark:border-zinc-600 dark:bg-zinc-700/80 dark:text-zinc-100 dark:hover:bg-zinc-700"
                       title={`${folder.name} (${folder.serverIds.length})`}
                       aria-label={`${folder.name} folder`}
@@ -751,7 +879,7 @@ export const NavigationServersCollection = ({
                       <div className="mt-2 flex flex-col items-center gap-2.5">
                         {containedServers.map((server) => (
                           <div key={`folder-${folder.id}-${server.id}`} className="flex origin-center justify-center scale-92">
-                            {renderServerItem(server)}
+                            {renderServerItem(server, { inFolder: true })}
                           </div>
                         ))}
                       </div>
@@ -760,13 +888,9 @@ export const NavigationServersCollection = ({
                 ) : (
                   <button
                     type="button"
-                    onClick={() => setExpandedFolderId(folder.id)}
+                    onClick={() => queueFolderToggle(folder.id)}
                     onContextMenu={(event) => openFolderContextMenu(event, folder.id)}
-                    onDoubleClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      openEditFolderPopup(folder);
-                    }}
+                    onDoubleClick={(event) => handleFolderDoubleClick(event, folder)}
                     onDragOver={(event) => {
                       const activeDraggedServerId = resolveDraggedServerId(event, draggedServerId);
                       if (!activeDraggedServerId) {
@@ -794,8 +918,9 @@ export const NavigationServersCollection = ({
                     className={`relative mx-auto flex h-10 w-20 items-center justify-center overflow-hidden rounded-[10px] border transition-all ${
                       dragOverFolderId === folder.id
                         ? "border-emerald-400 bg-emerald-500/20 ring-2 ring-emerald-400/40"
-                        : "border-zinc-300 bg-zinc-200 hover:border-primary/50 hover:ring-2 hover:ring-primary/25 dark:border-zinc-600 dark:bg-zinc-700"
+                        : "border-zinc-300 hover:border-primary/50 hover:ring-2 hover:ring-primary/25 dark:border-zinc-600"
                     }`}
+                    style={dragOverFolderId === folder.id ? undefined : getFolderSurfaceStyle(folder.background)}
                     title={`${folder.name} (${folder.serverIds.length})`}
                     aria-label={`${folder.name} folder`}
                   >
@@ -883,12 +1008,12 @@ export const NavigationServersCollection = ({
 
       {railContextMenu ? (
         <div
+          ref={railContextMenuRef}
           className="fixed z-120 min-w-42 rounded-md border border-zinc-700 bg-[#1f2125] p-1 shadow-2xl shadow-black/70"
           style={{
             left: railContextMenu.x,
             top: railContextMenu.y,
           }}
-          onPointerDown={(event) => event.stopPropagation()}
         >
           {railContextMenu.kind === "server" ? (
             <>
@@ -935,24 +1060,22 @@ export const NavigationServersCollection = ({
               <button
                 type="button"
                 onClick={() => {
-                  const folder = folders.find((entry) => entry.id === railContextMenu.folderId);
-                  if (folder) {
-                    openEditFolderPopup(folder);
-                  }
-                  setRailContextMenu(null);
+                  openFolderEditorFromMenu(railContextMenu.folderId);
                 }}
                 className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs text-zinc-100 transition hover:bg-white/10"
               >
-                Rename Folder
+                Edit Folder
               </button>
               <button
                 type="button"
-                onClick={() => {
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
                   const folder = folders.find((entry) => entry.id === railContextMenu.folderId);
+                  setRailContextMenu(null);
                   if (folder) {
                     openEditFolderPopup(folder);
                   }
-                  setRailContextMenu(null);
                 }}
                 className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs text-rose-300 transition hover:bg-rose-500/15"
               >

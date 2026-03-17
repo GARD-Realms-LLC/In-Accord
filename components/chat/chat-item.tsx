@@ -6,15 +6,16 @@ import qs from "query-string";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { type Member, MemberRole, type Profile } from "@/lib/db/types";
-import { Ban, Crown, Edit, FileIcon, Flag, MessageCircle, Reply, SmilePlus, Trash, UserPlus, Wrench } from "lucide-react";
+import { Ban, Crown, Edit, FileIcon, Flag, MessageCircle, Network, Reply, SmilePlus, Trash, UserPlus, Users, Wrench } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
 import { UserAvatar } from "@/components/user-avatar";
 import { BotAppBadge } from "@/components/bot-app-badge";
 import { NewUserCloverBadge } from "@/components/new-user-clover-badge";
 import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
+import { ProfileEffectLayer } from "@/components/profile-effect-layer";
 import { ProfileIconRow } from "@/components/profile-icon-row";
 import { ActionTooltip } from "@/components/action-tooltip";
 import { ModeratorLineIcon } from "@/components/moderator-line-icon";
@@ -23,8 +24,10 @@ import { cn } from "@/lib/utils";
 import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { BannerImage } from "@/components/ui/banner-image";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useModal } from "@/hooks/use-modal-store";
 import { getInAccordStaffLabel, isInAccordAdministrator, isInAccordDeveloper, isInAccordModerator } from "@/lib/in-accord-admin";
 import { isBotUser } from "@/lib/is-bot-user";
@@ -518,8 +521,6 @@ const setBoundedMapEntry = <TValue,>(target: Map<string, TValue>, key: string, v
     target.delete(oldest);
   }
 };
-const PROFILE_CARD_CACHE_TTL_MS = 120_000;
-
 type ProfileCardData = {
   id: string;
   realName: string | null;
@@ -534,8 +535,11 @@ type ProfileCardData = {
   pronouns?: string | null;
   comment?: string | null;
   effectiveProfileName?: string | null;
+  effectiveImageUrl?: string | null;
   avatarDecorationUrl?: string | null;
   effectiveAvatarDecorationUrl?: string | null;
+  profileEffectUrl?: string | null;
+  effectiveProfileEffectUrl?: string | null;
   bannerUrl: string | null;
   effectiveBannerUrl?: string | null;
   serverProfile?: {
@@ -556,80 +560,194 @@ type ProfileCardData = {
   role: string | null;
   email: string;
   imageUrl: string;
+  isDirectFriend?: boolean;
+  directFriendStatus?: "self" | "friends" | "not_friends";
+  mutualServersPercent?: number;
+  mutualServersCount?: number;
+  mutualFriendsCount?: number;
+  mutualServers?: Array<{
+    id: string;
+    name: string;
+    imageUrl: string;
+  }>;
+  mutualFriends?: Array<{
+    profileId: string;
+    memberId: string | null;
+    serverId: string | null;
+    displayName: string;
+    email: string | null;
+    imageUrl: string;
+  }>;
   createdAt: string | null;
   lastLogonAt: string | null;
 };
 
-const profileCardCache = new Map<
-  string,
-  {
-    data: ProfileCardData | null;
-    expiresAt: number;
+type MutualDetailsState = {
+  type: "servers" | "friends";
+  displayName: string;
+  mutualServers: NonNullable<ProfileCardData["mutualServers"]>;
+  mutualFriends: NonNullable<ProfileCardData["mutualFriends"]>;
+};
+
+type MutualProfileData = Pick<
+  ProfileCardData,
+  | "isDirectFriend"
+  | "directFriendStatus"
+  | "mutualServersPercent"
+  | "mutualServersCount"
+  | "mutualFriendsCount"
+  | "mutualServers"
+  | "mutualFriends"
+>;
+
+const createEmptyMutualProfileData = (): MutualProfileData => ({
+  isDirectFriend: false,
+  directFriendStatus: "not_friends",
+  mutualServersPercent: 0,
+  mutualServersCount: 0,
+  mutualFriendsCount: 0,
+  mutualServers: [],
+  mutualFriends: [],
+});
+
+const createEmptyProfileCardData = (): ProfileCardData => ({
+  id: "",
+  realName: null,
+  profileName: null,
+  profileIcons: [],
+  nameplateLabel: null,
+  nameplateColor: null,
+  nameplateImageUrl: null,
+  effectiveNameplateLabel: null,
+  effectiveNameplateColor: null,
+  effectiveNameplateImageUrl: null,
+  pronouns: null,
+  comment: null,
+  effectiveProfileName: null,
+  effectiveImageUrl: null,
+  avatarDecorationUrl: null,
+  effectiveAvatarDecorationUrl: null,
+  profileEffectUrl: null,
+  effectiveProfileEffectUrl: null,
+  bannerUrl: null,
+  effectiveBannerUrl: null,
+  serverProfile: null,
+  selectedServerTag: null,
+  presenceStatus: null,
+  role: null,
+  email: "",
+  imageUrl: "/in-accord-steampunk-logo.png",
+  isDirectFriend: false,
+  directFriendStatus: "not_friends",
+  mutualServersPercent: 0,
+  mutualServersCount: 0,
+  mutualFriendsCount: 0,
+  mutualServers: [],
+  mutualFriends: [],
+  createdAt: null,
+  lastLogonAt: null,
+});
+
+const getProfileCardLoadErrorMessage = (error: unknown) => {
+  if (axios.isAxiosError(error)) {
+    const status = Number(error.response?.status ?? 0);
+    if (status === 401) {
+      return "Live profile data is unauthorized.";
+    }
+
+    if (status === 403) {
+      return "Live profile data is forbidden.";
+    }
+
+    if (status >= 500) {
+      return "Live profile data failed on the server.";
+    }
+
+    if (error.code === "ECONNABORTED") {
+      return "Live profile data timed out.";
+    }
   }
->();
-const profileCardInFlight = new Map<string, Promise<ProfileCardData | null>>();
 
-const getProfileCardCacheKey = (profileId: string, memberId: string) => `${profileId}:${memberId}`;
-
-const getCachedProfileCard = (profileId: string, memberId: string) => {
-  const cacheKey = getProfileCardCacheKey(profileId, memberId);
-  const cached = profileCardCache.get(cacheKey);
-
-  if (!cached) {
-    return null;
-  }
-
-  if (cached.expiresAt <= Date.now()) {
-    profileCardCache.delete(cacheKey);
-    return null;
-  }
-
-  return cached.data;
+  return "Live profile data is unavailable.";
 };
 
 const fetchProfileCardData = async ({
   profileId,
   memberId,
+  viewerProfileId,
+  viewerMemberId,
 }: {
   profileId: string;
   memberId: string;
+  viewerProfileId: string;
+  viewerMemberId: string;
 }) => {
-  const cacheKey = getProfileCardCacheKey(profileId, memberId);
-  const cached = getCachedProfileCard(profileId, memberId);
+  const requestConfig = {
+    timeout: 5000,
+    withCredentials: true,
+    params: { memberId, viewerProfileId, viewerMemberId, _t: Date.now() },
+    headers: {
+      "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate",
+      Pragma: "no-cache",
+    },
+  } as const;
 
-  if (cached) {
-    return cached;
+  const [cardResult, mutualsResult] = await Promise.allSettled([
+    axios.get<ProfileCardData>(`/api/profile/${encodeURIComponent(profileId)}/card`, requestConfig),
+    axios.get<MutualProfileData>(`/api/profile/${encodeURIComponent(profileId)}/mutuals`, requestConfig),
+  ]);
+
+  if (cardResult.status === "rejected" && mutualsResult.status === "rejected") {
+    throw mutualsResult.reason ?? cardResult.reason ?? new Error("Live profile data is unavailable.");
   }
 
-  const inFlight = profileCardInFlight.get(cacheKey);
-  if (inFlight) {
-    return inFlight;
-  }
+  const cardData = cardResult.status === "fulfilled"
+    ? cardResult.value.data
+    : createEmptyProfileCardData();
+  const mutualData = mutualsResult.status === "fulfilled"
+    ? mutualsResult.value.data
+    : null;
 
-  const request = axios
-    .get<ProfileCardData>(`/api/profile/${encodeURIComponent(profileId)}/card`, {
-      params: { memberId },
-    })
-    .then((response) => response.data)
-    .catch(() => null)
-    .then((data) => {
-      setBoundedMapEntry(
-        profileCardCache,
-        cacheKey,
-        {
-          data,
-          expiresAt: Date.now() + PROFILE_CARD_CACHE_TTL_MS,
-        },
-        PROFILE_CARD_CACHE_LIMIT
-      );
-      return data;
-    })
-    .finally(() => {
-      profileCardInFlight.delete(cacheKey);
-    });
-
-  profileCardInFlight.set(cacheKey, request);
-  return request;
+  return {
+    ...cardData,
+    isDirectFriend: mutualData
+      ? Boolean(mutualData.isDirectFriend)
+      : Boolean(cardData.isDirectFriend),
+    directFriendStatus:
+      mutualData?.directFriendStatus === "friends" || mutualData?.directFriendStatus === "self"
+        ? mutualData.directFriendStatus
+        : cardData.directFriendStatus === "friends" || cardData.directFriendStatus === "self"
+          ? cardData.directFriendStatus
+          : "not_friends",
+    mutualServersPercent:
+      typeof mutualData?.mutualServersPercent === "number"
+        ? mutualData.mutualServersPercent
+        : typeof cardData.mutualServersPercent === "number"
+          ? cardData.mutualServersPercent
+          : 0,
+    mutualServersCount:
+      typeof mutualData?.mutualServersCount === "number"
+        ? mutualData.mutualServersCount
+        : typeof cardData.mutualServersCount === "number"
+          ? cardData.mutualServersCount
+          : 0,
+    mutualFriendsCount:
+      typeof mutualData?.mutualFriendsCount === "number"
+        ? mutualData.mutualFriendsCount
+        : typeof cardData.mutualFriendsCount === "number"
+          ? cardData.mutualFriendsCount
+          : 0,
+    mutualServers: Array.isArray(mutualData?.mutualServers)
+      ? mutualData?.mutualServers ?? []
+      : Array.isArray(cardData.mutualServers)
+        ? cardData.mutualServers
+        : [],
+    mutualFriends: Array.isArray(mutualData?.mutualFriends)
+      ? mutualData?.mutualFriends ?? []
+      : Array.isArray(cardData.mutualFriends)
+        ? cardData.mutualFriends
+        : [],
+  } satisfies ProfileCardData;
 };
 
 type LinkPreview = {
@@ -734,9 +852,12 @@ export const ChatItem = ({
   thread,
   canPurgeDeletedMessage = false,
 }: ChatItemProps) => {
+  const profileCardRequestSequenceRef = useRef(0);
   const [isEditing, setIsEditing] = useState(false);
   const [isProfilePopoverOpen, setIsProfilePopoverOpen] = useState(false);
   const [profileCard, setProfileCard] = useState<ProfileCardData | null>(null);
+  const [isProfileCardLoading, setIsProfileCardLoading] = useState(false);
+  const [profileCardLoadError, setProfileCardLoadError] = useState<string | null>(null);
   const [botCommands, setBotCommands] = useState<string[]>([]);
   const [botCommandsName, setBotCommandsName] = useState("Bot");
   const [isLoadingBotCommands, setIsLoadingBotCommands] = useState(false);
@@ -765,6 +886,7 @@ export const ChatItem = ({
     useState<RuntimeEmojiPreferences>({
       ...defaultRuntimeEmojiPreferences,
     });
+  const [openMutualDetails, setOpenMutualDetails] = useState<MutualDetailsState | null>(null);
   const { onOpen } = useModal();
   const params = useParams();
   const router = useRouter();
@@ -872,23 +994,7 @@ export const ChatItem = ({
   };
 
   const onMemberClick = () => {
-    const cached = getCachedProfileCard(member.profile.id, member.id);
-    if (cached) {
-      setProfileCard(cached);
-    }
-
     setIsProfilePopoverOpen((prev) => !prev);
-  };
-
-  const prefetchProfileCard = () => {
-    void fetchProfileCardData({
-      profileId: member.profile.id,
-      memberId: member.id,
-    }).then((data) => {
-      if (data && !isProfilePopoverOpen) {
-        setProfileCard((current) => current ?? data);
-      }
-    });
   };
 
   const onStartDirectMessage = () => {
@@ -1002,6 +1108,44 @@ export const ChatItem = ({
   const onOpenBotCommandsDialog = () => {
     setIsBotCommandsDialogOpen(true);
     void loadBotCommands();
+  };
+
+  const onOpenMutualDetails = (type: "servers" | "friends") => {
+    setIsProfilePopoverOpen(false);
+    setOpenMutualDetails({
+      type,
+      displayName,
+      mutualServers: profileCard?.mutualServers ?? [],
+      mutualFriends: profileCard?.mutualFriends ?? [],
+    });
+  };
+
+  const onOpenMutualServer = (serverId: string) => {
+    const normalizedServerId = String(serverId ?? "").trim();
+    if (!normalizedServerId) {
+      return;
+    }
+
+    setOpenMutualDetails(null);
+    router.push(`/servers/${encodeURIComponent(normalizedServerId)}`);
+  };
+
+  const onOpenPrivateMessageByRoute = ({
+    serverId,
+    memberId,
+  }: {
+    serverId: string | null | undefined;
+    memberId: string | null | undefined;
+  }) => {
+    const normalizedServerId = String(serverId ?? "").trim();
+    const normalizedMemberId = String(memberId ?? "").trim();
+
+    if (!normalizedServerId || !normalizedMemberId) {
+      return;
+    }
+
+    setOpenMutualDetails(null);
+    router.push(`/users?serverId=${encodeURIComponent(normalizedServerId)}&memberId=${encodeURIComponent(normalizedMemberId)}`);
   };
 
   const onReportMessage = async () => {
@@ -1238,28 +1382,52 @@ export const ChatItem = ({
 
   useEffect(() => {
     if (!isProfilePopoverOpen) {
+      profileCardRequestSequenceRef.current += 1;
+      setIsProfileCardLoading(false);
+      setProfileCardLoadError(null);
+      setProfileCard(null);
       return;
     }
 
     let cancelled = false;
-
-    const loadProfileCard = async () => {
-      const cached = getCachedProfileCard(member.profile.id, member.id);
-
-      if (cached) {
-        if (!cancelled) {
-          setProfileCard(cached);
-        }
+    const requestSequence = profileCardRequestSequenceRef.current + 1;
+    profileCardRequestSequenceRef.current = requestSequence;
+    const loadingTimeout = window.setTimeout(() => {
+      if (cancelled || profileCardRequestSequenceRef.current !== requestSequence) {
         return;
       }
 
-      const data = await fetchProfileCardData({
-        profileId: member.profile.id,
-        memberId: member.id,
-      });
+      setProfileCard(null);
+      setProfileCardLoadError("Live profile data timed out.");
+      setIsProfileCardLoading(false);
+    }, 5500);
 
-      if (!cancelled) {
-        setProfileCard(data);
+    const loadProfileCard = async () => {
+      setIsProfileCardLoading(true);
+      setProfileCardLoadError(null);
+      setProfileCard(null);
+      try {
+        const data = await fetchProfileCardData({
+          profileId: member.profile.id,
+          memberId: member.id,
+          viewerProfileId: currentMember.profileId,
+          viewerMemberId: currentMember.id,
+        });
+
+        if (!cancelled && profileCardRequestSequenceRef.current === requestSequence) {
+          setProfileCard(data);
+          setProfileCardLoadError(null);
+        }
+      } catch (error) {
+        if (!cancelled && profileCardRequestSequenceRef.current === requestSequence) {
+          setProfileCard(null);
+          setProfileCardLoadError(getProfileCardLoadErrorMessage(error));
+        }
+      } finally {
+        window.clearTimeout(loadingTimeout);
+        if (!cancelled && profileCardRequestSequenceRef.current === requestSequence) {
+          setIsProfileCardLoading(false);
+        }
       }
     };
 
@@ -1267,8 +1435,12 @@ export const ChatItem = ({
 
     return () => {
       cancelled = true;
+      window.clearTimeout(loadingTimeout);
+      if (profileCardRequestSequenceRef.current === requestSequence) {
+        setIsProfileCardLoading(false);
+      }
     };
-  }, [isProfilePopoverOpen, member.id, member.profile.id]);
+  }, [currentMember.profileId, isProfilePopoverOpen, member.id, member.profile.id]);
 
   useEffect(() => {
     setDisplayName(member.profile.name);
@@ -1394,7 +1566,13 @@ export const ChatItem = ({
     profileCard?.effectiveBannerUrl ?? profileCard?.bannerUrl ?? null
   );
   const effectiveAvatarDecorationUrl =
-    profileCard?.effectiveAvatarDecorationUrl ?? profileCard?.avatarDecorationUrl ?? null;
+    profileCard?.effectiveAvatarDecorationUrl ??
+    profileCard?.avatarDecorationUrl ??
+    ((member.profile as Profile & { avatarDecorationUrl?: string | null }).avatarDecorationUrl ?? null);
+  const effectiveProfileEffectUrl =
+    profileCard?.effectiveProfileEffectUrl ??
+    profileCard?.profileEffectUrl ??
+    ((member.profile as Profile & { profileEffectUrl?: string | null }).profileEffectUrl ?? null);
   const effectiveProfileIcons =
     profileCard?.profileIcons && profileCard.profileIcons.length > 0
       ? profileCard.profileIcons
@@ -1410,6 +1588,22 @@ export const ChatItem = ({
     profileCard?.effectiveNameplateColor ?? profileCard?.nameplateColor ?? null;
   const effectiveNameplateImageUrl =
     profileCard?.effectiveNameplateImageUrl ?? profileCard?.nameplateImageUrl ?? null;
+  const mutualServersCount = profileCard?.mutualServers?.length || (typeof profileCard?.mutualServersCount === "number" ? profileCard.mutualServersCount : 0);
+  const mutualFriendsCount = profileCard?.mutualFriends?.length || (typeof profileCard?.mutualFriendsCount === "number" ? profileCard.mutualFriendsCount : 0);
+  const mutualServersPercent = typeof profileCard?.mutualServersPercent === "number" ? profileCard.mutualServersPercent : 0;
+  const hasProfileCardLoadError = Boolean(profileCardLoadError);
+  const isSelfProfileCard = profileCard?.directFriendStatus === "self";
+  const mutualServersLabel = mutualServersCount > 0
+    ? `${mutualServersPercent}% in common · ${mutualServersCount}`
+    : "NOT WORKING";
+  const mutualFriendsLabel = mutualFriendsCount > 0
+    ? `${mutualFriendsCount} in common`
+    : "NOT WORKING";
+  const directFriendRelationshipLabel = profileCard?.directFriendStatus === "self"
+    ? "This is you"
+    : profileCard?.isDirectFriend
+      ? "Direct friends"
+      : "Not direct friends";
   const memberCreatedDate = profileCard?.createdAt
     ? new Date(profileCard.createdAt)
     : member.profile.createdAt
@@ -1792,19 +1986,19 @@ export const ChatItem = ({
             <button
               type="button"
               onClick={onMemberClick}
-              onMouseEnter={prefetchProfileCard}
               className="cursor-pointer hover:drop-shadow-md transition"
               aria-label={`Open profile for ${displayName}`}
               title={`View ${displayName}'s profile`}
             >
-              <UserAvatar src={displayImageUrl} />
+              <UserAvatar src={profileCard?.effectiveImageUrl ?? displayImageUrl} decorationSrc={effectiveAvatarDecorationUrl} />
             </button>
           </PopoverTrigger>
           <PopoverContent
             side="right"
             align="start"
-            className="w-[320px] overflow-hidden rounded-xl border border-black/30 bg-[#111214] p-0 text-[#dbdee1] shadow-2xl shadow-black/50"
+            className="relative w-[320px] overflow-hidden rounded-xl border border-black/30 bg-[#111214] p-0 text-[#dbdee1] shadow-2xl shadow-black/50"
           >
+            <ProfileEffectLayer src={effectiveProfileEffectUrl} />
             <div className="relative h-24 bg-linear-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
               {effectiveBannerUrl ? (
                 <BannerImage
@@ -1818,7 +2012,7 @@ export const ChatItem = ({
             <div className="relative p-3 pt-9">
               <div className="absolute -top-10 left-3 rounded-full border-4 border-[#111214]">
                 <UserAvatar
-                  src={displayImageUrl}
+                  src={profileCard?.effectiveImageUrl ?? displayImageUrl}
                   decorationSrc={effectiveAvatarDecorationUrl}
                   className="h-20 w-20"
                 />
@@ -1832,6 +2026,7 @@ export const ChatItem = ({
                     profileId={member.profile.id}
                     memberId={member.id}
                     pronouns={profileCard?.pronouns?.trim() || null}
+                    disableCardFetch
                     containerClassName="w-full min-w-0"
                     nameClassName="text-base font-bold text-white"
                     showNameplate
@@ -1840,7 +2035,7 @@ export const ChatItem = ({
                   />
                 </div>
               </div>
-              <div className="mt-2 min-h-36 w-full max-w-55 resize-y overflow-auto rounded-md border border-white/10 bg-[#1a1b1e] px-2.5 py-2">
+              <div className="mt-3 h-40 w-full overflow-y-auto rounded-md border border-white/10 bg-[#1a1b1e] px-3 py-2.5">
                 <p
                   className="whitespace-pre-wrap wrap-break-word align-top text-[11px] text-[#dbdee1]"
                   style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
@@ -1876,6 +2071,59 @@ export const ChatItem = ({
                   </div>
                 </div>
               ) : null}
+
+              <div className={cn("mt-3 grid gap-2", isSelfProfileCard ? "grid-cols-1" : "grid-cols-2")}>
+                <div className="col-span-2 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-xs text-[#dbdee1]">
+                  <span className="font-medium">Relationship: </span>
+                  <span className="text-[#949ba4]">
+                    {isProfileCardLoading
+                      ? "Loading..."
+                      : hasProfileCardLoadError
+                        ? profileCardLoadError
+                        : directFriendRelationshipLabel}
+                  </span>
+                </div>
+                {!isSelfProfileCard ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => onOpenMutualDetails("servers")}
+                      disabled={isProfileCardLoading || hasProfileCardLoadError}
+                      className="flex items-center gap-2 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-left text-xs text-[#dbdee1] transition hover:bg-[#232428] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Network className="h-4 w-4 shrink-0 text-[#949ba4]" />
+                      <div className="min-w-0">
+                        <p className="font-medium">Mutual servers</p>
+                        <p className="text-[#949ba4]">
+                          {isProfileCardLoading
+                            ? "Loading..."
+                            : hasProfileCardLoadError
+                              ? profileCardLoadError
+                              : mutualServersLabel}
+                        </p>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onOpenMutualDetails("friends")}
+                      disabled={isProfileCardLoading || hasProfileCardLoadError}
+                      className="flex items-center gap-2 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-left text-xs text-[#dbdee1] transition hover:bg-[#232428] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Users className="h-4 w-4 shrink-0 text-[#949ba4]" />
+                      <div className="min-w-0">
+                        <p className="font-medium">Mutual friends</p>
+                        <p className="text-[#949ba4]">
+                          {isProfileCardLoading
+                            ? "Loading..."
+                            : hasProfileCardLoadError
+                              ? profileCardLoadError
+                              : mutualFriendsLabel}
+                        </p>
+                      </div>
+                    </button>
+                  </>
+                ) : null}
+              </div>
 
               <div className="mt-3 flex items-center gap-2 border-t border-white/10 pt-3">
                 {canShowBotCommands ? (
@@ -1949,13 +2197,69 @@ export const ChatItem = ({
           botName={botCommandsName || displayName || "Bot"}
           commands={botCommands}
         />
+        <Dialog open={Boolean(openMutualDetails)} onOpenChange={(open) => {
+          if (!open) {
+            setOpenMutualDetails(null);
+          }
+        }}>
+          <DialogContent className="max-w-lg overflow-hidden border-black/30 bg-[#111214] p-0 text-[#dbdee1]">
+            <DialogHeader className="px-6 pt-6">
+              <DialogTitle>{openMutualDetails?.type === "servers" ? "Mutual Servers" : "Mutual Friends"}</DialogTitle>
+              <DialogDescription className="text-[#949ba4]">
+                Shared with {openMutualDetails?.displayName || "this user"}
+              </DialogDescription>
+            </DialogHeader>
+            <ScrollArea className="max-h-[min(60vh,28rem)] px-6 pb-6">
+              <div className="space-y-2">
+                {openMutualDetails?.type === "servers" ? (
+                  openMutualDetails.mutualServers.length ? openMutualDetails.mutualServers.map((serverItem) => (
+                    <button
+                      key={serverItem.id}
+                      type="button"
+                      onClick={() => onOpenMutualServer(serverItem.id)}
+                      className="flex w-full items-center gap-3 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-left transition hover:bg-[#232428]"
+                    >
+                      <img src={serverItem.imageUrl} alt={serverItem.name} className="h-10 w-10 rounded-full object-cover" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-[#dbdee1]">{serverItem.name}</p>
+                      </div>
+                    </button>
+                  )) : (
+                    <div className="rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-4 text-sm text-[#949ba4]">
+                      No mutual servers found.
+                    </div>
+                  )
+                ) : (
+                  openMutualDetails?.mutualFriends.length ? openMutualDetails.mutualFriends.map((friendItem) => (
+                    <button
+                      key={friendItem.profileId}
+                      type="button"
+                      onClick={() => onOpenPrivateMessageByRoute({ serverId: friendItem.serverId, memberId: friendItem.memberId })}
+                      disabled={!friendItem.serverId || !friendItem.memberId}
+                      className="flex w-full items-center gap-3 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-left transition hover:bg-[#232428] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <UserAvatar src={friendItem.imageUrl} />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-[#dbdee1]">{friendItem.displayName}</p>
+                        <p className="truncate text-xs text-[#949ba4]">{friendItem.email || friendItem.profileId}</p>
+                      </div>
+                    </button>
+                  )) : (
+                    <div className="rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-4 text-sm text-[#949ba4]">
+                      No mutual friends found.
+                    </div>
+                  )
+                )}
+              </div>
+            </ScrollArea>
+          </DialogContent>
+        </Dialog>
         <div className="flex w-full min-w-0 flex-col">
           <div className="flex items-center gap-x-2">
             <div className="flex items-center gap-1">
               <button
                 type="button"
                 onClick={onMemberClick}
-                onMouseEnter={prefetchProfileCard}
                 className="font-semibold text-sm hover:underline cursor-pointer"
               >
                 <ProfileNameWithServerTag

@@ -6,5 +6,31 @@
     "bannerColor": "#5865f2",
     "inviteMode": "normal",
     "showChannelGroups": true
+  },
+  "4860db26-8834-431e-8108-46c0818cc03c": {
+    "description": null,
+    "traits": [],
+    "gamesPlayed": [],
+    "bannerColor": "#5865f2",
+    "inviteMode": "normal",
+    "showChannelGroups": true
+  },
+  "3f4a088a-db41-48ef-a8eb-e8d8bb254437": {
+    "description": null,
+    "traits": [],
+    "gamesPlayed": [],
+    "bannerColor": "#5865f2",
+    "inviteMode": "normal",
+    "showChannelGroups": true
+  },
+  "c5125059-2188-4140-9254-b9d0ce36ab47": {
+    "description": null,
+    "traits": [],
+    "gamesPlayed": [],
+    "bannerColor": null,
+    "inviteMode": "normal",
+    "showChannelGroups": true,
+    "hideAllChannels": false,
+    "hiddenChannelIds": []
   }
 }

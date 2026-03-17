@@ -3,7 +3,7 @@ import { and, asc, eq } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { channel, ChannelType, db, member, server } from "@/lib/db";
-import { visibleChannelIdsForRole } from "@/lib/channel-permissions";
+import { resolveMemberContext, visibleChannelIdsForMember } from "@/lib/channel-permissions";
 import { resolveServerRouteContext } from "@/lib/route-slug-resolver";
 import { buildChannelPath } from "@/lib/route-slugs";
 import { pickDefaultServerChannel } from "@/lib/default-server-channel";
@@ -66,6 +66,7 @@ const ServerIdPage = async ({ params }: ServerIdPageProps) => {
     .from(server)
     .where(and(eq(server.id, serverId), eq(server.profileId, profile.id)))
     .limit(1);
+  const memberContext = await resolveMemberContext({ profileId: profile.id, serverId });
 
   const serverChannels = await db
     .select({ id: channel.id, name: channel.name, type: channel.type, createdAt: channel.createdAt })
@@ -73,12 +74,13 @@ const ServerIdPage = async ({ params }: ServerIdPageProps) => {
     .where(eq(channel.serverId, serverId))
     .orderBy(asc(channel.createdAt));
 
-  const visibleIds = await visibleChannelIdsForRole({
-    serverId,
-    role: currentMember[0].role,
-    isServerOwner: !!serverOwner[0],
-    channelIds: serverChannels.map((item) => item.id),
-  });
+  const visibleIds = memberContext
+    ? await visibleChannelIdsForMember({
+        serverId,
+        memberContext,
+        channelIds: serverChannels.map((item) => item.id),
+      })
+    : new Set(serverChannels.map((item) => item.id));
 
   const visibleChannels = serverChannels.filter((item) => visibleIds.has(item.id));
   const initialChannel = pickDefaultServerChannel(visibleChannels);

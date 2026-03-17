@@ -66,6 +66,7 @@ type ProfileNameWithServerTagProps = {
   profileId?: string | null;
   memberId?: string | null;
   pronouns?: string | null;
+  disableCardFetch?: boolean;
   containerClassName?: string;
   nameClassName?: string;
   badgeClassName?: string;
@@ -77,54 +78,14 @@ type ProfileNameWithServerTagProps = {
   stretchTagUnderPlate?: boolean;
 };
 
-const cardCache = new Map<string, ProfileCardState>();
-const inflightRequests = new Map<string, Promise<ProfileCardState>>();
-const PROFILE_CARD_COMPONENT_CACHE_LIMIT = 1_000;
-
-const setBoundedCardCacheEntry = (cacheKey: string, value: ProfileCardState) => {
-  cardCache.set(cacheKey, value);
-
-  while (cardCache.size > PROFILE_CARD_COMPONENT_CACHE_LIMIT) {
-    const oldest = cardCache.keys().next().value;
-    if (typeof oldest !== "string") {
-      break;
-    }
-
-    cardCache.delete(oldest);
-  }
-};
-
-const getCacheKey = (profileId: string, memberId?: string | null) => `${profileId}::${memberId ?? ""}`;
-
 const readCardState = async (profileId: string, memberId?: string | null) => {
-  const cacheKey = getCacheKey(profileId, memberId);
-
-  if (cardCache.has(cacheKey)) {
-    return cardCache.get(cacheKey) ?? {
-      effectiveProfileName: null,
-      effectiveProfileNameStyle: "standard",
-      pronouns: null,
-      nameplateLabel: null,
-      nameplateColor: null,
-      nameplateImageUrl: null,
-      effectiveNameplateLabel: null,
-      effectiveNameplateColor: null,
-      effectiveNameplateImageUrl: null,
-      selectedServerTag: null,
-      showPatronIcon: false,
-      showFamilyIcon: false,
-      showBusinessIcon: false,
-    };
-  }
-
-  const existingRequest = inflightRequests.get(cacheKey);
-  if (existingRequest) {
-    return existingRequest;
-  }
-
-  const request = axios
+  return axios
     .get<ProfileCardPayload>(`/api/profile/${encodeURIComponent(profileId)}/card`, {
-      params: memberId ? { memberId } : undefined,
+      params: memberId ? { memberId, _t: Date.now() } : { _t: Date.now() },
+      headers: {
+        "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate",
+        Pragma: "no-cache",
+      },
     })
     .then((response) => {
       const effectiveProfileName =
@@ -182,12 +143,10 @@ const readCardState = async (profileId: string, memberId?: string | null) => {
         showFamilyIcon,
         showBusinessIcon,
       };
-
-      setBoundedCardCacheEntry(cacheKey, nextState);
       return nextState;
     })
     .catch(() => {
-      const fallbackState: ProfileCardState = {
+      return {
         effectiveProfileName: null,
         effectiveProfileNameStyle: "standard",
         pronouns: null,
@@ -201,16 +160,8 @@ const readCardState = async (profileId: string, memberId?: string | null) => {
         showPatronIcon: false,
         showFamilyIcon: false,
         showBusinessIcon: false,
-      };
-      setBoundedCardCacheEntry(cacheKey, fallbackState);
-      return fallbackState;
-    })
-    .finally(() => {
-      inflightRequests.delete(cacheKey);
+      } satisfies ProfileCardState;
     });
-
-  inflightRequests.set(cacheKey, request);
-  return request;
 };
 
 export const ProfileNameWithServerTag = ({
@@ -218,6 +169,7 @@ export const ProfileNameWithServerTag = ({
   profileId,
   memberId,
   pronouns,
+  disableCardFetch = true,
   containerClassName,
   nameClassName,
   badgeClassName,
@@ -247,7 +199,7 @@ export const ProfileNameWithServerTag = ({
   const trimmedMemberId = useMemo(() => String(memberId ?? "").trim(), [memberId]);
 
   useEffect(() => {
-    if (!trimmedProfileId) {
+    if (!trimmedProfileId || disableCardFetch) {
       setEffectiveProfileName(null);
       setEffectiveProfileNameStyle("standard");
       setResolvedCardPronouns(null);
@@ -290,7 +242,7 @@ export const ProfileNameWithServerTag = ({
     return () => {
       cancelled = true;
     };
-  }, [refreshToken, trimmedMemberId, trimmedProfileId]);
+  }, [disableCardFetch, refreshToken, trimmedMemberId, trimmedProfileId]);
 
   useEffect(() => {
     const onProfileRefresh = (event: Event) => {
@@ -298,15 +250,11 @@ export const ProfileNameWithServerTag = ({
       const eventProfileId = String(customEvent.detail?.profileId ?? "").trim();
 
       if (!eventProfileId || eventProfileId === trimmedProfileId) {
-        const cacheKey = getCacheKey(trimmedProfileId, trimmedMemberId || null);
-        cardCache.delete(cacheKey);
         setRefreshToken((prev) => prev + 1);
       }
     };
 
     const onCardRefresh = () => {
-      const cacheKey = getCacheKey(trimmedProfileId, trimmedMemberId || null);
-      cardCache.delete(cacheKey);
       setRefreshToken((prev) => prev + 1);
     };
 

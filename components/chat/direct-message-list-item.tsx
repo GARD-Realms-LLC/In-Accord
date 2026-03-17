@@ -11,6 +11,7 @@ interface DirectMessageListItemProps {
   profileId: string;
   displayName: string;
   imageUrl: string | null;
+  avatarDecorationUrl?: string | null;
   profileCreatedAt?: Date | string | null;
   timestampLabel: string;
   unreadCount: number;
@@ -24,6 +25,7 @@ export const DirectMessageListItem = ({
   profileId,
   displayName,
   imageUrl,
+  avatarDecorationUrl,
   profileCreatedAt,
   timestampLabel,
   unreadCount,
@@ -40,7 +42,7 @@ export const DirectMessageListItem = ({
       aria-label={`Open PM with ${displayName}`}
       data-conversation-id={conversationId}
     >
-      <UserAvatar src={imageUrl ?? undefined} className="h-7 w-7" />
+      <UserAvatar src={imageUrl ?? undefined} decorationSrc={avatarDecorationUrl} className="h-7 w-7" />
       <div className="min-w-0 flex-1">
         <p className="truncate text-xs font-semibold flex items-center gap-2">
           <ProfileNameWithServerTag

@@ -48,7 +48,6 @@ export default function RootLayout({
             "light-gray",
             "dark-gray",
             "custom-theme",
-            "transparent-theme",
           ]}
           storageKey="in-accord-theme"
         >

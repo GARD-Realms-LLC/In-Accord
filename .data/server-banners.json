@@ -14,5 +14,15 @@
     "url": "http://localhost:3000/api/r2/object?key=Client%2FServer%20Icons%2F1773365680417-00000001.png",
     "fit": "cover",
     "scale": 1
+  },
+  "4860db26-8834-431e-8108-46c0818cc03c": {
+    "url": "/api/r2/object?key=Client%2FServer%20Icons%2F1773683389573-00000001.jpg",
+    "fit": "scale",
+    "scale": 0.45
+  },
+  "3f4a088a-db41-48ef-a8eb-e8d8bb254437": {
+    "url": "/api/r2/object?key=Client%2FServer%20Icons%2F1773685208592-00000001.jpg",
+    "fit": "cover",
+    "scale": 1
   }
 }

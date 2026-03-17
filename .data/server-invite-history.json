@@ -48,5 +48,75 @@
       "usedCount": 0,
       "usedByProfileIds": []
     }
+  ],
+  "4860db26-8834-431e-8108-46c0818cc03c": [
+    {
+      "code": "f39e1a13-a454-40db-ac34-ccbd52ed7bf3",
+      "source": "created",
+      "createdByProfileId": "00000001",
+      "createdAt": "2026-03-16T17:20:06.069Z",
+      "usedCount": 0,
+      "usedByProfileIds": []
+    }
+  ],
+  "3f4a088a-db41-48ef-a8eb-e8d8bb254437": [
+    {
+      "code": "eefad6a7-7bae-482c-b5b9-b3cd25b62581",
+      "source": "created",
+      "createdByProfileId": "00000001",
+      "createdAt": "2026-03-16T17:55:13.191Z",
+      "usedCount": 0,
+      "usedByProfileIds": []
+    }
+  ],
+  "93c262be-c0e5-4857-9ed9-5482d5c45e2e": [
+    {
+      "code": "fdd70cb8-a0db-4735-9281-ed42dbc99a23",
+      "source": "created",
+      "createdByProfileId": "00000001",
+      "createdAt": "2026-03-16T18:28:30.022Z",
+      "usedCount": 0,
+      "usedByProfileIds": []
+    }
+  ],
+  "af53a0d1-84f2-4c03-b15f-a4d52be07c24": [
+    {
+      "code": "4914c0d6-5536-4d3b-aa66-d7aafe90b663",
+      "source": "created",
+      "createdByProfileId": "00000001",
+      "createdAt": "2026-03-16T18:29:05.265Z",
+      "usedCount": 0,
+      "usedByProfileIds": []
+    }
+  ],
+  "246db3e9-e435-4186-81e2-10c29829aef4": [
+    {
+      "code": "69c82c2d-f10a-4179-81d4-a43778027aaa",
+      "source": "created",
+      "createdByProfileId": "00000001",
+      "createdAt": "2026-03-16T18:29:38.167Z",
+      "usedCount": 0,
+      "usedByProfileIds": []
+    }
+  ],
+  "2c3c2513-3576-48d3-ab04-246f963da9ee": [
+    {
+      "code": "f37d3d40-a373-4f7a-9401-0c81f44651eb",
+      "source": "created",
+      "createdByProfileId": "00000001",
+      "createdAt": "2026-03-16T18:30:09.309Z",
+      "usedCount": 0,
+      "usedByProfileIds": []
+    }
+  ],
+  "a059dea6-7df3-4b19-9a3d-b44050cc7fd5": [
+    {
+      "code": "12f890db-717d-448d-b89b-845e1d6b54b2",
+      "source": "created",
+      "createdByProfileId": "00000001",
+      "createdAt": "2026-03-16T18:30:40.530Z",
+      "usedCount": 0,
+      "usedByProfileIds": []
+    }
   ]
 }

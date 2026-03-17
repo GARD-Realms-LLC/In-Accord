@@ -39,6 +39,7 @@ export async function GET() {
       pronouns: profile.pronouns ?? null,
       comment: profile.comment ?? null,
       avatarDecorationUrl: profile.avatarDecorationUrl ?? null,
+      profileEffectUrl: (profile as { profileEffectUrl?: string | null }).profileEffectUrl ?? null,
       phoneNumber: profile.phoneNumber ?? null,
       dateOfBirth: profile.dateOfBirth ?? null,
       bannerUrl: resolvedBannerUrl,

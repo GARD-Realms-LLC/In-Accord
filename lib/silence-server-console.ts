@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 declare global {
@@ -10,7 +11,34 @@ declare global {
 
 const shouldSilence = (process.env.ENABLE_SERVER_LOGS ?? "false").toLowerCase() !== "true";
 const maxLogSizeBytes = 10 * 1024 * 1024;
-const serverLogPath = path.resolve(process.cwd(), process.env.SERVER_LOG_FILE ?? "logs/server.log");
+const workspaceRoot = path.resolve(process.cwd());
+const defaultServerLogDir = path.join(os.tmpdir(), "in-accord", "logs");
+const configuredServerLogFile = String(process.env.SERVER_LOG_FILE ?? "").trim();
+
+const isPathInsideWorkspace = (targetPath: string) => {
+  const relativePath = path.relative(workspaceRoot, targetPath);
+  return relativePath !== "" && !relativePath.startsWith("..") && !path.isAbsolute(relativePath);
+};
+
+const resolveServerLogPath = () => {
+  const fallbackPath = path.join(defaultServerLogDir, "server.log");
+
+  if (!configuredServerLogFile) {
+    return fallbackPath;
+  }
+
+  const configuredPath = path.isAbsolute(configuredServerLogFile)
+    ? path.normalize(configuredServerLogFile)
+    : path.join(defaultServerLogDir, configuredServerLogFile.replace(/^([.][\\/])+/, ""));
+
+  if (isPathInsideWorkspace(configuredPath)) {
+    return path.join(defaultServerLogDir, path.basename(configuredPath) || "server.log");
+  }
+
+  return configuredPath;
+};
+
+const serverLogPath = resolveServerLogPath();
 
 const formatLogMessage = (args: unknown[]) => {
   return args

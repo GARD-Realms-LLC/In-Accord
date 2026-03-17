@@ -3,12 +3,29 @@
 import { Minus, X } from "lucide-react";
 import type { CSSProperties } from "react";
 
+type ElectronWindowApi = {
+  minimizeCurrentWindow?: () => Promise<unknown>;
+  closeCurrentWindow?: () => Promise<unknown>;
+};
+
 export const MeetingPopoutWindowControls = () => {
   const onMinimize = () => {
+    const electronApi = (window as Window & { electronAPI?: ElectronWindowApi }).electronAPI;
+    if (typeof electronApi?.minimizeCurrentWindow === "function") {
+      void electronApi.minimizeCurrentWindow();
+      return;
+    }
+
     window.blur();
   };
 
   const onClose = () => {
+    const electronApi = (window as Window & { electronAPI?: ElectronWindowApi }).electronAPI;
+    if (typeof electronApi?.closeCurrentWindow === "function") {
+      void electronApi.closeCurrentWindow();
+      return;
+    }
+
     window.close();
   };
 

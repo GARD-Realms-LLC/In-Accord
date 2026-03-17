@@ -18,6 +18,7 @@ type RecentDmRailItem = {
   profileId: string;
   displayName: string;
   imageUrl: string | null;
+  avatarDecorationUrl: string | null;
   profileCreatedAt: string | null;
   timestampLabel: string;
   unreadCount: number;
@@ -170,6 +171,7 @@ export const LiveRecentDmsRail = ({
           profileId={dm.profileId}
           displayName={dm.displayName}
           imageUrl={dm.imageUrl}
+          avatarDecorationUrl={dm.avatarDecorationUrl}
           profileCreatedAt={dm.profileCreatedAt}
           timestampLabel={dm.timestampLabel}
           unreadCount={dm.unreadCount}

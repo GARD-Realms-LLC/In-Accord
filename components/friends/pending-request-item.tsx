@@ -13,6 +13,7 @@ interface PendingRequestItemProps {
   displayName: string;
   email: string | null;
   imageUrl: string | null;
+  avatarDecorationUrl?: string | null;
   isIncoming: boolean;
   isSpam?: boolean;
 }
@@ -23,6 +24,7 @@ export const PendingRequestItem = ({
   displayName,
   email,
   imageUrl,
+  avatarDecorationUrl,
   isIncoming,
   isSpam = false,
 }: PendingRequestItemProps) => {
@@ -63,7 +65,7 @@ export const PendingRequestItem = ({
       data-request-id={requestId}
     >
       <div className="flex items-center gap-2">
-        <UserAvatar src={imageUrl ?? undefined} className="h-8 w-8" />
+        <UserAvatar src={imageUrl ?? undefined} decorationSrc={avatarDecorationUrl} className="h-8 w-8" />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-foreground">
             <ProfileNameWithServerTag

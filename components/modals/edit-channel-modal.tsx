@@ -44,10 +44,18 @@ type RolePermissionSet = {
 };
 
 type ChannelPermissionOverwrite = {
-  targetType: "EVERYONE" | "ROLE";
+  targetType: "EVERYONE" | "ROLE" | "MEMBER";
   targetId: string;
   label: string;
+  subtitle?: string | null;
   permissions: RolePermissionSet;
+};
+
+type ChannelPermissionCandidate = {
+  targetType: "ROLE" | "MEMBER";
+  targetId: string;
+  label: string;
+  subtitle?: string | null;
 };
 
 type ChannelAdvancedSettings = {
@@ -65,7 +73,9 @@ type ChannelFeatureSettings = {
   integrations: {
     enabled: boolean;
     provider: string;
+    providerApiUrl: string;
     syncMentions: boolean;
+    allowedBotIds: string[];
   };
   webhooks: {
     items: Array<{
@@ -73,11 +83,14 @@ type ChannelFeatureSettings = {
       name: string;
       url: string;
       enabled: boolean;
+      secret: string;
+      eventTypes: string[];
     }>;
   };
   apps: {
     allowedAppIds: string[];
     allowPinnedApps: boolean;
+    apiUrl: string;
   };
   moderation: {
     requireVerifiedEmail: boolean;
@@ -85,6 +98,32 @@ type ChannelFeatureSettings = {
     slowmodeSeconds: number;
     flaggedWordsAction: "warn" | "block";
   };
+};
+
+type ChannelFeatureCatalog = {
+  providers: Array<{
+    key: string;
+    label: string;
+    configured: boolean;
+  }>;
+  bots: Array<{
+    id: string;
+    name: string;
+    applicationId: string;
+    commands: string[];
+  }>;
+  apps: Array<{
+    id: string;
+    name: string;
+    applicationId: string;
+    clientId: string;
+    redirectUri: string;
+    scopes: string[];
+  }>;
+  webhookEventTypes: Array<{
+    value: string;
+    label: string;
+  }>;
 };
 
 type ChannelInvitePanelItem = {
@@ -114,7 +153,9 @@ const DEFAULT_FEATURE_SETTINGS: ChannelFeatureSettings = {
   integrations: {
     enabled: false,
     provider: "",
+    providerApiUrl: "",
     syncMentions: false,
+    allowedBotIds: [],
   },
   webhooks: {
     items: [],
@@ -122,6 +163,7 @@ const DEFAULT_FEATURE_SETTINGS: ChannelFeatureSettings = {
   apps: {
     allowedAppIds: [],
     allowPinnedApps: true,
+    apiUrl: "",
   },
   moderation: {
     requireVerifiedEmail: false,
@@ -129,6 +171,13 @@ const DEFAULT_FEATURE_SETTINGS: ChannelFeatureSettings = {
     slowmodeSeconds: 0,
     flaggedWordsAction: "warn",
   },
+};
+
+const DEFAULT_FEATURE_CATALOG: ChannelFeatureCatalog = {
+  providers: [],
+  bots: [],
+  apps: [],
+  webhookEventTypes: [],
 };
 
 type ChannelSettingsTab =
@@ -201,7 +250,11 @@ export const EditChannelModal = () => {
   const [isSavingPermissions, setIsSavingPermissions] = useState(false);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [permissionOverwrites, setPermissionOverwrites] = useState<ChannelPermissionOverwrite[]>([]);
+  const [permissionCandidates, setPermissionCandidates] = useState<ChannelPermissionCandidate[]>([]);
+  const [permissionFilter, setPermissionFilter] = useState("");
+  const [selectedPermissionKey, setSelectedPermissionKey] = useState<string | null>(null);
   const [featureSettings, setFeatureSettings] = useState<ChannelFeatureSettings>(DEFAULT_FEATURE_SETTINGS);
+  const [featureCatalog, setFeatureCatalog] = useState<ChannelFeatureCatalog>(DEFAULT_FEATURE_CATALOG);
   const [featureSaveError, setFeatureSaveError] = useState<string | null>(null);
   const [featureSaveSuccess, setFeatureSaveSuccess] = useState<string | null>(null);
   const [isLoadingFeatures, setIsLoadingFeatures] = useState(false);
@@ -262,6 +315,7 @@ export const EditChannelModal = () => {
     form.setValue("channelGroupId", ((channel as { channelGroupId?: string | null })?.channelGroupId ?? null));
     applyAdvancedSettingsToForm(DEFAULT_ADVANCED_SETTINGS);
     setFeatureSettings(DEFAULT_FEATURE_SETTINGS);
+    setFeatureCatalog(DEFAULT_FEATURE_CATALOG);
     setFeatureSaveError(null);
     setFeatureSaveSuccess(null);
     setInvitePanelItems([]);
@@ -314,17 +368,22 @@ export const EditChannelModal = () => {
         setPermissionsError(null);
         setPermissionsSuccess(null);
 
-        const response = await axios.get<{ overwrites?: ChannelPermissionOverwrite[] }>(`/api/channels/${channel.id}/permissions`, {
+        const response = await axios.get<{
+          overwrites?: ChannelPermissionOverwrite[];
+          candidates?: ChannelPermissionCandidate[];
+        }>(`/api/channels/${channel.id}/permissions`, {
           params: { serverId: server.id },
         });
 
         if (!cancelled) {
           const overwrites = Array.isArray(response.data.overwrites) ? response.data.overwrites : [];
+          const candidates = Array.isArray(response.data.candidates) ? response.data.candidates : [];
           setPermissionOverwrites(
             overwrites.map((item) => ({
               targetType: item.targetType,
               targetId: item.targetId,
               label: item.label,
+              subtitle: item.subtitle ?? null,
               permissions: {
                 allowView: item.permissions?.allowView ?? null,
                 allowSend: item.permissions?.allowSend ?? null,
@@ -332,6 +391,17 @@ export const EditChannelModal = () => {
               },
             }))
           );
+          setPermissionCandidates(candidates);
+          setSelectedPermissionKey((prev) => {
+            const nextKeys = new Set(
+              overwrites.map((item) => `${item.targetType}:${item.targetId}`)
+            );
+            if (prev && nextKeys.has(prev)) {
+              return prev;
+            }
+
+            return overwrites[0] ? `${overwrites[0].targetType}:${overwrites[0].targetId}` : null;
+          });
         }
       } catch {
         if (!cancelled) setPermissionsError("Failed to load channel permissions.");
@@ -357,7 +427,7 @@ export const EditChannelModal = () => {
         setFeatureSaveError(null);
         setFeatureSaveSuccess(null);
 
-        const response = await axios.get<{ settings?: ChannelFeatureSettings }>(
+        const response = await axios.get<{ settings?: ChannelFeatureSettings; catalog?: ChannelFeatureCatalog }>(
           `/api/channels/${channel.id}/features`,
           {
             params: { serverId: server.id },
@@ -366,11 +436,13 @@ export const EditChannelModal = () => {
 
         if (!cancelled) {
           setFeatureSettings(response.data.settings ?? DEFAULT_FEATURE_SETTINGS);
+          setFeatureCatalog(response.data.catalog ?? DEFAULT_FEATURE_CATALOG);
         }
       } catch {
         if (!cancelled) {
           setFeatureSaveError("Failed to load channel feature settings.");
           setFeatureSettings(DEFAULT_FEATURE_SETTINGS);
+          setFeatureCatalog(DEFAULT_FEATURE_CATALOG);
         }
       } finally {
         if (!cancelled) setIsLoadingFeatures(false);
@@ -508,6 +580,8 @@ export const EditChannelModal = () => {
     setInvitePanelActionCode(null);
     setNewInviteMaxUses("");
     setNewInviteExpiresInHours("");
+    setPermissionFilter("");
+    setSelectedPermissionKey(null);
     setActiveTab("overview");
     onClose();
   };
@@ -638,26 +712,60 @@ export const EditChannelModal = () => {
     }
   };
 
-  const renderFeatureFeedback = () => (
-    <>
-      {featureSaveError ? (
-        <p className="mt-3 rounded border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
-          {featureSaveError}
-        </p>
-      ) : null}
-      {featureSaveSuccess ? (
-        <p className="mt-3 rounded border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
-          {featureSaveSuccess}
-        </p>
-      ) : null}
-    </>
-  );
+  const toggleFeatureId = (target: "allowedBotIds" | "allowedAppIds", value: string) => {
+    setFeatureSettings((prev) => {
+      if (target === "allowedBotIds") {
+        const exists = prev.integrations.allowedBotIds.includes(value);
+        return {
+          ...prev,
+          integrations: {
+            ...prev.integrations,
+            allowedBotIds: exists
+              ? prev.integrations.allowedBotIds.filter((entry) => entry !== value)
+              : [...prev.integrations.allowedBotIds, value],
+          },
+        };
+      }
+
+      const exists = prev.apps.allowedAppIds.includes(value);
+      return {
+        ...prev,
+        apps: {
+          ...prev.apps,
+          allowedAppIds: exists
+            ? prev.apps.allowedAppIds.filter((entry) => entry !== value)
+            : [...prev.apps.allowedAppIds, value],
+        },
+      };
+    });
+  };
+
+  const renderFeatureFeedback = () => {
+    if (!featureSaveError && !featureSaveSuccess) {
+      return null;
+    }
+
+    return (
+      <div className="space-y-2">
+        {featureSaveError ? (
+          <div className="rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+            {featureSaveError}
+          </div>
+        ) : null}
+        {featureSaveSuccess ? (
+          <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+            {featureSaveSuccess}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
 
   const renderIntegrationsSection = () => (
-    <div className="flex-1 space-y-4 px-6 py-5">
+    <div className="settings-scrollbar theme-settings-content-body min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
       <div className="rounded-lg border border-black/30 bg-[#232428] p-4">
         <p className="text-sm font-semibold text-white">Channel Integrations</p>
-        <p className="mt-1 text-xs text-zinc-400">Wire external services to this channel and choose basic sync behavior.</p>
+        <p className="mt-1 text-xs text-zinc-400">Choose the provider, API base URL, and which installed bots are allowed to operate in this channel.</p>
 
         <div className="mt-4 space-y-3">
           <div className="flex items-center justify-between rounded-md border border-black/25 bg-[#1e1f22] px-3 py-2">
@@ -681,36 +789,106 @@ export const EditChannelModal = () => {
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Primary Provider</p>
-              <Input
-                value={featureSettings.integrations.provider}
-                onChange={(event) =>
+              <Select
+                value={featureSettings.integrations.provider || "__none__"}
+                onValueChange={(value) =>
                   setFeatureSettings((prev) => ({
                     ...prev,
-                    integrations: { ...prev.integrations, provider: event.target.value.slice(0, 80) },
-                  }))
-                }
-                disabled={isLoadingFeatures || isSavingFeatures}
-                className="border-0 bg-zinc-700/50 text-zinc-100 focus-visible:ring-0 focus-visible:ring-offset-0"
-                placeholder="e.g. Zapier"
-              />
-            </div>
-
-            <div className="flex items-end justify-between rounded-md border border-black/25 bg-[#1e1f22] px-3 py-2">
-              <p className="text-xs text-zinc-300">Sync @mentions to integrations</p>
-              <Button
-                type="button"
-                size="sm"
-                variant={featureSettings.integrations.syncMentions ? "primary" : "secondary"}
-                onClick={() =>
-                  setFeatureSettings((prev) => ({
-                    ...prev,
-                    integrations: { ...prev.integrations, syncMentions: !prev.integrations.syncMentions },
+                    integrations: { ...prev.integrations, provider: value === "__none__" ? "" : value },
                   }))
                 }
                 disabled={isLoadingFeatures || isSavingFeatures}
               >
-                {featureSettings.integrations.syncMentions ? "On" : "Off"}
-              </Button>
+                <SelectTrigger className="border-0 bg-zinc-700/50 text-zinc-100 outline-none ring-offset-0 focus:ring-0 focus:ring-offset-0">
+                  <SelectValue placeholder="Choose provider" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">No provider selected</SelectItem>
+                  {featureCatalog.providers.map((provider) => (
+                    <SelectItem key={provider.key} value={provider.key}>
+                      {provider.label}
+                      {provider.configured ? "" : " (not configured)"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Provider API URL</p>
+              <Input
+                value={featureSettings.integrations.providerApiUrl}
+                onChange={(event) =>
+                  setFeatureSettings((prev) => ({
+                    ...prev,
+                    integrations: { ...prev.integrations, providerApiUrl: event.target.value.slice(0, 512) },
+                  }))
+                }
+                disabled={isLoadingFeatures || isSavingFeatures}
+                className="border-0 bg-zinc-700/50 text-zinc-100 focus-visible:ring-0 focus-visible:ring-offset-0"
+                placeholder="https://api.example.com/v1"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-end justify-between rounded-md border border-black/25 bg-[#1e1f22] px-3 py-2">
+            <div>
+              <p className="text-xs text-zinc-300">Sync @mentions to integrations</p>
+              <p className="text-[11px] text-zinc-500">When enabled, integration hooks can receive mention context for channel events.</p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant={featureSettings.integrations.syncMentions ? "primary" : "secondary"}
+              onClick={() =>
+                setFeatureSettings((prev) => ({
+                  ...prev,
+                  integrations: { ...prev.integrations, syncMentions: !prev.integrations.syncMentions },
+                }))
+              }
+              disabled={isLoadingFeatures || isSavingFeatures}
+            >
+              {featureSettings.integrations.syncMentions ? "On" : "Off"}
+            </Button>
+          </div>
+
+          <div className="rounded-md border border-black/25 bg-[#1e1f22] p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-300">Allowed installed bots</p>
+                <p className="mt-1 text-[11px] text-zinc-500">If you leave this empty, every enabled installed bot can respond here.</p>
+              </div>
+              <span className="rounded bg-black/25 px-2 py-1 text-[10px] uppercase tracking-[0.08em] text-zinc-400">
+                {featureSettings.integrations.allowedBotIds.length === 0 ? "All bots" : `${featureSettings.integrations.allowedBotIds.length} selected`}
+              </span>
+            </div>
+
+            <div className="mt-3 space-y-2">
+              {featureCatalog.bots.length === 0 ? (
+                <p className="rounded border border-dashed border-zinc-600/60 bg-black/20 px-3 py-3 text-xs text-zinc-400">
+                  No installed enabled bots were found for this server owner yet.
+                </p>
+              ) : (
+                featureCatalog.bots.map((bot) => {
+                  const checked = featureSettings.integrations.allowedBotIds.includes(bot.id);
+                  return (
+                    <label key={bot.id} className="flex items-start gap-3 rounded border border-black/20 bg-black/20 px-3 py-2 text-xs text-zinc-200">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleFeatureId("allowedBotIds", bot.id)}
+                        disabled={isLoadingFeatures || isSavingFeatures}
+                        className="mt-0.5"
+                      />
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-zinc-100">{bot.name}</p>
+                        <p className="truncate text-[11px] text-zinc-500">App ID: {bot.applicationId}</p>
+                        <p className="truncate text-[11px] text-zinc-500">Commands: {bot.commands.length > 0 ? bot.commands.slice(0, 6).join(", ") : "None"}</p>
+                      </div>
+                    </label>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>
@@ -727,10 +905,10 @@ export const EditChannelModal = () => {
   );
 
   const renderWebhooksSection = () => (
-    <div className="flex-1 space-y-4 px-6 py-5">
+    <div className="settings-scrollbar theme-settings-content-body min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
       <div className="rounded-lg border border-black/30 bg-[#232428] p-4">
         <p className="text-sm font-semibold text-white">Channel Webhooks</p>
-        <p className="mt-1 text-xs text-zinc-400">Manage outbound webhook endpoints for channel events.</p>
+        <p className="mt-1 text-xs text-zinc-400">Manage outbound webhook URLs, signing secrets, and which channel events each hook receives.</p>
 
         <div className="mt-4 space-y-2">
           {featureSettings.webhooks.items.length === 0 ? (
@@ -741,7 +919,7 @@ export const EditChannelModal = () => {
 
           {featureSettings.webhooks.items.map((hook) => (
             <div key={hook.id} className="space-y-2 rounded-md border border-black/25 bg-[#1e1f22] p-3">
-              <div className="grid gap-2 sm:grid-cols-[1fr_2fr_auto_auto]">
+              <div className="grid gap-2 sm:grid-cols-2">
                 <Input
                   value={hook.name}
                   onChange={(event) =>
@@ -774,40 +952,104 @@ export const EditChannelModal = () => {
                   className="border-0 bg-zinc-700/50 text-zinc-100 focus-visible:ring-0 focus-visible:ring-offset-0"
                   placeholder="https://example.com/hook"
                 />
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={hook.enabled ? "primary" : "secondary"}
-                  onClick={() =>
+                <Input
+                  value={hook.secret ?? ""}
+                  onChange={(event) =>
                     setFeatureSettings((prev) => ({
                       ...prev,
                       webhooks: {
                         items: prev.webhooks.items.map((item) =>
-                          item.id === hook.id ? { ...item, enabled: !item.enabled } : item
+                          item.id === hook.id ? { ...item, secret: event.target.value.slice(0, 120) } : item
                         ),
                       },
                     }))
                   }
                   disabled={isLoadingFeatures || isSavingFeatures}
-                >
-                  {hook.enabled ? "Enabled" : "Disabled"}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="destructive"
-                  onClick={() =>
-                    setFeatureSettings((prev) => ({
-                      ...prev,
-                      webhooks: {
-                        items: prev.webhooks.items.filter((item) => item.id !== hook.id),
-                      },
-                    }))
-                  }
-                  disabled={isLoadingFeatures || isSavingFeatures}
-                >
-                  Remove
-                </Button>
+                  className="border-0 bg-zinc-700/50 text-zinc-100 focus-visible:ring-0 focus-visible:ring-offset-0"
+                  placeholder="Optional signing secret"
+                />
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={hook.enabled ? "primary" : "secondary"}
+                    onClick={() =>
+                      setFeatureSettings((prev) => ({
+                        ...prev,
+                        webhooks: {
+                          items: prev.webhooks.items.map((item) =>
+                            item.id === hook.id ? { ...item, enabled: !item.enabled } : item
+                          ),
+                        },
+                      }))
+                    }
+                    disabled={isLoadingFeatures || isSavingFeatures}
+                  >
+                    {hook.enabled ? "Enabled" : "Disabled"}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    onClick={() =>
+                      setFeatureSettings((prev) => ({
+                        ...prev,
+                        webhooks: {
+                          items: prev.webhooks.items.filter((item) => item.id !== hook.id),
+                        },
+                      }))
+                    }
+                    disabled={isLoadingFeatures || isSavingFeatures}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              </div>
+
+              <div>
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Events</p>
+                <div className="flex flex-wrap gap-2">
+                  {featureCatalog.webhookEventTypes.map((eventType) => {
+                    const selected = hook.eventTypes.includes(eventType.value);
+                    return (
+                      <button
+                        key={`${hook.id}-${eventType.value}`}
+                        type="button"
+                        onClick={() =>
+                          setFeatureSettings((prev) => ({
+                            ...prev,
+                            webhooks: {
+                              items: prev.webhooks.items.map((item) => {
+                                if (item.id !== hook.id) {
+                                  return item;
+                                }
+
+                                const nextEventTypes = item.eventTypes.includes(eventType.value)
+                                  ? item.eventTypes.filter((entry) => entry !== eventType.value)
+                                  : [...item.eventTypes, eventType.value];
+
+                                return {
+                                  ...item,
+                                  eventTypes: nextEventTypes.length > 0 ? nextEventTypes : [eventType.value],
+                                };
+                              }),
+                            },
+                          }))
+                        }
+                        disabled={isLoadingFeatures || isSavingFeatures}
+                        className={cn(
+                          "rounded px-2.5 py-1 text-[11px] font-semibold transition",
+                          selected
+                            ? "border border-indigo-400/60 bg-indigo-500/20 text-indigo-100"
+                            : "border border-black/30 bg-black/20 text-zinc-300 hover:bg-black/30"
+                        )}
+                      >
+                        {eventType.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-2 text-[11px] text-zinc-500">Requests are sent as JSON with X-InAccord-Channel-Event headers and optional X-InAccord-Signature when a secret is set.</p>
               </div>
             </div>
           ))}
@@ -828,6 +1070,11 @@ export const EditChannelModal = () => {
                       name: "",
                       url: "",
                       enabled: true,
+                      secret: "",
+                      eventTypes:
+                        featureCatalog.webhookEventTypes.length > 0
+                          ? featureCatalog.webhookEventTypes.map((item) => item.value)
+                          : ["MESSAGE_CREATED"],
                     },
                   ],
                 },
@@ -851,37 +1098,29 @@ export const EditChannelModal = () => {
   );
 
   const renderAppsSection = () => {
-    const appIdsText = featureSettings.apps.allowedAppIds.join(", ");
-
     return (
-      <div className="flex-1 space-y-4 px-6 py-5">
+      <div className="settings-scrollbar theme-settings-content-body min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
         <div className="rounded-lg border border-black/30 bg-[#232428] p-4">
           <p className="text-sm font-semibold text-white">Channel Apps</p>
-          <p className="mt-1 text-xs text-zinc-400">Choose which app IDs can run inside this channel.</p>
+          <p className="mt-1 text-xs text-zinc-400">Choose which installed apps can run here and define the channel app API/launch URL.</p>
 
           <div className="mt-4 space-y-3">
             <div>
-              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Allowed app IDs (comma separated)</p>
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">App API URL</p>
               <Input
-                value={appIdsText}
-                onChange={(event) => {
-                  const parsed = event.target.value
-                    .split(",")
-                    .map((entry) => entry.trim())
-                    .filter(Boolean)
-                    .slice(0, 100);
-
+                value={featureSettings.apps.apiUrl}
+                onChange={(event) =>
                   setFeatureSettings((prev) => ({
                     ...prev,
                     apps: {
                       ...prev.apps,
-                      allowedAppIds: parsed,
+                      apiUrl: event.target.value.slice(0, 512),
                     },
-                  }));
-                }}
+                  }))
+                }
                 disabled={isLoadingFeatures || isSavingFeatures}
                 className="border-0 bg-zinc-700/50 text-zinc-100 focus-visible:ring-0 focus-visible:ring-offset-0"
-                placeholder="poll-bot, music-bot"
+                placeholder="https://apps.example.com/channel"
               />
             </div>
 
@@ -902,6 +1141,47 @@ export const EditChannelModal = () => {
                 {featureSettings.apps.allowPinnedApps ? "Allowed" : "Blocked"}
               </Button>
             </div>
+
+            <div className="rounded-md border border-black/25 bg-[#1e1f22] p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-300">Allowed installed apps</p>
+                  <p className="mt-1 text-[11px] text-zinc-500">If you leave this empty, every enabled installed app can appear here.</p>
+                </div>
+                <span className="rounded bg-black/25 px-2 py-1 text-[10px] uppercase tracking-[0.08em] text-zinc-400">
+                  {featureSettings.apps.allowedAppIds.length === 0 ? "All apps" : `${featureSettings.apps.allowedAppIds.length} selected`}
+                </span>
+              </div>
+
+              <div className="mt-3 space-y-2">
+                {featureCatalog.apps.length === 0 ? (
+                  <p className="rounded border border-dashed border-zinc-600/60 bg-black/20 px-3 py-3 text-xs text-zinc-400">
+                    No installed enabled apps were found for this server owner yet.
+                  </p>
+                ) : (
+                  featureCatalog.apps.map((app) => {
+                    const checked = featureSettings.apps.allowedAppIds.includes(app.id);
+                    return (
+                      <label key={app.id} className="flex items-start gap-3 rounded border border-black/20 bg-black/20 px-3 py-2 text-xs text-zinc-200">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleFeatureId("allowedAppIds", app.id)}
+                          disabled={isLoadingFeatures || isSavingFeatures}
+                          className="mt-0.5"
+                        />
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-zinc-100">{app.name}</p>
+                          <p className="truncate text-[11px] text-zinc-500">Client ID: {app.clientId || "—"}</p>
+                          <p className="truncate text-[11px] text-zinc-500">Redirect URI: {app.redirectUri || "Not set"}</p>
+                          <p className="truncate text-[11px] text-zinc-500">Scopes: {app.scopes.length > 0 ? app.scopes.join(", ") : "None"}</p>
+                        </div>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            </div>
           </div>
 
           {renderFeatureFeedback()}
@@ -920,7 +1200,7 @@ export const EditChannelModal = () => {
     const blockedWordsText = featureSettings.moderation.blockedWords.join(", ");
 
     return (
-      <div className="flex-1 space-y-4 px-6 py-5">
+      <div className="settings-scrollbar theme-settings-content-body min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
         <div className="rounded-lg border border-black/30 bg-[#232428] p-4">
           <p className="text-sm font-semibold text-white">Channel Moderation</p>
           <p className="mt-1 text-xs text-zinc-400">Set moderation controls and language safeguards for this channel.</p>
@@ -1032,7 +1312,7 @@ export const EditChannelModal = () => {
   };
 
   const renderInvitesSection = () => (
-    <div className="flex-1 space-y-4 px-6 py-5">
+    <div className="settings-scrollbar theme-settings-content-body min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
       <div className="rounded-lg border border-black/30 bg-[#232428] p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -1162,6 +1442,108 @@ export const EditChannelModal = () => {
     setPermissionsSuccess(null);
   };
 
+  const permissionKeyFor = (targetType: ChannelPermissionOverwrite["targetType"], targetId: string) =>
+    `${targetType}:${targetId}`;
+
+  const selectedOverwrite = useMemo(() => {
+    if (!selectedPermissionKey) {
+      return permissionOverwrites[0] ?? null;
+    }
+
+    return (
+      permissionOverwrites.find(
+        (item) => permissionKeyFor(item.targetType, item.targetId) === selectedPermissionKey
+      ) ?? permissionOverwrites[0] ?? null
+    );
+  }, [permissionOverwrites, selectedPermissionKey]);
+
+  const filteredPermissionCandidates = useMemo(() => {
+    const normalizedFilter = permissionFilter.trim().toLowerCase();
+    const existingKeys = new Set(
+      permissionOverwrites.map((item) => permissionKeyFor(item.targetType, item.targetId))
+    );
+
+    return permissionCandidates
+      .filter((candidate) => {
+        if (!normalizedFilter) {
+          return true;
+        }
+
+        const haystack = `${candidate.label} ${candidate.subtitle ?? ""}`.toLowerCase();
+        return haystack.includes(normalizedFilter);
+      })
+      .map((candidate) => ({
+        ...candidate,
+        exists: existingKeys.has(permissionKeyFor(candidate.targetType, candidate.targetId)),
+      }))
+      .slice(0, 12);
+  }, [permissionCandidates, permissionFilter, permissionOverwrites]);
+
+  const visiblePermissionOverwrites = useMemo(() => {
+    const normalizedFilter = permissionFilter.trim().toLowerCase();
+
+    const sorted = [...permissionOverwrites].sort((left, right) => {
+      const rank = (value: ChannelPermissionOverwrite["targetType"]) =>
+        value === "EVERYONE" ? 0 : value === "ROLE" ? 1 : 2;
+      const byType = rank(left.targetType) - rank(right.targetType);
+      if (byType !== 0) {
+        return byType;
+      }
+
+      return left.label.localeCompare(right.label);
+    });
+
+    if (!normalizedFilter) {
+      return sorted;
+    }
+
+    return sorted.filter((item) =>
+      `${item.label} ${item.subtitle ?? ""}`.toLowerCase().includes(normalizedFilter)
+    );
+  }, [permissionFilter, permissionOverwrites]);
+
+  const addOrFocusPermissionTarget = (candidate: ChannelPermissionCandidate) => {
+    const key = permissionKeyFor(candidate.targetType, candidate.targetId);
+    const existing = permissionOverwrites.find(
+      (item) => permissionKeyFor(item.targetType, item.targetId) === key
+    );
+
+    if (existing) {
+      setSelectedPermissionKey(key);
+      return;
+    }
+
+    setPermissionOverwrites((prev) => [
+      ...prev,
+      {
+        targetType: candidate.targetType,
+        targetId: candidate.targetId,
+        label: candidate.label,
+        subtitle: candidate.subtitle ?? null,
+        permissions: {
+          allowView: null,
+          allowSend: null,
+          allowConnect: null,
+        },
+      },
+    ]);
+    setSelectedPermissionKey(key);
+    setPermissionsError(null);
+    setPermissionsSuccess(null);
+  };
+
+  const removePermissionTarget = (overwrite: ChannelPermissionOverwrite) => {
+    if (overwrite.targetType === "EVERYONE" || overwrite.targetType === "ROLE") {
+      return;
+    }
+
+    const key = permissionKeyFor(overwrite.targetType, overwrite.targetId);
+    setPermissionOverwrites((prev) => prev.filter((item) => permissionKeyFor(item.targetType, item.targetId) !== key));
+    setSelectedPermissionKey((prev) => (prev === key ? null : prev));
+    setPermissionsError(null);
+    setPermissionsSuccess(null);
+  };
+
   const permissionChoiceClass = (isActive: boolean, kind: "allow" | "inherit" | "deny") => {
     if (!isActive) return "border border-black/30 bg-black/20 text-zinc-300 hover:bg-black/30";
     if (kind === "allow") return "border border-emerald-400/60 bg-emerald-500/20 text-emerald-100";
@@ -1208,7 +1590,7 @@ export const EditChannelModal = () => {
   };
 
   const renderPlaceholderSection = (tab: Exclude<ChannelSettingsTab, "overview" | "permissions" | "danger" | "integrations" | "webhooks" | "apps" | "moderation">) => (
-    <div className="flex-1 space-y-4 px-6 py-5">
+    <div className="settings-scrollbar theme-settings-content-body min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
       <div className="rounded-lg border border-black/30 bg-[#232428] p-4">
         <p className="text-sm font-semibold text-white">{tabLabelMap[tab]}</p>
         <p className="mt-1 text-xs text-zinc-400">{tabDescriptionMap[tab]}</p>
@@ -1235,57 +1617,157 @@ export const EditChannelModal = () => {
           : "Connect to Video";
 
     return (
-      <div className="flex-1 space-y-4 px-6 py-5">
+      <div className="settings-scrollbar min-h-0 flex-1 overflow-y-auto px-6 py-5">
         <div className="rounded-lg border border-black/30 bg-[#232428] p-4">
           <p className="text-sm font-semibold text-white">Permission Overwrites</p>
-          <p className="mt-1 text-xs text-zinc-400">Other-style: set Allow, Neutral (inherit), or Deny for each role.</p>
+          <p className="mt-1 text-xs text-zinc-400">Compact, Discord-style editing for roles and individual members.</p>
 
           <div className="mt-4 space-y-3">
-            {permissionOverwrites.map((overwrite) => (
-              <div key={`${overwrite.targetType}:${overwrite.targetId}`} className="rounded-md border border-black/25 bg-[#1e1f22] p-3">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-300">{overwrite.label}</p>
-                <div className="grid gap-2 sm:grid-cols-3">
-                  {([
-                    ["allowView", "View Channel"],
-                    ["allowSend", sendPermissionLabel],
-                    ["allowConnect", connectPermissionLabel],
-                  ] as const).map(([key, label]) => {
-                    const current = overwrite.permissions[key];
-                    return (
-                      <div key={key} className="rounded bg-black/20 px-2 py-2 text-xs text-zinc-200">
-                        <p className="mb-1.5 font-medium text-zinc-300">{label}</p>
-                        <div className="flex items-center gap-1">
-                          <button
+            <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
+              <div className="space-y-3 rounded-md border border-black/25 bg-[#1e1f22] p-3">
+                <div>
+                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Add roles or members</p>
+                  <Input
+                    value={permissionFilter}
+                    onChange={(event) => setPermissionFilter(event.target.value.slice(0, 120))}
+                    disabled={isLoadingPermissions || isSavingPermissions}
+                    className="border-0 bg-zinc-700/50 text-zinc-100 focus-visible:ring-0 focus-visible:ring-offset-0"
+                    placeholder="Search roles or members"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  {filteredPermissionCandidates.length === 0 ? (
+                    <p className="rounded border border-dashed border-zinc-600/60 bg-black/20 px-3 py-2 text-xs text-zinc-400">
+                      No matching roles or members.
+                    </p>
+                  ) : (
+                    filteredPermissionCandidates.map((candidate) => {
+                      const key = permissionKeyFor(candidate.targetType, candidate.targetId);
+                      return (
+                        <div key={key} className="flex items-center justify-between gap-2 rounded border border-black/20 bg-black/20 px-2 py-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-medium text-zinc-100">{candidate.label}</p>
+                            <p className="truncate text-[11px] text-zinc-400">{candidate.subtitle ?? candidate.targetType}</p>
+                          </div>
+                          <Button
                             type="button"
-                            onClick={() => onSetPermission(overwrite.targetType, overwrite.targetId, key, true)}
-                            className={cn("rounded px-2 py-1 text-[11px] font-semibold", permissionChoiceClass(current === true, "allow"))}
+                            size="sm"
+                            variant={candidate.exists ? "secondary" : "primary"}
+                            onClick={() => addOrFocusPermissionTarget(candidate)}
                             disabled={isLoadingPermissions || isSavingPermissions}
                           >
-                            Allow
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onSetPermission(overwrite.targetType, overwrite.targetId, key, null)}
-                            className={cn("rounded px-2 py-1 text-[11px] font-semibold", permissionChoiceClass(current === null, "inherit"))}
-                            disabled={isLoadingPermissions || isSavingPermissions}
-                          >
-                            Neutral
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onSetPermission(overwrite.targetType, overwrite.targetId, key, false)}
-                            className={cn("rounded px-2 py-1 text-[11px] font-semibold", permissionChoiceClass(current === false, "deny"))}
-                            disabled={isLoadingPermissions || isSavingPermissions}
-                          >
-                            Deny
-                          </button>
+                            {candidate.exists ? "Jump" : "Add"}
+                          </Button>
                         </div>
-                      </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                <div className="settings-scrollbar max-h-[44vh] space-y-1 overflow-y-auto pr-1">
+                  {visiblePermissionOverwrites.map((overwrite) => {
+                    const overwriteKey = permissionKeyFor(overwrite.targetType, overwrite.targetId);
+                    const isSelected = overwriteKey === permissionKeyFor(selectedOverwrite?.targetType ?? "EVERYONE", selectedOverwrite?.targetId ?? "EVERYONE") && Boolean(selectedOverwrite);
+                    return (
+                      <button
+                        key={overwriteKey}
+                        type="button"
+                        onClick={() => setSelectedPermissionKey(overwriteKey)}
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-md px-2 py-2 text-left transition",
+                          isSelected ? "bg-[#404249] text-white" : "bg-black/20 text-zinc-200 hover:bg-black/30"
+                        )}
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{overwrite.label}</p>
+                          <p className="truncate text-[11px] text-zinc-400">{overwrite.subtitle ?? overwrite.targetType}</p>
+                        </div>
+                        {overwrite.targetType === "MEMBER" ? (
+                          <span className="rounded bg-zinc-700/50 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-zinc-300">User</span>
+                        ) : overwrite.targetType === "ROLE" ? (
+                          <span className="rounded bg-zinc-700/50 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-zinc-300">Role</span>
+                        ) : (
+                          <span className="rounded bg-zinc-700/50 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-zinc-300">Default</span>
+                        )}
+                      </button>
                     );
                   })}
                 </div>
               </div>
-            ))}
+
+              <div className="rounded-md border border-black/25 bg-[#1e1f22] p-3">
+                {selectedOverwrite ? (
+                  <>
+                    <div className="flex items-start justify-between gap-3 border-b border-black/20 pb-3">
+                      <div>
+                        <p className="text-sm font-semibold text-white">{selectedOverwrite.label}</p>
+                        <p className="mt-1 text-xs text-zinc-400">{selectedOverwrite.subtitle ?? selectedOverwrite.targetType}</p>
+                      </div>
+                      {selectedOverwrite.targetType === "MEMBER" ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => removePermissionTarget(selectedOverwrite)}
+                          disabled={isLoadingPermissions || isSavingPermissions}
+                        >
+                          Remove
+                        </Button>
+                      ) : null}
+                    </div>
+
+                    <div className="mt-3 space-y-2">
+                      {([
+                        ["allowView", "View Channel"],
+                        ["allowSend", sendPermissionLabel],
+                        ["allowConnect", connectPermissionLabel],
+                      ] as const).map(([key, label]) => {
+                        const current = selectedOverwrite.permissions[key];
+                        return (
+                          <div key={key} className="flex items-center justify-between gap-3 rounded-md border border-black/20 bg-black/20 px-3 py-2">
+                            <div>
+                              <p className="text-sm font-medium text-zinc-100">{label}</p>
+                              <p className="text-[11px] text-zinc-400">Allow, inherit, or deny for this target.</p>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => onSetPermission(selectedOverwrite.targetType, selectedOverwrite.targetId, key, true)}
+                                className={cn("rounded px-2.5 py-1 text-[11px] font-semibold", permissionChoiceClass(current === true, "allow"))}
+                                disabled={isLoadingPermissions || isSavingPermissions}
+                              >
+                                Allow
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => onSetPermission(selectedOverwrite.targetType, selectedOverwrite.targetId, key, null)}
+                                className={cn("rounded px-2.5 py-1 text-[11px] font-semibold", permissionChoiceClass(current === null, "inherit"))}
+                                disabled={isLoadingPermissions || isSavingPermissions}
+                              >
+                                Inherit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => onSetPermission(selectedOverwrite.targetType, selectedOverwrite.targetId, key, false)}
+                                className={cn("rounded px-2.5 py-1 text-[11px] font-semibold", permissionChoiceClass(current === false, "deny"))}
+                                disabled={isLoadingPermissions || isSavingPermissions}
+                              >
+                                Deny
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : (
+                  <p className="rounded border border-dashed border-zinc-600/60 bg-black/20 px-3 py-3 text-xs text-zinc-400">
+                    Select a role or member to edit its overwrites.
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
 
           {permissionsError ? <p className="mt-3 rounded border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{permissionsError}</p> : null}
@@ -1303,18 +1785,18 @@ export const EditChannelModal = () => {
 
   return (
     <Dialog open={isModalOpen} onOpenChange={handleClose}>
-      <DialogContent className="h-[80vh] w-[80vw] max-h-[80vh] max-w-[80vw] overflow-hidden border border-black/30 bg-[#313338] p-0 text-white">
+      <DialogContent className="settings-theme-scope settings-scrollbar theme-settings-shell flex h-[85vh] max-h-[85vh] w-[85vw] max-w-[85vw] flex-col overflow-hidden border border-black/30 bg-[#313338] p-0 text-white">
         <DialogTitle className="sr-only">Edit Channel Settings</DialogTitle>
-        <div className="grid h-full grid-cols-[1fr_220px]">
-          <div className="flex h-full flex-col">
-            <div className="border-b border-black/30 px-6 py-4">
+        <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_240px]">
+          <div className="theme-settings-content flex min-h-0 h-full flex-col overflow-hidden">
+            <div className="theme-settings-content-header border-b border-black/30 px-6 py-4">
               <h2 className="text-lg font-bold text-white">{tabLabelMap[activeTab]}</h2>
               <p className="mt-0.5 text-xs text-zinc-400">{tabDescriptionMap[activeTab]}</p>
               <p className="text-xs text-zinc-400">Channel: #{channel?.name ?? "unknown"}</p>
             </div>
 
             {activeTab === "danger" ? (
-              <div className="flex-1 space-y-3 px-6 py-5">
+              <div className="settings-scrollbar theme-settings-content-body min-h-0 flex-1 space-y-3 overflow-y-auto px-6 py-5">
                 <p className="text-sm text-zinc-300">Deleting a channel permanently removes its messages.</p>
                 <Button
                   type="button"
@@ -1344,8 +1826,8 @@ export const EditChannelModal = () => {
               renderPlaceholderSection(activeTab)
             ) : (
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="flex h-full flex-col">
-                  <div className="flex-1 space-y-6 px-6 py-5">
+                <form onSubmit={form.handleSubmit(onSubmit)} className="flex h-full min-h-0 flex-col">
+                  <div className="settings-scrollbar theme-settings-content-body min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-5">
                     <FormField
                       control={form.control}
                       name="name"
@@ -1469,8 +1951,8 @@ export const EditChannelModal = () => {
             )}
           </div>
 
-          <aside className="border-l border-black/30 bg-[#2b2d31] p-3">
-            <div className="mt-1 space-y-3">
+          <aside className="theme-settings-rail settings-scrollbar min-h-0 overflow-y-auto border-l border-black/30 bg-[#2b2d31] p-3">
+            <div className="mt-1 space-y-3 pr-1">
               {sections.map((sectionGroup, groupIndex) => (
                 <div key={`${sectionGroup.label || "danger"}-${groupIndex}`} className="space-y-1">
                   {sectionGroup.label ? (

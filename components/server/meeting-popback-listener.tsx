@@ -31,8 +31,12 @@ export const MeetingPopbackListener = ({
     const targetUrl = `${baseChannelPath}?live=true`;
 
     const syncBackToMeeting = () => {
+      const currentUrl = `${window.location.pathname}${window.location.search}`;
+      if (currentUrl === targetUrl) {
+        return;
+      }
+
       router.replace(targetUrl);
-      router.refresh();
     };
 
     const onPopbackMessage = (event: MessageEvent) => {
@@ -59,35 +63,10 @@ export const MeetingPopbackListener = ({
       syncBackToMeeting();
     };
 
-    const onPopbackStorage = (event: StorageEvent) => {
-      if (event.key !== popbackStorageKey || !event.newValue) {
-        return;
-      }
-
-      try {
-        const payload = JSON.parse(event.newValue) as
-          | {
-              serverId?: string;
-              channelId?: string;
-            }
-          | undefined;
-
-        if (payload?.serverId !== serverId || payload?.channelId !== channelId) {
-          return;
-        }
-
-        syncBackToMeeting();
-      } catch {
-        // ignore invalid payloads
-      }
-    };
-
     window.addEventListener("message", onPopbackMessage);
-    window.addEventListener("storage", onPopbackStorage);
 
     return () => {
       window.removeEventListener("message", onPopbackMessage);
-      window.removeEventListener("storage", onPopbackStorage);
     };
   }, [channelId, channelPath, enabled, router, serverId]);
 

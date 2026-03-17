@@ -12,6 +12,7 @@ interface SettingsButtonProps {
   profileEmail?: string | null;
   profileImageUrl?: string | null;
   profileAvatarDecorationUrl?: string | null;
+  profileEffectUrl?: string | null;
   profileNameplateLabel?: string | null;
   profileNameplateColor?: string | null;
   profileNameplateImageUrl?: string | null;
@@ -30,6 +31,7 @@ export const SettingsButton = ({
   profileEmail,
   profileImageUrl,
   profileAvatarDecorationUrl,
+  profileEffectUrl,
   profileNameplateLabel,
   profileNameplateColor,
   profileNameplateImageUrl,
@@ -54,6 +56,7 @@ export const SettingsButton = ({
           profileEmail,
           profileImageUrl,
           profileAvatarDecorationUrl,
+          profileEffectUrl,
           profileNameplateLabel,
           profileNameplateColor,
           profileNameplateImageUrl,

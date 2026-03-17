@@ -86,7 +86,7 @@ const ThreadsToastContent = ({
   }, [filteredThreads]);
 
   return (
-    <div className="pointer-events-auto w-90 max-w-[90vw] rounded-md border border-zinc-300/70 bg-white p-3 text-zinc-900 shadow-md dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
+    <div className="pointer-events-auto w-[min(22.5rem,calc(100vw-1rem))] max-h-[calc(100vh-1rem)] max-w-[calc(100vw-1rem)] overflow-hidden rounded-md border border-zinc-300/70 bg-white p-3 text-zinc-900 shadow-md dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
       <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
         Threads
       </p>

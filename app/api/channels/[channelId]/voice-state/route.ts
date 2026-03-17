@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { channel, ChannelType, db, member } from "@/lib/db";
-import { computeChannelPermissionForRole, resolveMemberContext } from "@/lib/channel-permissions";
+import { computeChannelPermissionForMember, resolveMemberContext } from "@/lib/channel-permissions";
 import {
   clearVoiceState,
   ensureVoiceStateSchema,
@@ -72,11 +72,14 @@ export async function GET(
       serverId,
     });
 
-    const permissions = await computeChannelPermissionForRole({
+    if (!memberContext) {
+      return new NextResponse("Member not found", { status: 404 });
+    }
+
+    const permissions = await computeChannelPermissionForMember({
       serverId,
       channelId,
-      role: currentMember.role,
-      isServerOwner: memberContext?.isServerOwner ?? false,
+      memberContext,
     });
 
     if (!permissions.allowView) {
@@ -152,11 +155,14 @@ export async function POST(
       serverId,
     });
 
-    const permissions = await computeChannelPermissionForRole({
+    if (!memberContext) {
+      return new NextResponse("Member not found", { status: 404 });
+    }
+
+    const permissions = await computeChannelPermissionForMember({
       serverId,
       channelId,
-      role: currentMember.role,
-      isServerOwner: memberContext?.isServerOwner ?? false,
+      memberContext,
     });
 
     if (!permissions.allowConnect) {

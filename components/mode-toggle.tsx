@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Circle, Monitor, Moon, Palette, Sun } from "lucide-react"
+import { Circle, Moon, Palette, Sun } from "lucide-react"
 import { useTheme } from "next-themes"
 
 import { Button } from "@/components/ui/button"
@@ -22,11 +22,6 @@ type ThemeOption = {
   iconClassName?: string
 }
 
-type TransparentBackgroundOption = {
-  label: string
-  value: string
-}
-
 type CustomThemeColors = {
   background: string
   card: string
@@ -37,14 +32,6 @@ type CustomThemeColors = {
   mutedForeground: string
   border: string
 }
-
-type TransparentBackgroundSettingsPayload = {
-  selectedBackground: string | null
-  uploadedBackgrounds: string[]
-}
-
-const TRANSPARENT_BG_ATTRIBUTE = "data-transparent-bg"
-const UPLOADED_BG_PREFIX = "uploaded:"
 
 const defaultCustomThemeColors: CustomThemeColors = {
   background: "#101419",
@@ -119,13 +106,6 @@ const hexToHslTokens = (hex: string) => {
   return `${Math.round(h)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`
 }
 
-const transparentBackgroundOptions: TransparentBackgroundOption[] = [
-  { label: "Aurora Blue", value: "aurora-blue" },
-  { label: "Sunset Red", value: "sunset-red" },
-  { label: "Graphite", value: "graphite" },
-  { label: "Forest", value: "forest" },
-]
-
 const themeOptions: ThemeOption[] = [
   { label: "Dark Mode", value: "dark", icon: Moon },
   { label: "Light Mode", value: "light", icon: Sun },
@@ -172,37 +152,12 @@ const themeOptions: ThemeOption[] = [
     iconClassName: "fill-zinc-700 text-zinc-700",
   },
   { label: "Custom Colors", value: "custom-theme", icon: Palette },
-  { label: "Transparent Theme", value: "transparent-theme", icon: Monitor },
 ]
 
 export const ModeToggle = () => {
   const { setTheme, theme } = useTheme()
-  const [isTransparentModalOpen, setIsTransparentModalOpen] = React.useState(false)
   const [isCustomThemeModalOpen, setIsCustomThemeModalOpen] = React.useState(false)
-  const [transparentBackground, setTransparentBackground] = React.useState<string>(
-    transparentBackgroundOptions[0].value
-  )
   const [customThemeColors, setCustomThemeColors] = React.useState<CustomThemeColors>(defaultCustomThemeColors)
-  const [uploadedBackgrounds, setUploadedBackgrounds] = React.useState<string[]>([])
-  const [isUploadingBackground, setIsUploadingBackground] = React.useState(false)
-  const backgroundInputRef = React.useRef<HTMLInputElement | null>(null)
-
-  const persistTransparentBackgroundSettings = React.useCallback(
-    async (settings: TransparentBackgroundSettingsPayload) => {
-      try {
-        await fetch("/api/profile/transparent-background", {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(settings),
-        })
-      } catch {
-        // ignore network issues; current in-memory UI state remains active
-      }
-    },
-    []
-  )
 
   const applyCustomThemeColors = React.useCallback((colors: CustomThemeColors) => {
     document.documentElement.style.setProperty("--custom-background", hexToHslTokens(colors.background))
@@ -217,74 +172,6 @@ export const ModeToggle = () => {
     )
     document.documentElement.style.setProperty("--custom-border", hexToHslTokens(colors.border))
   }, [])
-
-  const applyTransparentBackground = React.useCallback((value: string) => {
-    if (value.startsWith(UPLOADED_BG_PREFIX)) {
-      const backgroundUrl = value.slice(UPLOADED_BG_PREFIX.length)
-      document.documentElement.setAttribute(TRANSPARENT_BG_ATTRIBUTE, "uploaded")
-      document.documentElement.style.setProperty("--transparent-uploaded-bg", `url("${backgroundUrl}")`)
-      return
-    }
-
-    document.documentElement.setAttribute(TRANSPARENT_BG_ATTRIBUTE, value)
-    document.documentElement.style.removeProperty("--transparent-uploaded-bg")
-  }, [])
-
-  React.useEffect(() => {
-    const fallbackValue = transparentBackgroundOptions[0].value
-    applyTransparentBackground(fallbackValue)
-    setTransparentBackground(fallbackValue)
-    setUploadedBackgrounds([])
-
-    let cancelled = false
-
-    const hydrateFromServer = async () => {
-      try {
-        const response = await fetch("/api/profile/transparent-background", {
-          method: "GET",
-          cache: "no-store",
-        })
-
-        if (!response.ok) {
-          return
-        }
-
-        const payload = (await response.json()) as {
-          selectedBackground?: string | null
-          uploadedBackgrounds?: unknown
-        }
-
-        if (cancelled) {
-          return
-        }
-
-        const serverUploads = Array.isArray(payload.uploadedBackgrounds)
-          ? payload.uploadedBackgrounds.filter((value): value is string => typeof value === "string")
-          : []
-
-        const serverValue = typeof payload.selectedBackground === "string" ? payload.selectedBackground : null
-
-        const fallbackValue = transparentBackgroundOptions[0].value
-        const mergedValue = serverValue && serverValue.trim().length > 0 ? serverValue : fallbackValue
-        const isPreset = transparentBackgroundOptions.some((option) => option.value === mergedValue)
-        const isUploaded = mergedValue.startsWith(UPLOADED_BG_PREFIX)
-        const normalizedValue = isPreset || isUploaded ? mergedValue : fallbackValue
-
-        setUploadedBackgrounds(serverUploads)
-        setTransparentBackground(normalizedValue)
-        applyTransparentBackground(normalizedValue)
-
-      } catch {
-        // keep default fallback
-      }
-    }
-
-    hydrateFromServer()
-
-    return () => {
-      cancelled = true
-    }
-  }, [applyTransparentBackground])
 
   React.useEffect(() => {
     let cancelled = false
@@ -342,79 +229,6 @@ export const ModeToggle = () => {
     }
   }, [applyCustomThemeColors])
 
-  const onChangeTransparentBackground = (value: string) => {
-    applyTransparentBackground(value)
-    setTransparentBackground(value)
-
-    const uploadsSnapshot = uploadedBackgrounds
-    void persistTransparentBackgroundSettings({
-      selectedBackground: value,
-      uploadedBackgrounds: uploadsSnapshot,
-    })
-  }
-
-  const onPickBackground = () => {
-    if (isUploadingBackground) {
-      return
-    }
-
-    backgroundInputRef.current?.click()
-  }
-
-  const onUploadBackground = async (file?: File) => {
-    if (!file) {
-      return
-    }
-
-    try {
-      setIsUploadingBackground(true)
-
-      const formData = new FormData()
-      formData.append("file", file)
-
-      const response = await fetch("/api/r2/upload?type=userBanner", {
-        method: "POST",
-        body: formData,
-      })
-
-      if (!response.ok) {
-        throw new Error("Failed to upload background")
-      }
-
-      const payload = (await response.json()) as { url?: string }
-      const uploadedUrl = payload.url
-
-      if (!uploadedUrl) {
-        throw new Error("Upload response missing URL")
-      }
-
-      let nextUploads: string[] = []
-
-      setUploadedBackgrounds((previous) => {
-        const next = [uploadedUrl, ...previous.filter((value) => value !== uploadedUrl)]
-        nextUploads = next
-
-        return next
-      })
-
-      const selectedToken = `${UPLOADED_BG_PREFIX}${uploadedUrl}`
-      applyTransparentBackground(selectedToken)
-      setTransparentBackground(selectedToken)
-
-      void persistTransparentBackgroundSettings({
-        selectedBackground: selectedToken,
-        uploadedBackgrounds: nextUploads.length > 0 ? nextUploads : [uploadedUrl],
-      })
-    } catch (error) {
-      window.alert("Background upload failed")
-    } finally {
-      setIsUploadingBackground(false)
-      if (backgroundInputRef.current) {
-        backgroundInputRef.current.value = ""
-      }
-    }
-  }
-
   const saveCustomThemeColors = React.useCallback((next: CustomThemeColors) => {
     setCustomThemeColors(next)
     applyCustomThemeColors(next)
@@ -466,10 +280,6 @@ export const ModeToggle = () => {
                 onClick={() => {
                   setTheme(option.value)
 
-                  if (option.value === "transparent-theme") {
-                    setIsTransparentModalOpen(true)
-                  }
-
                   if (option.value === "custom-theme") {
                     setIsCustomThemeModalOpen(true)
                   }
@@ -488,95 +298,6 @@ export const ModeToggle = () => {
         </div>
 
       </div>
-
-      <Dialog open={isTransparentModalOpen} onOpenChange={setIsTransparentModalOpen}>
-        <DialogContent className="border-white/10 bg-[#1e1f22] text-[#dbdee1]">
-          <DialogHeader>
-            <DialogTitle>Transparent Theme</DialogTitle>
-            <DialogDescription className="text-[#949ba4]">
-              Select Background to customize your transparent theme.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-2">
-            <label className="block text-xs font-semibold uppercase tracking-[0.08em] text-[#b5bac1]">
-              Select Background
-            </label>
-
-            <select
-              value={transparentBackground.startsWith(UPLOADED_BG_PREFIX) ? transparentBackgroundOptions[0].value : transparentBackground}
-              onChange={(event) => onChangeTransparentBackground(event.target.value)}
-              className="w-full rounded-lg border border-white/15 bg-[#1a1b1e] px-3 py-2 text-sm text-[#dbdee1] outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
-            >
-              {transparentBackgroundOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <label className="block text-xs font-semibold uppercase tracking-[0.08em] text-[#b5bac1]">
-                Uploaded Backgrounds
-              </label>
-
-              <Button
-                type="button"
-                size="sm"
-                onClick={onPickBackground}
-                disabled={isUploadingBackground}
-                className="bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {isUploadingBackground ? "Uploading..." : "Upload Background"}
-              </Button>
-
-              <input
-                ref={backgroundInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(event) => onUploadBackground(event.target.files?.[0])}
-              />
-            </div>
-
-            {uploadedBackgrounds.length > 0 ? (
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {uploadedBackgrounds.map((url) => {
-                  const token = `${UPLOADED_BG_PREFIX}${url}`
-                  const isActive = transparentBackground === token
-
-                  return (
-                    <button
-                      key={url}
-                      type="button"
-                      onClick={() => onChangeTransparentBackground(token)}
-                      className={cn(
-                        "overflow-hidden rounded-lg border border-white/15 bg-[#1a1b1e] text-left transition",
-                        isActive ? "ring-2 ring-[#5865f2]" : "hover:border-white/30"
-                      )}
-                      title="Apply uploaded background"
-                    >
-                      <img src={url} alt="Uploaded background" className="h-20 w-full object-cover" />
-                    </button>
-                  )
-                })}
-              </div>
-            ) : (
-              <p className="rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-xs text-[#949ba4]">
-                No uploaded backgrounds yet.
-              </p>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button type="button" onClick={() => setIsTransparentModalOpen(false)}>
-              Done
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={isCustomThemeModalOpen} onOpenChange={setIsCustomThemeModalOpen}>
         <DialogContent className="border-white/10 bg-[#1e1f22] text-[#dbdee1]">

@@ -310,7 +310,7 @@ const FormsPage = () => {
         ) : (
           <div className="space-y-4">
             <div className="relative overflow-hidden rounded-xl border border-zinc-700 bg-[#1e1f22]">
-              <div className="relative h-36 w-full">
+              <div className="relative h-44 w-full">
                 {resolvedConfigBannerUrl ? (
                   <BannerImage src={resolvedConfigBannerUrl} alt="Forms banner" className="object-cover" />
                 ) : (

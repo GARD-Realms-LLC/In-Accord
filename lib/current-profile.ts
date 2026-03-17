@@ -29,6 +29,7 @@ type CachedProfile = {
   businessSection: string | null;
   comment: string | null;
   avatarDecorationUrl: string | null;
+  profileEffectUrl: string | null;
   phoneNumber: string | null;
   dateOfBirth: string | null;
   familyParentUserId: string | null;
@@ -120,6 +121,7 @@ const getBasicCurrentProfile = async (userId: string): Promise<CachedProfile | n
     businessSection: null,
     comment: null,
     avatarDecorationUrl: null,
+    profileEffectUrl: null,
     phoneNumber: null,
     dateOfBirth: null,
     familyParentUserId: null,
@@ -171,6 +173,7 @@ export const currentProfile = async () => {
         up."businessSection" as "businessSection",
         up."comment" as "comment",
         up."avatarDecorationUrl" as "avatarDecorationUrl",
+        up."profileEffectUrl" as "profileEffectUrl",
         nullif(trim(to_jsonb(u)->>'phone'), '') as "phoneNumber",
         nullif(trim(to_jsonb(u)->>'dob'), '') as "dateOfBirth",
         nullif(trim(to_jsonb(u)->>'familyParentUserId'), '') as "familyParentUserId",
@@ -202,6 +205,7 @@ export const currentProfile = async () => {
         businessSection: string | null;
         comment: string | null;
         avatarDecorationUrl: string | null;
+        profileEffectUrl: string | null;
         phoneNumber: string | null;
         dateOfBirth: string | null;
         familyParentUserId: string | null;
@@ -255,6 +259,7 @@ export const currentProfile = async () => {
           businessSection: user.businessSection ?? null,
           comment: user.comment ?? null,
           avatarDecorationUrl: user.avatarDecorationUrl ?? null,
+          profileEffectUrl: user.profileEffectUrl ?? null,
           phoneNumber: user.phoneNumber ?? null,
           dateOfBirth: user.dateOfBirth ?? null,
           familyParentUserId: normalizedFamily?.familyParentUserId ?? user.familyParentUserId ?? null,

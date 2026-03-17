@@ -41,6 +41,7 @@ export async function GET(req: Request) {
         profileId: item.profileId,
         displayName: item.displayName,
         imageUrl: item.imageUrl,
+        avatarDecorationUrl: item.avatarDecorationUrl,
         profileCreatedAt: item.profileCreatedAt ? item.profileCreatedAt.toISOString() : null,
         timestampLabel: formatTimestamp(item.lastMessageAt),
         unreadCount: item.unreadCount,

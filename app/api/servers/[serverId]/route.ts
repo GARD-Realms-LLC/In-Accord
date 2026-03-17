@@ -65,6 +65,8 @@ export async function GET(
       bannerColor: profileSettings.bannerColor,
       inviteMode: profileSettings.inviteMode,
       showChannelGroups: profileSettings.showChannelGroups,
+      hideAllChannels: profileSettings.hideAllChannels,
+      hiddenChannelIds: profileSettings.hiddenChannelIds,
     });
   } catch (error) {
     console.log("[SERVER_ID_GET]", error);
@@ -150,6 +152,8 @@ export async function PATCH(
       bannerColor,
       inviteMode,
       showChannelGroups,
+      hideAllChannels,
+      hiddenChannelIds,
     } = await req.json();
 
     if (!profile) {
@@ -175,9 +179,12 @@ export async function PATCH(
       return new NextResponse("In-Accord server name is protected and cannot be renamed.", { status: 403 });
     }
 
+    const resolvedName = typeof name === "string" ? name : target.name;
+    const resolvedImageUrl = typeof imageUrl === "string" ? imageUrl : target.imageUrl;
+
     await db.update(server).set({
-        name,
-        imageUrl,
+      name: resolvedName,
+      imageUrl: resolvedImageUrl,
         updatedAt: new Date(),
       }).where(and(eq(server.id, serverId), eq(server.profileId, profile.id)));
 
@@ -193,7 +200,9 @@ export async function PATCH(
       gamesPlayed: Array.isArray(gamesPlayed) ? gamesPlayed : [],
       bannerColor: typeof bannerColor === "string" ? bannerColor : null,
       inviteMode: inviteMode === "approval" ? "approval" : "normal",
-      showChannelGroups: typeof showChannelGroups === "boolean" ? showChannelGroups : true,
+      showChannelGroups: typeof showChannelGroups === "boolean" ? showChannelGroups : undefined,
+      hideAllChannels: typeof hideAllChannels === "boolean" ? hideAllChannels : undefined,
+      hiddenChannelIds: Array.isArray(hiddenChannelIds) ? hiddenChannelIds : undefined,
     });
 
     const updatedServer = await db.query.server.findFirst({
@@ -237,8 +246,8 @@ export async function PATCH(
       serverId,
       targetId: serverId,
       metadata: {
-        name,
-        imageUrl,
+        name: resolvedName,
+        imageUrl: resolvedImageUrl,
         bannerUrl,
         bannerFit,
         bannerScale,
@@ -248,6 +257,8 @@ export async function PATCH(
         bannerColor: resolvedProfileSettings.bannerColor,
         inviteMode: resolvedProfileSettings.inviteMode,
         showChannelGroups: resolvedProfileSettings.showChannelGroups,
+        hideAllChannels: resolvedProfileSettings.hideAllChannels,
+        hiddenChannelIds: resolvedProfileSettings.hiddenChannelIds,
       },
     }).catch((eventError) => {
       console.warn("[SERVER_ID_PATCH_EVENT]", eventError);
@@ -266,6 +277,8 @@ export async function PATCH(
             bannerColor: resolvedProfileSettings.bannerColor,
             inviteMode: resolvedProfileSettings.inviteMode,
             showChannelGroups: resolvedProfileSettings.showChannelGroups,
+            hideAllChannels: resolvedProfileSettings.hideAllChannels,
+            hiddenChannelIds: resolvedProfileSettings.hiddenChannelIds,
           }
         : updatedServer
     );

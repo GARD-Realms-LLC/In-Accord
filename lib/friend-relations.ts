@@ -85,4 +85,12 @@ export const ensureFriendRelationsSchema = async () => {
     delete from "FriendRequest"
     where "id" like 'conv-%'
   `);
+
+  // Friendship edges must never point a profile at itself.
+  await db.execute(sql`
+    delete from "FriendRequest"
+    where coalesce(trim("requesterProfileId"), '') <> ''
+      and coalesce(trim("recipientProfileId"), '') <> ''
+      and trim("requesterProfileId") = trim("recipientProfileId")
+  `);
 };

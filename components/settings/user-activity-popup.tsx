@@ -3,6 +3,9 @@
 import { Clapperboard, Gamepad2, Music2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { getStreamActivityCopy } from "@/lib/streaming-display";
+import { getCachedVoiceState, VOICE_STATE_SYNC_EVENT, type VoiceStateSyncDetail } from "@/lib/voice-state-sync";
+
 type ActivityType = "game" | "video" | "music";
 
 type UserActivityPopupProps = {
@@ -139,6 +142,7 @@ export const UserActivityPopup = ({ initialCurrentGame }: UserActivityPopupProps
   const [currentGame, setCurrentGame] = useState<string>(String(initialCurrentGame ?? "").trim());
   const [mediaActivity, setMediaActivity] = useState<DetectedActivity | null>(null);
   const [runtimeActivity, setRuntimeActivity] = useState<DetectedActivity | null>(null);
+  const [streamingActivity, setStreamingActivity] = useState<DetectedActivity | null>(null);
   const [, setTimerTick] = useState(0);
 
   useEffect(() => {
@@ -148,6 +152,39 @@ export const UserActivityPopup = ({ initialCurrentGame }: UserActivityPopupProps
   useEffect(() => {
     setCurrentGame(String(initialCurrentGame ?? "").trim());
   }, [initialCurrentGame]);
+
+  useEffect(() => {
+    const applyVoiceState = (detail?: VoiceStateSyncDetail | null) => {
+      const isActive = detail?.active === true;
+      const isStreaming = detail?.isStreaming === true;
+
+      if (!isActive || !isStreaming) {
+        setStreamingActivity(null);
+        return;
+      }
+
+      const label = String(detail?.streamLabel ?? "").trim();
+      const streamActivity = getStreamActivityCopy(label);
+      setStreamingActivity({
+        type: "video",
+        title: streamActivity.title,
+        subtitle: streamActivity.subtitle,
+        details: streamActivity.details,
+      });
+    };
+
+    applyVoiceState(getCachedVoiceState());
+
+    const onVoiceStateSync = (event: Event) => {
+      applyVoiceState((event as CustomEvent<VoiceStateSyncDetail>).detail);
+    };
+
+    window.addEventListener(VOICE_STATE_SYNC_EVENT, onVoiceStateSync as EventListener);
+
+    return () => {
+      window.removeEventListener(VOICE_STATE_SYNC_EVENT, onVoiceStateSync as EventListener);
+    };
+  }, []);
 
   useEffect(() => {
     const refreshProfileActivity = async () => {
@@ -288,6 +325,10 @@ export const UserActivityPopup = ({ initialCurrentGame }: UserActivityPopupProps
   }, []);
 
   const resolvedActivity = useMemo<DetectedActivity | null>(() => {
+    if (streamingActivity) {
+      return streamingActivity;
+    }
+
     if (runtimeActivity) {
       return runtimeActivity;
     }
@@ -301,7 +342,7 @@ export const UserActivityPopup = ({ initialCurrentGame }: UserActivityPopupProps
     }
 
     return null;
-  }, [currentGame, mediaActivity, runtimeActivity]);
+  }, [currentGame, mediaActivity, runtimeActivity, streamingActivity]);
 
   if (!isClientReady || !resolvedActivity) {
     return null;

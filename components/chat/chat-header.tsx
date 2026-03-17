@@ -19,6 +19,7 @@ interface ChatHeaderProps {
   topic?: string | null;
   type: "channel" | "conversation";
   imageUrl?: string;
+  avatarDecorationUrl?: string | null;
   profileId?: string;
   memberId?: string;
   isBot?: boolean;
@@ -37,6 +38,7 @@ export const ChatHeader = ({
   topic,
   type,
   imageUrl,
+  avatarDecorationUrl,
   profileId,
   memberId,
   isBot,
@@ -69,7 +71,7 @@ export const ChatHeader = ({
           )
         )}
         {type === "conversation" && (
-          <UserAvatar src={imageUrl} className="h-8 w-8 md:h-8 md:w-8 mr-2" />
+          <UserAvatar src={imageUrl} decorationSrc={avatarDecorationUrl} className="h-8 w-8 md:h-8 md:w-8 mr-2" />
         )}
         <div className="flex min-w-0 items-center gap-1.5">
           {type === "conversation" ? (

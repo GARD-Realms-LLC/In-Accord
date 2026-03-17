@@ -11,7 +11,9 @@ type UserServerProfileRow = {
   nameplateLabel: string | null;
   nameplateColor: string | null;
   nameplateImageUrl: string | null;
+  imageUrl: string | null;
   avatarDecorationUrl: string | null;
+  profileEffectUrl: string | null;
   bannerUrl: string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
@@ -26,7 +28,9 @@ export type UserServerProfile = {
   nameplateLabel: string | null;
   nameplateColor: string | null;
   nameplateImageUrl: string | null;
+  imageUrl: string | null;
   avatarDecorationUrl: string | null;
+  profileEffectUrl: string | null;
   bannerUrl: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -49,7 +53,9 @@ export const ensureUserServerProfileSchema = async () => {
       "nameplateLabel" varchar(40),
       "nameplateColor" varchar(20),
       "nameplateImageUrl" text,
+      "imageUrl" text,
       "avatarDecorationUrl" text,
+      "profileEffectUrl" text,
       "bannerUrl" text,
       "createdAt" timestamp not null,
       "updatedAt" timestamp not null,
@@ -60,6 +66,11 @@ export const ensureUserServerProfileSchema = async () => {
   await db.execute(sql`
     alter table "UserServerProfile"
     add column if not exists "avatarDecorationUrl" text
+  `);
+
+  await db.execute(sql`
+    alter table "UserServerProfile"
+    add column if not exists "profileEffectUrl" text
   `);
 
   await db.execute(sql`
@@ -93,6 +104,11 @@ export const ensureUserServerProfileSchema = async () => {
   `);
 
   await db.execute(sql`
+    alter table "UserServerProfile"
+    add column if not exists "imageUrl" text
+  `);
+
+  await db.execute(sql`
     create index if not exists "UserServerProfile_serverId_idx"
     on "UserServerProfile" ("serverId")
   `);
@@ -121,7 +137,9 @@ export const getUserServerProfile = async (
       "nameplateLabel",
       "nameplateColor",
       "nameplateImageUrl",
+      "imageUrl",
       "avatarDecorationUrl",
+      "profileEffectUrl",
       "bannerUrl",
       "createdAt",
       "updatedAt"
@@ -146,7 +164,9 @@ export const getUserServerProfile = async (
     nameplateLabel: row.nameplateLabel,
     nameplateColor: row.nameplateColor,
     nameplateImageUrl: row.nameplateImageUrl,
+    imageUrl: row.imageUrl,
     avatarDecorationUrl: row.avatarDecorationUrl,
+    profileEffectUrl: row.profileEffectUrl,
     bannerUrl: row.bannerUrl,
     createdAt: new Date(row.createdAt),
     updatedAt: new Date(row.updatedAt),

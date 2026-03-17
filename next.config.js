@@ -6,6 +6,11 @@ const nextConfig = {
     ignoreBuildErrors: process.env.NEXT_IGNORE_TYPE_ERRORS === "1",
   },
   images: {
+    localPatterns: [
+      {
+        pathname: "/**",
+      },
+    ],
     remotePatterns: [
       {
         protocol: "http",

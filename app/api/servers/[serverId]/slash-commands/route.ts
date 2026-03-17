@@ -7,7 +7,7 @@ import { resolveServerRouteContext } from "@/lib/route-slug-resolver";
 import { listServerSlashCommands } from "@/lib/slash-commands";
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ serverId: string }> }
 ) {
   try {
@@ -42,7 +42,10 @@ export async function GET(
       return new NextResponse("Forbidden", { status: 403 });
     }
 
-    const commands = await listServerSlashCommands(normalizedServerId);
+    const { searchParams } = new URL(req.url);
+    const channelId = String(searchParams.get("channelId") ?? "").trim();
+
+    const commands = await listServerSlashCommands(normalizedServerId, { channelId });
 
     return NextResponse.json({
       serverId: normalizedServerId,

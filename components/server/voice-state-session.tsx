@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { getStreamStageText } from "@/lib/streaming-display";
+import { publishVoiceState } from "@/lib/voice-state-sync";
+
 type VoiceStateSessionProps = {
   serverId: string;
   channelId: string;
@@ -25,7 +28,7 @@ export const VoiceStateSession = ({
 }: VoiceStateSessionProps) => {
   const [isMuted, setIsMuted] = useState(false);
   const [isDeafened, setIsDeafened] = useState(false);
-  const [isCameraOn, setIsCameraOn] = useState(isVideoChannel);
+  const [isCameraOn, setIsCameraOn] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamLabel, setStreamLabel] = useState<string | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -66,6 +69,10 @@ export const VoiceStateSession = ({
       const customEvent = event as CustomEvent<{ isCameraOn?: boolean }>;
       if (typeof customEvent.detail?.isCameraOn === "boolean") {
         setIsCameraOn(customEvent.detail.isCameraOn);
+        if (customEvent.detail.isCameraOn) {
+          setIsStreaming(false);
+          setStreamLabel(null);
+        }
       }
     };
 
@@ -73,6 +80,9 @@ export const VoiceStateSession = ({
       const customEvent = event as CustomEvent<{ isStreaming?: boolean; streamLabel?: string | null }>;
       if (typeof customEvent.detail?.isStreaming === "boolean") {
         setIsStreaming(customEvent.detail.isStreaming);
+        if (customEvent.detail.isStreaming) {
+          setIsCameraOn(false);
+        }
         if (!customEvent.detail.isStreaming) {
           setStreamLabel(null);
         }
@@ -102,19 +112,15 @@ export const VoiceStateSession = ({
   }, []);
 
   useEffect(() => {
-    window.dispatchEvent(
-      new CustomEvent("inaccord:voice-state-sync", {
-        detail: {
-          isMuted,
-          isDeafened,
-          isCameraOn: isVideoChannel ? isCameraOn : false,
-          isStreaming: isVideoChannel ? isStreaming : false,
-          streamLabel: isVideoChannel && isStreaming ? streamLabel : null,
-          isVideoChannel,
-          active,
-        },
-      })
-    );
+    publishVoiceState({
+      isMuted,
+      isDeafened,
+      isCameraOn: isVideoChannel ? isCameraOn : false,
+      isStreaming: isVideoChannel ? isStreaming : false,
+      streamLabel: isVideoChannel && isStreaming ? streamLabel : null,
+      isVideoChannel,
+      active,
+    });
   }, [active, isCameraOn, isDeafened, isMuted, isStreaming, isVideoChannel, streamLabel]);
 
   useEffect(() => {
@@ -315,7 +321,7 @@ export const VoiceStateSession = ({
                 : "border-zinc-500/40 bg-zinc-500/10 text-zinc-300"
             }`}
           >
-            {isStreaming ? `Streaming${streamLabel ? ` • ${streamLabel}` : ""}` : "Not Streaming"}
+            {isStreaming ? getStreamStageText(streamLabel) : "Not Streaming"}
           </span>
         </>
       ) : null}

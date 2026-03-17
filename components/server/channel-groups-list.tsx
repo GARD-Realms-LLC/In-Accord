@@ -248,6 +248,7 @@ export const ChannelGroupsList = ({
         return (
           <div
             key={group.id}
+            data-channel-group-id={group.id}
             onDragOver={(event) => onGroupDragOver(event, group.id)}
             onDrop={(event) => onGroupDrop(event, group.id)}
             className={cn(

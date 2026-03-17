@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 
 import { appendBannerDebugEvent } from "@/lib/banner-debug";
-import { resolveBannerUrl } from "@/lib/asset-url";
+import { resolveAvatarUrl, resolveBannerUrl } from "@/lib/asset-url";
 import { currentProfile } from "@/lib/current-profile";
 import { db } from "@/lib/db";
 import {
@@ -21,7 +21,9 @@ type MemberServerRow = {
   nameplateLabel: string | null;
   nameplateColor: string | null;
   nameplateImageUrl: string | null;
+  imageUrl: string | null;
   avatarDecorationUrl: string | null;
+  profileEffectUrl: string | null;
   bannerUrl: string | null;
 };
 
@@ -34,7 +36,9 @@ const buildResponse = async (
     nameplateLabel: string | null;
     nameplateColor: string | null;
     nameplateImageUrl: string | null;
+    imageUrl: string | null;
     avatarDecorationUrl: string | null;
+    profileEffectUrl: string | null;
     bannerUrl: string | null;
   }
 ) => {
@@ -50,7 +54,9 @@ const buildResponse = async (
       usp."nameplateLabel" as "nameplateLabel",
       usp."nameplateColor" as "nameplateColor",
       usp."nameplateImageUrl" as "nameplateImageUrl",
+      usp."imageUrl" as "imageUrl",
       usp."avatarDecorationUrl" as "avatarDecorationUrl",
+      usp."profileEffectUrl" as "profileEffectUrl",
       usp."bannerUrl" as "bannerUrl"
     from "Member" m
     inner join "Server" s on s."id" = m."serverId"
@@ -87,7 +93,9 @@ const buildResponse = async (
       nameplateLabel: row.nameplateLabel,
       nameplateColor: row.nameplateColor,
       nameplateImageUrl: row.nameplateImageUrl,
+      imageUrl: resolveAvatarUrl(row.imageUrl),
       avatarDecorationUrl: row.avatarDecorationUrl,
+      profileEffectUrl: row.profileEffectUrl,
       bannerUrl: resolvedBannerUrl,
       effectiveProfileName: row.profileName ?? globalDefaults.profileName,
       effectiveProfileNameStyle:
@@ -100,7 +108,9 @@ const buildResponse = async (
       effectiveNameplateLabel: row.nameplateLabel ?? globalDefaults.nameplateLabel,
       effectiveNameplateColor: row.nameplateColor ?? globalDefaults.nameplateColor,
       effectiveNameplateImageUrl: row.nameplateImageUrl ?? globalDefaults.nameplateImageUrl,
+      effectiveImageUrl: resolveAvatarUrl(row.imageUrl ?? globalDefaults.imageUrl),
       effectiveAvatarDecorationUrl: row.avatarDecorationUrl ?? globalDefaults.avatarDecorationUrl,
+      effectiveProfileEffectUrl: row.profileEffectUrl ?? globalDefaults.profileEffectUrl,
       effectiveBannerUrl,
     };
   });
@@ -124,7 +134,9 @@ export async function GET() {
         nameplateLabel: profile.nameplateLabel ?? null,
         nameplateColor: profile.nameplateColor ?? null,
         nameplateImageUrl: (profile as { nameplateImageUrl?: string | null }).nameplateImageUrl ?? null,
+        imageUrl: profile.imageUrl ?? null,
         avatarDecorationUrl: profile.avatarDecorationUrl ?? null,
+        profileEffectUrl: (profile as { profileEffectUrl?: string | null }).profileEffectUrl ?? null,
         bannerUrl: resolveBannerUrl(profile.bannerUrl),
       })
     );
@@ -150,7 +162,9 @@ export async function PATCH(req: Request) {
       nameplateLabel?: unknown;
       nameplateColor?: unknown;
       nameplateImageUrl?: unknown;
+      imageUrl?: unknown;
       avatarDecorationUrl?: unknown;
+      profileEffectUrl?: unknown;
       bannerUrl?: unknown;
     };
 
@@ -161,7 +175,9 @@ export async function PATCH(req: Request) {
     const nameplateLabel = typeof body.nameplateLabel === "string" ? body.nameplateLabel.trim() : "";
     const nameplateColor = typeof body.nameplateColor === "string" ? body.nameplateColor.trim() : "";
     const nameplateImageUrl = typeof body.nameplateImageUrl === "string" ? body.nameplateImageUrl.trim() : "";
+    const imageUrl = typeof body.imageUrl === "string" ? body.imageUrl.trim() : "";
     const avatarDecorationUrl = typeof body.avatarDecorationUrl === "string" ? body.avatarDecorationUrl.trim() : "";
+    const profileEffectUrl = typeof body.profileEffectUrl === "string" ? body.profileEffectUrl.trim() : "";
     const bannerUrl = typeof body.bannerUrl === "string" ? body.bannerUrl.trim() : "";
 
     if (!serverId) {
@@ -210,6 +226,20 @@ export async function PATCH(req: Request) {
       );
     }
 
+    if (imageUrl.length > 2048) {
+      return NextResponse.json(
+        { error: "Avatar URL is too long." },
+        { status: 400 }
+      );
+    }
+
+    if (profileEffectUrl.length > 2048) {
+      return NextResponse.json(
+        { error: "Profile effect URL is too long." },
+        { status: 400 }
+      );
+    }
+
     await ensureUserServerProfileSchema();
 
     const membership = await db.execute(sql`
@@ -235,7 +265,9 @@ export async function PATCH(req: Request) {
     const normalizedNameplateLabel = nameplateLabel.length > 0 ? nameplateLabel : null;
     const normalizedNameplateColor = normalizedNameplateLabel ? (nameplateColor.length > 0 ? nameplateColor : "#5865f2") : null;
     const normalizedNameplateImageUrl = nameplateImageUrl.length > 0 ? nameplateImageUrl : null;
+    const normalizedImageUrl = imageUrl.length > 0 ? imageUrl : null;
     const normalizedAvatarDecorationUrl = avatarDecorationUrl.length > 0 ? avatarDecorationUrl : null;
+    const normalizedProfileEffectUrl = profileEffectUrl.length > 0 ? profileEffectUrl : null;
     const normalizedBannerUrl = bannerUrl.length > 0 ? bannerUrl : null;
     const resolvedBannerUrl = resolveBannerUrl(normalizedBannerUrl);
 
@@ -256,7 +288,9 @@ export async function PATCH(req: Request) {
       !normalizedComment &&
       !normalizedNameplateLabel &&
       !normalizedNameplateImageUrl &&
+      !normalizedImageUrl &&
       !normalizedAvatarDecorationUrl &&
+      !normalizedProfileEffectUrl &&
       !normalizedBannerUrl
     ) {
       await db.execute(sql`
@@ -275,7 +309,9 @@ export async function PATCH(req: Request) {
           "nameplateLabel",
           "nameplateColor",
           "nameplateImageUrl",
+          "imageUrl",
           "avatarDecorationUrl",
+          "profileEffectUrl",
           "bannerUrl",
           "createdAt",
           "updatedAt"
@@ -289,7 +325,9 @@ export async function PATCH(req: Request) {
           ${normalizedNameplateLabel},
           ${normalizedNameplateColor},
           ${normalizedNameplateImageUrl},
+          ${normalizedImageUrl},
           ${normalizedAvatarDecorationUrl},
+          ${normalizedProfileEffectUrl},
           ${normalizedBannerUrl},
           now(),
           now()
@@ -301,7 +339,9 @@ export async function PATCH(req: Request) {
             "nameplateLabel" = excluded."nameplateLabel",
             "nameplateColor" = excluded."nameplateColor",
             "nameplateImageUrl" = excluded."nameplateImageUrl",
+            "imageUrl" = excluded."imageUrl",
             "avatarDecorationUrl" = excluded."avatarDecorationUrl",
+            "profileEffectUrl" = excluded."profileEffectUrl",
             "bannerUrl" = excluded."bannerUrl",
             "updatedAt" = excluded."updatedAt"
       `);
@@ -316,7 +356,9 @@ export async function PATCH(req: Request) {
       nameplateLabel: normalizedNameplateLabel,
       nameplateColor: normalizedNameplateColor,
       nameplateImageUrl: normalizedNameplateImageUrl,
+      imageUrl: resolveAvatarUrl(normalizedImageUrl),
       avatarDecorationUrl: normalizedAvatarDecorationUrl,
+      profileEffectUrl: normalizedProfileEffectUrl,
       bannerUrl: resolvedBannerUrl,
       ...(await buildResponse(profile.id, {
         profileName: profile.name ?? null,
@@ -325,7 +367,9 @@ export async function PATCH(req: Request) {
         nameplateLabel: profile.nameplateLabel ?? null,
         nameplateColor: profile.nameplateColor ?? null,
         nameplateImageUrl: (profile as { nameplateImageUrl?: string | null }).nameplateImageUrl ?? null,
+        imageUrl: profile.imageUrl ?? null,
         avatarDecorationUrl: profile.avatarDecorationUrl ?? null,
+        profileEffectUrl: (profile as { profileEffectUrl?: string | null }).profileEffectUrl ?? null,
         bannerUrl: resolveBannerUrl(profile.bannerUrl),
       })),
     });

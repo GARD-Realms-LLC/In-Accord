@@ -10,12 +10,14 @@ import { ChatInput } from "@/components/chat/chat-input";
 import { LiveChannelMessagesPane } from "@/components/chat/live-channel-messages-pane";
 import { VoiceStateSession } from "@/components/server/voice-state-session";
 import { VideoChannelMeetingPanel } from "@/components/server/video-channel-meeting-panel";
-import { MeetingPopbackListener } from "@/components/server/meeting-popback-listener";
 import { MeetingParticipantsRail } from "@/components/server/meeting-participants-rail";
 // import { MediaRoom } from "@/components/media-room";
 import { channel, db, member, message, server } from "@/lib/db";
-import { computeChannelPermissionForRole, visibleChannelIdsForRole } from "@/lib/channel-permissions";
-import { resolveMemberContext } from "@/lib/channel-permissions";
+import {
+  computeChannelPermissionForMember,
+  resolveMemberContext,
+  visibleChannelIdsForMember,
+} from "@/lib/channel-permissions";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 import { getUserProfileNameMap } from "@/lib/user-profile";
 import type { Profile } from "@/lib/db/types";
@@ -100,12 +102,13 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
       .where(eq(channel.serverId, serverId))
       .orderBy(asc(channel.createdAt));
 
-    const visibleIds = await visibleChannelIdsForRole({
-      serverId,
-      role: currentMember.role,
-      isServerOwner: !!serverOwner[0],
-      channelIds: channels.map((item) => item.id),
-    });
+    const visibleIds = memberContext
+      ? await visibleChannelIdsForMember({
+          serverId,
+          memberContext,
+          channelIds: channels.map((item) => item.id),
+        })
+      : new Set(channels.map((item) => item.id));
 
     const visibleChannels = channels.filter((item) => visibleIds.has(item.id));
     const defaultChannel = pickDefaultServerChannel(visibleChannels);
@@ -158,14 +161,18 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
     serverId,
   });
 
-  const channelPermissions = await computeChannelPermissionForRole({
-    serverId,
-    channelId: currentChannel.id,
-    role: currentMember.role,
-    isServerOwner: memberContext?.isServerOwner ?? false,
-  });
+  const channelPermissions = memberContext
+    ? await computeChannelPermissionForMember({
+        serverId,
+        channelId: currentChannel.id,
+        memberContext,
+      })
+    : { allowView: false, allowSend: false, allowConnect: false };
 
   const isLiveSessionRequested = String(resolvedSearchParams?.live ?? "").toLowerCase() === "true";
+  const isLiveSessionSuppressed = ["false", "0", "no"].includes(
+    String(resolvedSearchParams?.live ?? "").toLowerCase()
+  );
   const isMeetingPopoutRequested = ["true", "1", "yes"].includes(
     String(resolvedSearchParams?.meetingPopout ?? "").toLowerCase()
   );
@@ -419,7 +426,9 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
   const isAudioChannel = currentChannel.type === ChannelType.AUDIO;
   const isVideoChannel = currentChannel.type === ChannelType.VIDEO;
   const mediaChannelLabel = isAudioChannel ? "Voice" : "Video";
-  const isLiveSession = channelPermissions.allowConnect && isLiveSessionRequested;
+  const isLiveSession =
+    channelPermissions.allowConnect &&
+    (isLiveSessionRequested || (isVideoChannel && !isLiveSessionSuppressed));
   const isMeetingPopoutView = isVideoChannel && isMeetingPopoutRequested;
   const isVideoPopoutChatMode = isVideoChannel && isPopoutChatRequested && !isMeetingPopoutView;
   const normalizedChannelIcon = String((currentChannel as { icon?: string | null }).icon ?? "").trim();
@@ -451,15 +460,6 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
   );
   return (
     <div className={`flex h-full min-h-0 flex-col gap-2 ${isMeetingPopoutView ? "fixed inset-0 z-200 bg-[#0f1013] p-0" : ""}`}>
-      {isVideoChannel ? (
-        <MeetingPopbackListener
-          serverId={serverId}
-          channelId={currentChannel.id}
-          channelPath={canonicalChannelPath}
-          enabled={!isMeetingPopoutView}
-        />
-      ) : null}
-
       <div className={`theme-server-chat-surface flex min-h-0 flex-1 flex-col overflow-hidden ${
         isMeetingPopoutView
           ? "rounded-none border-0 bg-transparent shadow-none"

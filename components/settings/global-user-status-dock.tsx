@@ -12,11 +12,11 @@ type GlobalUserStatusDockProps = {
   profileRealName?: string | null;
   profileName?: string | null;
   profilePronouns?: string | null;
-  profileComment?: string | null;
   profileRole?: string | null;
   profileEmail?: string | null;
   profileImageUrl?: string | null;
   profileAvatarDecorationUrl?: string | null;
+  profileEffectUrl?: string | null;
   profileNameplateLabel?: string | null;
   profileNameplateColor?: string | null;
   profileNameplateImageUrl?: string | null;
@@ -36,11 +36,11 @@ export const GlobalUserStatusDock = ({
   profileRealName,
   profileName,
   profilePronouns,
-  profileComment,
   profileRole,
   profileEmail,
   profileImageUrl,
   profileAvatarDecorationUrl,
+  profileEffectUrl,
   profileNameplateLabel,
   profileNameplateColor,
   profileNameplateImageUrl,
@@ -71,11 +71,11 @@ export const GlobalUserStatusDock = ({
           profileRealName={profileRealName}
           profileName={profileName}
           profilePronouns={profilePronouns}
-          profileComment={profileComment}
           profileRole={profileRole}
           profileEmail={profileEmail}
           profileImageUrl={profileImageUrl}
           profileAvatarDecorationUrl={profileAvatarDecorationUrl}
+          profileEffectUrl={profileEffectUrl}
           profileNameplateLabel={profileNameplateLabel}
           profileNameplateColor={profileNameplateColor}
           profileNameplateImageUrl={profileNameplateImageUrl}
@@ -95,6 +95,7 @@ export const GlobalUserStatusDock = ({
             profileEmail={profileEmail}
             profileImageUrl={profileImageUrl}
             profileAvatarDecorationUrl={profileAvatarDecorationUrl}
+            profileEffectUrl={profileEffectUrl}
             profileNameplateLabel={profileNameplateLabel}
             profileNameplateColor={profileNameplateColor}
             profileNameplateImageUrl={profileNameplateImageUrl}
