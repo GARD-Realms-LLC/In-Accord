@@ -98,6 +98,11 @@ type ChannelFeatureSettings = {
     slowmodeSeconds: number;
     flaggedWordsAction: "warn" | "block";
   };
+  counting: {
+    enabled: boolean;
+    startingNumber: number;
+    preventConsecutiveTurns: boolean;
+  };
 };
 
 type ChannelFeatureCatalog = {
@@ -170,6 +175,11 @@ const DEFAULT_FEATURE_SETTINGS: ChannelFeatureSettings = {
     blockedWords: [],
     slowmodeSeconds: 0,
     flaggedWordsAction: "warn",
+  },
+  counting: {
+    enabled: false,
+    startingNumber: 1,
+    preventConsecutiveTurns: true,
   },
 };
 
@@ -1297,6 +1307,7 @@ export const EditChannelModal = () => {
                 placeholder="spam, slur, scam"
               />
             </div>
+
           </div>
 
           {renderFeatureFeedback()}
@@ -1606,11 +1617,13 @@ export const EditChannelModal = () => {
     const sendPermissionLabel =
       selectedChannelType === ChannelType.TEXT
         ? "Send Messages"
+        : selectedChannelType === ChannelType.ANNOUNCEMENT
+          ? "Publish Updates"
         : selectedChannelType === ChannelType.AUDIO
           ? "Transmit Audio"
           : "Transmit Video";
     const connectPermissionLabel =
-      selectedChannelType === ChannelType.TEXT
+      selectedChannelType === ChannelType.TEXT || selectedChannelType === ChannelType.ANNOUNCEMENT
         ? "Connect"
         : selectedChannelType === ChannelType.AUDIO
           ? "Connect to Voice"
@@ -1913,6 +1926,12 @@ export const EditChannelModal = () => {
                         </FormItem>
                       )}
                     />
+
+                    {form.watch("type") === ChannelType.ANNOUNCEMENT ? (
+                      <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-3 text-xs text-amber-100">
+                        Announcement channels are intended for staff-posted updates. Guests can read them, while moderators and server managers publish updates.
+                      </div>
+                    ) : null}
 
                     <FormField
                       control={form.control}

@@ -4,11 +4,11 @@ import { v4 as uuidv4 } from "uuid";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db } from "@/lib/db";
-import { ensureMessageReactionSchema } from "@/lib/message-reactions";
+import { addMessageReaction, ensureMessageReactionSchema } from "@/lib/message-reactions";
 
 type Scope = "channel" | "direct";
 
-const basicEmotes = new Set(["😀", "😂", "😍", "🔥", "👏", "🎉", "👍", "👀", "💯", "🤝", "😎", "🙏"]);
+const basicEmotes = new Set(["😀", "😂", "😍", "🔥", "👏", "🎉", "👍", "👀", "💯", "🤝", "😎", "🙏", "✅", "❌"]);
 const ACCESS_CACHE_TTL_MS = 30_000;
 const REACTIONS_CACHE_TTL_MS = 2_000;
 
@@ -229,31 +229,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ message
     }
 
     await ensureMessageReactionSchema();
-
-    await db.execute(sql`
-      insert into "MessageReaction" (
-        "id",
-        "messageId",
-        "scope",
-        "emoji",
-        "count",
-        "createdAt",
-        "updatedAt"
-      )
-      values (
-        ${uuidv4()},
-        ${messageId},
-        ${scope},
-        ${emoji},
-        1,
-        now(),
-        now()
-      )
-      on conflict ("messageId", "scope", "emoji") do update
-      set
-        "count" = "MessageReaction"."count" + 1,
-        "updatedAt" = now()
-    `);
+    await addMessageReaction({
+      messageId,
+      scope,
+      emoji,
+      executor: db,
+    });
 
     const reactions = await loadReactions(messageId, scope);
     setCachedReactions(messageId, scope, reactions);

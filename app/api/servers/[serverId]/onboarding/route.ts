@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
-import { ChannelType, channel, db, member, server } from "@/lib/db";
+import { ChannelType, channel, db } from "@/lib/db";
 import { resolveServerRouteContext } from "@/lib/route-slug-resolver";
+import { getServerManagementAccess } from "@/lib/server-management-access";
 import {
   getServerOnboardingConfig,
   setServerOnboardingConfig,
@@ -44,6 +45,7 @@ export async function GET(
     const resolvedServer = await resolveServerRouteContext({
       profileId: profile.id,
       serverParam: serverId,
+      profileRole: profile.role,
     });
 
     if (!resolvedServer) {
@@ -52,24 +54,18 @@ export async function GET(
 
     const resolvedServerId = resolvedServer.id;
 
-    const requesterMembership = await db.query.member.findFirst({
-      where: and(eq(member.serverId, resolvedServerId), eq(member.profileId, profile.id)),
-    });
+    const access = await getServerManagementAccess({ serverId: resolvedServerId, profileId: profile.id, profileRole: profile.role });
 
-    if (!requesterMembership) {
+    if (!access.canView) {
       return new NextResponse("Forbidden", { status: 403 });
     }
-
-    const ownerServer = await db.query.server.findFirst({
-      where: and(eq(server.id, resolvedServerId), eq(server.profileId, profile.id)),
-    });
 
     const config = await getServerOnboardingConfig(resolvedServerId);
     const channels = await getServerChannels(resolvedServerId);
 
     return NextResponse.json({
       serverId: resolvedServerId,
-      canManageOnboarding: Boolean(ownerServer),
+      canManageOnboarding: access.canManage,
       channels,
       config,
     });
@@ -98,6 +94,7 @@ export async function PATCH(
     const resolvedServer = await resolveServerRouteContext({
       profileId: profile.id,
       serverParam: serverId,
+      profileRole: profile.role,
     });
 
     if (!resolvedServer) {
@@ -106,18 +103,21 @@ export async function PATCH(
 
     const resolvedServerId = resolvedServer.id;
 
-    const ownerServer = await db.query.server.findFirst({
-      where: and(eq(server.id, resolvedServerId), eq(server.profileId, profile.id)),
-    });
+    const access = await getServerManagementAccess({ serverId: resolvedServerId, profileId: profile.id, profileRole: profile.role });
 
-    if (!ownerServer) {
-      return new NextResponse("Only the server owner can manage onboarding.", { status: 403 });
+    if (!access.canManage) {
+      return new NextResponse("Only the server owner or an In-Accord administrator can manage onboarding.", { status: 403 });
     }
 
     const body = (await req.json().catch(() => ({}))) as OnboardingPatchBody;
     const channels = await getServerChannels(resolvedServerId);
     const validTextChannelIds = new Set(
-      channels.filter((channelItem) => channelItem.type === ChannelType.TEXT).map((channelItem) => channelItem.id)
+      channels
+        .filter(
+          (channelItem) =>
+            channelItem.type === ChannelType.TEXT || channelItem.type === ChannelType.ANNOUNCEMENT
+        )
+        .map((channelItem) => channelItem.id)
     );
 
     const nextChecklistIds = Array.isArray(body.checklistChannelIds)

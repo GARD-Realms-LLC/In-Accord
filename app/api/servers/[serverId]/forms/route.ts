@@ -4,6 +4,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { currentProfile } from "@/lib/current-profile";
 import { db, member, profile, server } from "@/lib/db";
 import { resolveServerRouteContext } from "@/lib/route-slug-resolver";
+import { getServerManagementAccess } from "@/lib/server-management-access";
 import {
   getServerOnboardingConfig,
   getServerOnboardingResponseByMember,
@@ -85,6 +86,7 @@ export async function GET(
     const resolvedServer = await resolveServerRouteContext({
       profileId: currentUser.id,
       serverParam: serverId,
+      profileRole: currentUser.role,
     });
 
     if (!resolvedServer) {
@@ -93,27 +95,27 @@ export async function GET(
 
     const resolvedServerId = resolvedServer.id;
 
+    const access = await getServerManagementAccess({ serverId: resolvedServerId, profileId: currentUser.id, profileRole: currentUser.role });
+
+    if (!access.canView) {
+      return new NextResponse("Forbidden", { status: 403 });
+    }
+
     const membership = await db.query.member.findFirst({
       where: and(eq(member.serverId, resolvedServerId), eq(member.profileId, currentUser.id)),
     });
 
-    if (!membership) {
-      return new NextResponse("Forbidden", { status: 403 });
-    }
-
     const config = await getServerOnboardingConfig(resolvedServerId);
-    const existingSubmission = await getServerOnboardingResponseByMember(resolvedServerId, membership.id);
+    const existingSubmission = membership
+      ? await getServerOnboardingResponseByMember(resolvedServerId, membership.id)
+      : null;
 
     const { searchParams } = new URL(request.url);
     const scope = searchParams.get("scope");
 
-    const ownerServer = await db.query.server.findFirst({
-      where: and(eq(server.id, resolvedServerId), eq(server.profileId, currentUser.id)),
-    });
-
     if (scope === "owner") {
-      if (!ownerServer) {
-        return new NextResponse("Only the server owner can view all submissions.", { status: 403 });
+      if (!access.canManage) {
+        return new NextResponse("Only the server owner or an In-Accord administrator can view all submissions.", { status: 403 });
       }
 
       const responses = await getServerOnboardingResponses(resolvedServerId);
@@ -144,7 +146,7 @@ export async function GET(
     return NextResponse.json({
       serverId: resolvedServerId,
       config,
-      canManageForms: Boolean(ownerServer),
+      canManageForms: access.canManage,
       submission: existingSubmission,
     });
   } catch (error) {
@@ -172,6 +174,7 @@ export async function POST(
     const resolvedServer = await resolveServerRouteContext({
       profileId: currentUser.id,
       serverParam: serverId,
+      profileRole: currentUser.role,
     });
 
     if (!resolvedServer) {
@@ -256,6 +259,7 @@ export async function PATCH(
     const resolvedServer = await resolveServerRouteContext({
       profileId: currentUser.id,
       serverParam: serverId,
+      profileRole: currentUser.role,
     });
 
     if (!resolvedServer) {
@@ -264,12 +268,10 @@ export async function PATCH(
 
     const resolvedServerId = resolvedServer.id;
 
-    const ownerServer = await db.query.server.findFirst({
-      where: and(eq(server.id, resolvedServerId), eq(server.profileId, currentUser.id)),
-    });
+    const access = await getServerManagementAccess({ serverId: resolvedServerId, profileId: currentUser.id, profileRole: currentUser.role });
 
-    if (!ownerServer) {
-      return new NextResponse("Only the server owner can moderate submissions.", { status: 403 });
+    if (!access.canManage) {
+      return new NextResponse("Only the server owner or an In-Accord administrator can moderate submissions.", { status: 403 });
     }
 
     const body = (await req.json().catch(() => ({}))) as ReviewBody;

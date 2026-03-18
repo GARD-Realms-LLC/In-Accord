@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db, profile } from "@/lib/db";
+import { normalizeOptionalCloudflareObjectPointer } from "@/lib/live-db-asset-pointers";
 
 export async function PATCH(req: Request) {
   try {
@@ -16,12 +17,16 @@ export async function PATCH(req: Request) {
     const imageUrl =
       body.imageUrl === null
         ? null
-        : typeof body.imageUrl === "string"
-          ? body.imageUrl.trim()
+        : body.imageUrl !== undefined
+          ? normalizeOptionalCloudflareObjectPointer(body.imageUrl)
           : undefined;
 
     if (imageUrl === undefined) {
       return new NextResponse("imageUrl is required", { status: 400 });
+    }
+
+    if (body.imageUrl !== null && imageUrl === null) {
+      return new NextResponse("imageUrl must be a Cloudflare object pointer", { status: 400 });
     }
 
     await db

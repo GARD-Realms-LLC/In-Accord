@@ -291,7 +291,7 @@ const ThreadPage = async ({ params }: ThreadPageProps) => {
     profileId: profile.id,
     serverId,
   });
-  const canBulkDeleteMessages = Boolean(memberContext?.isServerOwner) || hasInAccordAdministrativeAccess(profile.role);
+  const canBulkDeleteMessages = Boolean(memberContext?.isServerOwner) || access.currentMember!.role === "ADMIN" || hasInAccordAdministrativeAccess(profile.role);
   const initialLiveMessages = hydratedThreadMessages.map((item) => ({
     id: item.id,
     content: item.content,

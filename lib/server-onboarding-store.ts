@@ -1,5 +1,6 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { sql } from "drizzle-orm";
+
+import { db } from "@/lib/db";
 
 export type ServerOnboardingPrompt = {
   id: string;
@@ -41,12 +42,10 @@ export type ServerOnboardingResponse = {
   updatedAt: string;
 };
 
-type ServerOnboardingMap = Record<string, ServerOnboardingConfig>;
-type ServerOnboardingResponsesMap = Record<string, ServerOnboardingResponse[]>;
-
-const dataDir = path.join(process.cwd(), ".data");
-const onboardingFile = path.join(dataDir, "server-onboarding.json");
-const onboardingResponsesFile = path.join(dataDir, "server-onboarding-responses.json");
+declare global {
+  // eslint-disable-next-line no-var
+  var inAccordServerOnboardingSchemaReady: boolean | undefined;
+}
 
 const normalizeStringArray = (value: unknown): string[] =>
   Array.isArray(value)
@@ -226,83 +225,131 @@ const normalizeConfig = (value: unknown): ServerOnboardingConfig => {
   };
 };
 
-async function readOnboardingMap(): Promise<ServerOnboardingMap> {
-  try {
-    const raw = await readFile(onboardingFile, "utf8");
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object") {
-      return {};
-    }
-
-    const normalized: ServerOnboardingMap = {};
-    for (const [serverId, config] of Object.entries(parsed as Record<string, unknown>)) {
-      normalized[serverId] = normalizeConfig(config);
-    }
-
-    return normalized;
-  } catch {
-    return {};
+const ensureServerOnboardingSchema = async () => {
+  if (globalThis.inAccordServerOnboardingSchemaReady) {
+    return;
   }
-}
 
-async function writeOnboardingMap(map: ServerOnboardingMap) {
-  await mkdir(dataDir, { recursive: true });
-  await writeFile(onboardingFile, JSON.stringify(map, null, 2), "utf8");
-}
+  await db.execute(sql`
+    create table if not exists "ServerOnboardingConfig" (
+      "serverId" varchar(191) primary key,
+      "enabled" boolean not null default false,
+      "welcomeMessage" text not null,
+      "bannerPreset" varchar(64) not null,
+      "bannerUrl" text not null default '',
+      "checklistChannelIds" jsonb not null default '[]'::jsonb,
+      "resourceChannelIds" jsonb not null default '[]'::jsonb,
+      "prompts" jsonb not null default '[]'::jsonb,
+      "updatedAt" timestamp not null
+    )
+  `);
 
-async function readOnboardingResponsesMap(): Promise<ServerOnboardingResponsesMap> {
-  try {
-    const raw = await readFile(onboardingResponsesFile, "utf8");
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object") {
-      return {};
-    }
+  await db.execute(sql`
+    create table if not exists "ServerOnboardingResponse" (
+      "id" varchar(191) primary key,
+      "serverId" varchar(191) not null,
+      "memberId" varchar(191) not null,
+      "profileId" varchar(191) not null,
+      "answers" jsonb not null default '[]'::jsonb,
+      "reviewStatus" varchar(32) not null default 'PENDING',
+      "reviewNote" varchar(500) not null default '',
+      "reviewedByProfileId" varchar(191),
+      "reviewedAt" timestamp,
+      "submittedAt" timestamp not null,
+      "updatedAt" timestamp not null
+    )
+  `);
 
-    const normalized: ServerOnboardingResponsesMap = {};
-    for (const [serverId, responses] of Object.entries(parsed as Record<string, unknown>)) {
-      const normalizedResponses = Array.isArray(responses)
-        ? responses
-            .map((responseItem) => normalizeResponse(responseItem))
-            .filter((responseItem): responseItem is ServerOnboardingResponse => Boolean(responseItem))
-        : [];
+  await db.execute(sql`
+    create unique index if not exists "ServerOnboardingResponse_server_member_key"
+    on "ServerOnboardingResponse" ("serverId", "memberId")
+  `);
 
-      normalized[serverId] = normalizedResponses;
-    }
-
-    return normalized;
-  } catch {
-    return {};
-  }
-}
-
-async function writeOnboardingResponsesMap(map: ServerOnboardingResponsesMap) {
-  await mkdir(dataDir, { recursive: true });
-  await writeFile(onboardingResponsesFile, JSON.stringify(map, null, 2), "utf8");
-}
+  globalThis.inAccordServerOnboardingSchemaReady = true;
+};
 
 export async function getServerOnboardingConfig(serverId: string): Promise<ServerOnboardingConfig> {
-  const map = await readOnboardingMap();
-  return normalizeConfig(map[serverId]);
+  const normalizedServerId = String(serverId ?? "").trim();
+  if (!normalizedServerId) {
+    return normalizeConfig({});
+  }
+
+  await ensureServerOnboardingSchema();
+
+  const result = await db.execute(sql`
+    select *
+    from "ServerOnboardingConfig"
+    where "serverId" = ${normalizedServerId}
+    limit 1
+  `);
+
+  const row = ((result as unknown as { rows?: Array<Record<string, unknown>> }).rows ?? [])[0];
+  return normalizeConfig(row ?? {});
 }
 
 export async function setServerOnboardingConfig(serverId: string, input: Partial<ServerOnboardingConfig>) {
-  const map = await readOnboardingMap();
-  const current = normalizeConfig(map[serverId]);
+  const normalizedServerId = String(serverId ?? "").trim();
+  if (!normalizedServerId) {
+    throw new Error("Server ID is required.");
+  }
 
-  map[serverId] = normalizeConfig({
+  await ensureServerOnboardingSchema();
+
+  const current = await getServerOnboardingConfig(normalizedServerId);
+  const next = normalizeConfig({
     ...current,
     ...input,
     updatedAt: new Date().toISOString(),
   });
 
-  await writeOnboardingMap(map);
+  await db.execute(sql`
+    insert into "ServerOnboardingConfig" (
+      "serverId", "enabled", "welcomeMessage", "bannerPreset", "bannerUrl", "checklistChannelIds", "resourceChannelIds", "prompts", "updatedAt"
+    )
+    values (
+      ${normalizedServerId}, ${next.enabled}, ${next.welcomeMessage}, ${next.bannerPreset}, ${next.bannerUrl},
+      ${JSON.stringify(next.checklistChannelIds)}::jsonb, ${JSON.stringify(next.resourceChannelIds)}::jsonb,
+      ${JSON.stringify(next.prompts)}::jsonb, ${new Date(next.updatedAt)}
+    )
+    on conflict ("serverId") do update
+    set "enabled" = excluded."enabled",
+        "welcomeMessage" = excluded."welcomeMessage",
+        "bannerPreset" = excluded."bannerPreset",
+        "bannerUrl" = excluded."bannerUrl",
+        "checklistChannelIds" = excluded."checklistChannelIds",
+        "resourceChannelIds" = excluded."resourceChannelIds",
+        "prompts" = excluded."prompts",
+        "updatedAt" = excluded."updatedAt"
+  `);
 
-  return map[serverId];
+  return next;
 }
 
 export async function getServerOnboardingResponses(serverId: string): Promise<ServerOnboardingResponse[]> {
-  const map = await readOnboardingResponsesMap();
-  return (map[serverId] ?? []).filter((item) => item.serverId === serverId);
+  const normalizedServerId = String(serverId ?? "").trim();
+  if (!normalizedServerId) {
+    return [];
+  }
+
+  await ensureServerOnboardingSchema();
+
+  const result = await db.execute(sql`
+    select *
+    from "ServerOnboardingResponse"
+    where "serverId" = ${normalizedServerId}
+    order by "submittedAt" desc, "id" asc
+  `);
+
+  return (((result as unknown as { rows?: Array<Record<string, unknown>> }).rows ?? []))
+    .map((row) =>
+      normalizeResponse({
+        ...row,
+        submittedAt: row.submittedAt instanceof Date ? row.submittedAt.toISOString() : row.submittedAt,
+        updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt,
+        reviewedAt: row.reviewedAt instanceof Date ? row.reviewedAt.toISOString() : row.reviewedAt,
+      })
+    )
+    .filter((item): item is ServerOnboardingResponse => Boolean(item));
 }
 
 export async function getServerOnboardingResponseByMember(serverId: string, memberId: string) {
@@ -318,8 +365,11 @@ type UpsertServerOnboardingResponseInput = {
 };
 
 export async function upsertServerOnboardingResponse(input: UpsertServerOnboardingResponseInput) {
-  const map = await readOnboardingResponsesMap();
-  const existing = map[input.serverId] ?? [];
+  await ensureServerOnboardingSchema();
+
+  const normalizedServerId = String(input.serverId ?? "").trim();
+  const normalizedMemberId = String(input.memberId ?? "").trim();
+  const normalizedProfileId = String(input.profileId ?? "").trim();
   const nowIso = new Date().toISOString();
 
   const normalizedAnswers = input.answers
@@ -327,43 +377,35 @@ export async function upsertServerOnboardingResponse(input: UpsertServerOnboardi
     .filter((answerItem): answerItem is ServerOnboardingResponseAnswer => Boolean(answerItem))
     .slice(0, 8);
 
-  const existingIndex = existing.findIndex((item) => item.memberId === input.memberId);
+  const existing = await getServerOnboardingResponseByMember(normalizedServerId, normalizedMemberId);
 
-  if (existingIndex >= 0) {
-    const previous = existing[existingIndex];
-    existing[existingIndex] = {
-      ...previous,
-      profileId: input.profileId,
-      answers: normalizedAnswers,
-      reviewStatus: "PENDING",
-      reviewNote: "",
-      reviewedByProfileId: null,
-      reviewedAt: null,
-      updatedAt: nowIso,
-    };
+  const nextId = existing?.id ?? `response-${normalizedMemberId}-${Date.now()}`;
+  const submittedAt = existing?.submittedAt ?? nowIso;
 
-    map[input.serverId] = existing;
-    await writeOnboardingResponsesMap(map);
-    return existing[existingIndex];
+  await db.execute(sql`
+    insert into "ServerOnboardingResponse" (
+      "id", "serverId", "memberId", "profileId", "answers", "reviewStatus", "reviewNote", "reviewedByProfileId", "reviewedAt", "submittedAt", "updatedAt"
+    )
+    values (
+      ${nextId}, ${normalizedServerId}, ${normalizedMemberId}, ${normalizedProfileId}, ${JSON.stringify(normalizedAnswers)}::jsonb,
+      ${"PENDING"}, ${""}, ${null}, ${null}, ${new Date(submittedAt)}, ${new Date(nowIso)}
+    )
+    on conflict ("serverId", "memberId") do update
+    set "profileId" = excluded."profileId",
+        "answers" = excluded."answers",
+        "reviewStatus" = excluded."reviewStatus",
+        "reviewNote" = excluded."reviewNote",
+        "reviewedByProfileId" = excluded."reviewedByProfileId",
+        "reviewedAt" = excluded."reviewedAt",
+        "updatedAt" = excluded."updatedAt"
+  `);
+
+  const persisted = await getServerOnboardingResponseByMember(normalizedServerId, normalizedMemberId);
+  if (!persisted) {
+    throw new Error("Failed to persist onboarding response.");
   }
 
-  const created: ServerOnboardingResponse = {
-    id: `response-${input.memberId}-${Date.now()}`,
-    serverId: input.serverId,
-    memberId: input.memberId,
-    profileId: input.profileId,
-    answers: normalizedAnswers,
-    reviewStatus: "PENDING",
-    reviewNote: "",
-    reviewedByProfileId: null,
-    reviewedAt: null,
-    submittedAt: nowIso,
-    updatedAt: nowIso,
-  };
-
-  map[input.serverId] = [...existing, created];
-  await writeOnboardingResponsesMap(map);
-  return created;
+  return persisted;
 }
 
 type SetServerOnboardingResponseReviewInput = {
@@ -375,27 +417,32 @@ type SetServerOnboardingResponseReviewInput = {
 };
 
 export async function setServerOnboardingResponseReview(input: SetServerOnboardingResponseReviewInput) {
-  const map = await readOnboardingResponsesMap();
-  const responses = map[input.serverId] ?? [];
-  const targetIndex = responses.findIndex((item) => item.id === input.responseId);
-
-  if (targetIndex < 0) {
+  const normalizedServerId = String(input.serverId ?? "").trim();
+  const normalizedResponseId = String(input.responseId ?? "").trim();
+  if (!normalizedServerId || !normalizedResponseId) {
     return null;
   }
 
+  await ensureServerOnboardingSchema();
+
   const nowIso = new Date().toISOString();
-  const previous = responses[targetIndex];
 
-  responses[targetIndex] = {
-    ...previous,
-    reviewStatus: input.reviewStatus,
-    reviewNote: typeof input.reviewNote === "string" ? input.reviewNote.trim().slice(0, 500) : "",
-    reviewedByProfileId: input.reviewedByProfileId,
-    reviewedAt: nowIso,
-    updatedAt: nowIso,
-  };
+  const result = await db.execute(sql`
+    update "ServerOnboardingResponse"
+    set "reviewStatus" = ${input.reviewStatus},
+        "reviewNote" = ${typeof input.reviewNote === "string" ? input.reviewNote.trim().slice(0, 500) : ""},
+        "reviewedByProfileId" = ${input.reviewedByProfileId},
+        "reviewedAt" = ${new Date(nowIso)},
+        "updatedAt" = ${new Date(nowIso)}
+    where "serverId" = ${normalizedServerId}
+      and "id" = ${normalizedResponseId}
+    returning "memberId"
+  `);
 
-  map[input.serverId] = responses;
-  await writeOnboardingResponsesMap(map);
-  return responses[targetIndex];
+  const memberId = ((result as unknown as { rows?: Array<{ memberId: string | null }> }).rows ?? [])[0]?.memberId;
+  if (!memberId) {
+    return null;
+  }
+
+  return getServerOnboardingResponseByMember(normalizedServerId, memberId);
 }

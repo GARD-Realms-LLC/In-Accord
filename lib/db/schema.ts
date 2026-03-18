@@ -20,6 +20,7 @@ export enum ChannelType {
   TEXT = "TEXT",
   AUDIO = "AUDIO",
   VIDEO = "VIDEO",
+  ANNOUNCEMENT = "ANNOUNCEMENT",
 }
 
 export const memberRoleValues = [
@@ -31,6 +32,7 @@ export const channelTypeValues = [
   ChannelType.TEXT,
   ChannelType.AUDIO,
   ChannelType.VIDEO,
+  ChannelType.ANNOUNCEMENT,
 ] as const;
 
 export const memberRoleEnum = pgEnum("MemberRole", memberRoleValues);

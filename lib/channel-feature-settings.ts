@@ -37,7 +37,14 @@ export type ChannelFeatureSettings = {
     slowmodeSeconds: number;
     flaggedWordsAction: "warn" | "block";
   };
+  counting: {
+    enabled: boolean;
+    startingNumber: number;
+    preventConsecutiveTurns: boolean;
+  };
 };
+
+export type ChannelCountingSettings = ChannelFeatureSettings["counting"];
 
 export const DEFAULT_CHANNEL_FEATURE_SETTINGS: ChannelFeatureSettings = {
   integrations: {
@@ -60,6 +67,11 @@ export const DEFAULT_CHANNEL_FEATURE_SETTINGS: ChannelFeatureSettings = {
     blockedWords: [],
     slowmodeSeconds: 0,
     flaggedWordsAction: "warn",
+  },
+  counting: {
+    enabled: false,
+    startingNumber: 1,
+    preventConsecutiveTurns: true,
   },
 };
 
@@ -138,6 +150,10 @@ export const normalizeChannelFeatureSettings = (input: unknown): ChannelFeatureS
     record.moderation && typeof record.moderation === "object"
       ? (record.moderation as Record<string, unknown>)
       : {};
+  const countingRaw =
+    record.counting && typeof record.counting === "object"
+      ? (record.counting as Record<string, unknown>)
+      : {};
 
   const webhookItemsRaw = Array.isArray(webhooksRaw.items) ? webhooksRaw.items : [];
   const webhookItems = webhookItemsRaw
@@ -206,6 +222,19 @@ export const normalizeChannelFeatureSettings = (input: unknown): ChannelFeatureS
         DEFAULT_CHANNEL_FEATURE_SETTINGS.moderation.slowmodeSeconds
       ),
       flaggedWordsAction: flaggedWordsActionRaw === "block" ? "block" : "warn",
+    },
+    counting: {
+      enabled: asBoolean(countingRaw.enabled, DEFAULT_CHANNEL_FEATURE_SETTINGS.counting.enabled),
+      startingNumber: asBoundedInt(
+        countingRaw.startingNumber,
+        1,
+        1_000_000_000,
+        DEFAULT_CHANNEL_FEATURE_SETTINGS.counting.startingNumber
+      ),
+      preventConsecutiveTurns: asBoolean(
+        countingRaw.preventConsecutiveTurns,
+        DEFAULT_CHANNEL_FEATURE_SETTINGS.counting.preventConsecutiveTurns
+      ),
     },
   };
 };

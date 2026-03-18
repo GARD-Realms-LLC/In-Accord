@@ -875,6 +875,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
     avatarDecorationUrl: dm.avatarDecorationUrl,
     profileCreatedAt: dm.profileCreatedAt ? new Date(dm.profileCreatedAt).toISOString() : null,
     timestampLabel: formatTimestamp(dm.lastMessageAt),
+    lastMessageAt: new Date(dm.lastMessageAt).toISOString(),
     unreadCount: dm.unreadCount,
   }));
   const initialConversationMessages = selectedConversation

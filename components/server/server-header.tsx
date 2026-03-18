@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Bell,
   CalendarPlus,
   ChevronDown,
   EyeOff,
@@ -90,6 +91,10 @@ export const ServerHeader = ({
   const isModerator = isAdmin || role === MemberRole.MODERATOR;
 
   const getChannelIcon = (type: ChannelType) => {
+    if (type === ChannelType.ANNOUNCEMENT) {
+      return <Bell className="h-3.5 w-3.5" />;
+    }
+
     if (type === ChannelType.AUDIO) {
       return <Mic className="h-3.5 w-3.5" />;
     }
@@ -219,7 +224,7 @@ export const ServerHeader = ({
               </DropdownMenuItem>
             )}
             <DropdownMenuItem
-              onClick={() => onOpen("editServer", { server })}
+              onClick={() => onOpen("editServer", { server, viewerProfileId, viewerMemberId })}
               className="px-3 py-2 text-sm cursor-pointer"
             >
               Server Settings
@@ -300,6 +305,13 @@ export const ServerHeader = ({
               >
                 Create Channel
                 <PlusCircle className="h-4 w-4 ml-auto" />
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => onOpen("createChannel", { server, channelType: ChannelType.ANNOUNCEMENT })}
+                className="px-3 py-2 text-sm cursor-pointer"
+              >
+                Add Announcement Channel
+                <Bell className="h-4 w-4 ml-auto" />
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => onOpen("createChannel", { server, channelType: ChannelType.AUDIO })}

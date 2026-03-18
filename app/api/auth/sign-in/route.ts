@@ -20,6 +20,7 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => null);
     const email = String(body?.email || "").trim().toLowerCase();
     const password = String(body?.password || "");
+    const stayLoggedIn = body?.stayLoggedIn === true;
 
     if (!email || !password) {
       return new NextResponse("Email and password are required", { status: 400 });
@@ -68,7 +69,7 @@ export async function POST(request: Request) {
       return new NextResponse("Invalid credentials", { status: 401 });
     }
 
-    await setSessionUserId(authenticatedUserId, { request });
+    await setSessionUserId(authenticatedUserId, { request, persistent: stayLoggedIn });
     return NextResponse.json({ ok: true, redirectTo: "/users" });
   } catch (error) {
     console.error("[AUTH_SIGN_IN_POST]", error);

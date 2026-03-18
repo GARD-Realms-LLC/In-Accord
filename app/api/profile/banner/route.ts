@@ -5,7 +5,7 @@ import { appendBannerDebugEvent } from "@/lib/banner-debug";
 import { resolveBannerUrl } from "@/lib/asset-url";
 import { currentProfile } from "@/lib/current-profile";
 import { db } from "@/lib/db";
-import { setUserBanner } from "@/lib/user-banner-store";
+import { normalizeOptionalCloudflareObjectPointer } from "@/lib/live-db-asset-pointers";
 import { ensureUserProfileSchema } from "@/lib/user-profile";
 
 export async function PATCH(req: Request) {
@@ -17,10 +17,11 @@ export async function PATCH(req: Request) {
     }
 
     const body = (await req.json()) as { bannerUrl?: string | null };
-    const normalizedBannerUrl =
-      typeof body.bannerUrl === "string" && body.bannerUrl.trim().length > 0
-        ? body.bannerUrl.trim()
-        : null;
+    const normalizedBannerUrl = normalizeOptionalCloudflareObjectPointer(body.bannerUrl);
+
+    if (body.bannerUrl !== null && body.bannerUrl !== undefined && normalizedBannerUrl === null) {
+      return NextResponse.json({ error: "bannerUrl must be a Cloudflare object pointer" }, { status: 400 });
+    }
 
     const fallbackProfileName = (current.profileName ?? current.realName ?? current.email ?? "User")
       .trim()
@@ -46,8 +47,6 @@ export async function PATCH(req: Request) {
     } catch (dbError) {
       console.error("[PROFILE_BANNER_PATCH_DB]", dbError);
     }
-
-    await setUserBanner(current.id, normalizedBannerUrl);
 
     const resolvedBannerUrl = resolveBannerUrl(normalizedBannerUrl);
     void appendBannerDebugEvent({

@@ -1,52 +1,58 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { sql } from "drizzle-orm";
+
+import { db } from "@/lib/db";
 
 type IntegrationBotControl = {
   bootedProfileIds: string[];
   bannedProfileIds: string[];
 };
 
-type IntegrationBotControlMap = Record<string, IntegrationBotControl>;
-
-const dataDir = path.join(process.cwd(), ".data");
-const controlsFile = path.join(dataDir, "server-integration-bot-controls.json");
+declare global {
+  // eslint-disable-next-line no-var
+  var inAccordServerIntegrationBotControlSchemaReady: boolean | undefined;
+}
 
 const normalizeList = (value: unknown): string[] =>
   Array.isArray(value)
     ? Array.from(new Set(value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)))
     : [];
 
-async function readControlMap(): Promise<IntegrationBotControlMap> {
-  try {
-    const raw = await readFile(controlsFile, "utf8");
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object") {
-      return {};
-    }
-
-    const normalized: IntegrationBotControlMap = {};
-    for (const [serverId, control] of Object.entries(parsed as Record<string, unknown>)) {
-      const typed = control as { bootedProfileIds?: unknown; bannedProfileIds?: unknown };
-      normalized[serverId] = {
-        bootedProfileIds: normalizeList(typed?.bootedProfileIds),
-        bannedProfileIds: normalizeList(typed?.bannedProfileIds),
-      };
-    }
-
-    return normalized;
-  } catch {
-    return {};
+const ensureServerIntegrationBotControlSchema = async () => {
+  if (globalThis.inAccordServerIntegrationBotControlSchemaReady) {
+    return;
   }
-}
 
-async function writeControlMap(map: IntegrationBotControlMap) {
-  await mkdir(dataDir, { recursive: true });
-  await writeFile(controlsFile, JSON.stringify(map, null, 2), "utf8");
-}
+  await db.execute(sql`
+    create table if not exists "ServerIntegrationBotControl" (
+      "serverId" varchar(191) primary key,
+      "bootedProfileIds" jsonb not null default '[]'::jsonb,
+      "bannedProfileIds" jsonb not null default '[]'::jsonb,
+      "createdAt" timestamp not null default now(),
+      "updatedAt" timestamp not null default now()
+    )
+  `);
+
+  globalThis.inAccordServerIntegrationBotControlSchemaReady = true;
+};
 
 export async function getServerIntegrationBotControl(serverId: string): Promise<IntegrationBotControl> {
-  const map = await readControlMap();
-  const current = map[serverId];
+  const normalizedServerId = String(serverId ?? "").trim();
+  if (!normalizedServerId) {
+    return { bootedProfileIds: [], bannedProfileIds: [] };
+  }
+
+  await ensureServerIntegrationBotControlSchema();
+
+  const result = await db.execute(sql`
+    select
+      sibc."bootedProfileIds" as "bootedProfileIds",
+      sibc."bannedProfileIds" as "bannedProfileIds"
+    from "ServerIntegrationBotControl" sibc
+    where sibc."serverId" = ${normalizedServerId}
+    limit 1
+  `);
+
+  const current = ((result as unknown as { rows?: Array<Record<string, unknown>> }).rows ?? [])[0];
   if (!current) {
     return { bootedProfileIds: [], bannedProfileIds: [] };
   }
@@ -58,49 +64,75 @@ export async function getServerIntegrationBotControl(serverId: string): Promise<
 }
 
 export async function setServerIntegrationBotBooted(serverId: string, profileId: string, booted: boolean) {
-  if (!profileId.trim()) {
+  const normalizedServerId = String(serverId ?? "").trim();
+  const normalizedProfileId = profileId.trim();
+  if (!normalizedServerId || !normalizedProfileId) {
     return;
   }
 
-  const map = await readControlMap();
-  const current = await getServerIntegrationBotControl(serverId);
+  await ensureServerIntegrationBotControlSchema();
+
+  const current = await getServerIntegrationBotControl(normalizedServerId);
   const next = new Set(current.bootedProfileIds);
 
   if (booted) {
-    next.add(profileId);
+    next.add(normalizedProfileId);
   } else {
-    next.delete(profileId);
+    next.delete(normalizedProfileId);
   }
 
-  map[serverId] = {
-    ...current,
-    bootedProfileIds: Array.from(next),
-  };
+  const now = new Date();
 
-  await writeControlMap(map);
+  await db.execute(sql`
+    insert into "ServerIntegrationBotControl" ("serverId", "bootedProfileIds", "bannedProfileIds", "createdAt", "updatedAt")
+    values (
+      ${normalizedServerId},
+      ${JSON.stringify(Array.from(next))}::jsonb,
+      ${JSON.stringify(current.bannedProfileIds)}::jsonb,
+      ${now},
+      ${now}
+    )
+    on conflict ("serverId") do update
+    set "bootedProfileIds" = excluded."bootedProfileIds",
+        "bannedProfileIds" = excluded."bannedProfileIds",
+        "updatedAt" = excluded."updatedAt"
+  `);
 }
 
 export async function setServerIntegrationBotBanned(serverId: string, profileId: string, banned: boolean) {
-  if (!profileId.trim()) {
+  const normalizedServerId = String(serverId ?? "").trim();
+  const normalizedProfileId = profileId.trim();
+  if (!normalizedServerId || !normalizedProfileId) {
     return;
   }
 
-  const map = await readControlMap();
-  const current = await getServerIntegrationBotControl(serverId);
+  await ensureServerIntegrationBotControlSchema();
+
+  const current = await getServerIntegrationBotControl(normalizedServerId);
   const next = new Set(current.bannedProfileIds);
 
   if (banned) {
-    next.add(profileId);
+    next.add(normalizedProfileId);
   } else {
-    next.delete(profileId);
+    next.delete(normalizedProfileId);
   }
 
-  map[serverId] = {
-    ...current,
-    bannedProfileIds: Array.from(next),
-  };
+  const now = new Date();
 
-  await writeControlMap(map);
+  await db.execute(sql`
+    insert into "ServerIntegrationBotControl" ("serverId", "bootedProfileIds", "bannedProfileIds", "createdAt", "updatedAt")
+    values (
+      ${normalizedServerId},
+      ${JSON.stringify(current.bootedProfileIds)}::jsonb,
+      ${JSON.stringify(Array.from(next))}::jsonb,
+      ${now},
+      ${now}
+    )
+    on conflict ("serverId") do update
+    set "bootedProfileIds" = excluded."bootedProfileIds",
+        "bannedProfileIds" = excluded."bannedProfileIds",
+        "updatedAt" = excluded."updatedAt"
+  `);
 }
 
 export async function isServerIntegrationBotBanned(serverId: string, profileId: string): Promise<boolean> {
@@ -109,13 +141,29 @@ export async function isServerIntegrationBotBanned(serverId: string, profileId: 
 }
 
 export async function clearServerIntegrationBotFlags(serverId: string, profileId: string) {
-  const map = await readControlMap();
-  const current = await getServerIntegrationBotControl(serverId);
+  const normalizedServerId = String(serverId ?? "").trim();
+  const normalizedProfileId = String(profileId ?? "").trim();
+  if (!normalizedServerId || !normalizedProfileId) {
+    return;
+  }
 
-  map[serverId] = {
-    bootedProfileIds: current.bootedProfileIds.filter((id) => id !== profileId),
-    bannedProfileIds: current.bannedProfileIds.filter((id) => id !== profileId),
-  };
+  await ensureServerIntegrationBotControlSchema();
 
-  await writeControlMap(map);
+  const current = await getServerIntegrationBotControl(normalizedServerId);
+  const now = new Date();
+
+  await db.execute(sql`
+    insert into "ServerIntegrationBotControl" ("serverId", "bootedProfileIds", "bannedProfileIds", "createdAt", "updatedAt")
+    values (
+      ${normalizedServerId},
+      ${JSON.stringify(current.bootedProfileIds.filter((id) => id !== normalizedProfileId))}::jsonb,
+      ${JSON.stringify(current.bannedProfileIds.filter((id) => id !== normalizedProfileId))}::jsonb,
+      ${now},
+      ${now}
+    )
+    on conflict ("serverId") do update
+    set "bootedProfileIds" = excluded."bootedProfileIds",
+        "bannedProfileIds" = excluded."bannedProfileIds",
+        "updatedAt" = excluded."updatedAt"
+  `);
 }

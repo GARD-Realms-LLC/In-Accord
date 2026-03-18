@@ -5,6 +5,7 @@ import { appendBannerDebugEvent } from "@/lib/banner-debug";
 import { resolveAvatarUrl, resolveBannerUrl } from "@/lib/asset-url";
 import { currentProfile } from "@/lib/current-profile";
 import { db } from "@/lib/db";
+import { normalizeOptionalCloudflareObjectPointer } from "@/lib/live-db-asset-pointers";
 import {
   DEFAULT_PROFILE_NAME_STYLE,
   isProfileNameStyleValue,
@@ -264,11 +265,31 @@ export async function PATCH(req: Request) {
     const normalizedComment = comment.length > 0 ? comment : null;
     const normalizedNameplateLabel = nameplateLabel.length > 0 ? nameplateLabel : null;
     const normalizedNameplateColor = normalizedNameplateLabel ? (nameplateColor.length > 0 ? nameplateColor : "#5865f2") : null;
-    const normalizedNameplateImageUrl = nameplateImageUrl.length > 0 ? nameplateImageUrl : null;
-    const normalizedImageUrl = imageUrl.length > 0 ? imageUrl : null;
-    const normalizedAvatarDecorationUrl = avatarDecorationUrl.length > 0 ? avatarDecorationUrl : null;
-    const normalizedProfileEffectUrl = profileEffectUrl.length > 0 ? profileEffectUrl : null;
-    const normalizedBannerUrl = bannerUrl.length > 0 ? bannerUrl : null;
+    const normalizedNameplateImageUrl = nameplateImageUrl.length > 0 ? normalizeOptionalCloudflareObjectPointer(nameplateImageUrl) : null;
+    const normalizedImageUrl = imageUrl.length > 0 ? normalizeOptionalCloudflareObjectPointer(imageUrl) : null;
+    const normalizedAvatarDecorationUrl = avatarDecorationUrl.length > 0 ? normalizeOptionalCloudflareObjectPointer(avatarDecorationUrl) : null;
+    const normalizedProfileEffectUrl = profileEffectUrl.length > 0 ? normalizeOptionalCloudflareObjectPointer(profileEffectUrl) : null;
+    const normalizedBannerUrl = bannerUrl.length > 0 ? normalizeOptionalCloudflareObjectPointer(bannerUrl) : null;
+
+    if (nameplateImageUrl.length > 0 && normalizedNameplateImageUrl === null) {
+      return NextResponse.json({ error: "Nameplate image URL must be a Cloudflare object pointer." }, { status: 400 });
+    }
+
+    if (imageUrl.length > 0 && normalizedImageUrl === null) {
+      return NextResponse.json({ error: "Avatar URL must be a Cloudflare object pointer." }, { status: 400 });
+    }
+
+    if (avatarDecorationUrl.length > 0 && normalizedAvatarDecorationUrl === null) {
+      return NextResponse.json({ error: "Avatar decoration URL must be a Cloudflare object pointer." }, { status: 400 });
+    }
+
+    if (profileEffectUrl.length > 0 && normalizedProfileEffectUrl === null) {
+      return NextResponse.json({ error: "Profile effect URL must be a Cloudflare object pointer." }, { status: 400 });
+    }
+
+    if (bannerUrl.length > 0 && normalizedBannerUrl === null) {
+      return NextResponse.json({ error: "Banner URL must be a Cloudflare object pointer." }, { status: 400 });
+    }
     const resolvedBannerUrl = resolveBannerUrl(normalizedBannerUrl);
 
     void appendBannerDebugEvent({

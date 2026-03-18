@@ -5,10 +5,10 @@ import {
   autoConvertFamilyAccountIfNeeded,
   ensureFamilyAccountSchema,
 } from "@/lib/family-accounts";
+import { ensureLegacyUserBannerPointersImported } from "@/lib/legacy-banner-db-migration";
 import { normalizePresenceStatus } from "@/lib/presence-status";
 import { resolveAvatarUrl, resolveBannerUrl } from "@/lib/asset-url";
 import { clearSessionUserId, getSessionUserId } from "@/lib/session";
-import { getUserBanner } from "@/lib/user-banner-store";
 import { ensureUserProfileSchema } from "@/lib/user-profile";
 
 const CURRENT_PROFILE_CACHE_TTL_MS = 10_000;
@@ -156,6 +156,7 @@ export const currentProfile = async () => {
   }
 
   try {
+    await ensureLegacyUserBannerPointersImported();
     await ensureUserProfileSchema();
     await ensureFamilyAccountSchema();
 
@@ -221,14 +222,7 @@ export const currentProfile = async () => {
     }).rows;
     const user = rows?.[0];
 
-    let resolvedBannerUrl = user?.bannerUrl ?? null;
-    if (user && !resolvedBannerUrl) {
-      try {
-        resolvedBannerUrl = await getUserBanner(user.userId);
-      } catch (error) {
-        console.error("[CURRENT_PROFILE_BANNER_LOOKUP]", error);
-      }
-    }
+    const resolvedBannerUrl = user?.bannerUrl ?? null;
 
     let normalizedFamily: Awaited<ReturnType<typeof autoConvertFamilyAccountIfNeeded>> | null = null;
     if (user) {

@@ -15,7 +15,8 @@ import {
 import { resolveAbsoluteAppUrl, resolveRuntimeAppOrigin } from "@/lib/client-runtime-url";
 import {
   REALTIME_DIRECT_MESSAGE_CREATED_EVENT,
-  REALTIME_DIRECT_MESSAGES_REFRESH_EVENT,
+  REALTIME_DIRECT_MESSAGE_DELETED_EVENT,
+  REALTIME_DIRECT_MESSAGE_UPDATED_EVENT,
 } from "@/lib/realtime-events";
 
 type ChatRenderableProfile = Profile & {
@@ -89,6 +90,16 @@ type DirectMessageCreatedEventPayload = {
   message?: SerializedDirectMessage;
 };
 
+type DirectMessageUpdatedEventPayload = {
+  message?: Pick<SerializedDirectMessage, "id" | "content" | "fileUrl" | "deleted" | "isUpdated">;
+};
+
+type DirectMessageDeletedEventPayload = {
+  messageId?: string;
+  hardDelete?: boolean;
+  message?: Pick<SerializedDirectMessage, "id" | "content" | "fileUrl" | "deleted" | "isUpdated">;
+};
+
 type LiveDirectMessagesPaneProps = {
   initialMessages: SerializedDirectMessage[];
   initialReactionsByMessageId: Record<string, Array<{ emoji: string; count: number }>>;
@@ -155,6 +166,34 @@ const reconcileCanonicalMessage = (
         }
       : item
   );
+};
+
+const applyRealtimeDirectMessagePatch = (
+  currentMessages: LiveDirectMessage[],
+  nextMessage: Pick<SerializedDirectMessage, "id" | "content" | "fileUrl" | "deleted" | "isUpdated">
+) => currentMessages.map((item) => (item.id === nextMessage.id ? { ...item, ...nextMessage, optimistic: false } : item));
+
+const applyRealtimeDirectMessageDelete = ({
+  currentMessages,
+  payload,
+}: {
+  currentMessages: LiveDirectMessage[];
+  payload: DirectMessageDeletedEventPayload;
+}) => {
+  const targetId = String(payload.message?.id ?? payload.messageId ?? "").trim();
+  if (!targetId) {
+    return currentMessages;
+  }
+
+  if (payload.hardDelete) {
+    return currentMessages.filter((item) => item.id !== targetId);
+  }
+
+  if (!payload.message) {
+    return currentMessages;
+  }
+
+  return applyRealtimeDirectMessagePatch(currentMessages, payload.message);
 };
 
 export const LiveDirectMessagesPane = ({
@@ -246,8 +285,25 @@ export const LiveDirectMessagesPane = ({
       setMessages((current) => reconcileCanonicalMessage(current, nextMessage));
     };
 
-    const onRefresh = () => {
-      void refreshMessages();
+    const onMessageUpdated = (payload: DirectMessageUpdatedEventPayload | undefined) => {
+      if (!payload?.message?.id) {
+        return;
+      }
+
+      setMessages((current) => applyRealtimeDirectMessagePatch(current, payload.message!));
+    };
+
+    const onMessageDeleted = (payload: DirectMessageDeletedEventPayload | undefined) => {
+      if (!payload) {
+        return;
+      }
+
+      const targetId = String(payload.message?.id ?? payload.messageId ?? "").trim();
+      if (!targetId) {
+        return;
+      }
+
+      setMessages((current) => applyRealtimeDirectMessageDelete({ currentMessages: current, payload }));
     };
 
     const joinRoom = () => {
@@ -322,14 +378,16 @@ export const LiveDirectMessagesPane = ({
     joinRoom();
     void refreshMessages();
     socket.on?.(REALTIME_DIRECT_MESSAGE_CREATED_EVENT, onMessageCreated);
-    socket.on?.(REALTIME_DIRECT_MESSAGES_REFRESH_EVENT, onRefresh);
+    socket.on?.(REALTIME_DIRECT_MESSAGE_UPDATED_EVENT, onMessageUpdated);
+    socket.on?.(REALTIME_DIRECT_MESSAGE_DELETED_EVENT, onMessageDeleted);
     socket.on?.("connect", onConnect);
 
     return () => {
       window.removeEventListener(LOCAL_CHAT_MUTATION_EVENT, onLocalMutation as EventListener);
       socket.emit?.("inaccord:leave", roomPayload);
       socket.off?.(REALTIME_DIRECT_MESSAGE_CREATED_EVENT, onMessageCreated);
-      socket.off?.(REALTIME_DIRECT_MESSAGES_REFRESH_EVENT, onRefresh);
+      socket.off?.(REALTIME_DIRECT_MESSAGE_UPDATED_EVENT, onMessageUpdated);
+      socket.off?.(REALTIME_DIRECT_MESSAGE_DELETED_EVENT, onMessageDeleted);
       socket.off?.("connect", onConnect);
     };
   }, [conversationId, currentMember, currentProfile, refreshMessages, roomPayload, socket]);

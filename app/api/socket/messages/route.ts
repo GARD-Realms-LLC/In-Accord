@@ -3,16 +3,22 @@ import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 
 import { currentProfile } from "@/lib/current-profile";
-import { channel, db, member, message } from "@/lib/db";
+import { channel, ChannelType, db, member, MemberRole, message, server } from "@/lib/db";
 import { ensureChannelThreadSchema, markThreadRead, touchThreadActivity } from "@/lib/channel-threads";
+import {
+  createDefaultServerCountingState,
+  getServerCountingSnapshot,
+  saveServerCountingSnapshot,
+  type ServerCountingState,
+} from "@/lib/server-counting";
 import { computeChannelPermissionForMember, resolveMemberContext } from "@/lib/channel-permissions";
 import { emitChannelWebhookEvent, getChannelFeatureSettings } from "@/lib/channel-feature-settings";
+import { addMessageReaction, ensureMessageReactionSchema } from "@/lib/message-reactions";
 import { executeServerSlashCommand } from "@/lib/slash-commands";
 import { parseMentionSegments } from "@/lib/mentions";
 import { publishRealtimeEvent } from "@/lib/realtime-events-server";
 import {
   REALTIME_CHANNEL_MESSAGE_CREATED_EVENT,
-  REALTIME_CHANNEL_REFRESH_EVENT,
 } from "@/lib/realtime-events";
 import { getUserProfileNameMap } from "@/lib/user-profile";
 import { listThreadsForMessages } from "@/lib/channel-threads";
@@ -41,6 +47,7 @@ const normalizeIsoDate = (value: Date | string | null | undefined) => {
 };
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const countingIntegerPattern = /^\d+$/;
 
 const applyBlockedWordModeration = ({
   content,
@@ -184,6 +191,31 @@ const serializeChannelMessage = async (item: {
       },
     },
   };
+};
+
+const buildCountingFailureMessage = ({
+  actorProfileId,
+  actorLabel,
+  expectedNumber,
+  submittedNumber,
+  resetNumber,
+  sameUserViolation,
+}: {
+  actorProfileId: string;
+  actorLabel: string;
+  expectedNumber: number;
+  submittedNumber: number;
+  resetNumber: number;
+  sameUserViolation: boolean;
+}) => {
+  const safeLabel = actorLabel.replace(/[\[\]\(\)]/g, "").trim() || "That member";
+  const mention = `@[${safeLabel}](user:${actorProfileId})`;
+
+  if (sameUserViolation) {
+    return `${mention} broke the count by going twice in a row. The next number is ${resetNumber}.`;
+  }
+
+  return `${mention} broke the count. Expected ${expectedNumber}, got ${submittedNumber}. The next number is ${resetNumber}.`;
 };
 
 const getSerializedChannelMessageById = async (messageId: string) => {
@@ -505,6 +537,25 @@ export async function POST(req: Request) {
       return new NextResponse("Content is required", { status: 400 });
     }
 
+    const serverCountingSnapshot = !normalizedThreadId
+      ? await getServerCountingSnapshot({ serverId })
+      : null;
+    const countingEnabled = Boolean(
+      !normalizedThreadId &&
+      serverCountingSnapshot?.countingSettings.enabled &&
+      serverCountingSnapshot.countingSettings.channelId === currentChannel.id
+    );
+
+    if (countingEnabled) {
+      if (fileUrl) {
+        return new NextResponse("Attachments are not allowed in counting channels.", { status: 400 });
+      }
+
+      if (!countingIntegerPattern.test(finalContent)) {
+        return new NextResponse("Only whole numbers are allowed in counting channels.", { status: 400 });
+      }
+    }
+
     if (featureSettings.moderation.slowmodeSeconds > 0) {
       const lastMessageResult = await db.execute(sql`
         select "createdAt"
@@ -561,14 +612,237 @@ export async function POST(req: Request) {
       return insertedRows[0];
     };
 
+    if (currentChannel.type === ChannelType.ANNOUNCEMENT && currentMember.role === MemberRole.GUEST) {
+      return new NextResponse("Only moderators can publish in announcement channels.", {
+        status: 403,
+      });
+    }
+
     const isSlashCommandInput = finalContent.startsWith("/") && !fileUrl;
+
+    if (countingEnabled) {
+      const submittedNumber = Number(finalContent);
+
+      if (!Number.isSafeInteger(submittedNumber) || submittedNumber < 0) {
+        return new NextResponse("That number is too large for this counting channel.", { status: 400 });
+      }
+
+      await ensureMessageReactionSchema();
+
+      const serverOwner = await db.query.server.findFirst({
+        where: eq(server.id, serverId),
+        columns: { profileId: true },
+      });
+
+      const responseMember = serverOwner?.profileId
+        ? await db.query.member.findFirst({
+            where: and(eq(member.serverId, serverId), eq(member.profileId, serverOwner.profileId)),
+            columns: { id: true },
+          })
+        : null;
+
+      const actorLabel =
+        String(profile.name ?? "").trim() ||
+        String(profile.email ?? "").trim() ||
+        "That member";
+
+      const countingResult = await db.transaction(async (tx) => {
+        const snapshot = await getServerCountingSnapshot({
+          serverId,
+          executor: tx,
+        });
+
+        if (!snapshot.countingSettings.enabled || snapshot.countingSettings.channelId !== currentChannel.id) {
+          throw new Error("COUNTING_NOT_ENABLED");
+        }
+
+        const expectedNumber = snapshot.countingState.nextNumber;
+        const sameUserViolation =
+          snapshot.countingSettings.preventConsecutiveTurns &&
+          snapshot.countingState.lastProfileId === profile.id;
+        const isCorrectCount = submittedNumber === expectedNumber && !sameUserViolation;
+
+        const insertedRows = await tx
+          .insert(message)
+          .values({
+            id: uuidv4(),
+            content: finalContent,
+            fileUrl: null,
+            memberId: currentMember.id,
+            channelId: currentChannel.id,
+            threadId: null,
+            deleted: false,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .returning();
+
+        const insertedCountMessage = insertedRows[0];
+        const reactionEmoji = isCorrectCount ? "✅" : "❌";
+
+        await addMessageReaction({
+          messageId: insertedCountMessage.id,
+          scope: "channel",
+          emoji: reactionEmoji,
+          executor: tx,
+        });
+
+        let nextCountingState: ServerCountingState;
+        let responseMessageId: string | null = null;
+
+        if (isCorrectCount) {
+          nextCountingState = {
+            nextNumber: expectedNumber + 1,
+            lastProfileId: profile.id,
+            lastMessageId: insertedCountMessage.id,
+            updatedAt: new Date().toISOString(),
+          };
+        } else {
+          nextCountingState = {
+            ...createDefaultServerCountingState(snapshot.countingSettings),
+            updatedAt: new Date().toISOString(),
+          };
+
+          const responseContent = buildCountingFailureMessage({
+            actorProfileId: profile.id,
+            actorLabel,
+            expectedNumber,
+            submittedNumber,
+            resetNumber: nextCountingState.nextNumber,
+            sameUserViolation,
+          });
+
+          const responseRows = await tx
+            .insert(message)
+            .values({
+              id: uuidv4(),
+              content: responseContent,
+              fileUrl: null,
+              memberId: responseMember?.id ?? currentMember.id,
+              channelId: currentChannel.id,
+              threadId: null,
+              deleted: false,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            })
+            .returning();
+
+          responseMessageId = responseRows[0]?.id ?? null;
+        }
+
+        await saveServerCountingSnapshot({
+          serverId,
+          parsedSettings: snapshot.parsedSettings,
+          countingSettings: snapshot.countingSettings,
+          countingState: nextCountingState,
+          executor: tx,
+        });
+
+        return {
+          insertedMessageId: insertedCountMessage.id,
+          responseMessageId,
+          reactionEmoji,
+          expectedNumber,
+          submittedNumber,
+          isCorrectCount,
+          sameUserViolation,
+          nextNumber: nextCountingState.nextNumber,
+        };
+      });
+
+      const serializedInserted = await getSerializedChannelMessageById(countingResult.insertedMessageId);
+      const serializedResponse = countingResult.responseMessageId
+        ? await getSerializedChannelMessageById(countingResult.responseMessageId)
+        : null;
+      const normalizedClientMutationId =
+        typeof clientMutationId === "string" && clientMutationId.trim().length > 0
+          ? clientMutationId.trim()
+          : undefined;
+
+      if (serializedInserted) {
+        await publishRealtimeEvent(
+          REALTIME_CHANNEL_MESSAGE_CREATED_EVENT,
+          {
+            serverId,
+            channelId: currentChannel.id,
+            threadId: null,
+          },
+          {
+            entity: "message",
+            action: "created",
+            message: {
+              ...serializedInserted,
+              clientMutationId: normalizedClientMutationId,
+            },
+            reactionsByMessageId: {
+              [countingResult.insertedMessageId]: [{ emoji: countingResult.reactionEmoji, count: 1 }],
+            },
+            thread: null,
+          }
+        );
+      }
+
+      if (serializedResponse) {
+        await publishRealtimeEvent(
+          REALTIME_CHANNEL_MESSAGE_CREATED_EVENT,
+          {
+            serverId,
+            channelId: currentChannel.id,
+            threadId: null,
+          },
+          {
+            entity: "message",
+            action: "created",
+            message: serializedResponse,
+            thread: null,
+          }
+        );
+      }
+
+      await emitChannelWebhookEvent({
+        serverId,
+        channelId: currentChannel.id,
+        channelName: currentChannel.name,
+        eventType: "MESSAGE_CREATED",
+        actorProfileId: profile.id,
+        payload: {
+          messageId: countingResult.insertedMessageId,
+          threadId: null,
+          content: finalContent,
+          fileUrl: null,
+          memberId: currentMember.id,
+          blockedWordMatches: moderated.matchedWords,
+          counting: {
+            enabled: true,
+            expectedNumber: countingResult.expectedNumber,
+            submittedNumber: countingResult.submittedNumber,
+            accepted: countingResult.isCorrectCount,
+            sameUserViolation: countingResult.sameUserViolation,
+            nextNumber: countingResult.nextNumber,
+          },
+        },
+      });
+
+      return NextResponse.json(
+        serializedInserted
+          ? {
+              ...serializedInserted,
+              clientMutationId: normalizedClientMutationId,
+            }
+          : {
+              id: countingResult.insertedMessageId,
+            }
+      );
+    }
 
     if (isSlashCommandInput) {
       const commandResult = await executeServerSlashCommand({
         serverId,
         rawInput: finalContent,
         channelId: currentChannel.id,
+        threadId: normalizedThreadId,
         actorProfileId: profile.id,
+        actorProfileRole: profile.role,
       });
 
       if (commandResult.handled) {
@@ -587,6 +861,12 @@ export async function POST(req: Request) {
           memberId: responderMembership?.id ?? currentMember.id,
         });
 
+        const serializedInsertedResponse = await getSerializedChannelMessageById(insertedResponse.id);
+        const normalizedClientMutationId =
+          typeof clientMutationId === "string" && clientMutationId.trim().length > 0
+            ? clientMutationId.trim()
+            : undefined;
+
         if (normalizedThreadId) {
           await touchThreadActivity({
             threadId: normalizedThreadId,
@@ -599,20 +879,28 @@ export async function POST(req: Request) {
         }
 
         await publishRealtimeEvent(
-          REALTIME_CHANNEL_REFRESH_EVENT,
+          REALTIME_CHANNEL_MESSAGE_CREATED_EVENT,
           {
             serverId,
             channelId: currentChannel.id,
             threadId: normalizedThreadId,
           },
-          { entity: "message", action: "created" }
+          {
+            entity: "message",
+            action: "created",
+            message: serializedInsertedResponse
+              ? {
+                  ...serializedInsertedResponse,
+                  clientMutationId: normalizedClientMutationId,
+                }
+              : undefined,
+            thread: normalizedThreadId
+              ? {
+                  id: normalizedThreadId,
+                }
+              : null,
+          }
         );
-
-        const serializedInsertedResponse = await getSerializedChannelMessageById(insertedResponse.id);
-        const normalizedClientMutationId =
-          typeof clientMutationId === "string" && clientMutationId.trim().length > 0
-            ? clientMutationId.trim()
-            : undefined;
 
         return NextResponse.json(
           serializedInsertedResponse
@@ -636,7 +924,9 @@ export async function POST(req: Request) {
         serverId,
         rawInput: finalContent,
         channelId: currentChannel.id,
+        threadId: normalizedThreadId,
         actorProfileId: profile.id,
+        actorProfileRole: profile.role,
       });
 
       if (commandResult.handled) {
@@ -705,25 +995,41 @@ export async function POST(req: Request) {
         );
       } else {
         await publishRealtimeEvent(
-          REALTIME_CHANNEL_REFRESH_EVENT,
+          REALTIME_CHANNEL_MESSAGE_CREATED_EVENT,
           {
             serverId,
             channelId: currentChannel.id,
             threadId: normalizedThreadId,
           },
-          { entity: "message", action: "created" }
+          {
+            entity: "message",
+            action: "created",
+            thread: normalizedThreadId
+              ? {
+                  id: normalizedThreadId,
+                }
+              : null,
+          }
         );
       }
     } catch (realtimeError) {
       console.error("[SOCKET_MESSAGES_POST_REALTIME]", realtimeError);
       await publishRealtimeEvent(
-        REALTIME_CHANNEL_REFRESH_EVENT,
+        REALTIME_CHANNEL_MESSAGE_CREATED_EVENT,
         {
           serverId,
           channelId: currentChannel.id,
           threadId: normalizedThreadId,
         },
-        { entity: "message", action: "created" }
+        {
+          entity: "message",
+          action: "created",
+          thread: normalizedThreadId
+            ? {
+                id: normalizedThreadId,
+              }
+            : null,
+        }
       );
     }
 

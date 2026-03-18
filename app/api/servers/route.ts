@@ -2,10 +2,12 @@ import { v4 as uuidv4 } from "uuid";
 import { NextResponse } from "next/server";
 import { eq, sql } from "drizzle-orm";
 
+import { ensureAnnouncementChannelSchema } from "@/lib/announcement-channels";
 import { appendBannerDebugEvent } from "@/lib/banner-debug";
 import { resolveBannerUrl } from "@/lib/asset-url";
 import { currentProfile } from "@/lib/current-profile";
 import { channel, ChannelType, db, MemberRole, member, server } from "@/lib/db";
+import { normalizeOptionalCloudflareObjectPointer } from "@/lib/live-db-asset-pointers";
 import { getServerBannerConfig, setServerBannerConfig } from "@/lib/server-banner-store";
 import { appendServerInviteHistory } from "@/lib/server-invite-store";
 import { upsertOurBoardEntry } from "@/lib/our-board-store";
@@ -21,20 +23,32 @@ export async function POST(req: Request) {
     const { name, imageUrl, bannerUrl, bannerFit, bannerScale } = await req.json();
     const profile = await currentProfile();
 
+    const normalizedImageUrl = normalizeOptionalCloudflareObjectPointer(imageUrl);
+    const normalizedBannerUrl = normalizeOptionalCloudflareObjectPointer(bannerUrl);
+
     if (!profile) {
       return new NextResponse("Unauthorize", { status: 401 });
+    }
+
+    if (imageUrl !== null && imageUrl !== undefined && normalizedImageUrl === null) {
+      return new NextResponse("Server image must be a Cloudflare object pointer", { status: 400 });
+    }
+
+    if (bannerUrl !== null && bannerUrl !== undefined && normalizedBannerUrl === null) {
+      return new NextResponse("Server banner must be a Cloudflare object pointer", { status: 400 });
     }
 
     const serverId = uuidv4();
     const inviteCode = uuidv4();
     const now = new Date();
 
+  await ensureAnnouncementChannelSchema();
     await ensureSystemChannelSchema();
 
     await db.transaction(async (tx) => {
       const resolvedImageUrl =
-        typeof imageUrl === "string" && imageUrl.trim().length > 0
-          ? imageUrl
+        normalizedImageUrl
+          ? normalizedImageUrl
           : "/in-accord-steampunk-logo.png";
 
       await tx.insert(server).values({
@@ -51,6 +65,16 @@ export async function POST(req: Request) {
         id: uuidv4(),
         name: "general",
         type: ChannelType.TEXT,
+        profileId: profile.id,
+        serverId,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await tx.insert(channel).values({
+        id: uuidv4(),
+        name: "announcements",
+        type: ChannelType.ANNOUNCEMENT,
         profileId: profile.id,
         serverId,
         createdAt: now,
@@ -124,7 +148,7 @@ export async function POST(req: Request) {
       });
 
       await setServerBannerConfig(serverId, {
-        url: bannerUrl,
+        url: normalizedBannerUrl,
         fit: bannerFit,
         scale: typeof bannerScale === "number" ? bannerScale : Number(bannerScale),
       });

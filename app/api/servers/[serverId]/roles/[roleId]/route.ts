@@ -2,8 +2,9 @@ import { and, eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { currentProfile } from "@/lib/current-profile";
-import { db, server } from "@/lib/db";
+import { db } from "@/lib/db";
 import { ensureChannelPermissionSchema } from "@/lib/channel-permissions";
+import { getServerManagementAccess } from "@/lib/server-management-access";
 import { ensureServerRolesSchema } from "@/lib/server-roles";
 
 type Params = { params: Promise<{ serverId: string; roleId: string }> };
@@ -26,12 +27,14 @@ export async function PATCH(req: Request, { params }: Params) {
 			return new NextResponse("Server ID and Role ID are required", { status: 400 });
 		}
 
-		const targetServer = await db.query.server.findFirst({
-			where: and(eq(server.id, serverId), eq(server.profileId, profile.id)),
-		});
+		const access = await getServerManagementAccess({ serverId, profileId: profile.id, profileRole: profile.role });
 
-		if (!targetServer) {
-			return new NextResponse("Only the server owner can edit roles", { status: 403 });
+		if (!access.target) {
+			return new NextResponse("Server not found", { status: 404 });
+		}
+
+		if (!access.canManage) {
+			return new NextResponse("Only the server owner or an In-Accord administrator can edit roles", { status: 403 });
 		}
 
 		await ensureServerRolesSchema();
@@ -186,12 +189,14 @@ export async function DELETE(_req: Request, { params }: Params) {
 			return new NextResponse("Server ID and Role ID are required", { status: 400 });
 		}
 
-		const targetServer = await db.query.server.findFirst({
-			where: and(eq(server.id, serverId), eq(server.profileId, profile.id)),
-		});
+		const access = await getServerManagementAccess({ serverId, profileId: profile.id, profileRole: profile.role });
 
-		if (!targetServer) {
-			return new NextResponse("Only the server owner can delete roles", { status: 403 });
+		if (!access.target) {
+			return new NextResponse("Server not found", { status: 404 });
+		}
+
+		if (!access.canManage) {
+			return new NextResponse("Only the server owner or an In-Accord administrator can delete roles", { status: 403 });
 		}
 
 		await ensureServerRolesSchema();

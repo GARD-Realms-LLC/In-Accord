@@ -33,3 +33,54 @@ export const ensureMessageReactionSchema = async () => {
 
   messageReactionSchemaReady = true;
 };
+
+type SqlExecutor = Pick<typeof db, "execute">;
+
+export const addMessageReaction = async ({
+  messageId,
+  scope,
+  emoji,
+  count = 1,
+  executor = db,
+}: {
+  messageId: string;
+  scope: "channel" | "direct";
+  emoji: string;
+  count?: number;
+  executor?: SqlExecutor;
+}) => {
+  const normalizedMessageId = String(messageId ?? "").trim();
+  const normalizedEmoji = String(emoji ?? "").trim().slice(0, 32);
+  const safeCount = Number.isFinite(count) ? Math.max(1, Math.floor(count)) : 1;
+
+  if (!normalizedMessageId || !normalizedEmoji) {
+    return;
+  }
+
+  await ensureMessageReactionSchema();
+
+  await executor.execute(sql`
+    insert into "MessageReaction" (
+      "id",
+      "messageId",
+      "scope",
+      "emoji",
+      "count",
+      "createdAt",
+      "updatedAt"
+    )
+    values (
+      ${crypto.randomUUID()},
+      ${normalizedMessageId},
+      ${scope},
+      ${normalizedEmoji},
+      ${safeCount},
+      now(),
+      now()
+    )
+    on conflict ("messageId", "scope", "emoji") do update
+    set
+      "count" = "MessageReaction"."count" + ${safeCount},
+      "updatedAt" = now()
+  `);
+};

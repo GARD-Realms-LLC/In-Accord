@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 
 import { currentProfile } from "@/lib/current-profile";
-import { db, member, server } from "@/lib/db";
+import { db } from "@/lib/db";
+import { getServerManagementAccess } from "@/lib/server-management-access";
 import {
   allowedServerEmojiStickerAssetTypes,
   ensureServerEmojiStickerSchema,
@@ -54,27 +55,6 @@ const normalizeStatusFilter = (value: unknown): StatusFilter => {
   return "ALL";
 };
 
-const ensureServerAccess = async (serverId: string, profileId: string) => {
-  const existingMember = await db.query.member.findFirst({
-    where: and(eq(member.serverId, serverId), eq(member.profileId, profileId)),
-    columns: { id: true },
-  });
-
-  if (!existingMember) {
-    return { member: false, isOwner: false };
-  }
-
-  const ownerServer = await db.query.server.findFirst({
-    where: and(eq(server.id, serverId), eq(server.profileId, profileId)),
-    columns: { id: true },
-  });
-
-  return {
-    member: true,
-    isOwner: Boolean(ownerServer),
-  };
-};
-
 export async function GET(req: Request, { params }: Params) {
   try {
     const { serverId: rawServerId } = await params;
@@ -91,8 +71,8 @@ export async function GET(req: Request, { params }: Params) {
 
     await ensureServerEmojiStickerSchema();
 
-    const access = await ensureServerAccess(serverId, profile.id);
-    if (!access.member) {
+    const access = await getServerManagementAccess({ serverId, profileId: profile.id, profileRole: profile.role });
+    if (!access.canView) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
@@ -173,7 +153,7 @@ export async function GET(req: Request, { params }: Params) {
     return NextResponse.json({
       assets,
       summary,
-      canManageEmojiStickers: access.isOwner,
+      canManageEmojiStickers: access.canManage,
     });
   } catch (error) {
     console.error("[SERVER_EMOJI_STICKERS_GET]", error);
@@ -197,13 +177,9 @@ export async function POST(req: Request, { params }: Params) {
 
     await ensureServerEmojiStickerSchema();
 
-    const access = await ensureServerAccess(serverId, profile.id);
-    if (!access.member) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
-
-    if (!access.isOwner) {
-      return new NextResponse("Only the server owner can manage emoji and stickers", { status: 403 });
+    const access = await getServerManagementAccess({ serverId, profileId: profile.id, profileRole: profile.role });
+    if (!access.canManage) {
+      return new NextResponse("Only the server owner or an In-Accord administrator can manage emoji and stickers", { status: 403 });
     }
 
     const body = (await req.json().catch(() => ({}))) as {
@@ -291,13 +267,9 @@ export async function PATCH(req: Request, { params }: Params) {
 
     await ensureServerEmojiStickerSchema();
 
-    const access = await ensureServerAccess(serverId, profile.id);
-    if (!access.member) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
-
-    if (!access.isOwner) {
-      return new NextResponse("Only the server owner can manage emoji and stickers", { status: 403 });
+    const access = await getServerManagementAccess({ serverId, profileId: profile.id, profileRole: profile.role });
+    if (!access.canManage) {
+      return new NextResponse("Only the server owner or an In-Accord administrator can manage emoji and stickers", { status: 403 });
     }
 
     const body = (await req.json().catch(() => ({}))) as {

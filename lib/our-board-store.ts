@@ -1,13 +1,10 @@
 import "server-only";
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { sql } from "drizzle-orm";
 
+import { db } from "@/lib/db";
 import { toInAboardImageUrl } from "@/lib/in-aboard-image-url";
-
-const dataDir = path.join(process.cwd(), ".data");
-const boardFile = path.join(dataDir, "our-board.json");
 
 export const OUR_BOARD_BUMP_COOLDOWN_MS = 60 * 60 * 1000;
 
@@ -32,7 +29,10 @@ export type OurBoardEntry = {
   updatedAt: string;
 };
 
-type OurBoardMap = Record<string, Partial<OurBoardEntry> | undefined>;
+declare global {
+  // eslint-disable-next-line no-var
+  var inAccordOurBoardSchemaReady: boolean | undefined;
+}
 
 const MAX_TAGS = 12;
 const MAX_TAG_LENGTH = 32;
@@ -178,25 +178,71 @@ const normalizeEntry = (
   };
 };
 
-const readBoardMap = async (): Promise<OurBoardMap> => {
-  try {
-    const raw = await readFile(boardFile, "utf8");
-    const parsed = JSON.parse(raw) as unknown;
-
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return {};
-    }
-
-    return parsed as OurBoardMap;
-  } catch {
-    return {};
+const ensureOurBoardSchema = async () => {
+  if (globalThis.inAccordOurBoardSchemaReady) {
+    return;
   }
+
+  await db.execute(sql`
+    create table if not exists "InAboardEntry" (
+      "serverId" varchar(191) primary key,
+      "serverName" varchar(191) not null,
+      "imageUrl" text,
+      "bannerUrl" text,
+      "tags" jsonb not null default '[]'::jsonb,
+      "ownerProfileId" varchar(191) not null,
+      "ownerDisplayName" varchar(191) not null,
+      "ownerEmail" varchar(320),
+      "listed" boolean not null default true,
+      "description" varchar(800) not null default '',
+      "bumpChannelId" varchar(191),
+      "bumpCount" integer not null default 0,
+      "lastBumpedAt" timestamp,
+      "lastBumpedByProfileId" varchar(191),
+      "bumpTimestampsByProfileId" jsonb not null default '{}'::jsonb,
+      "manageToken" varchar(128) not null,
+      "createdAt" timestamp not null,
+      "updatedAt" timestamp not null
+    )
+  `);
+
+  await db.execute(sql`
+    create unique index if not exists "InAboardEntry_manageToken_key"
+    on "InAboardEntry" ("manageToken")
+  `);
+
+  globalThis.inAccordOurBoardSchemaReady = true;
 };
 
-const writeBoardMap = async (map: OurBoardMap) => {
-  await mkdir(dataDir, { recursive: true });
-  await writeFile(boardFile, JSON.stringify(map, null, 2), "utf8");
-};
+const mapRowToEntry = (row: Record<string, unknown> | undefined, fallback?: Partial<OurBoardEntry>) =>
+  normalizeEntry(
+    row
+      ? {
+          serverId: row.serverId as string | undefined,
+          serverName: row.serverName as string | undefined,
+          imageUrl: row.imageUrl as string | null | undefined,
+          bannerUrl: row.bannerUrl as string | null | undefined,
+          tags: row.tags as string[] | undefined,
+          ownerProfileId: row.ownerProfileId as string | undefined,
+          ownerDisplayName: row.ownerDisplayName as string | undefined,
+          ownerEmail: row.ownerEmail as string | null | undefined,
+          listed: row.listed as boolean | undefined,
+          description: row.description as string | undefined,
+          bumpChannelId: row.bumpChannelId as string | null | undefined,
+          bumpCount: row.bumpCount as number | undefined,
+          lastBumpedAt:
+            row.lastBumpedAt instanceof Date
+              ? row.lastBumpedAt.toISOString()
+              : (row.lastBumpedAt as string | null | undefined),
+          lastBumpedByProfileId: row.lastBumpedByProfileId as string | null | undefined,
+          bumpTimestampsByProfileId: row.bumpTimestampsByProfileId as Record<string, string> | undefined,
+          manageToken: row.manageToken as string | undefined,
+          createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : (row.createdAt as string | undefined),
+          updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : (row.updatedAt as string | undefined),
+        }
+      : undefined,
+    fallback
+  );
 
 const withSortedEntries = (entries: OurBoardEntry[]) =>
   [...entries].sort((left, right) => {
@@ -215,10 +261,33 @@ const withSortedEntries = (entries: OurBoardEntry[]) =>
   });
 
 export const listOurBoardEntries = async (): Promise<OurBoardEntry[]> => {
-  const map = await readBoardMap();
+  await ensureOurBoardSchema();
 
-  const entries = Object.values(map)
-    .map((entry) => normalizeEntry(entry))
+  const result = await db.execute(sql`
+    select
+      iab."serverId" as "serverId",
+      iab."serverName" as "serverName",
+      iab."imageUrl" as "imageUrl",
+      iab."bannerUrl" as "bannerUrl",
+      iab."tags" as "tags",
+      iab."ownerProfileId" as "ownerProfileId",
+      iab."ownerDisplayName" as "ownerDisplayName",
+      iab."ownerEmail" as "ownerEmail",
+      iab."listed" as "listed",
+      iab."description" as "description",
+      iab."bumpChannelId" as "bumpChannelId",
+      iab."bumpCount" as "bumpCount",
+      iab."lastBumpedAt" as "lastBumpedAt",
+      iab."lastBumpedByProfileId" as "lastBumpedByProfileId",
+      iab."bumpTimestampsByProfileId" as "bumpTimestampsByProfileId",
+      iab."manageToken" as "manageToken",
+      iab."createdAt" as "createdAt",
+      iab."updatedAt" as "updatedAt"
+    from "InAboardEntry" iab
+  `);
+
+  const entries = (((result as unknown as { rows?: Array<Record<string, unknown>> }).rows ?? []))
+    .map((row) => mapRowToEntry(row))
     .filter((entry): entry is OurBoardEntry => entry !== null);
 
   return withSortedEntries(entries);
@@ -235,8 +304,18 @@ export const getOurBoardEntryByServerId = async (serverId: string) => {
     return null;
   }
 
-  const map = await readBoardMap();
-  return normalizeEntry(map[normalizedServerId], { serverId: normalizedServerId }) ?? null;
+  await ensureOurBoardSchema();
+
+  const result = await db.execute(sql`
+    select *
+    from "InAboardEntry"
+    where "serverId" = ${normalizedServerId}
+    limit 1
+  `);
+
+  return mapRowToEntry(((result as unknown as { rows?: Array<Record<string, unknown>> }).rows ?? [])[0], {
+    serverId: normalizedServerId,
+  }) ?? null;
 };
 
 export const getOurBoardEntryByManageToken = async (manageToken: string) => {
@@ -245,8 +324,16 @@ export const getOurBoardEntryByManageToken = async (manageToken: string) => {
     return null;
   }
 
-  const all = await listOurBoardEntries();
-  return all.find((entry) => entry.manageToken === normalizedToken) ?? null;
+  await ensureOurBoardSchema();
+
+  const result = await db.execute(sql`
+    select *
+    from "InAboardEntry"
+    where "manageToken" = ${normalizedToken}
+    limit 1
+  `);
+
+  return mapRowToEntry(((result as unknown as { rows?: Array<Record<string, unknown>> }).rows ?? [])[0]) ?? null;
 };
 
 export const upsertOurBoardEntry = async ({
@@ -276,11 +363,8 @@ export const upsertOurBoardEntry = async ({
   const normalizedImageUrl = toInAboardImageUrl(imageUrl);
   const normalizedBannerUrl = toInAboardImageUrl(bannerUrl);
 
-  const map = await readBoardMap();
-  const existing = normalizeEntry(map[normalizedServerId], {
-    serverId: normalizedServerId,
-    ownerProfileId: normalizedOwnerId,
-  });
+  await ensureOurBoardSchema();
+  const existing = await getOurBoardEntryByServerId(normalizedServerId);
 
   const nowIso = new Date().toISOString();
 
@@ -308,8 +392,36 @@ export const upsertOurBoardEntry = async ({
     throw new Error("Unable to normalize In-Aboard entry.");
   }
 
-  map[normalizedServerId] = next;
-  await writeBoardMap(map);
+  await db.execute(sql`
+    insert into "InAboardEntry" (
+      "serverId", "serverName", "imageUrl", "bannerUrl", "tags", "ownerProfileId", "ownerDisplayName", "ownerEmail",
+      "listed", "description", "bumpChannelId", "bumpCount", "lastBumpedAt", "lastBumpedByProfileId",
+      "bumpTimestampsByProfileId", "manageToken", "createdAt", "updatedAt"
+    )
+    values (
+      ${next.serverId}, ${next.serverName}, ${next.imageUrl}, ${next.bannerUrl}, ${JSON.stringify(next.tags)}::jsonb,
+      ${next.ownerProfileId}, ${next.ownerDisplayName}, ${next.ownerEmail}, ${next.listed}, ${next.description}, ${next.bumpChannelId},
+      ${next.bumpCount}, ${next.lastBumpedAt ? new Date(next.lastBumpedAt) : null}, ${next.lastBumpedByProfileId},
+      ${JSON.stringify(next.bumpTimestampsByProfileId)}::jsonb, ${next.manageToken}, ${new Date(next.createdAt)}, ${new Date(next.updatedAt)}
+    )
+    on conflict ("serverId") do update
+    set "serverName" = excluded."serverName",
+        "imageUrl" = excluded."imageUrl",
+        "bannerUrl" = excluded."bannerUrl",
+        "tags" = excluded."tags",
+        "ownerProfileId" = excluded."ownerProfileId",
+        "ownerDisplayName" = excluded."ownerDisplayName",
+        "ownerEmail" = excluded."ownerEmail",
+        "listed" = excluded."listed",
+        "description" = excluded."description",
+        "bumpChannelId" = excluded."bumpChannelId",
+        "bumpCount" = excluded."bumpCount",
+        "lastBumpedAt" = excluded."lastBumpedAt",
+        "lastBumpedByProfileId" = excluded."lastBumpedByProfileId",
+        "bumpTimestampsByProfileId" = excluded."bumpTimestampsByProfileId",
+        "manageToken" = excluded."manageToken",
+        "updatedAt" = excluded."updatedAt"
+  `);
 
   return next;
 };
@@ -335,11 +447,8 @@ export const updateOurBoardEntryByOwner = async ({
     throw new Error("Invalid In-Aboard owner update request.");
   }
 
-  const map = await readBoardMap();
-  const existing = normalizeEntry(map[normalizedServerId], {
-    serverId: normalizedServerId,
-    ownerProfileId: normalizedOwnerId,
-  });
+  await ensureOurBoardSchema();
+  const existing = await getOurBoardEntryByServerId(normalizedServerId);
 
   if (!existing) {
     throw new Error("In-Aboard entry not found.");
@@ -362,8 +471,7 @@ export const updateOurBoardEntryByOwner = async ({
     throw new Error("Unable to normalize updated In-Aboard entry.");
   }
 
-  map[normalizedServerId] = next;
-  await writeBoardMap(map);
+  await upsertOurBoardEntry(next);
 
   return next;
 };
@@ -385,10 +493,8 @@ export const updateOurBoardEntryByServerId = async ({
     throw new Error("Invalid In-Aboard server update request.");
   }
 
-  const map = await readBoardMap();
-  const existing = normalizeEntry(map[normalizedServerId], {
-    serverId: normalizedServerId,
-  });
+  await ensureOurBoardSchema();
+  const existing = await getOurBoardEntryByServerId(normalizedServerId);
 
   if (!existing) {
     throw new Error("In-Aboard entry not found.");
@@ -407,8 +513,7 @@ export const updateOurBoardEntryByServerId = async ({
     throw new Error("Unable to normalize updated In-Aboard entry.");
   }
 
-  map[normalizedServerId] = next;
-  await writeBoardMap(map);
+  await upsertOurBoardEntry(next);
 
   return next;
 };
@@ -425,20 +530,9 @@ export const updateOurBoardEntryByToken = async ({
     throw new Error("Invalid manage token.");
   }
 
-  const map = await readBoardMap();
-  const match = Object.entries(map).find(([, value]) => {
-    const normalized = normalizeEntry(value);
-    return normalized?.manageToken === normalizedToken;
-  });
-
-  if (!match) {
-    throw new Error("Invalid manage token.");
-  }
-
-  const [serverId, rawEntry] = match;
-  const existing = normalizeEntry(rawEntry);
+  const existing = await getOurBoardEntryByManageToken(normalizedToken);
   if (!existing) {
-    throw new Error("In-Aboard entry not found.");
+    throw new Error("Invalid manage token.");
   }
 
   const next = normalizeEntry(
@@ -455,8 +549,7 @@ export const updateOurBoardEntryByToken = async ({
     throw new Error("Unable to normalize updated In-Aboard entry.");
   }
 
-  map[serverId] = next;
-  await writeBoardMap(map);
+  await upsertOurBoardEntry(next);
 
   return next;
 };
@@ -478,8 +571,8 @@ export const recordOurBoardBump = async ({
     throw new Error("Invalid bump request.");
   }
 
-  const map = await readBoardMap();
-  const existing = normalizeEntry(map[normalizedServerId]);
+  await ensureOurBoardSchema();
+  const existing = await getOurBoardEntryByServerId(normalizedServerId);
 
   if (!existing) {
     throw new Error("In-Aboard entry not found for this server.");
@@ -532,8 +625,7 @@ export const recordOurBoardBump = async ({
     throw new Error("Unable to normalize bumped In-Aboard entry.");
   }
 
-  map[normalizedServerId] = next;
-  await writeBoardMap(map);
+  await upsertOurBoardEntry(next);
 
   return {
     ok: true as const,

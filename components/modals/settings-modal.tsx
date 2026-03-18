@@ -2210,11 +2210,15 @@ export const SettingsModal = () => {
   const [isDefaultProfileNameStylesPanelOpen, setIsDefaultProfileNameStylesPanelOpen] = useState(false);
   const [isServerProfileNameStylesPanelOpen, setIsServerProfileNameStylesPanelOpen] = useState(false);
   const [isAvatarPanelOpen, setIsAvatarPanelOpen] = useState(false);
+  const [isAvatarDecorationPanelOpen, setIsAvatarDecorationPanelOpen] = useState(false);
+  const [isProfileEffectPanelOpen, setIsProfileEffectPanelOpen] = useState(false);
   const [isNameplatePanelOpen, setIsNameplatePanelOpen] = useState(false);
   const [isDefaultBannerPanelOpen, setIsDefaultBannerPanelOpen] = useState(false);
   const [isServerBannerPanelOpen, setIsServerBannerPanelOpen] = useState(false);
   const [isServerNameplatePanelOpen, setIsServerNameplatePanelOpen] = useState(false);
+  const [isServerAvatarPanelOpen, setIsServerAvatarPanelOpen] = useState(false);
   const [isServerAvatarDecorationPanelOpen, setIsServerAvatarDecorationPanelOpen] = useState(false);
+  const [isServerProfileEffectPanelOpen, setIsServerProfileEffectPanelOpen] = useState(false);
   const [isPluginsInstalledPanelOpen, setIsPluginsInstalledPanelOpen] = useState(false);
   const [isDownloadedPluginsPanelOpen, setIsDownloadedPluginsPanelOpen] = useState(false);
   const [isPluginUploadsPanelOpen, setIsPluginUploadsPanelOpen] = useState(false);
@@ -7637,11 +7641,27 @@ export const SettingsModal = () => {
                         </Button>
                         <Button
                           type="button"
-                          onClick={() => setIsServerAvatarDecorationPanelOpen(true)}
+                          onClick={() => setIsServerAvatarPanelOpen(true)}
                           disabled={isSavingServerProfile}
                           className="h-8 border border-white/15 bg-[#1a1b1e] px-3 text-xs text-[#dbdee1] hover:bg-[#2a2b30] disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           Avatar
+                        </Button>
+                        <Button
+                          type="button"
+                          onClick={() => setIsServerAvatarDecorationPanelOpen(true)}
+                          disabled={isSavingServerProfile}
+                          className="h-8 border border-white/15 bg-[#1a1b1e] px-3 text-xs text-[#dbdee1] hover:bg-[#2a2b30] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Avatar Decoration
+                        </Button>
+                        <Button
+                          type="button"
+                          onClick={() => setIsServerProfileEffectPanelOpen(true)}
+                          disabled={isSavingServerProfile}
+                          className="h-8 border border-white/15 bg-[#1a1b1e] px-3 text-xs text-[#dbdee1] hover:bg-[#2a2b30] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Profile Effect
                         </Button>
                       </div>
                       {serverProfileImageInput.trim() ? (
@@ -7904,12 +7924,12 @@ export const SettingsModal = () => {
                       </DialogContent>
                     </Dialog>
 
-                    <Dialog open={isServerAvatarDecorationPanelOpen} onOpenChange={setIsServerAvatarDecorationPanelOpen}>
+                    <Dialog open={isServerAvatarPanelOpen} onOpenChange={setIsServerAvatarPanelOpen}>
                       <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
                         <DialogHeader>
                           <DialogTitle>Avatar</DialogTitle>
                           <DialogDescription className="text-[#949ba4]">
-                            Upload a server avatar and optional overlays for this server only.
+                            Upload a server avatar for this server only.
                           </DialogDescription>
                         </DialogHeader>
 
@@ -7917,10 +7937,7 @@ export const SettingsModal = () => {
                           <div className="rounded-xl border border-white/10 bg-[#1a1b1e] p-4">
                             <div className="flex items-center gap-3">
                               <div className="relative overflow-hidden rounded-full">
-                                <ProfileEffectLayer
-                                  src={serverProfileEffectInput.trim() || selectedServer?.effectiveProfileEffectUrl || profileEffectUrl}
-                                  className="rounded-full"
-                                />
+                                <ProfileEffectLayer src={previewProfileEffectUrl} className="rounded-full" />
                                 <UserAvatar
                                   src={previewAvatarUrl ?? undefined}
                                   decorationSrc={previewAvatarDecorationUrl}
@@ -7931,66 +7948,6 @@ export const SettingsModal = () => {
                                 <p className="text-sm font-semibold text-white">Current Avatar</p>
                                 <p className="text-xs text-[#949ba4]">Server profile avatar</p>
                               </div>
-                            </div>
-                          </div>
-
-                          <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
-                              Avatar Decoration URL
-                            </p>
-                            <input
-                              type="text"
-                              value={serverProfileAvatarDecorationInput}
-                              onChange={(event) => {
-                                setServerProfileAvatarDecorationInput(event.target.value);
-                                setServerProfileStatus(null);
-                              }}
-                              placeholder="https://..."
-                              disabled={isSavingServerProfile}
-                              className="mt-2 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35 disabled:cursor-not-allowed disabled:opacity-60"
-                            />
-                            <div className="mt-2 flex flex-wrap justify-end gap-2">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => {
-                                  setServerProfileAvatarDecorationInput("");
-                                  setServerProfileStatus(null);
-                                }}
-                                disabled={isSavingServerProfile}
-                              >
-                                Clear
-                              </Button>
-                            </div>
-                          </div>
-
-                          <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
-                              Profile Effect URL
-                            </p>
-                            <input
-                              type="text"
-                              value={serverProfileEffectInput}
-                              onChange={(event) => {
-                                setServerProfileEffectInput(event.target.value);
-                                setServerProfileStatus(null);
-                              }}
-                              placeholder="https://..."
-                              disabled={isSavingServerProfile}
-                              className="mt-2 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35 disabled:cursor-not-allowed disabled:opacity-60"
-                            />
-                            <div className="mt-2 flex flex-wrap justify-end gap-2">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => {
-                                  setServerProfileEffectInput("");
-                                  setServerProfileStatus(null);
-                                }}
-                                disabled={isSavingServerProfile}
-                              >
-                                Clear
-                              </Button>
                             </div>
                           </div>
 
@@ -8058,11 +8015,7 @@ export const SettingsModal = () => {
                               )}
                             </Button>
 
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={() => setIsServerAvatarDecorationPanelOpen(false)}
-                            >
+                            <Button type="button" variant="outline" onClick={() => setIsServerAvatarPanelOpen(false)}>
                               Close
                             </Button>
                           </div>
@@ -8080,7 +8033,170 @@ export const SettingsModal = () => {
                           <div className="text-xs text-[#949ba4]">Save server profile to apply avatar changes.</div>
                           <Button
                             type="button"
+                            onClick={() => setIsServerAvatarPanelOpen(false)}
+                            className="bg-[#5865f2] text-white hover:bg-[#4752c4]"
+                          >
+                            Done
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+
+                    <Dialog open={isServerAvatarDecorationPanelOpen} onOpenChange={setIsServerAvatarDecorationPanelOpen}>
+                      <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
+                        <DialogHeader>
+                          <DialogTitle>Avatar Decoration</DialogTitle>
+                          <DialogDescription className="text-[#949ba4]">
+                            Set a server-specific avatar decoration. Leave blank to use your global decoration.
+                          </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="space-y-4">
+                          <div className="rounded-xl border border-white/10 bg-[#1a1b1e] p-4">
+                            <div className="flex items-center gap-3">
+                              <div className="relative overflow-hidden rounded-full">
+                                <ProfileEffectLayer src={previewProfileEffectUrl} className="rounded-full" />
+                                <UserAvatar
+                                  src={previewAvatarUrl ?? undefined}
+                                  decorationSrc={previewAvatarDecorationUrl}
+                                  className="h-14 w-14"
+                                />
+                              </div>
+                              <div>
+                                <p className="text-sm font-semibold text-white">Current Decoration</p>
+                                <p className="text-xs text-[#949ba4]">Server profile decoration preview</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                              Avatar Decoration URL
+                            </p>
+                            <input
+                              type="text"
+                              value={serverProfileAvatarDecorationInput}
+                              onChange={(event) => {
+                                setServerProfileAvatarDecorationInput(event.target.value);
+                                setServerProfileStatus(null);
+                              }}
+                              placeholder="https://..."
+                              disabled={isSavingServerProfile}
+                              className="mt-2 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35 disabled:cursor-not-allowed disabled:opacity-60"
+                            />
+                            <div className="mt-2 flex flex-wrap justify-end gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                  setServerProfileAvatarDecorationInput("");
+                                  setServerProfileStatus(null);
+                                }}
+                                disabled={isSavingServerProfile}
+                              >
+                                Clear
+                              </Button>
+                              <Button type="button" variant="outline" onClick={() => setIsServerAvatarDecorationPanelOpen(false)}>
+                                Close
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <DialogFooter className="gap-2 sm:justify-between">
+                          <div className="text-xs text-[#949ba4]">Save server profile to apply decoration changes.</div>
+                          <Button
+                            type="button"
                             onClick={() => setIsServerAvatarDecorationPanelOpen(false)}
+                            className="bg-[#5865f2] text-white hover:bg-[#4752c4]"
+                          >
+                            Done
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+
+                    <Dialog open={isServerProfileEffectPanelOpen} onOpenChange={setIsServerProfileEffectPanelOpen}>
+                      <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
+                        <DialogHeader>
+                          <DialogTitle>Profile Effect</DialogTitle>
+                          <DialogDescription className="text-[#949ba4]">
+                            Set a server-specific profile effect. Leave blank to use your global effect.
+                          </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="space-y-4">
+                          <div className="relative overflow-hidden rounded-xl border border-white/10 bg-[#111214] text-[#dbdee1]">
+                            <ProfileEffectLayer src={previewProfileEffectUrl} />
+                            <div className="relative h-24 bg-linear-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
+                              {resolvedPreviewBannerUrl ? (
+                                <BannerImage
+                                  src={resolvedPreviewBannerUrl}
+                                  alt="Server profile effect preview banner"
+                                  className="object-cover"
+                                />
+                              ) : null}
+                            </div>
+
+                            <div className="relative p-3 pt-9">
+                              <div className="absolute -top-10 left-3 rounded-full border-4 border-[#111214]">
+                                <UserAvatar
+                                  src={previewAvatarUrl ?? undefined}
+                                  decorationSrc={previewAvatarDecorationUrl}
+                                  className="h-20 w-20"
+                                />
+                              </div>
+
+                              <div className="min-w-0">
+                                <p className={`text-base font-bold text-white ${getProfileNameStyleClass(previewProfileNameStyle)}`}>
+                                  {previewDisplayName}
+                                </p>
+                                <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">
+                                  Server profile effect preview
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                              Profile Effect URL
+                            </p>
+                            <input
+                              type="text"
+                              value={serverProfileEffectInput}
+                              onChange={(event) => {
+                                setServerProfileEffectInput(event.target.value);
+                                setServerProfileStatus(null);
+                              }}
+                              placeholder="https://..."
+                              disabled={isSavingServerProfile}
+                              className="mt-2 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35 disabled:cursor-not-allowed disabled:opacity-60"
+                            />
+                            <div className="mt-2 flex flex-wrap justify-end gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                  setServerProfileEffectInput("");
+                                  setServerProfileStatus(null);
+                                }}
+                                disabled={isSavingServerProfile}
+                              >
+                                Clear
+                              </Button>
+                              <Button type="button" variant="outline" onClick={() => setIsServerProfileEffectPanelOpen(false)}>
+                                Close
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <DialogFooter className="gap-2 sm:justify-between">
+                          <div className="text-xs text-[#949ba4]">Save server profile to apply effect changes.</div>
+                          <Button
+                            type="button"
+                            onClick={() => setIsServerProfileEffectPanelOpen(false)}
                             className="bg-[#5865f2] text-white hover:bg-[#4752c4]"
                           >
                             Done
@@ -13196,10 +13312,17 @@ export const SettingsModal = () => {
                             </Button>
                             <Button
                               type="button"
-                              onClick={() => setIsAvatarPanelOpen(true)}
+                              onClick={() => setIsAvatarDecorationPanelOpen(true)}
                               className="h-8 border border-white/15 bg-[#1a1b1e] px-3 text-xs text-[#dbdee1] hover:bg-[#2a2b30]"
                             >
                               Avatar Decoration
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={() => setIsProfileEffectPanelOpen(true)}
+                              className="h-8 border border-white/15 bg-[#1a1b1e] px-3 text-xs text-[#dbdee1] hover:bg-[#2a2b30]"
+                            >
+                              Profile Effect
                             </Button>
                           </div>
                           {nameplateLabelInput.trim() || nameplateLabel ? (
@@ -13879,110 +14002,6 @@ export const SettingsModal = () => {
                                 </div>
                               </div>
 
-                              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
-                                  Avatar Decoration URL
-                                </p>
-                                <input
-                                  type="text"
-                                  value={avatarDecorationInput}
-                                  onChange={(event) => {
-                                    setAvatarDecorationInput(event.target.value);
-                                    setAvatarDecorationStatus(null);
-                                  }}
-                                  placeholder="https://..."
-                                  disabled={isSavingAvatarDecoration}
-                                  className="mt-2 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35 disabled:cursor-not-allowed disabled:opacity-60"
-                                />
-
-                                {avatarDecorationStatus ? (
-                                  <p className="mt-2 rounded-md border border-white/10 bg-[#1a1b1e] px-3 py-2 text-xs text-[#b5bac1]">
-                                    {avatarDecorationStatus}
-                                  </p>
-                                ) : null}
-
-                                <div className="mt-2 flex flex-wrap justify-end gap-2">
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => {
-                                      setAvatarDecorationInput("");
-                                      setAvatarDecorationStatus(null);
-                                    }}
-                                    disabled={isSavingAvatarDecoration}
-                                  >
-                                    Clear
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    onClick={() => void onSaveAvatarDecoration()}
-                                    disabled={isSavingAvatarDecoration}
-                                    className="bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
-                                  >
-                                    {isSavingAvatarDecoration ? (
-                                      <span className="inline-flex items-center gap-2">
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                        Saving...
-                                      </span>
-                                    ) : (
-                                      "Save Decoration"
-                                    )}
-                                  </Button>
-                                </div>
-                              </div>
-
-                              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
-                                  Profile Effect URL
-                                </p>
-                                <input
-                                  type="text"
-                                  value={profileEffectInput}
-                                  onChange={(event) => {
-                                    setProfileEffectInput(event.target.value);
-                                    setProfileEffectStatus(null);
-                                  }}
-                                  placeholder="https://..."
-                                  disabled={isSavingProfileEffect}
-                                  className="mt-2 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35 disabled:cursor-not-allowed disabled:opacity-60"
-                                />
-
-                                {profileEffectStatus ? (
-                                  <p className="mt-2 rounded-md border border-white/10 bg-[#1a1b1e] px-3 py-2 text-xs text-[#b5bac1]">
-                                    {profileEffectStatus}
-                                  </p>
-                                ) : null}
-
-                                <div className="mt-2 flex flex-wrap justify-end gap-2">
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => {
-                                      setProfileEffectInput("");
-                                      setProfileEffectStatus(null);
-                                    }}
-                                    disabled={isSavingProfileEffect}
-                                  >
-                                    Clear
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    onClick={() => void onSaveProfileEffect()}
-                                    disabled={isSavingProfileEffect}
-                                    className="bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
-                                  >
-                                    {isSavingProfileEffect ? (
-                                      <span className="inline-flex items-center gap-2">
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                        Saving...
-                                      </span>
-                                    ) : (
-                                      "Save Effect"
-                                    )}
-                                  </Button>
-                                </div>
-                              </div>
-
                               <div className="flex items-center justify-end gap-2">
                                 {uploadedAvatarThumbnails.length > 0 ? (
                                   <div className="mr-auto rounded-lg border border-white/10 bg-black/20 p-2">
@@ -14072,6 +14091,191 @@ export const SettingsModal = () => {
                                 accept="image/*"
                                 onChange={(event) => onAvatarPanelChange(event.target.files?.[0])}
                               />
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+
+                        <Dialog open={isAvatarDecorationPanelOpen} onOpenChange={setIsAvatarDecorationPanelOpen}>
+                          <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
+                            <DialogHeader>
+                              <DialogTitle>Avatar Decoration</DialogTitle>
+                              <DialogDescription className="text-[#949ba4]">
+                                Set the decoration overlay for your global avatar.
+                              </DialogDescription>
+                            </DialogHeader>
+
+                            <div className="space-y-4">
+                              <div className="rounded-xl border border-white/10 bg-[#1a1b1e] p-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="relative overflow-hidden rounded-full">
+                                    <ProfileEffectLayer src={profileEffectInput.trim() || profileEffectUrl} className="rounded-full" />
+                                    <UserAvatar
+                                      src={avatarUrl ?? undefined}
+                                      decorationSrc={avatarDecorationInput.trim() || avatarDecorationUrl}
+                                      className="h-14 w-14"
+                                    />
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-semibold text-white">Current Decoration</p>
+                                    <p className="text-xs text-[#949ba4]">Global avatar decoration preview</p>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                                  Avatar Decoration URL
+                                </p>
+                                <input
+                                  type="text"
+                                  value={avatarDecorationInput}
+                                  onChange={(event) => {
+                                    setAvatarDecorationInput(event.target.value);
+                                    setAvatarDecorationStatus(null);
+                                  }}
+                                  placeholder="https://..."
+                                  disabled={isSavingAvatarDecoration}
+                                  className="mt-2 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35 disabled:cursor-not-allowed disabled:opacity-60"
+                                />
+
+                                {avatarDecorationStatus ? (
+                                  <p className="mt-2 rounded-md border border-white/10 bg-[#1a1b1e] px-3 py-2 text-xs text-[#b5bac1]">
+                                    {avatarDecorationStatus}
+                                  </p>
+                                ) : null}
+
+                                <div className="mt-2 flex flex-wrap justify-end gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setAvatarDecorationInput("");
+                                      setAvatarDecorationStatus(null);
+                                    }}
+                                    disabled={isSavingAvatarDecoration}
+                                  >
+                                    Clear
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    onClick={() => void onSaveAvatarDecoration()}
+                                    disabled={isSavingAvatarDecoration}
+                                    className="bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    {isSavingAvatarDecoration ? (
+                                      <span className="inline-flex items-center gap-2">
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        Saving...
+                                      </span>
+                                    ) : (
+                                      "Save Decoration"
+                                    )}
+                                  </Button>
+                                  <Button type="button" variant="outline" onClick={() => setIsAvatarDecorationPanelOpen(false)}>
+                                    Close
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+
+                        <Dialog open={isProfileEffectPanelOpen} onOpenChange={setIsProfileEffectPanelOpen}>
+                          <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
+                            <DialogHeader>
+                              <DialogTitle>Profile Effect</DialogTitle>
+                              <DialogDescription className="text-[#949ba4]">
+                                Set the animated effect layer for your global profile.
+                              </DialogDescription>
+                            </DialogHeader>
+
+                            <div className="space-y-4">
+                              <div className="relative overflow-hidden rounded-xl border border-white/10 bg-[#111214] text-[#dbdee1]">
+                                <ProfileEffectLayer src={profileEffectInput.trim() || profileEffectUrl} />
+                                <div className="relative h-24 bg-linear-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
+                                  {resolveBannerUrl(bannerUrl) ? (
+                                    <BannerImage
+                                      src={resolveBannerUrl(bannerUrl) as string}
+                                      alt="Profile effect preview banner"
+                                      className="object-cover"
+                                    />
+                                  ) : null}
+                                </div>
+
+                                <div className="relative p-3 pt-9">
+                                  <div className="absolute -top-10 left-3 rounded-full border-4 border-[#111214]">
+                                    <UserAvatar
+                                      src={avatarUrl ?? undefined}
+                                      decorationSrc={avatarDecorationInput.trim() || avatarDecorationUrl}
+                                      className="h-20 w-20"
+                                    />
+                                  </div>
+
+                                  <div className="min-w-0">
+                                    <p className="text-base font-bold text-white">
+                                      {defaultProfileNameDraft.trim() || profileName || realName || "User"}
+                                    </p>
+                                    <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">
+                                      Global profile effect preview
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                                  Profile Effect URL
+                                </p>
+                                <input
+                                  type="text"
+                                  value={profileEffectInput}
+                                  onChange={(event) => {
+                                    setProfileEffectInput(event.target.value);
+                                    setProfileEffectStatus(null);
+                                  }}
+                                  placeholder="https://..."
+                                  disabled={isSavingProfileEffect}
+                                  className="mt-2 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35 disabled:cursor-not-allowed disabled:opacity-60"
+                                />
+
+                                {profileEffectStatus ? (
+                                  <p className="mt-2 rounded-md border border-white/10 bg-[#1a1b1e] px-3 py-2 text-xs text-[#b5bac1]">
+                                    {profileEffectStatus}
+                                  </p>
+                                ) : null}
+
+                                <div className="mt-2 flex flex-wrap justify-end gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setProfileEffectInput("");
+                                      setProfileEffectStatus(null);
+                                    }}
+                                    disabled={isSavingProfileEffect}
+                                  >
+                                    Clear
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    onClick={() => void onSaveProfileEffect()}
+                                    disabled={isSavingProfileEffect}
+                                    className="bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    {isSavingProfileEffect ? (
+                                      <span className="inline-flex items-center gap-2">
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        Saving...
+                                      </span>
+                                    ) : (
+                                      "Save Effect"
+                                    )}
+                                  </Button>
+                                  <Button type="button" variant="outline" onClick={() => setIsProfileEffectPanelOpen(false)}>
+                                    Close
+                                  </Button>
+                                </div>
+                              </div>
                             </div>
                           </DialogContent>
                         </Dialog>

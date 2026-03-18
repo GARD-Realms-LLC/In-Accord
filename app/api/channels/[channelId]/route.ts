@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { MemberRole } from "@/lib/db";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
+import { ensureAnnouncementChannelSchema } from "@/lib/announcement-channels";
 import { currentProfile } from "@/lib/current-profile";
 import { channel, db, member, server } from "@/lib/db";
 import { ensureChannelGroupSchema } from "@/lib/channel-groups";
@@ -9,7 +10,7 @@ import { ensureChannelOtherSettingsSchema } from "@/lib/channel-other-settings";
 import { ensureChannelTopicSchema } from "@/lib/channel-topic";
 import { ensureSystemChannelSchema } from "@/lib/system-channels";
 
-const VALID_CHANNEL_TYPES = new Set(["TEXT", "AUDIO", "VIDEO"]);
+const VALID_CHANNEL_TYPES = new Set(["TEXT", "ANNOUNCEMENT", "AUDIO", "VIDEO"]);
 
 const resolveAllowedChannelTypes = async () => {
   const result = await db.execute(sql`

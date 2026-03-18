@@ -3,10 +3,12 @@ import { and, eq, or } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { conversation, db, directMessage, member, MemberRole } from "@/lib/db";
+import { getRecentDmRailItemForProfile } from "@/lib/direct-messages";
 import { publishRealtimeEvent } from "@/lib/realtime-events-server";
 import {
-  REALTIME_DIRECT_MESSAGES_REFRESH_EVENT,
-  REALTIME_DM_RAIL_REFRESH_EVENT,
+  REALTIME_DIRECT_MESSAGE_DELETED_EVENT,
+  REALTIME_DIRECT_MESSAGE_UPDATED_EVENT,
+  REALTIME_DM_RAIL_SYNC_EVENT,
 } from "@/lib/realtime-events";
 
 type RouteParams = { directMessageId: string };
@@ -56,6 +58,37 @@ const getConversationProfileIds = async (conversationId: string) => {
   });
 
   return rows.map((item) => String(item.profileId ?? "").trim()).filter(Boolean);
+};
+
+const publishDirectMessageRailSync = async ({
+  conversationId,
+  participantProfileIds,
+}: {
+  conversationId: string;
+  participantProfileIds: string[];
+}) => {
+  await Promise.all(
+    participantProfileIds.map(async (participantProfileId) => {
+      const item = await getRecentDmRailItemForProfile({
+        profileId: participantProfileId,
+        conversationId,
+      });
+
+      await publishRealtimeEvent(
+        REALTIME_DM_RAIL_SYNC_EVENT,
+        {
+          profileId: participantProfileId,
+        },
+        {
+          entity: "direct-message",
+          action: "sync",
+          scope: "rail",
+          conversationId,
+          item,
+        }
+      );
+    })
+  );
 };
 
 export async function PATCH(req: Request, { params }: { params: Promise<RouteParams> }) {
@@ -136,20 +169,27 @@ export async function PATCH(req: Request, { params }: { params: Promise<RoutePar
     const participantProfileIds = await getConversationProfileIds(conversationId);
 
     await publishRealtimeEvent(
-      REALTIME_DIRECT_MESSAGES_REFRESH_EVENT,
+      REALTIME_DIRECT_MESSAGE_UPDATED_EVENT,
       {
         conversationId,
       },
-      { entity: "direct-message", action: "updated" }
+      {
+        entity: "direct-message",
+        action: "updated",
+        message: {
+          id: updated[0]?.id ?? directMessageId,
+          content: updated[0]?.content ?? content,
+          fileUrl: updated[0]?.fileUrl ?? currentDirectMessage.fileUrl ?? null,
+          deleted: Boolean(updated[0]?.deleted),
+          isUpdated: true,
+        },
+      }
     );
 
-    await publishRealtimeEvent(
-      REALTIME_DM_RAIL_REFRESH_EVENT,
-      {
-        profileIds: participantProfileIds,
-      },
-      { entity: "direct-message", action: "updated", scope: "rail" }
-    );
+    await publishDirectMessageRailSync({
+      conversationId,
+      participantProfileIds,
+    });
 
     return NextResponse.json(updated[0] ?? null);
   } catch (error) {
@@ -229,20 +269,28 @@ export async function DELETE(req: Request, { params }: { params: Promise<RoutePa
     const participantProfileIds = await getConversationProfileIds(conversationId);
 
     await publishRealtimeEvent(
-      REALTIME_DIRECT_MESSAGES_REFRESH_EVENT,
+      REALTIME_DIRECT_MESSAGE_DELETED_EVENT,
       {
         conversationId,
       },
-      { entity: "direct-message", action: "deleted" }
+      {
+        entity: "direct-message",
+        action: "deleted",
+        hardDelete: false,
+        message: {
+          id: updated[0]?.id ?? directMessageId,
+          content: updated[0]?.content ?? "This message has been deleted.",
+          fileUrl: null,
+          deleted: true,
+          isUpdated: true,
+        },
+      }
     );
 
-    await publishRealtimeEvent(
-      REALTIME_DM_RAIL_REFRESH_EVENT,
-      {
-        profileIds: participantProfileIds,
-      },
-      { entity: "direct-message", action: "deleted", scope: "rail" }
-    );
+    await publishDirectMessageRailSync({
+      conversationId,
+      participantProfileIds,
+    });
 
     return NextResponse.json(updated[0] ?? null);
   } catch (error) {

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 
 import { currentProfile } from "@/lib/current-profile";
 import { channel, db, server } from "@/lib/db";
+import { getServerManagementAccess } from "@/lib/server-management-access";
 import {
   getOurBoardEntryByServerId,
   updateOurBoardEntryByServerId,
@@ -32,8 +33,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ ser
       return new NextResponse("Server not found", { status: 404 });
     }
 
-    const isServerOwner = String(targetServer.profileId ?? "").trim() === profile.id;
-    if (!isServerOwner) {
+    const access = await getServerManagementAccess({ serverId: normalizedServerId, profileId: profile.id, profileRole: profile.role });
+    if (!access.canManage) {
       return new NextResponse("Forbidden", { status: 403 });
     }
 
@@ -126,8 +127,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ se
       return new NextResponse("Server not found", { status: 404 });
     }
 
-    const isServerOwner = String(targetServer.profileId ?? "").trim() === profile.id;
-    if (!isServerOwner) {
+    const access = await getServerManagementAccess({ serverId: normalizedServerId, profileId: profile.id, profileRole: profile.role });
+    if (!access.canManage) {
       return new NextResponse("Forbidden", { status: 403 });
     }
 

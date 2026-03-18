@@ -1,7 +1,9 @@
 import { and, eq, sql } from "drizzle-orm";
 
 import { db, member, server } from "@/lib/db";
+import { canManageChannelMessages, resolveMemberContext } from "@/lib/channel-permissions";
 import { makeIntegrationBotProfileId } from "@/lib/integration-bot-profile";
+import { bulkDeleteChannelMessages } from "@/lib/message-bulk-delete";
 import {
   OUR_BOARD_BUMP_COOLDOWN_MS,
   recordOurBoardBump,
@@ -157,6 +159,12 @@ export const listServerSlashCommands = async (
       sourceType: "SYSTEM",
       sourceName: "In-Accord",
     },
+    {
+      name: "purge",
+      description: "Delete 1, 5, 10, 15, 25, or all recent messages in this channel (admins/owners).",
+      sourceType: "SYSTEM",
+      sourceName: "In-Accord",
+    },
   ];
 
   if (integrationsEnabled) {
@@ -229,12 +237,16 @@ export const executeServerSlashCommand = async ({
   serverId,
   rawInput,
   channelId,
+  threadId,
   actorProfileId,
+  actorProfileRole,
 }: {
   serverId: string;
   rawInput: string;
   channelId: string;
+  threadId?: string | null;
   actorProfileId: string;
+  actorProfileRole?: string | null;
 }): Promise<
   | { handled: false }
   | { handled: true; responseContent: string; responseMemberId?: string }
@@ -396,6 +408,77 @@ export const executeServerSlashCommand = async ({
         `🚀 ${targetServer.name} bumped on In-Aboard! ` +
         `Your next bump is available in ${Math.round(OUR_BOARD_BUMP_COOLDOWN_MS / 60_000)} minutes. ` +
         `Public board: ${boardUrl}`,
+    };
+  }
+
+  if (selectedCommand.name === "purge") {
+    const normalizedActorProfileId = String(actorProfileId ?? "").trim();
+    if (!normalizedActorProfileId) {
+      return {
+        handled: true,
+        responseContent: "❌ You must be signed in to use /purge.",
+      };
+    }
+
+    const memberContext = await resolveMemberContext({
+      profileId: normalizedActorProfileId,
+      serverId,
+    });
+
+    if (!canManageChannelMessages({ memberContext, profileRole: actorProfileRole })) {
+      return {
+        handled: true,
+        responseContent: "❌ Only server owners and admins can use /purge.",
+      };
+    }
+
+    const normalizedArg = String(args ?? "").trim().toLowerCase();
+    const allowedPresets = new Map<string, number>([
+      ["1", 1],
+      ["5", 5],
+      ["10", 10],
+      ["15", 15],
+      ["25", 25],
+    ]);
+    const deleteAll = normalizedArg === "all";
+    const deleteAmount = allowedPresets.get(normalizedArg);
+
+    if (!deleteAll && typeof deleteAmount !== "number") {
+      return {
+        handled: true,
+        responseContent: "Usage: /purge 1, /purge 5, /purge 10, /purge 15, /purge 25, or /purge all",
+      };
+    }
+
+    const purgeResult = await bulkDeleteChannelMessages({
+      serverId,
+      channelId,
+      threadId,
+      actorProfileId: normalizedActorProfileId,
+      actorProfileRole,
+      amount: deleteAll ? null : deleteAmount,
+      deleteAll,
+    });
+
+    if (!purgeResult.ok) {
+      return {
+        handled: true,
+        responseContent: `❌ ${purgeResult.message}`,
+      };
+    }
+
+    if (purgeResult.deletedCount === 0) {
+      return {
+        handled: true,
+        responseContent: "🧹 No messages matched that purge request.",
+      };
+    }
+
+    const scopeLabel = deleteAll ? "all matching messages" : `${deleteAmount} message${deleteAmount === 1 ? "" : "s"}`;
+
+    return {
+      handled: true,
+      responseContent: `🧹 Purged ${purgeResult.deletedCount} message${purgeResult.deletedCount === 1 ? "" : "s"} from this channel (${scopeLabel}).`,
     };
   }
 

@@ -7,10 +7,15 @@ import {
   normalizeChannelFeatureSettings,
   parseStoredChannelSettings,
 } from "@/lib/channel-feature-settings";
+import {
+  createDefaultChannelCountingState,
+  normalizeChannelCountingState,
+} from "@/lib/channel-counting";
 import { currentProfile } from "@/lib/current-profile";
 import { db, member, server } from "@/lib/db";
 import { MemberRole } from "@/lib/db/types";
 import { ensureChannelOtherSettingsSchema } from "@/lib/channel-other-settings";
+import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 import { integrationProviderKeys, getEffectiveIntegrationProviderCredentials } from "@/lib/integration-provider-config";
 import { getUserPreferences } from "@/lib/user-preferences";
 
@@ -63,7 +68,7 @@ export async function GET(req: Request, { params }: Params) {
     }
 
     const context = await getMemberContext(profile.id, serverId);
-    if (!context.currentMember && !context.isServerOwner) {
+    if (!context.currentMember && !context.isServerOwner && !hasInAccordAdministrativeAccess(profile.role)) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
@@ -160,7 +165,9 @@ export async function PATCH(req: Request, { params }: Params) {
     const context = await getMemberContext(profile.id, serverId);
     const role = context.currentMember?.role;
     const canManage =
-      context.isServerOwner || (role ? [MemberRole.ADMIN, MemberRole.MODERATOR].includes(role) : false);
+      context.isServerOwner ||
+      (role ? [MemberRole.ADMIN, MemberRole.MODERATOR].includes(role) : false) ||
+      hasInAccordAdministrativeAccess(profile.role);
 
     if (!canManage) {
       return new NextResponse("Unauthorized", { status: 401 });
@@ -194,12 +201,22 @@ export async function PATCH(req: Request, { params }: Params) {
     }).rows?.[0];
 
     const parsed = parseStoredChannelSettings(currentRow?.rawSettingsJson);
+    const previousFeatureSettings = normalizeChannelFeatureSettings(parsed.channelFeatureSettings);
     const nextFeatureSettings = normalizeChannelFeatureSettings(body?.settings ?? DEFAULT_CHANNEL_FEATURE_SETTINGS);
+    const countingSettingsChanged =
+      previousFeatureSettings.counting.enabled !== nextFeatureSettings.counting.enabled ||
+      previousFeatureSettings.counting.startingNumber !== nextFeatureSettings.counting.startingNumber ||
+      previousFeatureSettings.counting.preventConsecutiveTurns !== nextFeatureSettings.counting.preventConsecutiveTurns;
 
-    const nextRaw = JSON.stringify({
+    const nextParsed: Record<string, unknown> = {
       ...parsed,
       channelFeatureSettings: nextFeatureSettings,
-    });
+      channelCountingState: countingSettingsChanged
+        ? createDefaultChannelCountingState(nextFeatureSettings.counting)
+        : normalizeChannelCountingState(parsed.channelCountingState, nextFeatureSettings.counting),
+    };
+
+    const nextRaw = JSON.stringify(nextParsed);
 
     await db.execute(sql`
       insert into "ChannelOtherSettings" (

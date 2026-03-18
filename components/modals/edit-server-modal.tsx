@@ -28,10 +28,12 @@ import { Button } from "@/components/ui/button";
 import { BannerImage } from "@/components/ui/banner-image";
 import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
 import { ServerBackupSettingsPanel } from "@/components/modals/server-backup-settings-panel";
+import { ServerAnnouncementSettingsPanel } from "@/components/modals/server-announcement-settings-panel";
 import { UserAvatar } from "@/components/user-avatar";
 import { useModal } from "@/hooks/use-modal-store";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { resolveBannerUrl } from "@/lib/asset-url";
+import { isInAccordAdministrator } from "@/lib/in-accord-admin";
 import { getOtherApiOrigin } from "@/lib/other-upstream-identifiers";
 import { cn } from "@/lib/utils";
 import { isInAccordProtectedServer } from "@/lib/server-security";
@@ -64,6 +66,7 @@ type ServerSettingsSection =
   | "stickers"
   | "soundboard"
   | "moderation"
+  | "counting"
   | "autoMod"
   | "auditLog"
   | "bans"
@@ -113,6 +116,7 @@ const SETTINGS_SECTIONS: Array<{
     heading: "Moderation",
     items: [
       { key: "moderation", label: "Moderation" },
+      { key: "counting", label: "Counting" },
       { key: "autoMod", label: "AutoMod" },
       { key: "auditLog", label: "Audit Log" },
       { key: "bans", label: "Bans" },
@@ -166,6 +170,7 @@ const SECTION_TITLES: Record<ServerSettingsSection, string> = {
   stickers: "Stickers",
   soundboard: "Sound EFX",
   moderation: "Moderation",
+  counting: "Counting",
   autoMod: "AutoMod",
   auditLog: "Audit Log",
   bans: "Bans",
@@ -206,6 +211,7 @@ const GENERIC_SECTION_DESCRIPTIONS: Partial<Record<ServerSettingsSection, string
   serverGuide: "Configure guide content and channel recommendations.",
   onboarding: "Adjust onboarding prompts and suggested channels.",
   moderation: "Set moderation defaults and automated enforcement behavior.",
+  counting: "Choose one live-DB-backed counting channel and manage how server counting progresses.",
   autoMod: "Tune auto moderation triggers and actions.",
   auditLog: "Configure audit visibility and retention options.",
   bans: "Manage ban handling defaults and logging behavior.",
@@ -244,6 +250,7 @@ const SERVER_GUIDE_USAGE: Partial<Record<ServerSettingsSection, string>> = {
   stickers: "Upload and manage custom stickers for server expression and branding.",
   soundboard: "Add and manage Sound EFX clips. Enable/disable or delete clips as needed.",
   moderation: "Tune moderation defaults and combine with AutoMod and safety controls.",
+  counting: "Pick the single counting channel for this server, set the starting number, and manage progress stored in the live database.",
   autoMod: "Define automated moderation checks and enforcement behavior.",
   auditLog: "Review administrative actions to understand recent changes and moderation events.",
   bans: "Manage banned members and enforce long-term safety boundaries.",
@@ -871,6 +878,40 @@ type ServerOurBoardChannel = {
   type: string;
 };
 
+type ServerCountingChannel = {
+  id: string;
+  name: string;
+  type: string;
+};
+
+type ServerCountingSettings = {
+  enabled: boolean;
+  channelId: string | null;
+  startingNumber: number;
+  preventConsecutiveTurns: boolean;
+};
+
+type ServerCountingState = {
+  nextNumber: number;
+  lastProfileId: string | null;
+  lastMessageId: string | null;
+  updatedAt: string | null;
+};
+
+const DEFAULT_SERVER_COUNTING_SETTINGS: ServerCountingSettings = {
+  enabled: false,
+  channelId: null,
+  startingNumber: 1,
+  preventConsecutiveTurns: true,
+};
+
+const DEFAULT_SERVER_COUNTING_STATE: ServerCountingState = {
+  nextNumber: 1,
+  lastProfileId: null,
+  lastMessageId: null,
+  updatedAt: null,
+};
+
 const DEFAULT_ONBOARDING_CONFIG: OnboardingConfig = {
   enabled: false,
   welcomeMessage: "Welcome to the server! Complete onboarding to unlock your best channels.",
@@ -893,6 +934,7 @@ export const EditServerModal = () => {
   const { isOpen, onClose, onOpen, type, data } = useModal();
   const router = useRouter();
   const [currentProfileId, setCurrentProfileId] = useState("");
+  const [currentProfileRole, setCurrentProfileRole] = useState("");
   const [activeSection, setActiveSection] = useState<ServerSettingsSection>("overview");
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isUploadingBanner, setIsUploadingBanner] = useState(false);
@@ -1021,6 +1063,13 @@ export const EditServerModal = () => {
   const [ourBoardBumpChannelDraft, setOurBoardBumpChannelDraft] = useState("");
   const [ourBoardTagsDraft, setOurBoardTagsDraft] = useState<string[]>([]);
   const [ourBoardTagInputDraft, setOurBoardTagInputDraft] = useState("");
+  const [countingChannels, setCountingChannels] = useState<ServerCountingChannel[]>([]);
+  const [countingSettings, setCountingSettings] = useState<ServerCountingSettings>(DEFAULT_SERVER_COUNTING_SETTINGS);
+  const [countingState, setCountingState] = useState<ServerCountingState>(DEFAULT_SERVER_COUNTING_STATE);
+  const [isLoadingCounting, setIsLoadingCounting] = useState(false);
+  const [isSavingCounting, setIsSavingCounting] = useState(false);
+  const [countingError, setCountingError] = useState<string | null>(null);
+  const [countingSuccess, setCountingSuccess] = useState<string | null>(null);
   const [genericSectionSettings, setGenericSectionSettings] = useState<Record<ServerSettingsSection, GenericSectionSettings>>(
     () => createDefaultGenericSectionSettings()
   );
@@ -1044,6 +1093,7 @@ export const EditServerModal = () => {
   const isInAboardSettingsOwner =
     String((server as { profileId?: string | null } | undefined)?.profileId ?? "").trim().length > 0 &&
     String((server as { profileId?: string | null } | undefined)?.profileId ?? "").trim() === currentProfileId;
+  const canManageServerSettings = isInAboardSettingsOwner || isInAccordAdministrator(currentProfileRole);
   const isProtectedInAccordServer = isInAccordProtectedServer({
     serverId: server?.id,
     serverName: server?.name,
@@ -1052,6 +1102,7 @@ export const EditServerModal = () => {
   useEffect(() => {
     if (!isModalOpen) {
       setCurrentProfileId("");
+      setCurrentProfileRole("");
       return;
     }
 
@@ -1059,15 +1110,17 @@ export const EditServerModal = () => {
 
     const loadCurrentProfileId = async () => {
       try {
-        const response = await axios.get<{ id?: string }>("/api/profile/me");
+        const response = await axios.get<{ id?: string; role?: string | null }>("/api/profile/me");
         if (cancelled) {
           return;
         }
 
         setCurrentProfileId(String(response.data?.id ?? "").trim());
+        setCurrentProfileRole(String(response.data?.role ?? "").trim());
       } catch {
         if (!cancelled) {
           setCurrentProfileId("");
+          setCurrentProfileRole("");
         }
       }
     };
@@ -1102,6 +1155,7 @@ export const EditServerModal = () => {
       "stickers",
       "soundboard",
       "moderation",
+      "counting",
       "autoMod",
       "auditLog",
       "bans",
@@ -2470,6 +2524,11 @@ export const EditServerModal = () => {
   };
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    if (!canManageServerSettings) {
+      setSubmitError("Only the server owner can save server settings.");
+      return;
+    }
+
     if (isProtectedInAccordServer && values.name.trim() !== String(server?.name ?? "").trim()) {
       setSubmitError("In-Accord server name is protected and cannot be renamed.");
       return;
@@ -3495,6 +3554,7 @@ export const EditServerModal = () => {
     activeSection === "integrations" ||
     activeSection === "ourBoard" ||
     activeSection === "soundboard" ||
+    activeSection === "counting" ||
     activeSection === "deleteServer" ||
     Boolean(activeEmojiStickerType);
 
@@ -3660,6 +3720,44 @@ export const EditServerModal = () => {
     }
   }, [server?.id]);
 
+  const loadCountingSettings = useCallback(async () => {
+    if (!server?.id) {
+      return;
+    }
+
+    try {
+      setIsLoadingCounting(true);
+      setCountingError(null);
+      setCountingSuccess(null);
+
+      const response = await axios.get<{
+        settings?: ServerCountingSettings;
+        state?: ServerCountingState;
+        channels?: ServerCountingChannel[];
+      }>(`/api/servers/${server.id}/counting`);
+
+      setCountingSettings(response.data.settings ?? DEFAULT_SERVER_COUNTING_SETTINGS);
+      setCountingState(response.data.state ?? DEFAULT_SERVER_COUNTING_STATE);
+      setCountingChannels(response.data.channels ?? []);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          (typeof error.response?.data === "string" ? error.response.data : "") ||
+          error.message;
+        setCountingError(message || "Failed to load counting settings.");
+      } else {
+        setCountingError("Failed to load counting settings.");
+      }
+
+      setCountingSettings(DEFAULT_SERVER_COUNTING_SETTINGS);
+      setCountingState(DEFAULT_SERVER_COUNTING_STATE);
+      setCountingChannels([]);
+    } finally {
+      setIsLoadingCounting(false);
+    }
+  }, [server?.id]);
+
   useEffect(() => {
     if (!isModalOpen || activeSection !== "ourBoard") {
       return;
@@ -3667,6 +3765,14 @@ export const EditServerModal = () => {
 
     void loadOurBoardSettings();
   }, [activeSection, isModalOpen, loadOurBoardSettings]);
+
+  useEffect(() => {
+    if (!isModalOpen || activeSection !== "counting") {
+      return;
+    }
+
+    void loadCountingSettings();
+  }, [activeSection, isModalOpen, loadCountingSettings]);
 
   const onSaveOurBoardSettings = async () => {
     if (!server?.id || isSavingOurBoard) {
@@ -3732,6 +3838,44 @@ export const EditServerModal = () => {
 
   const onRemoveOurBoardTag = (targetTag: string) => {
     setOurBoardTagsDraft((previous) => previous.filter((tag) => tag !== targetTag));
+  };
+
+  const onSaveCountingSettings = async (resetProgress = false) => {
+    if (!server?.id || isSavingCounting || !canManageServerSettings) {
+      return;
+    }
+
+    try {
+      setIsSavingCounting(true);
+      setCountingError(null);
+      setCountingSuccess(null);
+
+      const response = await axios.patch<{
+        settings?: ServerCountingSettings;
+        state?: ServerCountingState;
+        channels?: ServerCountingChannel[];
+      }>(`/api/servers/${server.id}/counting`, {
+        settings: countingSettings,
+        resetProgress,
+      });
+
+      setCountingSettings(response.data.settings ?? countingSettings);
+      setCountingState(response.data.state ?? countingState);
+      setCountingChannels(response.data.channels ?? countingChannels);
+      setCountingSuccess(resetProgress ? "Counting progress reset." : "Counting settings saved.");
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message =
+          (error.response?.data as { error?: string })?.error ||
+          (typeof error.response?.data === "string" ? error.response.data : "") ||
+          error.message;
+        setCountingError(message || "Failed to save counting settings.");
+      } else {
+        setCountingError("Failed to save counting settings.");
+      }
+    } finally {
+      setIsSavingCounting(false);
+    }
   };
 
   const loadCommunityEvents = useCallback(async () => {
@@ -5091,6 +5235,174 @@ export const EditServerModal = () => {
                           </div>
                         </div>
                       </div>
+                    ) : activeSection === "counting" ? (
+                      <div className="space-y-4">
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Status</p>
+                            <p className="mt-1 text-lg font-semibold text-zinc-100">
+                              {countingSettings.enabled ? "Enabled" : "Disabled"}
+                            </p>
+                          </div>
+                          <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Counting Channel</p>
+                            <p className="mt-1 text-sm font-semibold text-zinc-100">
+                              {countingChannels.find((channelItem) => channelItem.id === countingSettings.channelId)?.name
+                                ? `#${countingChannels.find((channelItem) => channelItem.id === countingSettings.channelId)?.name}`
+                                : "None selected"}
+                            </p>
+                          </div>
+                          <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Next Number</p>
+                            <p className="mt-1 text-2xl font-semibold text-zinc-100">{countingState.nextNumber}</p>
+                          </div>
+                        </div>
+
+                        <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-4 space-y-4">
+                          <div className="rounded-md border border-indigo-500/30 bg-indigo-500/10 px-3 py-2 text-xs text-indigo-100">
+                            Counting configuration and progress are stored only in the shared live database for this server.
+                          </div>
+
+                          <div className="flex items-center justify-between rounded-md border border-zinc-700 bg-[#1e1f22] px-3 py-2">
+                            <div>
+                              <p className="text-sm font-medium text-zinc-100">Enable server counting</p>
+                              <p className="text-xs text-zinc-400">Only the selected text channel will enforce counting rules.</p>
+                            </div>
+                            <button
+                              type="button"
+                              disabled={!canManageServerSettings || isLoadingCounting || isSavingCounting}
+                              onClick={() =>
+                                setCountingSettings((previous) => ({
+                                  ...previous,
+                                  enabled: !previous.enabled,
+                                }))
+                              }
+                              className={cn(
+                                "rounded-md px-3 py-1.5 text-xs font-semibold transition",
+                                countingSettings.enabled
+                                  ? "bg-emerald-600/80 text-white hover:bg-emerald-600"
+                                  : "bg-zinc-600/60 text-zinc-100 hover:bg-zinc-600"
+                              )}
+                            >
+                              {countingSettings.enabled ? "Enabled" : "Disabled"}
+                            </button>
+                          </div>
+
+                          <div>
+                            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Counting Channel</p>
+                            <select
+                              value={countingSettings.channelId ?? ""}
+                              onChange={(event) =>
+                                setCountingSettings((previous) => ({
+                                  ...previous,
+                                  channelId: event.target.value || null,
+                                }))
+                              }
+                              disabled={!canManageServerSettings || isLoadingCounting || isSavingCounting}
+                              className="h-10 w-full rounded-md border border-zinc-700 bg-[#15161a] px-2 text-sm text-zinc-100 outline-none focus:border-indigo-500"
+                            >
+                              <option value="">No counting channel selected</option>
+                              {countingChannels.map((channelItem) => (
+                                <option key={channelItem.id} value={channelItem.id}>
+                                  #{channelItem.name}
+                                </option>
+                              ))}
+                            </select>
+                            <p className="mt-1 text-[11px] text-zinc-500">
+                              Pick the single text channel that should run counting for this server.
+                            </p>
+                          </div>
+
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div>
+                              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">Starting Number</p>
+                              <input
+                                type="number"
+                                min={1}
+                                max={1000000000}
+                                value={String(countingSettings.startingNumber)}
+                                onChange={(event) => {
+                                  const parsed = Number(event.target.value);
+                                  const safe = Number.isFinite(parsed)
+                                    ? Math.max(1, Math.min(1_000_000_000, Math.floor(parsed)))
+                                    : 1;
+                                  setCountingSettings((previous) => ({
+                                    ...previous,
+                                    startingNumber: safe,
+                                  }));
+                                }}
+                                disabled={!canManageServerSettings || isLoadingCounting || isSavingCounting}
+                                className="h-10 w-full rounded-md border border-zinc-700 bg-[#15161a] px-3 text-sm text-zinc-100 outline-none focus:border-indigo-500"
+                              />
+                            </div>
+
+                            <div className="flex items-end justify-between rounded-md border border-zinc-700 bg-[#15161a] px-3 py-2">
+                              <div>
+                                <p className="text-xs text-zinc-300">Block back-to-back turns</p>
+                                <p className="text-[11px] text-zinc-500">Prevent the same member from counting twice in a row.</p>
+                              </div>
+                              <button
+                                type="button"
+                                disabled={!canManageServerSettings || isLoadingCounting || isSavingCounting}
+                                onClick={() =>
+                                  setCountingSettings((previous) => ({
+                                    ...previous,
+                                    preventConsecutiveTurns: !previous.preventConsecutiveTurns,
+                                  }))
+                                }
+                                className={cn(
+                                  "rounded-md px-3 py-1.5 text-xs font-semibold transition",
+                                  countingSettings.preventConsecutiveTurns
+                                    ? "bg-[#5865f2] text-white hover:bg-[#4752c4]"
+                                    : "bg-zinc-600/60 text-zinc-100 hover:bg-zinc-600"
+                                )}
+                              >
+                                {countingSettings.preventConsecutiveTurns ? "On" : "Off"}
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="rounded-md border border-zinc-700 bg-[#1e1f22] px-3 py-2 text-xs text-zinc-300">
+                            <p>Last update: {countingState.updatedAt ? new Date(countingState.updatedAt).toLocaleString() : "No counting activity yet."}</p>
+                            <p className="mt-1">Current progress lives in the DB and the next accepted number is <span className="font-semibold text-white">{countingState.nextNumber}</span>.</p>
+                          </div>
+
+                          {countingError ? (
+                            <p className="text-xs text-rose-300">{countingError}</p>
+                          ) : null}
+
+                          {countingSuccess ? (
+                            <p className="text-xs text-emerald-300">{countingSuccess}</p>
+                          ) : null}
+
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              type="button"
+                              onClick={() => void loadCountingSettings()}
+                              disabled={isLoadingCounting || isSavingCounting}
+                              className="bg-transparent text-zinc-300 hover:bg-white/10"
+                            >
+                              Reset Draft
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={() => void onSaveCountingSettings(true)}
+                              disabled={!canManageServerSettings || isLoadingCounting || isSavingCounting}
+                              className="bg-[#4e5058] text-white hover:bg-[#5d6069]"
+                            >
+                              {isSavingCounting ? "Saving..." : "Reset Progress"}
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={() => void onSaveCountingSettings(false)}
+                              disabled={!canManageServerSettings || isLoadingCounting || isSavingCounting}
+                              className="bg-[#5865f2] text-white hover:bg-[#4752c4]"
+                            >
+                              {isSavingCounting ? "Saving..." : "Save Counting"}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
                     ) : activeSection === "eventsManagement" ? (
                       <div className="space-y-4">
                         <div className="rounded-lg border border-zinc-700 bg-[#2B2D31] p-4">
@@ -5198,6 +5510,8 @@ export const EditServerModal = () => {
                           </div>
                         </div>
                       </div>
+                    ) : activeSection === "communityOverview" ? (
+                      <ServerAnnouncementSettingsPanel serverId={server?.id} />
                     ) : activeSection === "backups" ? (
                       <ServerBackupSettingsPanel serverId={server?.id} />
                     ) : activeSection === "onboarding" ? (
@@ -6967,6 +7281,11 @@ export const EditServerModal = () => {
                 </div>
 
                 <div className="flex items-center justify-between border-t border-black/20 bg-[#2B2D31] px-8 py-4">
+                  {!canManageServerSettings ? (
+                    <p className="text-xs text-amber-300">Only the server owner or an In-Accord administrator can save server settings.</p>
+                  ) : (
+                    <span />
+                  )}
                   <Button
                     type="button"
                     variant="ghost"
@@ -6976,7 +7295,7 @@ export const EditServerModal = () => {
                   >
                     Cancel
                   </Button>
-                  <Button variant="primary" disabled={isLoading || isUploadingImage || isUploadingBanner}>
+                  <Button variant="primary" disabled={isLoading || isUploadingImage || isUploadingBanner || !canManageServerSettings}>
                     {isLoading ? "Saving..." : "Save Changes"}
                   </Button>
                 </div>

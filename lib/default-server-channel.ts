@@ -31,7 +31,9 @@ const isExcludedDefaultChannelName = (name: string) => {
 };
 
 export const pickDefaultServerChannel = <T extends ServerChannelCandidate>(channels: T[]) => {
-  const visibleTextChannels = channels.filter((item) => item.type === ChannelType.TEXT);
+  const visibleTextChannels = channels.filter(
+    (item) => item.type === ChannelType.TEXT || item.type === ChannelType.ANNOUNCEMENT
+  );
   const preferredTextChannel = visibleTextChannels.find((item) => !isExcludedDefaultChannelName(item.name));
 
   if (preferredTextChannel) {

@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db } from "@/lib/db";
+import { normalizeOptionalCloudflareObjectPointer } from "@/lib/live-db-asset-pointers";
 import { ensureUserProfileSchema } from "@/lib/user-profile";
 
 export async function PATCH(req: Request) {
@@ -14,10 +15,15 @@ export async function PATCH(req: Request) {
     }
 
     const body = (await req.json().catch(() => ({}))) as { avatarDecorationUrl?: string | null };
-    const normalizedAvatarDecorationUrl =
-      typeof body.avatarDecorationUrl === "string" && body.avatarDecorationUrl.trim().length > 0
-        ? body.avatarDecorationUrl.trim()
-        : null;
+    const normalizedAvatarDecorationUrl = normalizeOptionalCloudflareObjectPointer(body.avatarDecorationUrl);
+
+    if (
+      body.avatarDecorationUrl !== null &&
+      body.avatarDecorationUrl !== undefined &&
+      normalizedAvatarDecorationUrl === null
+    ) {
+      return NextResponse.json({ error: "avatarDecorationUrl must be a Cloudflare object pointer" }, { status: 400 });
+    }
 
     const fallbackProfileName = (current.profileName ?? current.realName ?? current.email ?? "User")
       .trim()

@@ -1,5 +1,7 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { sql } from "drizzle-orm";
+
+import { db } from "@/lib/db";
+import { ensureLegacyServerBannerPointersImported } from "@/lib/legacy-banner-db-migration";
 
 export type BannerFitMode = "cover" | "contain" | "scale";
 
@@ -9,28 +11,55 @@ export interface ServerBannerConfig {
   scale: number;
 }
 
-type BannerMap = Record<string, string | ServerBannerConfig>;
+declare global {
+  // eslint-disable-next-line no-var
+  var inAccordServerBannerSchemaReady: boolean | undefined;
+}
 
-const dataDir = path.join(process.cwd(), ".data");
-const bannerFile = path.join(dataDir, "server-banners.json");
-
-async function readBannerMap(): Promise<BannerMap> {
-  try {
-    const raw = await readFile(bannerFile, "utf8");
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object") {
-      return {};
-    }
-    return parsed as BannerMap;
-  } catch {
-    return {};
+const ensureServerBannerSchema = async () => {
+  if (globalThis.inAccordServerBannerSchemaReady) {
+    return;
   }
-}
 
-async function writeBannerMap(map: BannerMap) {
-  await mkdir(dataDir, { recursive: true });
-  await writeFile(bannerFile, JSON.stringify(map, null, 2), "utf8");
-}
+  await db.execute(sql`
+    create table if not exists "ServerBanner" (
+      "serverId" varchar(191) primary key,
+      "url" text,
+      "fit" varchar(20) not null default 'cover',
+      "scale" double precision not null default 1,
+      "createdAt" timestamp not null default now(),
+      "updatedAt" timestamp not null default now()
+    )
+  `);
+
+  await db.execute(sql`
+    alter table "ServerBanner"
+    add column if not exists "url" text
+  `);
+
+  await db.execute(sql`
+    alter table "ServerBanner"
+    add column if not exists "fit" varchar(20) not null default 'cover'
+  `);
+
+  await db.execute(sql`
+    alter table "ServerBanner"
+    add column if not exists "scale" double precision not null default 1
+  `);
+
+  await db.execute(sql`
+    alter table "ServerBanner"
+    add column if not exists "createdAt" timestamp not null default now()
+  `);
+
+  await db.execute(sql`
+    alter table "ServerBanner"
+    add column if not exists "updatedAt" timestamp not null default now()
+  `);
+
+  await ensureLegacyServerBannerPointersImported();
+  globalThis.inAccordServerBannerSchemaReady = true;
+};
 
 const normalizeScale = (value?: number) => {
   if (typeof value !== "number" || Number.isNaN(value)) {
@@ -47,34 +76,36 @@ const normalizeFit = (value?: string): BannerFitMode => {
 };
 
 export async function getServerBannerConfig(serverId: string): Promise<ServerBannerConfig | null> {
-  const map = await readBannerMap();
-  const value = map[serverId];
-
-  if (!value) {
+  const normalizedServerId = String(serverId ?? "").trim();
+  if (!normalizedServerId) {
     return null;
   }
 
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    if (!trimmed) {
-      return null;
-    }
-    return {
-      url: trimmed,
-      fit: "cover",
-      scale: 1,
-    };
-  }
+  await ensureServerBannerSchema();
 
-  const trimmed = typeof value.url === "string" ? value.url.trim() : "";
+  const result = await db.execute(sql`
+    select
+      nullif(trim(sb."url"), '') as "url",
+      sb."fit" as "fit",
+      sb."scale" as "scale"
+    from "ServerBanner" sb
+    where sb."serverId" = ${normalizedServerId}
+    limit 1
+  `);
+
+  const row = ((result as unknown as {
+    rows?: Array<{ url: string | null; fit: string | null; scale: number | string | null }>;
+  }).rows ?? [])[0];
+
+  const trimmed = typeof row?.url === "string" ? row.url.trim() : "";
   if (!trimmed) {
     return null;
   }
 
   return {
     url: trimmed,
-    fit: normalizeFit(value.fit),
-    scale: normalizeScale(value.scale),
+    fit: normalizeFit(row?.fit ?? undefined),
+    scale: normalizeScale(typeof row?.scale === "number" ? row.scale : Number(row?.scale)),
   };
 }
 
@@ -95,18 +126,32 @@ export async function setServerBannerConfig(
   serverId: string,
   config?: { url?: string | null; fit?: BannerFitMode | string; scale?: number }
 ) {
-  const map = await readBannerMap();
-  const url = typeof config?.url === "string" ? config.url.trim() : "";
-
-  if (url.length > 0) {
-    map[serverId] = {
-      url,
-      fit: normalizeFit(config?.fit),
-      scale: normalizeScale(config?.scale),
-    };
-  } else {
-    delete map[serverId];
+  const normalizedServerId = String(serverId ?? "").trim();
+  if (!normalizedServerId) {
+    throw new Error("Server ID is required.");
   }
 
-  await writeBannerMap(map);
+  await ensureServerBannerSchema();
+
+  const url = typeof config?.url === "string" ? config.url.trim() : "";
+  const fit = normalizeFit(config?.fit);
+  const scale = normalizeScale(config?.scale);
+  const now = new Date();
+
+  if (url.length > 0) {
+    await db.execute(sql`
+      insert into "ServerBanner" ("serverId", "url", "fit", "scale", "createdAt", "updatedAt")
+      values (${normalizedServerId}, ${url}, ${fit}, ${scale}, ${now}, ${now})
+      on conflict ("serverId") do update
+      set "url" = excluded."url",
+          "fit" = excluded."fit",
+          "scale" = excluded."scale",
+          "updatedAt" = excluded."updatedAt"
+    `);
+  } else {
+    await db.execute(sql`
+      delete from "ServerBanner"
+      where "serverId" = ${normalizedServerId}
+    `);
+  }
 }

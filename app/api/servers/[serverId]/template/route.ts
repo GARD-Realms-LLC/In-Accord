@@ -12,6 +12,7 @@ import { ensureChannelOtherSettingsSchema } from "@/lib/channel-other-settings";
 import { ensureChannelPermissionSchema } from "@/lib/channel-permissions";
 import { getOtherApiOrigin } from "@/lib/other-upstream-identifiers";
 import { getDecryptedOtherBotToken, getUserPreferences } from "@/lib/user-preferences";
+import { getServerManagementAccess } from "@/lib/server-management-access";
 
 type Params = { params: Promise<{ serverId: string }> };
 
@@ -362,8 +363,12 @@ const isOtherCategoryType = (type: number | string | undefined) => normalizeOthe
 
 const mapOtherChannelType = (type: number | string | undefined): ChannelType | null => {
   const normalizedType = normalizeOtherChannelType(type);
-  if (normalizedType === 0 || normalizedType === 5 || normalizedType === 15 || normalizedType === 16) {
+  if (normalizedType === 0 || normalizedType === 15 || normalizedType === 16) {
     return ChannelType.TEXT;
+  }
+
+  if (normalizedType === 5) {
+    return ChannelType.ANNOUNCEMENT;
   }
 
   if (normalizedType === 2) {
@@ -489,10 +494,10 @@ const mapOverwritePermission = ({
 };
 
 const getAuthorizedOwnerServer = async (serverId: string, profileId: string) => {
-  return db.query.server.findFirst({
-    where: and(eq(server.id, serverId), eq(server.profileId, profileId)),
-    columns: { id: true, name: true },
-  });
+  const access = await getServerManagementAccess({ serverId, profileId, profileRole: null });
+  return access.canManage && access.target
+    ? { id: access.target.id, name: access.target.name }
+    : null;
 };
 
 const resolveOtherAccessToken = async (
@@ -682,9 +687,9 @@ export async function GET(_req: Request, { params }: Params) {
       return new NextResponse("Server ID missing", { status: 400 });
     }
 
-    const ownerServer = await getAuthorizedOwnerServer(serverId, profile.id);
-    if (!ownerServer) {
-      return new NextResponse("Only the server owner can manage templates", { status: 403 });
+    const ownerServer = await getServerManagementAccess({ serverId, profileId: profile.id, profileRole: profile.role });
+    if (!ownerServer.canManage || !ownerServer.target) {
+      return new NextResponse("Only the server owner or an In-Accord administrator can manage templates", { status: 403 });
     }
 
     await ensureChannelGroupSchema();
@@ -818,7 +823,7 @@ export async function GET(_req: Request, { params }: Params) {
       exportedAt: new Date().toISOString(),
       server: {
         id: serverId,
-        name: ownerServer.name,
+        name: ownerServer.target!.name,
       },
       roles: roles
         .filter((role) => !role.isManaged)
@@ -864,9 +869,9 @@ export async function POST(req: Request, { params }: Params) {
       return new NextResponse("Server ID missing", { status: 400 });
     }
 
-    const ownerServer = await getAuthorizedOwnerServer(serverId, profile.id);
-    if (!ownerServer) {
-      return new NextResponse("Only the server owner can import templates", { status: 403 });
+    const ownerServer = await getServerManagementAccess({ serverId, profileId: profile.id, profileRole: profile.role });
+    if (!ownerServer.canManage || !ownerServer.target) {
+      return new NextResponse("Only the server owner or an In-Accord administrator can import templates", { status: 403 });
     }
 
     const body = (await req.json().catch(() => ({}))) as ImportRequestBody;
@@ -1190,11 +1195,12 @@ export async function POST(req: Request, { params }: Params) {
       const autoGroupIdByChannelType = new Map<ChannelType, string>();
       const defaultGroupLabelByType: Record<ChannelType, string> = {
         [ChannelType.TEXT]: "Text Channels",
+        [ChannelType.ANNOUNCEMENT]: "Announcement Channels",
         [ChannelType.AUDIO]: "Audio Channels",
         [ChannelType.VIDEO]: "Video Channels",
       };
 
-      for (const channelType of [ChannelType.TEXT, ChannelType.AUDIO, ChannelType.VIDEO] as const) {
+      for (const channelType of [ChannelType.TEXT, ChannelType.ANNOUNCEMENT, ChannelType.AUDIO, ChannelType.VIDEO] as const) {
         const defaultNameKey = defaultGroupLabelByType[channelType].trim().toLowerCase();
         const existingDefaultGroupId = groupIdByNormalizedName.get(defaultNameKey);
         if (existingDefaultGroupId) {

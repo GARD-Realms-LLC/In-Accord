@@ -8,6 +8,7 @@ export enum ChannelType {
   TEXT = "TEXT",
   AUDIO = "AUDIO",
   VIDEO = "VIDEO",
+  ANNOUNCEMENT = "ANNOUNCEMENT",
 }
 
 export interface Profile {

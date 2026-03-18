@@ -15,6 +15,51 @@ export interface GlobalRecentDmItem {
   unreadCount: number;
 }
 
+export interface SerializedRecentDmRailItem {
+  conversationId: string;
+  serverId: string;
+  memberId: string;
+  profileId: string;
+  displayName: string;
+  imageUrl: string | null;
+  avatarDecorationUrl: string | null;
+  profileCreatedAt: string | null;
+  timestampLabel: string;
+  lastMessageAt: string | null;
+  unreadCount: number;
+}
+
+export const formatRecentDmTimestamp = (value: Date) => {
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+    return "";
+  }
+
+  return value.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+};
+
+export const serializeRecentDmRailItem = (item: GlobalRecentDmItem): SerializedRecentDmRailItem => ({
+  conversationId: item.conversationId,
+  serverId: item.serverId,
+  memberId: item.memberId,
+  profileId: item.profileId,
+  displayName: item.displayName,
+  imageUrl: item.imageUrl,
+  avatarDecorationUrl: item.avatarDecorationUrl,
+  profileCreatedAt: item.profileCreatedAt ? item.profileCreatedAt.toISOString() : null,
+  timestampLabel: formatRecentDmTimestamp(item.lastMessageAt),
+  lastMessageAt:
+    item.lastMessageAt instanceof Date && !Number.isNaN(item.lastMessageAt.getTime())
+      ? item.lastMessageAt.toISOString()
+      : null,
+  unreadCount: item.unreadCount,
+});
+
 export const getGlobalRecentDmsForProfile = async ({
   profileId,
   selectedServerId,
@@ -119,6 +164,31 @@ export const getGlobalRecentDmsForProfile = async ({
     lastMessageAt: new Date(row.lastMessageAt),
     unreadCount: Number(row.unreadCount ?? 0),
   }));
+};
+
+export const getRecentDmRailItemForProfile = async ({
+  profileId,
+  conversationId,
+  selectedServerId,
+  recentWindowDays = 30,
+}: {
+  profileId: string;
+  conversationId: string;
+  selectedServerId?: string | null;
+  recentWindowDays?: number;
+}): Promise<SerializedRecentDmRailItem | null> => {
+  if (!profileId || !conversationId) {
+    return null;
+  }
+
+  const items = await getGlobalRecentDmsForProfile({
+    profileId,
+    selectedServerId,
+    recentWindowDays,
+  });
+
+  const match = items.find((item) => item.conversationId === conversationId);
+  return match ? serializeRecentDmRailItem(match) : null;
 };
 
 export const markConversationRead = async ({

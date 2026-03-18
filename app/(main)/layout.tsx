@@ -3,6 +3,7 @@ import { LastLocationTracker } from "@/components/navigation/last-location-track
 import { SignInForm } from "@/components/auth/sign-in-form";
 
 import { currentProfile } from "@/lib/current-profile";
+import { INACCORD_BUILD_NUMBER, INACCORD_VERSION_LABEL } from "@/lib/build-version";
 import { UserActivityPopup } from "@/components/settings/user-activity-popup";
 import { UserLocalTime } from "@/components/server/user-local-time";
 import { GlobalUserStatusDock } from "@/components/settings/global-user-status-dock";
@@ -11,7 +12,13 @@ const MainLayout = async ({ children }: { children: React.ReactNode }) => {
   const profile = await currentProfile();
 
   if (!profile) {
-    return <SignInForm contextMessage="Sign in is required to open this page." />;
+    return (
+      <SignInForm
+        contextMessage="Sign in is required to open this page."
+        buildNumber={INACCORD_BUILD_NUMBER}
+        versionLabel={INACCORD_VERSION_LABEL}
+      />
+    );
   }
 
   return (

@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db } from "@/lib/db";
+import { normalizeOptionalCloudflareObjectPointer } from "@/lib/live-db-asset-pointers";
 import { ensureUserProfileSchema } from "@/lib/user-profile";
 
 const isValidHexColor = (value: string) => /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value);
@@ -45,7 +46,11 @@ export async function PATCH(req: Request) {
     }
 
     const normalizedColor = normalizedLabel ? (rawColor || "#5865f2") : null;
-    const normalizedImageUrl = rawImageUrl || null;
+    const normalizedImageUrl = rawImageUrl ? normalizeOptionalCloudflareObjectPointer(rawImageUrl) : null;
+
+    if (rawImageUrl.length > 0 && normalizedImageUrl === null) {
+      return NextResponse.json({ error: "Nameplate image URL must be a Cloudflare object pointer." }, { status: 400 });
+    }
 
     const fallbackProfileName = (current.profileName ?? current.realName ?? current.email ?? "User")
       .trim()

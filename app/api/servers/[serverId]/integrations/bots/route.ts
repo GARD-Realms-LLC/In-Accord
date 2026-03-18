@@ -4,6 +4,7 @@ import { and, eq, ne, sql } from "drizzle-orm";
 import { currentProfile } from "@/lib/current-profile";
 import { db, member, server } from "@/lib/db";
 import { isBotUser } from "@/lib/is-bot-user";
+import { getServerManagementAccess } from "@/lib/server-management-access";
 import {
   clearServerIntegrationBotFlags,
   getServerIntegrationBotControl,
@@ -89,11 +90,9 @@ export async function GET(
       return new NextResponse("Server ID missing", { status: 400 });
     }
 
-    const requesterMembership = await db.query.member.findFirst({
-      where: and(eq(member.serverId, serverId), eq(member.profileId, profile.id)),
-    });
+    const access = await getServerManagementAccess({ serverId, profileId: profile.id, profileRole: profile.role });
 
-    if (!requesterMembership) {
+    if (!access.canView) {
       return new NextResponse("Forbidden", { status: 403 });
     }
 
@@ -131,12 +130,10 @@ export async function POST(
       return new NextResponse("Server ID missing", { status: 400 });
     }
 
-    const ownerServer = await db.query.server.findFirst({
-      where: and(eq(server.id, serverId), eq(server.profileId, profile.id)),
-    });
+    const access = await getServerManagementAccess({ serverId, profileId: profile.id, profileRole: profile.role });
 
-    if (!ownerServer) {
-      return new NextResponse("Only the server owner can manage integrations.", { status: 403 });
+    if (!access.canManage) {
+      return new NextResponse("Only the server owner or an In-Accord administrator can manage integrations.", { status: 403 });
     }
 
     const normalizedAction = action ?? "BOOT";

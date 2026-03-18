@@ -996,7 +996,7 @@ export const ChatInput = ({
           render={({ field }) => (
             <FormItem>
               <FormControl>
-                <div className="relative w-full p-4 pb-6">
+                <div className="relative w-full pb-6 pl-4 pr-0 pt-4">
                   {activeQuote ? (
                     <div className="mb-2 ml-14 mr-14 flex items-start justify-between rounded-md border border-indigo-500/35 bg-indigo-500/10 px-3 py-2 text-xs text-indigo-100">
                       <div className="min-w-0">

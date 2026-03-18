@@ -14,6 +14,7 @@ interface DirectMessageListItemProps {
   avatarDecorationUrl?: string | null;
   profileCreatedAt?: Date | string | null;
   timestampLabel: string;
+  lastMessageAt?: string | null;
   unreadCount: number;
   isActive?: boolean;
 }
@@ -28,6 +29,7 @@ export const DirectMessageListItem = ({
   avatarDecorationUrl,
   profileCreatedAt,
   timestampLabel,
+  lastMessageAt: _lastMessageAt,
   unreadCount,
   isActive,
 }: DirectMessageListItemProps) => {

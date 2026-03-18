@@ -1,9 +1,8 @@
-import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { currentProfile } from "@/lib/current-profile";
-import { db, server } from "@/lib/db";
 import { getServerBackupRecord } from "@/lib/server-backups";
+import { getServerManagementAccess } from "@/lib/server-management-access";
 
 type Params = { params: Promise<{ serverId: string; backupId: string }> };
 
@@ -19,13 +18,10 @@ export async function GET(_request: Request, { params }: Params) {
       return new NextResponse("Backup request is invalid.", { status: 400 });
     }
 
-    const ownerServer = await db.query.server.findFirst({
-      where: and(eq(server.id, serverId), eq(server.profileId, profile.id)),
-      columns: { id: true },
-    });
+    const access = await getServerManagementAccess({ serverId, profileId: profile.id, profileRole: profile.role });
 
-    if (!ownerServer) {
-      return new NextResponse("Only the server owner can download backups.", { status: 403 });
+    if (!access.canManage) {
+      return new NextResponse("Only the server owner or an In-Accord administrator can download backups.", { status: 403 });
     }
 
     const backup = await getServerBackupRecord(serverId, backupId);

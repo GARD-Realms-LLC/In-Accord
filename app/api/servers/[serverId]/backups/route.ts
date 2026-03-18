@@ -1,8 +1,7 @@
-import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { currentProfile } from "@/lib/current-profile";
-import { db, server } from "@/lib/db";
+import { getServerManagementAccess } from "@/lib/server-management-access";
 import {
   createServerBackup,
   getServerBackupConfig,
@@ -12,17 +11,6 @@ import {
 } from "@/lib/server-backups";
 
 type Params = { params: Promise<{ serverId: string }> };
-
-const getOwnedServer = async (serverId: string, profileId: string) => {
-  return db.query.server.findFirst({
-    where: and(eq(server.id, serverId), eq(server.profileId, profileId)),
-    columns: {
-      id: true,
-      name: true,
-      profileId: true,
-    },
-  });
-};
 
 export async function GET(_request: Request, { params }: Params) {
   try {
@@ -36,9 +24,9 @@ export async function GET(_request: Request, { params }: Params) {
       return new NextResponse("Server ID missing", { status: 400 });
     }
 
-    const ownerServer = await getOwnedServer(serverId, profile.id);
-    if (!ownerServer) {
-      return new NextResponse("Only the server owner can manage backups.", { status: 403 });
+    const access = await getServerManagementAccess({ serverId, profileId: profile.id, profileRole: profile.role });
+    if (!access.canManage) {
+      return new NextResponse("Only the server owner or an In-Accord administrator can manage backups.", { status: 403 });
     }
 
     const [config, backups] = await Promise.all([
@@ -69,9 +57,9 @@ export async function PATCH(request: Request, { params }: Params) {
       return new NextResponse("Server ID missing", { status: 400 });
     }
 
-    const ownerServer = await getOwnedServer(serverId, profile.id);
-    if (!ownerServer) {
-      return new NextResponse("Only the server owner can manage backups.", { status: 403 });
+    const access = await getServerManagementAccess({ serverId, profileId: profile.id, profileRole: profile.role });
+    if (!access.canManage) {
+      return new NextResponse("Only the server owner or an In-Accord administrator can manage backups.", { status: 403 });
     }
 
     const body = (await request.json().catch(() => ({}))) as ServerBackupConfigPatch;
@@ -101,9 +89,9 @@ export async function POST(request: Request, { params }: Params) {
       return new NextResponse("Server ID missing", { status: 400 });
     }
 
-    const ownerServer = await getOwnedServer(serverId, profile.id);
-    if (!ownerServer) {
-      return new NextResponse("Only the server owner can create backups.", { status: 403 });
+    const access = await getServerManagementAccess({ serverId, profileId: profile.id, profileRole: profile.role });
+    if (!access.canManage) {
+      return new NextResponse("Only the server owner or an In-Accord administrator can create backups.", { status: 403 });
     }
 
     const body = (await request.json().catch(() => ({}))) as { destination?: "FILE" | "S3" | "FTP" };

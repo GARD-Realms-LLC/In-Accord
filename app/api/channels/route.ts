@@ -3,11 +3,12 @@ import { and, eq, inArray } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 import { sql } from "drizzle-orm";
 
+import { ensureAnnouncementChannelSchema } from "@/lib/announcement-channels";
 import { currentProfile } from "@/lib/current-profile";
 import { channel, db, MemberRole, member, server } from "@/lib/db";
 import { ensureChannelGroupSchema } from "@/lib/channel-groups";
 
-const VALID_CHANNEL_TYPES = new Set(["TEXT", "AUDIO", "VIDEO"]);
+const VALID_CHANNEL_TYPES = new Set(["TEXT", "ANNOUNCEMENT", "AUDIO", "VIDEO"]);
 
 const resolveAllowedChannelTypes = async () => {
   const result = await db.execute(sql`
@@ -134,6 +135,7 @@ export async function POST(req: Request) {
     }
 
     const normalizedType = typeof type === "string" ? type.trim().toUpperCase() : "";
+    await ensureAnnouncementChannelSchema();
     const allowedChannelTypes = await resolveAllowedChannelTypes();
     if (!allowedChannelTypes.has(normalizedType)) {
       return new NextResponse("Invalid channel type", { status: 400 });

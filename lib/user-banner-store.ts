@@ -1,49 +1,55 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { sql } from "drizzle-orm";
 
-type UserBannerMap = Record<string, string>;
-
-const dataDir = path.join(process.cwd(), ".data");
-const bannerFile = path.join(dataDir, "user-banners.json");
-
-async function readBannerMap(): Promise<UserBannerMap> {
-  try {
-    const raw = await readFile(bannerFile, "utf8");
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object") {
-      return {};
-    }
-    return parsed as UserBannerMap;
-  } catch {
-    return {};
-  }
-}
-
-async function writeBannerMap(map: UserBannerMap) {
-  await mkdir(dataDir, { recursive: true });
-  await writeFile(bannerFile, JSON.stringify(map, null, 2), "utf8");
-}
+import { db } from "@/lib/db";
+import { ensureLegacyUserBannerPointersImported } from "@/lib/legacy-banner-db-migration";
+import { ensureUserProfileSchema } from "@/lib/user-profile";
 
 export async function getUserBanner(userId: string): Promise<string | null> {
-  const map = await readBannerMap();
-  const value = map[userId];
-  if (typeof value !== "string") {
+  const normalizedUserId = String(userId ?? "").trim();
+  if (!normalizedUserId) {
     return null;
   }
 
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
+  await ensureLegacyUserBannerPointersImported();
+  await ensureUserProfileSchema();
+
+  const result = await db.execute(sql`
+    select nullif(trim(up."bannerUrl"), '') as "bannerUrl"
+    from "UserProfile" up
+    where up."userId" = ${normalizedUserId}
+    limit 1
+  `);
+
+  const bannerUrl = ((result as unknown as {
+    rows?: Array<{ bannerUrl: string | null }>;
+  }).rows ?? [])[0]?.bannerUrl;
+
+  return typeof bannerUrl === "string" && bannerUrl.trim().length > 0 ? bannerUrl.trim() : null;
 }
 
 export async function setUserBanner(userId: string, bannerUrl?: string | null) {
-  const map = await readBannerMap();
-  const url = typeof bannerUrl === "string" ? bannerUrl.trim() : "";
-
-  if (url.length > 0) {
-    map[userId] = url;
-  } else {
-    delete map[userId];
+  const normalizedUserId = String(userId ?? "").trim();
+  if (!normalizedUserId) {
+    throw new Error("User ID is required.");
   }
 
-  await writeBannerMap(map);
+  await ensureLegacyUserBannerPointersImported();
+  await ensureUserProfileSchema();
+
+  const normalizedBannerUrl = typeof bannerUrl === "string" && bannerUrl.trim().length > 0 ? bannerUrl.trim() : null;
+  const now = new Date();
+
+  await db.execute(sql`
+    insert into "UserProfile" ("userId", "profileName", "bannerUrl", "createdAt", "updatedAt")
+    values (
+      ${normalizedUserId},
+      ${"User"},
+      ${normalizedBannerUrl},
+      ${now},
+      ${now}
+    )
+    on conflict ("userId") do update
+    set "bannerUrl" = excluded."bannerUrl",
+        "updatedAt" = excluded."updatedAt"
+  `);
 }

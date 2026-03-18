@@ -1,11 +1,12 @@
 import { Channel, ChannelType, MemberRole } from "@/lib/db/types";
-import { Hash, Mic, Video } from "lucide-react";
+import { Bell, Hash, Mic, Video } from "lucide-react";
 import { asc, eq, sql } from "drizzle-orm";
 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { currentProfile } from "@/lib/current-profile";
 import { channel, db, server } from "@/lib/db";
 import { ensureChannelGroupSchema } from "@/lib/channel-groups";
+import { isInAccordAdministrator } from "@/lib/in-accord-admin";
 import { resolveMemberContext, visibleChannelIdsForMember } from "@/lib/channel-permissions";
 import { getServerBannerConfig } from "@/lib/server-banner-store";
 import { getServerProfileSettings } from "@/lib/server-profile-settings-store";
@@ -43,6 +44,7 @@ type ChannelGroupRow = {
 
 const iconMap = {
   [ChannelType.TEXT]: <Hash className="mr-2 h-4 w-4" />,
+  [ChannelType.ANNOUNCEMENT]: <Bell className="mr-2 h-4 w-4" />,
   [ChannelType.AUDIO]: <Mic className="mr-2 h-4 w-4" />,
   [ChannelType.VIDEO]: <Video className="mr-2 h-4 w-4" />,
 };
@@ -181,7 +183,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
   const role = members.find(
     (member) => member.profileId === profile?.id
   )?.role;
-  const isServerOwner = !!profile?.id && currentServer.profileId === profile.id;
+  const isServerOwner = (!!profile?.id && currentServer.profileId === profile.id) || isInAccordAdministrator(profile?.role);
 
   const visibleChannelIds = role
     ? await visibleChannelIdsForMember({

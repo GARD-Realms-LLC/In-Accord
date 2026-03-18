@@ -9,7 +9,7 @@ import {
   type LocalChatMutationDetail,
 } from "@/lib/chat-live-events";
 import { resolveAbsoluteAppUrl, resolveRuntimeAppOrigin } from "@/lib/client-runtime-url";
-import { REALTIME_DM_RAIL_REFRESH_EVENT } from "@/lib/realtime-events";
+import { REALTIME_DM_RAIL_SYNC_EVENT } from "@/lib/realtime-events";
 
 type RecentDmRailItem = {
   conversationId: string;
@@ -21,12 +21,26 @@ type RecentDmRailItem = {
   avatarDecorationUrl: string | null;
   profileCreatedAt: string | null;
   timestampLabel: string;
+  lastMessageAt: string | null;
   unreadCount: number;
 };
 
 type RecentDmRailResponse = {
   items?: RecentDmRailItem[];
 };
+
+type RecentDmRailSyncPayload = {
+  conversationId?: string;
+  item?: RecentDmRailItem | null;
+};
+
+const getRecentDmSortTime = (item: RecentDmRailItem) => {
+  const parsed = Date.parse(item.lastMessageAt ?? "");
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+const sortRecentDmItems = (items: RecentDmRailItem[]) =>
+  [...items].sort((left, right) => getRecentDmSortTime(right) - getRecentDmSortTime(left));
 
 type LiveRecentDmsRailProps = {
   initialItems: RecentDmRailItem[];
@@ -91,7 +105,7 @@ export const LiveRecentDmsRail = ({
         }
 
         const payload = (await response.json()) as RecentDmRailResponse;
-        setItems(Array.isArray(payload.items) ? payload.items : []);
+        setItems(sortRecentDmItems(Array.isArray(payload.items) ? payload.items : []));
       })
       .catch((error) => {
         console.error("[LIVE_RECENT_DMS_REFRESH]", error);
@@ -105,12 +119,27 @@ export const LiveRecentDmsRail = ({
   }, [requestUrl]);
 
   useEffect(() => {
-    setItems(initialItems);
+    setItems(sortRecentDmItems(initialItems));
   }, [initialItems]);
 
   useEffect(() => {
-    const onRefresh = () => {
-      void refreshRail();
+    const onSync = (payload: RecentDmRailSyncPayload | undefined) => {
+      const conversationId = String(payload?.conversationId ?? payload?.item?.conversationId ?? "").trim();
+      if (!conversationId) {
+        return;
+      }
+
+      const item = payload?.item ?? null;
+
+      setItems((current) => {
+        if (!item || (selectedServerId && item.serverId !== selectedServerId)) {
+          return current.filter((entry) => entry.conversationId !== conversationId);
+        }
+
+        const next = current.filter((entry) => entry.conversationId !== item.conversationId);
+        next.push(item);
+        return sortRecentDmItems(next);
+      });
     };
 
     const joinRoom = () => {
@@ -145,16 +174,16 @@ export const LiveRecentDmsRail = ({
 
     joinRoom();
     void refreshRail();
-    socket.on?.(REALTIME_DM_RAIL_REFRESH_EVENT, onRefresh);
+    socket.on?.(REALTIME_DM_RAIL_SYNC_EVENT, onSync);
     socket.on?.("connect", onConnect);
 
     return () => {
       window.removeEventListener(LOCAL_CHAT_MUTATION_EVENT, onLocalMutation as EventListener);
       socket.emit?.("inaccord:leave", roomPayload);
-      socket.off?.(REALTIME_DM_RAIL_REFRESH_EVENT, onRefresh);
+      socket.off?.(REALTIME_DM_RAIL_SYNC_EVENT, onSync);
       socket.off?.("connect", onConnect);
     };
-  }, [refreshRail, roomPayload, socket]);
+  }, [refreshRail, roomPayload, selectedServerId, socket]);
 
   if (items.length === 0) {
     return <p>No recent PMs yet.</p>;

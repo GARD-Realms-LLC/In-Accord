@@ -81,6 +81,7 @@ const patronSparkles = Array.from({ length: 14 }, (_, index) => ({
 const AuthLayout = ({ children }: { children: ReactNode }) => {
   const rosterContainerRef = useRef<HTMLDivElement | null>(null);
   const rosterTrackRef = useRef<HTMLDivElement | null>(null);
+  const [isClientDecorReady, setIsClientDecorReady] = useState(false);
   const [rosterStartOffset, setRosterStartOffset] = useState(0);
   const [rosterEndOffset, setRosterEndOffset] = useState(0);
   const [rosterDurationSeconds, setRosterDurationSeconds] = useState(28);
@@ -101,9 +102,13 @@ const AuthLayout = ({ children }: { children: ReactNode }) => {
   ];
 
   useEffect(() => {
+    setIsClientDecorReady(true);
+  }, []);
+
+  useEffect(() => {
     const container = rosterContainerRef.current;
     const track = rosterTrackRef.current;
-    if (!container || !track) {
+    if (!isClientDecorReady || !container || !track) {
       return;
     }
 
@@ -131,48 +136,50 @@ const AuthLayout = ({ children }: { children: ReactNode }) => {
     return () => {
       observer.disconnect();
     };
-  }, [featuredPatrons.length]);
+  }, [featuredPatrons.length, isClientDecorReady]);
 
   return (
-    <div className="relative flex min-h-screen w-full overflow-hidden bg-[#0f1115] text-white">
+    <div className="relative grid min-h-screen w-full grid-cols-[minmax(0,1fr)_auto] overflow-hidden bg-[#0f1115] text-white">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(88,101,242,0.28),transparent_38%),radial-gradient(circle_at_82%_14%,rgba(56,189,248,0.2),transparent_36%),linear-gradient(140deg,#0b0d12_0%,#111827_42%,#1f2937_100%)]"
       />
 
-      <div aria-hidden className="auth-steampunk-social-layer pointer-events-none absolute inset-y-0 left-0 right-24 z-5 sm:right-32">
-        {steampunkSocialIcons.map((item) => (
-          <span
-            key={item.key}
-            className="auth-steampunk-social-glyph"
-            style={{
-              left: item.left,
-              top: item.top,
-              opacity: item.opacity,
-              ["--social-glyph-duration" as any]: item.duration,
-              ["--social-spin-duration" as any]: item.spinDuration,
-              ["--social-pulse-duration" as any]: item.pulseDuration,
-              ["--social-float-distance" as any]: item.floatDistance,
-              ["--social-spin-direction" as any]: item.spinDirection,
-              ["--social-spin-play-state" as any]: item.spinPlayState,
-              animationDelay: item.delay,
-              transform: `rotate(${item.rotation}deg)`,
-            }}
-          >
-            <span className="auth-steampunk-social-gear">
-              <span className="auth-steampunk-social-gear-hub" />
+      {isClientDecorReady ? (
+        <div aria-hidden className="auth-steampunk-social-layer pointer-events-none absolute inset-y-0 left-0 right-24 z-5 sm:right-32">
+          {steampunkSocialIcons.map((item) => (
+            <span
+              key={item.key}
+              className="auth-steampunk-social-glyph"
+              style={{
+                left: item.left,
+                top: item.top,
+                opacity: item.opacity,
+                ["--social-glyph-duration" as any]: item.duration,
+                ["--social-spin-duration" as any]: item.spinDuration,
+                ["--social-pulse-duration" as any]: item.pulseDuration,
+                ["--social-float-distance" as any]: item.floatDistance,
+                ["--social-spin-direction" as any]: item.spinDirection,
+                ["--social-spin-play-state" as any]: item.spinPlayState,
+                animationDelay: item.delay,
+                transform: `rotate(${item.rotation}deg)`,
+              }}
+            >
+              <span className="auth-steampunk-social-gear">
+                <span className="auth-steampunk-social-gear-hub" />
+              </span>
+              <item.Icon className="auth-steampunk-social-icon" style={{ width: `${item.size}px`, height: `${item.size}px` }} />
             </span>
-            <item.Icon className="auth-steampunk-social-icon" style={{ width: item.size, height: item.size }} />
-          </span>
-        ))}
-      </div>
+          ))}
+        </div>
+      ) : null}
 
-      <main className="relative z-10 flex min-h-screen w-full items-center justify-center p-6 md:p-10">
+      <main className="relative z-10 col-start-1 flex min-h-screen min-w-0 items-center justify-center px-4 py-6 md:px-8 md:py-10">
         {children}
       </main>
 
       <aside
-        className="relative z-10 flex min-h-screen w-24 shrink-0 flex-col overflow-hidden border-l border-black/30 bg-[#0d0f14]/65 sm:w-32"
+        className="relative z-10 flex min-h-screen w-24 flex-col overflow-hidden border-l border-black/30 bg-[#0d0f14]/65 sm:w-32"
         style={{ ["--auth-patron-intensity" as any]: 1, ["--auth-patron-speed" as any]: 1 }}
       >
         <div className="relative z-20 border-b border-amber-300/25 bg-[#0d0f14]/78 px-3 py-3 backdrop-blur-md">
@@ -210,40 +217,42 @@ const AuthLayout = ({ children }: { children: ReactNode }) => {
           </div>
         </div>
 
-        <div className="pointer-events-none absolute inset-0">
-          {patronRainDrops.map((drop) => (
-            <span
-              key={drop.key}
-              className="auth-patron-rain-drop"
-              style={{
-                left: drop.left,
-                animationDelay: drop.delay,
-                ["--rain-duration" as any]: drop.duration,
-                ["--drop-opacity" as any]: drop.opacity,
-                width: drop.width,
-                height: drop.height,
-                background: drop.background,
-                boxShadow: drop.boxShadow,
-                transform: `scale(${drop.scale})`,
-              }}
-            />
-          ))}
+        {isClientDecorReady ? (
+          <div className="pointer-events-none absolute inset-0">
+            {patronRainDrops.map((drop) => (
+              <span
+                key={drop.key}
+                className="auth-patron-rain-drop"
+                style={{
+                  left: drop.left,
+                  animationDelay: drop.delay,
+                  ["--rain-duration" as any]: drop.duration,
+                  ["--drop-opacity" as any]: String(drop.opacity),
+                  width: drop.width,
+                  height: drop.height,
+                  background: drop.background,
+                  boxShadow: drop.boxShadow,
+                  transform: `scale(${drop.scale})`,
+                }}
+              />
+            ))}
 
-          {patronSparkles.map((sparkle) => (
-            <span
-              key={sparkle.key}
-              className="auth-patron-rain-sparkle"
-              style={{
-                left: sparkle.left,
-                top: sparkle.top,
-                animationDelay: sparkle.delay,
-                ["--sparkle-duration" as any]: sparkle.duration,
-                ["--sparkle-opacity" as any]: sparkle.opacity,
-                transform: `scale(${sparkle.scale})`,
-              }}
-            />
-          ))}
-        </div>
+            {patronSparkles.map((sparkle) => (
+              <span
+                key={sparkle.key}
+                className="auth-patron-rain-sparkle"
+                style={{
+                  left: sparkle.left,
+                  top: sparkle.top,
+                  animationDelay: sparkle.delay,
+                  ["--sparkle-duration" as any]: sparkle.duration,
+                  ["--sparkle-opacity" as any]: String(sparkle.opacity),
+                  transform: `scale(${sparkle.scale})`,
+                }}
+              />
+            ))}
+          </div>
+        ) : null}
       </aside>
     </div>
   );

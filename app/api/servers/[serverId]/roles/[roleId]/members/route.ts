@@ -2,7 +2,8 @@ import { and, eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { currentProfile } from "@/lib/current-profile";
-import { db, member, server } from "@/lib/db";
+import { db } from "@/lib/db";
+import { getServerManagementAccess } from "@/lib/server-management-access";
 import { ensureServerRolesSchema } from "@/lib/server-roles";
 
 type Params = { params: Promise<{ serverId: string; roleId: string }> };
@@ -26,12 +27,12 @@ export async function GET(_req: Request, { params }: Params) {
       return new NextResponse("Server ID and Role ID are required", { status: 400 });
     }
 
-    const existingMember = await db.query.member.findFirst({
-      where: and(eq(member.serverId, serverId), eq(member.profileId, profile.id)),
-      columns: { id: true },
-    });
+    const access = await getServerManagementAccess({ serverId, profileId: profile.id, profileRole: profile.role });
+    if (!access.target) {
+      return new NextResponse("Server not found", { status: 404 });
+    }
 
-    if (!existingMember) {
+    if (!access.canView) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
@@ -47,11 +48,6 @@ export async function GET(_req: Request, { params }: Params) {
     if (!((roleExists as unknown as { rows?: Array<{ id: string }> }).rows?.[0])) {
       return new NextResponse("Role not found", { status: 404 });
     }
-
-    const ownerServer = await db.query.server.findFirst({
-      where: and(eq(server.id, serverId), eq(server.profileId, profile.id)),
-      columns: { id: true },
-    });
 
     const membersResult = await db.execute(sql`
       with role_ranked as (
@@ -138,7 +134,7 @@ export async function GET(_req: Request, { params }: Params) {
 
     return NextResponse.json({
       members,
-      canManageRoleMembers: Boolean(ownerServer),
+      canManageRoleMembers: access.canManage,
     });
   } catch (error) {
     console.error("[SERVER_ROLE_MEMBERS_GET]", error);
@@ -160,13 +156,13 @@ export async function POST(req: Request, { params }: Params) {
       return new NextResponse("Server ID and Role ID are required", { status: 400 });
     }
 
-    const ownerServer = await db.query.server.findFirst({
-      where: and(eq(server.id, serverId), eq(server.profileId, profile.id)),
-      columns: { id: true },
-    });
+    const access = await getServerManagementAccess({ serverId, profileId: profile.id, profileRole: profile.role });
+    if (!access.target) {
+      return new NextResponse("Server not found", { status: 404 });
+    }
 
-    if (!ownerServer) {
-      return new NextResponse("Only the server owner can manage role members", { status: 403 });
+    if (!access.canManage) {
+      return new NextResponse("Only the server owner or an In-Accord administrator can manage role members", { status: 403 });
     }
 
     await ensureServerRolesSchema();
@@ -205,13 +201,13 @@ export async function DELETE(req: Request, { params }: Params) {
       return new NextResponse("Server ID and Role ID are required", { status: 400 });
     }
 
-    const ownerServer = await db.query.server.findFirst({
-      where: and(eq(server.id, serverId), eq(server.profileId, profile.id)),
-      columns: { id: true },
-    });
+    const access = await getServerManagementAccess({ serverId, profileId: profile.id, profileRole: profile.role });
+    if (!access.target) {
+      return new NextResponse("Server not found", { status: 404 });
+    }
 
-    if (!ownerServer) {
-      return new NextResponse("Only the server owner can manage role members", { status: 403 });
+    if (!access.canManage) {
+      return new NextResponse("Only the server owner or an In-Accord administrator can manage role members", { status: 403 });
     }
 
     const body = (await req.json().catch(() => ({}))) as { memberId?: string };

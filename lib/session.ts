@@ -5,7 +5,9 @@ import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 
 export const SESSION_COOKIE_NAME = "inaccord_session_user_id";
-const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30;
+const PERSISTENT_SESSION_TTL_SECONDS = 60 * 60 * 24 * 5;
+const BROWSER_SESSION_TTL_SECONDS = 60 * 60 * 24;
+const MAX_SIGNED_TOKEN_AGE_SECONDS = PERSISTENT_SESSION_TTL_SECONDS;
 const SESSION_SECRET = process.env.SESSION_SECRET || "replace_me_session_secret";
 
 type SessionRow = {
@@ -87,12 +89,12 @@ const resolveSessionCookieSecure = async (request?: Request) => {
   return process.env.NODE_ENV === "production";
 };
 
-const getSessionCookieOptions = async (request?: Request) => ({
+const getSessionCookieOptions = async (request?: Request, maxAge?: number) => ({
   httpOnly: true,
   sameSite: "lax" as const,
   secure: await resolveSessionCookieSecure(request),
   path: "/",
-  maxAge: SESSION_TTL_SECONDS,
+  ...(typeof maxAge === "number" ? { maxAge } : {}),
 });
 
 const expireSessionCookie = async (request?: Request) => {
@@ -175,7 +177,7 @@ const parseSessionToken = (token: string) => {
   }
 
   const now = Math.floor(Date.now() / 1000);
-  if (issuedAt <= 0 || now - issuedAt > SESSION_TTL_SECONDS) {
+  if (issuedAt <= 0 || now - issuedAt > MAX_SIGNED_TOKEN_AGE_SECONDS) {
     return null;
   }
 
@@ -204,12 +206,16 @@ const resolveRequestMetadata = (request?: Request) => {
   };
 };
 
-const createSessionRecord = async (userId: string, request?: Request) => {
+const createSessionRecord = async (
+  userId: string,
+  request?: Request,
+  ttlSeconds: number = BROWSER_SESSION_TTL_SECONDS
+) => {
   await ensureSessionSchema();
 
   const sessionId = randomBytes(24).toString("hex");
   const issuedAt = Math.floor(Date.now() / 1000);
-  const expiresAt = new Date((issuedAt + SESSION_TTL_SECONDS) * 1000);
+  const expiresAt = new Date((issuedAt + ttlSeconds) * 1000);
   const { userAgent, ipAddress } = resolveRequestMetadata(request);
 
   await db.execute(sql`
@@ -404,14 +410,19 @@ export const setSessionUserId = async (
   options?: {
     sessionId?: string;
     request?: Request;
+    persistent?: boolean;
   }
 ) => {
+  const ttlSeconds = options?.persistent ? PERSISTENT_SESSION_TTL_SECONDS : BROWSER_SESSION_TTL_SECONDS;
   const sessionDetails = options?.sessionId
     ? { sessionId: options.sessionId, issuedAt: Math.floor(Date.now() / 1000) }
-    : await createSessionRecord(userId, options?.request);
+    : await createSessionRecord(userId, options?.request, ttlSeconds);
 
   const cookieStore = await cookies();
-  const cookieOptions = await getSessionCookieOptions(options?.request);
+  const cookieOptions = await getSessionCookieOptions(
+    options?.request,
+    options?.persistent ? PERSISTENT_SESSION_TTL_SECONDS : undefined
+  );
   cookieStore.set(
     SESSION_COOKIE_NAME,
     createSessionToken(userId, sessionDetails.sessionId, sessionDetails.issuedAt),

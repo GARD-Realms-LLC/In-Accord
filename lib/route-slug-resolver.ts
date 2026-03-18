@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 
 import { channel, db, member, server } from "@/lib/db";
+import { isInAccordAdministrator } from "@/lib/in-accord-admin";
 import { buildRouteSegment, matchesRouteParam } from "@/lib/route-slugs";
 
 type ServerCandidate = { id: string; name: string };
@@ -22,21 +23,29 @@ const safeDecode = (value: string) => {
 export async function resolveServerRouteContext(input: {
   profileId: string;
   serverParam: string;
+  profileRole?: string | null;
 }): Promise<{ id: string; name: string; segment: string } | null> {
   const normalizedParam = safeDecode(String(input.serverParam ?? "").trim());
+  const isGlobalAdministrator = isInAccordAdministrator(input.profileRole);
   if (!normalizedParam) {
     return null;
   }
 
-  const directServer = await db
-    .select({ id: server.id, name: server.name })
-    .from(server)
-    .innerJoin(
-      member,
-      and(eq(member.serverId, server.id), eq(member.profileId, input.profileId))
-    )
-    .where(eq(server.id, normalizedParam))
-    .limit(1);
+  const directServer = isGlobalAdministrator
+    ? await db
+        .select({ id: server.id, name: server.name })
+        .from(server)
+        .where(eq(server.id, normalizedParam))
+        .limit(1)
+    : await db
+        .select({ id: server.id, name: server.name })
+        .from(server)
+        .innerJoin(
+          member,
+          and(eq(member.serverId, server.id), eq(member.profileId, input.profileId))
+        )
+        .where(eq(server.id, normalizedParam))
+        .limit(1);
 
   if (directServer[0]) {
     return {
@@ -46,13 +55,15 @@ export async function resolveServerRouteContext(input: {
     };
   }
 
-  const candidates = await db
-    .select({ id: server.id, name: server.name })
-    .from(server)
-    .innerJoin(
-      member,
-      and(eq(member.serverId, server.id), eq(member.profileId, input.profileId))
-    );
+  const candidates = isGlobalAdministrator
+    ? await db.select({ id: server.id, name: server.name }).from(server)
+    : await db
+        .select({ id: server.id, name: server.name })
+        .from(server)
+        .innerJoin(
+          member,
+          and(eq(member.serverId, server.id), eq(member.profileId, input.profileId))
+        );
 
   const match = (candidates as ServerCandidate[]).find((item) =>
     matchesRouteParam(normalizedParam, item)

@@ -8,7 +8,10 @@ import { emitChannelWebhookEvent, getChannelFeatureSettings } from "@/lib/channe
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 import { parseMentionSegments } from "@/lib/mentions";
 import { publishRealtimeEvent } from "@/lib/realtime-events-server";
-import { REALTIME_CHANNEL_REFRESH_EVENT } from "@/lib/realtime-events";
+import {
+  REALTIME_CHANNEL_MESSAGE_DELETED_EVENT,
+  REALTIME_CHANNEL_MESSAGE_UPDATED_EVENT,
+} from "@/lib/realtime-events";
 
 type RouteParams = { messageId: string };
 
@@ -221,13 +224,23 @@ export async function PATCH(
       .returning();
 
     await publishRealtimeEvent(
-      REALTIME_CHANNEL_REFRESH_EVENT,
+      REALTIME_CHANNEL_MESSAGE_UPDATED_EVENT,
       {
         serverId,
         channelId,
         threadId: currentMessage.threadId,
       },
-      { entity: "message", action: "updated" }
+      {
+        entity: "message",
+        action: "updated",
+        message: {
+          id: updated[0]?.id ?? messageId,
+          content: updated[0]?.content ?? moderated.nextContent,
+          fileUrl: updated[0]?.fileUrl ?? currentMessage.fileUrl ?? null,
+          deleted: Boolean(updated[0]?.deleted),
+          isUpdated: true,
+        },
+      }
     );
 
     await emitChannelWebhookEvent({
@@ -384,13 +397,18 @@ export async function DELETE(
         .where(and(eq(message.id, messageId), eq(message.channelId, channelId)));
 
       await publishRealtimeEvent(
-        REALTIME_CHANNEL_REFRESH_EVENT,
+        REALTIME_CHANNEL_MESSAGE_DELETED_EVENT,
         {
           serverId,
           channelId,
           threadId: currentMessage.threadId,
         },
-        { entity: "message", action: "deleted" }
+        {
+          entity: "message",
+          action: "deleted",
+          hardDelete: true,
+          messageId,
+        }
       );
 
       await emitChannelWebhookEvent({
@@ -423,13 +441,24 @@ export async function DELETE(
       .returning();
 
     await publishRealtimeEvent(
-      REALTIME_CHANNEL_REFRESH_EVENT,
+      REALTIME_CHANNEL_MESSAGE_DELETED_EVENT,
       {
         serverId,
         channelId,
         threadId: currentMessage.threadId,
       },
-      { entity: "message", action: "deleted" }
+      {
+        entity: "message",
+        action: "deleted",
+        hardDelete: false,
+        message: {
+          id: updated[0]?.id ?? messageId,
+          content: updated[0]?.content ?? "This message has been deleted.",
+          fileUrl: null,
+          deleted: true,
+          isUpdated: true,
+        },
+      }
     );
 
     await emitChannelWebhookEvent({

@@ -1,7 +1,8 @@
 import "server-only";
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { sql } from "drizzle-orm";
+
+import { db } from "@/lib/db";
 
 export type ServerInviteMode = "normal" | "approval";
 
@@ -16,10 +17,10 @@ export type ServerProfileSettings = {
   hiddenChannelIds: string[];
 };
 
-type SettingsMap = Record<string, Partial<ServerProfileSettings> | undefined>;
-
-const dataDir = path.join(process.cwd(), ".data");
-const settingsFile = path.join(dataDir, "server-profile-settings.json");
+declare global {
+  // eslint-disable-next-line no-var
+  var inAccordServerProfileSettingsSchemaReady: boolean | undefined;
+}
 
 const DEFAULT_SETTINGS: ServerProfileSettings = {
   description: null,
@@ -129,62 +130,134 @@ const normalizeHideAllChannels = (value: unknown) => {
   return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on";
 };
 
-const normalizeSettings = (value: Partial<ServerProfileSettings> | undefined): ServerProfileSettings => {
-  return {
-    description: normalizeDescription(value?.description),
-    traits: normalizeStringList(value?.traits, 12, 36),
-    gamesPlayed: normalizeStringList(value?.gamesPlayed, 24, 48),
-    bannerColor: normalizeHexColor(value?.bannerColor),
-    inviteMode: normalizeInviteMode(value?.inviteMode),
-    showChannelGroups: normalizeShowChannelGroups(value?.showChannelGroups),
-    hideAllChannels: normalizeHideAllChannels(value?.hideAllChannels),
-    hiddenChannelIds: normalizeStringIdList(value?.hiddenChannelIds),
-  };
+const normalizeSettings = (value: Partial<ServerProfileSettings> | undefined): ServerProfileSettings => ({
+  description: normalizeDescription(value?.description),
+  traits: normalizeStringList(value?.traits, 12, 36),
+  gamesPlayed: normalizeStringList(value?.gamesPlayed, 24, 48),
+  bannerColor: normalizeHexColor(value?.bannerColor),
+  inviteMode: normalizeInviteMode(value?.inviteMode),
+  showChannelGroups: normalizeShowChannelGroups(value?.showChannelGroups),
+  hideAllChannels: normalizeHideAllChannels(value?.hideAllChannels),
+  hiddenChannelIds: normalizeStringIdList(value?.hiddenChannelIds),
+});
+
+const ensureServerProfileSettingsSchema = async () => {
+  if (globalThis.inAccordServerProfileSettingsSchemaReady) {
+    return;
+  }
+
+  await db.execute(sql`
+    create table if not exists "ServerProfileSettings" (
+      "serverId" varchar(191) primary key,
+      "description" text,
+      "traits" jsonb not null default '[]'::jsonb,
+      "gamesPlayed" jsonb not null default '[]'::jsonb,
+      "bannerColor" varchar(20),
+      "inviteMode" varchar(20) not null default 'normal',
+      "showChannelGroups" boolean not null default true,
+      "hideAllChannels" boolean not null default false,
+      "hiddenChannelIds" jsonb not null default '[]'::jsonb,
+      "createdAt" timestamp not null default now(),
+      "updatedAt" timestamp not null default now()
+    )
+  `);
+
+  globalThis.inAccordServerProfileSettingsSchemaReady = true;
 };
 
-async function readSettingsMap(): Promise<SettingsMap> {
-  try {
-    const raw = await readFile(settingsFile, "utf8");
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return {};
-    }
-
-    return parsed as SettingsMap;
-  } catch {
-    return {};
-  }
-}
-
-async function writeSettingsMap(map: SettingsMap) {
-  await mkdir(dataDir, { recursive: true });
-  await writeFile(settingsFile, JSON.stringify(map, null, 2), "utf8");
-}
-
 export async function getServerProfileSettings(serverId: string): Promise<ServerProfileSettings> {
-  const map = await readSettingsMap();
-  const raw = map[serverId];
-  if (!raw || typeof raw !== "object") {
+  const normalizedServerId = String(serverId ?? "").trim();
+  if (!normalizedServerId) {
     return { ...DEFAULT_SETTINGS };
   }
 
-  return normalizeSettings(raw);
+  await ensureServerProfileSettingsSchema();
+
+  const result = await db.execute(sql`
+    select
+      sps."description" as "description",
+      sps."traits" as "traits",
+      sps."gamesPlayed" as "gamesPlayed",
+      sps."bannerColor" as "bannerColor",
+      sps."inviteMode" as "inviteMode",
+      sps."showChannelGroups" as "showChannelGroups",
+      sps."hideAllChannels" as "hideAllChannels",
+      sps."hiddenChannelIds" as "hiddenChannelIds"
+    from "ServerProfileSettings" sps
+    where sps."serverId" = ${normalizedServerId}
+    limit 1
+  `);
+
+  const row = ((result as unknown as { rows?: Array<Record<string, unknown>> }).rows ?? [])[0];
+  if (!row) {
+    return { ...DEFAULT_SETTINGS };
+  }
+
+  return normalizeSettings({
+    description: row.description as string | null | undefined,
+    traits: row.traits as string[] | undefined,
+    gamesPlayed: row.gamesPlayed as string[] | undefined,
+    bannerColor: row.bannerColor as string | null | undefined,
+    inviteMode: row.inviteMode as ServerInviteMode | undefined,
+    showChannelGroups: row.showChannelGroups as boolean | undefined,
+    hideAllChannels: row.hideAllChannels as boolean | undefined,
+    hiddenChannelIds: row.hiddenChannelIds as string[] | undefined,
+  });
 }
 
 export async function setServerProfileSettings(
   serverId: string,
   next: Partial<ServerProfileSettings>
 ): Promise<ServerProfileSettings> {
-  const map = await readSettingsMap();
-  const current = await getServerProfileSettings(serverId);
+  const normalizedServerId = String(serverId ?? "").trim();
+  if (!normalizedServerId) {
+    throw new Error("Server ID is required.");
+  }
 
-  const merged = normalizeSettings({
-    ...current,
-    ...next,
-  });
+  await ensureServerProfileSettingsSchema();
 
-  map[serverId] = merged;
-  await writeSettingsMap(map);
+  const current = await getServerProfileSettings(normalizedServerId);
+  const merged = normalizeSettings({ ...current, ...next });
+  const now = new Date();
+
+  await db.execute(sql`
+    insert into "ServerProfileSettings" (
+      "serverId",
+      "description",
+      "traits",
+      "gamesPlayed",
+      "bannerColor",
+      "inviteMode",
+      "showChannelGroups",
+      "hideAllChannels",
+      "hiddenChannelIds",
+      "createdAt",
+      "updatedAt"
+    )
+    values (
+      ${normalizedServerId},
+      ${merged.description},
+      ${JSON.stringify(merged.traits)}::jsonb,
+      ${JSON.stringify(merged.gamesPlayed)}::jsonb,
+      ${merged.bannerColor},
+      ${merged.inviteMode},
+      ${merged.showChannelGroups},
+      ${merged.hideAllChannels},
+      ${JSON.stringify(merged.hiddenChannelIds)}::jsonb,
+      ${now},
+      ${now}
+    )
+    on conflict ("serverId") do update
+    set "description" = excluded."description",
+        "traits" = excluded."traits",
+        "gamesPlayed" = excluded."gamesPlayed",
+        "bannerColor" = excluded."bannerColor",
+        "inviteMode" = excluded."inviteMode",
+        "showChannelGroups" = excluded."showChannelGroups",
+        "hideAllChannels" = excluded."hideAllChannels",
+        "hiddenChannelIds" = excluded."hiddenChannelIds",
+        "updatedAt" = excluded."updatedAt"
+  `);
 
   return merged;
 }

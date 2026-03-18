@@ -10,6 +10,7 @@ import { ChannelType, MemberRole } from "@/lib/db/types";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 import { resolveServerRouteContext } from "@/lib/route-slug-resolver";
 import { buildRouteSegment } from "@/lib/route-slugs";
+import { getServerManagementAccess } from "@/lib/server-management-access";
 
 type ChannelRow = {
   id: string;
@@ -43,6 +44,7 @@ const ServerIdLayout = async ({
   const resolvedServer = await resolveServerRouteContext({
     profileId: profile.id,
     serverParam,
+    profileRole: profile.role,
   });
 
   if (!resolvedServer) {
@@ -51,25 +53,18 @@ const ServerIdLayout = async ({
 
   const serverId = resolvedServer.id;
 
-  const hasAccess = await db
-    .select({ id: server.id, name: server.name, ownerProfileId: server.profileId })
-    .from(server)
-    .innerJoin(
-      member,
-      and(
-        eq(member.serverId, server.id),
-        eq(member.profileId, profile.id),
-        eq(server.id, serverId)
-      )
-    )
-    .limit(1);
+  const access = await getServerManagementAccess({
+    serverId,
+    profileId: profile.id,
+    profileRole: profile.role,
+  });
 
-  if (!hasAccess[0]) {
+  if (!access.target || !access.canView) {
     return redirect("/");
   }
 
-  const currentServerName = hasAccess[0].name;
-  const isServerOwner = hasAccess[0].ownerProfileId === profile.id;
+  const currentServerName = access.target.name;
+  const isServerOwner = access.canManage;
 
   const channelsResult = await db
     .select({
@@ -106,6 +101,7 @@ const ServerIdLayout = async ({
   const memberRows = (membersResult as unknown as { rows: MemberRow[] }).rows;
 
   const textChannels = channelRows.filter((row) => row.type === ChannelType.TEXT);
+  const announcementChannels = channelRows.filter((row) => row.type === ChannelType.ANNOUNCEMENT);
   const voiceChannels = channelRows.filter((row) => row.type === ChannelType.AUDIO);
   const videoChannels = channelRows.filter((row) => row.type === ChannelType.VIDEO);
 
@@ -129,6 +125,7 @@ const ServerIdLayout = async ({
       serverId={serverId}
       serverRouteSegment={resolvedServer.segment}
       textChannels={textChannels.map((channel) => ({ id: channel.id, name: channel.name, routeSegment: buildRouteSegment(channel.name, channel.id) }))}
+      announcementChannels={announcementChannels.map((channel) => ({ id: channel.id, name: channel.name, routeSegment: buildRouteSegment(channel.name, channel.id) }))}
       voiceChannels={voiceChannels.map((channel) => ({ id: channel.id, name: channel.name, routeSegment: buildRouteSegment(channel.name, channel.id) }))}
       videoChannels={videoChannels.map((channel) => ({ id: channel.id, name: channel.name, routeSegment: buildRouteSegment(channel.name, channel.id) }))}
       onlineUsers={onlineUsers.map((member) => ({

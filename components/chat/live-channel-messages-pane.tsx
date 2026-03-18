@@ -15,7 +15,9 @@ import {
 import { resolveAbsoluteAppUrl, resolveRuntimeAppOrigin } from "@/lib/client-runtime-url";
 import {
   REALTIME_CHANNEL_MESSAGE_CREATED_EVENT,
-  REALTIME_CHANNEL_REFRESH_EVENT,
+  REALTIME_CHANNEL_MESSAGE_DELETED_EVENT,
+  REALTIME_CHANNEL_MESSAGE_UPDATED_EVENT,
+  REALTIME_CHANNEL_MESSAGES_BULK_SYNC_EVENT,
 } from "@/lib/realtime-events";
 
 type ChatRenderableProfile = Profile & {
@@ -97,6 +99,22 @@ type LiveChannelMessagesResponse = {
 
 type ChannelMessageCreatedEventPayload = {
   message?: SerializedChannelMessage;
+  reactionsByMessageId?: Record<string, Array<{ emoji: string; count: number }>>;
+};
+
+type ChannelMessageUpdatedEventPayload = {
+  message?: Pick<SerializedChannelMessage, "id" | "content" | "fileUrl" | "deleted" | "isUpdated">;
+};
+
+type ChannelMessageDeletedEventPayload = {
+  messageId?: string;
+  hardDelete?: boolean;
+  message?: Pick<SerializedChannelMessage, "id" | "content" | "fileUrl" | "deleted" | "isUpdated">;
+};
+
+type ChannelMessagesBulkSyncEventPayload = {
+  softDeletedIds?: string[];
+  hardDeletedIds?: string[];
 };
 
 type LiveChannelMessagesPaneProps = {
@@ -171,6 +189,68 @@ const reconcileCanonicalMessage = (
         }
       : item
   );
+};
+
+const applyRealtimeMessagePatch = (
+  currentMessages: LiveChannelMessage[],
+  nextMessage: Pick<SerializedChannelMessage, "id" | "content" | "fileUrl" | "deleted" | "isUpdated">
+) => currentMessages.map((item) => (item.id === nextMessage.id ? { ...item, ...nextMessage, optimistic: false } : item));
+
+const applyRealtimeMessageDelete = ({
+  currentMessages,
+  payload,
+}: {
+  currentMessages: LiveChannelMessage[];
+  payload: ChannelMessageDeletedEventPayload;
+}) => {
+  const targetId = String(payload.message?.id ?? payload.messageId ?? "").trim();
+  if (!targetId) {
+    return currentMessages;
+  }
+
+  if (payload.hardDelete) {
+    return currentMessages.filter((item) => item.id !== targetId);
+  }
+
+  if (!payload.message) {
+    return currentMessages;
+  }
+
+  return applyRealtimeMessagePatch(currentMessages, payload.message);
+};
+
+const applyRealtimeBulkSync = ({
+  currentMessages,
+  payload,
+}: {
+  currentMessages: LiveChannelMessage[];
+  payload: ChannelMessagesBulkSyncEventPayload;
+}) => {
+  const softDeletedIds = new Set(
+    (Array.isArray(payload.softDeletedIds) ? payload.softDeletedIds : [])
+      .map((item) => String(item ?? "").trim())
+      .filter(Boolean)
+  );
+  const hardDeletedIds = new Set(
+    (Array.isArray(payload.hardDeletedIds) ? payload.hardDeletedIds : [])
+      .map((item) => String(item ?? "").trim())
+      .filter(Boolean)
+  );
+
+  return currentMessages
+    .filter((item) => !hardDeletedIds.has(item.id))
+    .map((item) =>
+      softDeletedIds.has(item.id)
+        ? {
+            ...item,
+            content: "This message has been deleted.",
+            fileUrl: null,
+            deleted: true,
+            isUpdated: true,
+            optimistic: false,
+          }
+        : item
+    );
 };
 
 export const LiveChannelMessagesPane = ({
@@ -283,10 +363,78 @@ export const LiveChannelMessagesPane = ({
       }
 
       setMessages((current) => reconcileCanonicalMessage(current, nextMessage));
+
+      if (payload?.reactionsByMessageId) {
+        setReactionsByMessageId((current) => ({
+          ...current,
+          ...payload.reactionsByMessageId,
+        }));
+      }
     };
 
-    const onRefresh = () => {
-      void refreshMessages();
+    const onMessageUpdated = (payload: ChannelMessageUpdatedEventPayload | undefined) => {
+      if (!payload?.message?.id) {
+        return;
+      }
+
+      setMessages((current) => applyRealtimeMessagePatch(current, payload.message!));
+    };
+
+    const onMessageDeleted = (payload: ChannelMessageDeletedEventPayload | undefined) => {
+      if (!payload) {
+        return;
+      }
+
+      const targetId = String(payload.message?.id ?? payload.messageId ?? "").trim();
+      if (!targetId) {
+        return;
+      }
+
+      setMessages((current) => applyRealtimeMessageDelete({ currentMessages: current, payload }));
+
+      if (payload.hardDelete) {
+        setThreadsBySourceMessageId((current) => {
+          if (!(targetId in current)) {
+            return current;
+          }
+
+          const next = { ...current };
+          delete next[targetId];
+          return next;
+        });
+      }
+    };
+
+    const onBulkSync = (payload: ChannelMessagesBulkSyncEventPayload | undefined) => {
+      if (!payload) {
+        return;
+      }
+
+      setMessages((current) => applyRealtimeBulkSync({ currentMessages: current, payload }));
+
+      const hardDeletedIds = new Set(
+        (Array.isArray(payload.hardDeletedIds) ? payload.hardDeletedIds : [])
+          .map((item) => String(item ?? "").trim())
+          .filter(Boolean)
+      );
+
+      if (hardDeletedIds.size === 0) {
+        return;
+      }
+
+      setThreadsBySourceMessageId((current) => {
+        let changed = false;
+        const next = { ...current };
+
+        for (const messageId of Array.from(hardDeletedIds)) {
+          if (messageId in next) {
+            delete next[messageId];
+            changed = true;
+          }
+        }
+
+        return changed ? next : current;
+      });
     };
 
     const joinRoom = () => {
@@ -361,14 +509,18 @@ export const LiveChannelMessagesPane = ({
     joinRoom();
     void refreshMessages();
     socket.on?.(REALTIME_CHANNEL_MESSAGE_CREATED_EVENT, onMessageCreated);
-    socket.on?.(REALTIME_CHANNEL_REFRESH_EVENT, onRefresh);
+    socket.on?.(REALTIME_CHANNEL_MESSAGE_UPDATED_EVENT, onMessageUpdated);
+    socket.on?.(REALTIME_CHANNEL_MESSAGE_DELETED_EVENT, onMessageDeleted);
+    socket.on?.(REALTIME_CHANNEL_MESSAGES_BULK_SYNC_EVENT, onBulkSync);
     socket.on?.("connect", onConnect);
 
     return () => {
       window.removeEventListener(LOCAL_CHAT_MUTATION_EVENT, onLocalMutation as EventListener);
       socket.emit?.("inaccord:leave", roomPayload);
       socket.off?.(REALTIME_CHANNEL_MESSAGE_CREATED_EVENT, onMessageCreated);
-      socket.off?.(REALTIME_CHANNEL_REFRESH_EVENT, onRefresh);
+      socket.off?.(REALTIME_CHANNEL_MESSAGE_UPDATED_EVENT, onMessageUpdated);
+      socket.off?.(REALTIME_CHANNEL_MESSAGE_DELETED_EVENT, onMessageDeleted);
+      socket.off?.(REALTIME_CHANNEL_MESSAGES_BULK_SYNC_EVENT, onBulkSync);
       socket.off?.("connect", onConnect);
     };
   }, [channelId, currentMember, currentProfile, refreshMessages, roomPayload, serverId, socket, threadId]);

@@ -68,6 +68,7 @@ interface ServerRouteShellProps {
   serverId: string;
   serverRouteSegment: string;
   textChannels: SearchItem[];
+  announcementChannels: SearchItem[];
   voiceChannels: SearchItem[];
   videoChannels: SearchItem[];
   onlineUsers: OnlineUserItem[];
@@ -83,6 +84,7 @@ export const ServerRouteShell = ({
   serverId,
   serverRouteSegment,
   textChannels,
+  announcementChannels,
   voiceChannels,
   videoChannels,
   onlineUsers,
@@ -204,9 +206,14 @@ export const ServerRouteShell = ({
       return preferred.id;
     }
 
+    const announcementFallback = announcementChannels[0] ?? null;
+    if (announcementFallback?.id) {
+      return announcementFallback.id;
+    }
+
     const fallback = voiceChannels[0] ?? videoChannels[0] ?? null;
     return fallback?.id ?? null;
-  }, [textChannels, videoChannels, voiceChannels]);
+  }, [announcementChannels, textChannels, videoChannels, voiceChannels]);
 
   const navigateToServerTab = (tab: ServerTabItem) => {
     router.push(
@@ -725,6 +732,15 @@ export const ServerRouteShell = ({
                   id: channel.id,
                   name: channel.name,
                   icon: <Hash className="mr-2 h-4 w-4" />,
+                })),
+              },
+              {
+                label: "Announcement Channels",
+                type: "channel",
+                data: announcementChannels.map((channel) => ({
+                  id: channel.id,
+                  name: channel.name,
+                  icon: <Bell className="mr-2 h-4 w-4" />,
                 })),
               },
               {

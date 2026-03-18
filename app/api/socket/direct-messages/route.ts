@@ -4,11 +4,11 @@ import { v4 as uuidv4 } from "uuid";
 
 import { currentProfile } from "@/lib/current-profile";
 import { conversation, db, directMessage, member } from "@/lib/db";
+import { getRecentDmRailItemForProfile } from "@/lib/direct-messages";
 import { publishRealtimeEvent } from "@/lib/realtime-events-server";
 import {
   REALTIME_DIRECT_MESSAGE_CREATED_EVENT,
-  REALTIME_DIRECT_MESSAGES_REFRESH_EVENT,
-  REALTIME_DM_RAIL_REFRESH_EVENT,
+  REALTIME_DM_RAIL_SYNC_EVENT,
 } from "@/lib/realtime-events";
 import { getUserProfileNameMap } from "@/lib/user-profile";
 
@@ -116,6 +116,37 @@ const getSerializedDirectMessageById = async (directMessageId: string) => {
   }
 
   return serializeDirectMessage(row);
+};
+
+const publishDirectMessageRailSync = async ({
+  conversationId,
+  participantProfileIds,
+}: {
+  conversationId: string;
+  participantProfileIds: string[];
+}) => {
+  await Promise.all(
+    participantProfileIds.map(async (participantProfileId) => {
+      const item = await getRecentDmRailItemForProfile({
+        profileId: participantProfileId,
+        conversationId,
+      });
+
+      await publishRealtimeEvent(
+        REALTIME_DM_RAIL_SYNC_EVENT,
+        {
+          profileId: participantProfileId,
+        },
+        {
+          entity: "direct-message",
+          action: "sync",
+          scope: "rail",
+          conversationId,
+          item,
+        }
+      );
+    })
+  );
 };
 
 export async function GET(req: Request) {
@@ -312,7 +343,7 @@ export async function POST(req: Request) {
         );
       } else {
         await publishRealtimeEvent(
-          REALTIME_DIRECT_MESSAGES_REFRESH_EVENT,
+          REALTIME_DIRECT_MESSAGE_CREATED_EVENT,
           {
             conversationId,
           },
@@ -322,7 +353,7 @@ export async function POST(req: Request) {
     } catch (realtimeError) {
       console.error("[SOCKET_DIRECT_MESSAGES_POST_REALTIME]", realtimeError);
       await publishRealtimeEvent(
-        REALTIME_DIRECT_MESSAGES_REFRESH_EVENT,
+        REALTIME_DIRECT_MESSAGE_CREATED_EVENT,
         {
           conversationId,
         },
@@ -333,13 +364,10 @@ export async function POST(req: Request) {
     try {
       const participantProfileIds = await getConversationProfileIds(conversationId);
 
-      await publishRealtimeEvent(
-        REALTIME_DM_RAIL_REFRESH_EVENT,
-        {
-          profileIds: participantProfileIds,
-        },
-        { entity: "direct-message", action: "created", scope: "rail" }
-      );
+      await publishDirectMessageRailSync({
+        conversationId,
+        participantProfileIds,
+      });
     } catch (railRefreshError) {
       console.error("[SOCKET_DIRECT_MESSAGES_POST_RAIL]", railRefreshError);
     }

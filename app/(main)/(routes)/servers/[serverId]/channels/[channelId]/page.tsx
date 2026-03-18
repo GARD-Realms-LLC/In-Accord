@@ -26,6 +26,7 @@ import { listActiveVoiceMembersForChannel, pruneStaleVoiceStates } from "@/lib/v
 import { resolveChannelRouteContext, resolveServerRouteContext } from "@/lib/route-slug-resolver";
 import { buildChannelPath, buildServerPath } from "@/lib/route-slugs";
 import { pickDefaultServerChannel } from "@/lib/default-server-channel";
+import { MemberRole } from "@/lib/db/types";
 
 interface ChannelIdPageProps {
   params: Promise<{
@@ -153,6 +154,8 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
 
   const isMediaChannel =
     currentChannel.type === ChannelType.AUDIO || currentChannel.type === ChannelType.VIDEO;
+  const isTextLikeChannel =
+    currentChannel.type === ChannelType.TEXT || currentChannel.type === ChannelType.ANNOUNCEMENT;
 
   const channelTopic = null;
 
@@ -425,6 +428,9 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
 
   const isAudioChannel = currentChannel.type === ChannelType.AUDIO;
   const isVideoChannel = currentChannel.type === ChannelType.VIDEO;
+  const canPublishAnnouncement =
+    currentChannel.type !== ChannelType.ANNOUNCEMENT || currentMember.role !== MemberRole.GUEST;
+  const canSendToChannel = channelPermissions.allowSend && canPublishAnnouncement;
   const mediaChannelLabel = isAudioChannel ? "Voice" : "Video";
   const isLiveSession =
     channelPermissions.allowConnect &&
@@ -432,7 +438,7 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
   const isMeetingPopoutView = isVideoChannel && isMeetingPopoutRequested;
   const isVideoPopoutChatMode = isVideoChannel && isPopoutChatRequested && !isMeetingPopoutView;
   const normalizedChannelIcon = String((currentChannel as { icon?: string | null }).icon ?? "").trim();
-  const canBulkDeleteMessages = Boolean(memberContext?.isServerOwner) || hasInAccordAdministrativeAccess(profile.role);
+  const canBulkDeleteMessages = Boolean(memberContext?.isServerOwner) || currentMember.role === "ADMIN" || hasInAccordAdministrativeAccess(profile.role);
   const initialLiveMessages = hydratedChannelMessages.map((item) => ({
     id: item.id,
     content: item.content,
@@ -477,7 +483,7 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
           />
         )}
 
-        {currentChannel.type === ChannelType.TEXT || isVideoPopoutChatMode ? null : (
+        {isTextLikeChannel || isVideoPopoutChatMode ? null : (
           <div className={`${isMeetingPopoutView ? "w-full p-2" : "w-full border-b border-border/60 p-4"} ${isVideoChannel && !isMeetingPopoutView ? "max-h-[58vh] overflow-y-auto" : ""}`}>
             <VoiceStateSession
               serverId={serverId}
@@ -723,7 +729,7 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
               channelId: currentChannel.id,
               serverId: currentChannel.serverId,
             }}
-            disabled={!channelPermissions.allowSend}
+            disabled={!canSendToChannel}
             mentionUsers={mentionUsers}
             mentionRoles={mentionRoles}
             canBulkDeleteMessages={canBulkDeleteMessages}
@@ -741,13 +747,19 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
               channelId: currentChannel.id,
               serverId: currentChannel.serverId,
             }}
-            disabled={!channelPermissions.allowSend}
+            disabled={!canSendToChannel}
             mentionUsers={mentionUsers}
             mentionRoles={mentionRoles}
             canBulkDeleteMessages={canBulkDeleteMessages}
           />
         </div>
       )}
+
+      {currentChannel.type === ChannelType.ANNOUNCEMENT && currentMember.role === MemberRole.GUEST ? (
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          This announcement channel is read-only for guests. Moderators and server managers can publish updates here.
+        </div>
+      ) : null}
     </div>
   );
 };

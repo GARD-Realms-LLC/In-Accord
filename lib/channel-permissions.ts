@@ -2,6 +2,7 @@ import { and, eq, sql } from "drizzle-orm";
 
 import { db, member, server } from "@/lib/db";
 import { MemberRole } from "@/lib/db/types";
+import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 import { ensureServerRolesSchema } from "@/lib/server-roles";
 
 export type ChannelPermissionSet = {
@@ -25,6 +26,24 @@ export type ResolvedMemberContext = {
   role: MemberRole;
   assignedRoleIds: string[];
   isServerOwner: boolean;
+};
+
+export const canManageChannelMessages = ({
+  memberContext,
+  profileRole,
+}: {
+  memberContext: ResolvedMemberContext | null | undefined;
+  profileRole?: string | null;
+}) => {
+  if (!memberContext) {
+    return false;
+  }
+
+  return (
+    memberContext.isServerOwner ||
+    memberContext.role === MemberRole.ADMIN ||
+    hasInAccordAdministrativeAccess(profileRole)
+  );
 };
 
 const defaultPermissions: ChannelPermissionSet = {

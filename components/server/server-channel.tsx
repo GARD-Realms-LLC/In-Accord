@@ -2,7 +2,7 @@
 
 import axios from "axios";
 import { type Channel, ChannelType, MemberRole, type Server } from "@/lib/db/types";
-import { Hash, Mic, Settings, Video } from "lucide-react";
+import { Bell, Hash, Mic, Settings, Video } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
@@ -21,6 +21,7 @@ interface ServerChannelProps {
 
 const iconMap = {
   [ChannelType.TEXT]: Hash,
+  [ChannelType.ANNOUNCEMENT]: Bell,
   [ChannelType.AUDIO]: Mic,
   [ChannelType.VIDEO]: Video,
 };
