@@ -12,13 +12,84 @@ import {
 
 type AxiosConfigWithLoadingId = {
   __loadingToastRequestId?: symbol;
+  inaccordTrackLoading?: boolean;
+};
+
+const TRACK_LOADING_HEADER = "x-inaccord-track-loading";
+
+const shouldTrackRequestMethod = (method: unknown) => {
+  const normalizedMethod = String(method ?? "GET").trim().toUpperCase();
+  return !["GET", "HEAD", "OPTIONS"].includes(normalizedMethod);
+};
+
+const isTruthyTrackingValue = (value: unknown) => {
+  const normalizedValue = String(value ?? "").trim().toLowerCase();
+  return ["1", "true", "yes", "on"].includes(normalizedValue);
+};
+
+const readHeadersTrackingValue = (headers: HeadersInit | undefined) => {
+  if (!headers) {
+    return false;
+  }
+
+  if (headers instanceof Headers) {
+    return isTruthyTrackingValue(headers.get(TRACK_LOADING_HEADER));
+  }
+
+  if (Array.isArray(headers)) {
+    const matched = headers.find(
+      ([name]) => String(name).trim().toLowerCase() === TRACK_LOADING_HEADER
+    );
+    return isTruthyTrackingValue(matched?.[1]);
+  }
+
+  return isTruthyTrackingValue(
+    (headers as Record<string, unknown>)[TRACK_LOADING_HEADER]
+  );
+};
+
+const shouldTrackAxiosRequest = (config: AxiosConfigWithLoadingId & {
+  method?: unknown;
+  headers?: unknown;
+}) => {
+  if (!shouldTrackRequestMethod(config.method)) {
+    return false;
+  }
+
+  return (
+    config.inaccordTrackLoading === true ||
+    readHeadersTrackingValue(config.headers as HeadersInit | undefined)
+  );
+};
+
+const shouldTrackFetchRequest = (
+  input: RequestInfo | URL,
+  init?: RequestInit & { inaccordTrackLoading?: boolean },
+) => {
+  const requestMethod =
+    init?.method ??
+    (input instanceof Request ? input.method : "GET");
+
+  if (!shouldTrackRequestMethod(requestMethod)) {
+    return false;
+  }
+
+  return (
+    init?.inaccordTrackLoading === true ||
+    readHeadersTrackingValue(init?.headers) ||
+    (input instanceof Request
+      ? readHeadersTrackingValue(input.headers)
+      : false)
+  );
 };
 
 export const ToasterProvider = () => {
   useEffect(() => {
     const requestInterceptor = axios.interceptors.request.use((config) => {
       const trackedConfig = config as typeof config & AxiosConfigWithLoadingId;
-      trackedConfig.__loadingToastRequestId = beginTrackedLoading();
+      trackedConfig.__loadingToastRequestId = shouldTrackAxiosRequest(trackedConfig)
+        ? beginTrackedLoading()
+        : undefined;
       return trackedConfig;
     });
 
@@ -38,7 +109,10 @@ export const ToasterProvider = () => {
     const originalFetch = window.fetch.bind(window);
 
     window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const requestId = beginTrackedLoading();
+      const trackedInit = init as (RequestInit & { inaccordTrackLoading?: boolean }) | undefined;
+      const requestId = shouldTrackFetchRequest(input, trackedInit)
+        ? beginTrackedLoading()
+        : undefined;
 
       try {
         return await originalFetch(input, init);

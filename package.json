@@ -1,7 +1,7 @@
 {
   "name": "In-Accord",
-  "version": "1.0.255",
-  "inaccordDisplayVersion": "1.0.80",
+  "version": "1.0.266",
+  "inaccordDisplayVersion": "1.0.91",
   "private": true,
   "repository": {
     "type": "git",
@@ -25,6 +25,9 @@
     "version:bump:patch": "node scripts/bump-version.cjs",
     "build": "npm run clean:next && next build --webpack",
     "start": "next start",
+    "preview:cloudflare": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy:cloudflare": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cloudflare:typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "lint": "next lint",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
@@ -49,6 +52,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1002.0",
     "@hookform/resolvers": "3.9.0",
+    "@opennextjs/cloudflare": "^1.17.1",
     "@radix-ui/react-avatar": "1.1.11",
     "@radix-ui/react-dialog": "1.1.15",
     "@radix-ui/react-dropdown-menu": "2.1.16",
@@ -110,6 +114,7 @@
     "drizzle-kit": "^0.31.5",
     "electron": "^41.0.3",
     "electron-winstaller": "^5.4.0",
-    "eslint": "^9.39.0"
+    "eslint": "^9.39.0",
+    "wrangler": "^4.75.0"
   }
 }

@@ -13,6 +13,12 @@ import { StreamerModePreferencesProvider } from "@/components/providers/streamer
 import { GameOverlayPreferencesProvider } from "@/components/providers/game-overlay-preferences-provider";
 import { ActivityPrivacyPreferencesProvider } from "@/components/providers/activity-privacy-preferences-provider";
 import { CurrentGameSyncProvider } from "@/components/providers/current-game-sync-provider";
+import { BuildStalenessProvider } from "@/components/providers/build-staleness-provider";
+import {
+  INACCORD_BUILD_NUMBER,
+  INACCORD_INTERNAL_VERSION,
+  INACCORD_VERSION_LABEL,
+} from "@/lib/build-version";
 
 const font = Open_Sans({ subsets: ["latin"] });
 
@@ -57,6 +63,11 @@ export default function RootLayout({
             <ActivityPrivacyPreferencesProvider />
             <GameOverlayPreferencesProvider />
             <CurrentGameSyncProvider />
+            <BuildStalenessProvider
+              currentVersion={INACCORD_INTERNAL_VERSION}
+              currentDisplayVersion={INACCORD_VERSION_LABEL}
+              currentBuildNumber={INACCORD_BUILD_NUMBER}
+            />
             <ContextMenuProvider />
             <ModalProvider />
             <ToasterProvider />

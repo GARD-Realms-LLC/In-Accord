@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { normalizeOptionalCloudflareObjectPointer } from "@/lib/live-db-asset-pointers";
-import { LEGACY_WORKSPACE_DATA_DIR, RUNTIME_DATA_DIR } from "@/lib/runtime-data-dir";
+import { getLegacyWorkspaceDataDir, getRuntimeDataDir } from "@/lib/runtime-data-dir";
 import { ensureUserProfileSchema } from "@/lib/user-profile";
 
 type LegacyUserBannerMap = Record<string, string>;
@@ -29,10 +29,10 @@ const pathExists = async (targetPath: string) => {
 };
 
 const readFirstExistingJson = async <T>(relativeFileName: string): Promise<T | null> => {
-  const runtimeStoresDir = path.join(RUNTIME_DATA_DIR, "stores");
+  const runtimeStoresDir = path.join(getRuntimeDataDir(), "stores");
   const candidates = [
     path.join(runtimeStoresDir, relativeFileName),
-    path.join(LEGACY_WORKSPACE_DATA_DIR, relativeFileName),
+    path.join(getLegacyWorkspaceDataDir(), relativeFileName),
   ];
 
   for (const candidate of candidates) {

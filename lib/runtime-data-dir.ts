@@ -2,8 +2,8 @@ import { access, copyFile, mkdir } from "fs/promises";
 import os from "os";
 import path from "path";
 
-const FILE_DATA_DISABLED = String(process.env.INACCORD_DISABLE_FILE_DATA ?? "").trim() === "1";
-const STANDALONE_BUILD_ACTIVE = String(process.env.NEXT_OUTPUT_MODE ?? "").trim() === "standalone";
+const isFileDataDisabled = () => String(process.env.INACCORD_DISABLE_FILE_DATA ?? "").trim() === "1";
+const isStandaloneBuildActive = () => String(process.env.NEXT_OUTPUT_MODE ?? "").trim() === "standalone";
 
 const normalizeConfiguredPath = (value: string) => {
   const trimmed = value.trim();
@@ -36,16 +36,16 @@ const resolveOsRuntimeBaseDir = () => {
   return path.join(os.homedir(), ".local", "state", "In-Accord", "runtime-data");
 };
 
-export const RUNTIME_DATA_DIR = (() => {
-  if (FILE_DATA_DISABLED || STANDALONE_BUILD_ACTIVE) {
+export const getRuntimeDataDir = () => {
+  if (isFileDataDisabled() || isStandaloneBuildActive()) {
     return path.join(process.cwd(), ".runtime-data-disabled");
   }
 
   const configured = normalizeConfiguredPath(String(process.env.INACCORD_RUNTIME_DATA_DIR ?? ""));
   return configured || resolveOsRuntimeBaseDir();
-})();
+};
 
-export const LEGACY_WORKSPACE_DATA_DIR = path.join(process.cwd(), ".data");
+export const getLegacyWorkspaceDataDir = () => path.join(process.cwd(), ".data");
 
 const pathExists = async (targetPath: string) => {
   try {
@@ -62,9 +62,9 @@ export const ensureLegacyRuntimeStoreMigrated = async (fileName: string) => {
     return;
   }
 
-  const runtimeStoresDir = path.join(RUNTIME_DATA_DIR, "stores");
+  const runtimeStoresDir = path.join(getRuntimeDataDir(), "stores");
   const runtimeFile = path.join(runtimeStoresDir, normalizedFileName);
-  const legacyFile = path.join(LEGACY_WORKSPACE_DATA_DIR, normalizedFileName);
+  const legacyFile = path.join(getLegacyWorkspaceDataDir(), normalizedFileName);
 
   const runtimeExists = await pathExists(runtimeFile);
   if (runtimeExists) {

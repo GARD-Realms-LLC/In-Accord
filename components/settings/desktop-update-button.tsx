@@ -1,7 +1,7 @@
 "use client";
 
 import { Download, RefreshCw, TriangleAlert } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -34,6 +34,14 @@ type DesktopUpdateButtonProps = {
 export const DesktopUpdateButton = ({ className }: DesktopUpdateButtonProps) => {
   const [updaterState, setUpdaterState] = useState<DesktopUpdaterState | null>(null);
   const [isActionPending, setIsActionPending] = useState(false);
+  const isMountedRef = useRef(false);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     const electronApi = resolveElectronApi();
@@ -146,7 +154,9 @@ export const DesktopUpdateButton = ({ className }: DesktopUpdateButtonProps) => 
       try {
         await electronApi.relaunchToApplyUpdate();
       } finally {
-        setIsActionPending(false);
+        if (isMountedRef.current) {
+          setIsActionPending(false);
+        }
       }
       return;
     }
@@ -158,18 +168,24 @@ export const DesktopUpdateButton = ({ className }: DesktopUpdateButtonProps) => 
     setIsActionPending(true);
     try {
       const nextState = await electronApi.checkForUpdatesNow();
-      setUpdaterState(nextState);
+      if (isMountedRef.current) {
+        setUpdaterState(nextState);
+      }
     } catch {
-      setUpdaterState((currentState) => ({
-        supported: currentState?.supported ?? true,
-        status: "error",
-        currentVersion: currentState?.currentVersion ?? null,
-        nextVersion: currentState?.nextVersion ?? null,
-        lastCheckedAt: currentState?.lastCheckedAt ?? null,
-        error: "Desktop update check failed.",
-      }));
+      if (isMountedRef.current) {
+        setUpdaterState((currentState) => ({
+          supported: currentState?.supported ?? true,
+          status: "error",
+          currentVersion: currentState?.currentVersion ?? null,
+          nextVersion: currentState?.nextVersion ?? null,
+          lastCheckedAt: currentState?.lastCheckedAt ?? null,
+          error: "Desktop update check failed.",
+        }));
+      }
     } finally {
-      setIsActionPending(false);
+      if (isMountedRef.current) {
+        setIsActionPending(false);
+      }
     }
   };
 

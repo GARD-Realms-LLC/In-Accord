@@ -15,6 +15,8 @@
 /out/
 /dist/
 /.cache/
+/.open-next/
+/.wrangler/
 /.electron-cache/
 /.next-dev/
 /.next-win64/
@@ -52,3 +54,4 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+cloudflare-env.d.ts

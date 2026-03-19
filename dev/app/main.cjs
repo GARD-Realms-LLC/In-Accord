@@ -23,6 +23,25 @@ const TRANSIENT_DESKTOP_CACHE_PATHS = [
 ];
 const APP_CONNECT_CHECK_TIMEOUT_MS = 10_000;
 const APP_CONNECT_RETRY_DELAY_MS = 3_000;
+const DESKTOP_RETRY_URL = "inaccord-retry://reload";
+const DESKTOP_LOADING_LOGO_PATH = path.join(
+  __dirname,
+  "assets",
+  "installer-loading.gif",
+);
+
+const readAssetDataUrl = (assetPath, mimeType) => {
+  try {
+    return `data:${mimeType};base64,${fs.readFileSync(assetPath).toString("base64")}`;
+  } catch {
+    return null;
+  }
+};
+
+const DESKTOP_LOADING_LOGO_URL = readAssetDataUrl(
+  DESKTOP_LOADING_LOGO_PATH,
+  "image/gif",
+);
 
 const spawnDetached = (command, args) => {
   try {
@@ -173,16 +192,14 @@ let appOriginPromise = null;
 let mainWindow = null;
 const meetingWindows = new Set();
 const windowConnectRetryHandles = new Map();
-let updateDelayHandle = null;
-let updateIntervalHandle = null;
 let updateTask = null;
 let hasDownloadedUpdate = false;
 let shouldApplyDownloadedUpdateOnQuit = false;
-const UPDATE_FOCUS_RECHECK_MIN_MS = 60_000;
 let updaterStatus = packagedUpdateConfig ? "idle" : "unsupported";
 let nextUpdateVersion = null;
 let lastUpdateCheckedAt = null;
 let updaterErrorMessage = null;
+const windowTargetPaths = new Map();
 
 const readJsonFileSafe = (targetPath) => {
   try {
@@ -506,66 +523,6 @@ const runSquirrelUpdateCycle = async () => {
   return getDesktopUpdaterState();
 };
 
-const stopSquirrelUpdater = () => {
-  if (updateDelayHandle) {
-    clearTimeout(updateDelayHandle);
-    updateDelayHandle = null;
-  }
-
-  if (updateIntervalHandle) {
-    clearInterval(updateIntervalHandle);
-    updateIntervalHandle = null;
-  }
-};
-
-const startSquirrelUpdater = () => {
-  if (!packagedUpdateConfig || updateDelayHandle || updateIntervalHandle) {
-    return;
-  }
-
-  const startupDelayMs = isSquirrelFirstRun
-    ? packagedUpdateConfig.firstRunDelayMs
-    : 0;
-
-  updateDelayHandle = setTimeout(() => {
-    updateDelayHandle = null;
-    void runSquirrelUpdateCycle();
-    updateIntervalHandle = setInterval(() => {
-      void runSquirrelUpdateCycle();
-    }, packagedUpdateConfig.intervalMs);
-  }, startupDelayMs);
-};
-
-const relaunchIntoNewestInstalledVersion = () => {
-  if (!syncInstalledUpdateAvailability()) {
-    return false;
-  }
-
-  spawnDetached(getUpdateExePath(), [
-    "--processStartAndWait",
-    getExecutableName(),
-  ]);
-  app.exit(0);
-  return true;
-};
-
-const shouldRunFocusedUpdateCheck = () => {
-  if (!packagedUpdateConfig || hasDownloadedUpdate || updateTask) {
-    return false;
-  }
-
-  if (!lastUpdateCheckedAt) {
-    return true;
-  }
-
-  const lastCheckMs = Date.parse(lastUpdateCheckedAt);
-  if (!Number.isFinite(lastCheckMs)) {
-    return true;
-  }
-
-  return Date.now() - lastCheckMs >= UPDATE_FOCUS_RECHECK_MIN_MS;
-};
-
 const escapeHtml = (value) =>
   String(value || "")
     .replace(/&/g, "&amp;")
@@ -574,7 +531,37 @@ const escapeHtml = (value) =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
-const buildDesktopStatusPageUrl = ({ title, status, detail }) => {
+const buildDesktopStatusPageUrl = ({
+  title,
+  status,
+  detail,
+  retryEnabled = false,
+  loading = false,
+}) => {
+  const loadingMarkup = `
+      <section class="card card-loading" aria-live="polite" aria-busy="true">
+        <div class="logo-stage">
+          ${
+            DESKTOP_LOADING_LOGO_URL
+              ? `<img class="logo-image" src="${DESKTOP_LOADING_LOGO_URL}" alt="In-Accord logo" />`
+              : `<div class="logo-fallback" aria-hidden="true">IA</div>`
+          }
+        </div>
+        <div class="loading-text">Loading...</div>
+      </section>`;
+  const statusMarkup = `
+      <section class="card">
+        <div class="eyebrow">In-Accord Desktop</div>
+        <h1>${escapeHtml(title)}</h1>
+        <p>${escapeHtml(status)}</p>
+        <div class="status">Live app mode</div>
+        <pre>${escapeHtml(detail)}</pre>
+        ${
+          retryEnabled
+            ? `<div class="actions"><button class="button" type="button" onclick="window.location.href='${DESKTOP_RETRY_URL}'">Retry now</button></div>`
+            : ""
+        }
+      </section>`;
   const html = `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -613,6 +600,16 @@ const buildDesktopStatusPageUrl = ({ title, status, detail }) => {
         background: linear-gradient(180deg, var(--panel), var(--panel-2));
         box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
         padding: 22px;
+      }
+      .card-loading {
+        width: min(460px, 100%);
+        padding: 48px 28px 40px;
+        display: grid;
+        justify-items: center;
+        gap: 18px;
+        background:
+          radial-gradient(circle at top, rgba(250, 204, 21, 0.15), transparent 48%),
+          linear-gradient(180deg, rgba(17, 22, 31, 0.98), rgba(22, 29, 41, 0.98));
       }
       .eyebrow {
         display: inline-flex;
@@ -659,16 +656,96 @@ const buildDesktopStatusPageUrl = ({ title, status, detail }) => {
         font-size: 12px;
         line-height: 1.55;
       }
+      .actions {
+        margin-top: 18px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      .button {
+        appearance: none;
+        border: 1px solid rgba(56, 189, 248, 0.35);
+        background: rgba(56, 189, 248, 0.16);
+        color: #e0f2fe;
+        border-radius: 12px;
+        padding: 10px 14px;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .button:hover {
+        background: rgba(56, 189, 248, 0.24);
+      }
+      .logo-stage {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 220px;
+        height: 220px;
+        border-radius: 50%;
+        background:
+          radial-gradient(circle, rgba(250, 204, 21, 0.16), rgba(250, 204, 21, 0.03) 56%, transparent 72%);
+        animation: logoFloat 3.8s ease-in-out infinite;
+      }
+      .logo-stage::after {
+        content: "";
+        position: absolute;
+        inset: 24px;
+        border-radius: 50%;
+        border: 1px solid rgba(250, 204, 21, 0.2);
+        box-shadow: 0 0 40px rgba(250, 204, 21, 0.14);
+      }
+      .logo-image {
+        position: relative;
+        z-index: 1;
+        width: 182px;
+        height: 182px;
+        object-fit: contain;
+        filter: drop-shadow(0 14px 32px rgba(0, 0, 0, 0.45));
+      }
+      .logo-fallback {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        place-items: center;
+        width: 148px;
+        height: 148px;
+        border-radius: 50%;
+        border: 1px solid rgba(250, 204, 21, 0.28);
+        background: radial-gradient(circle at top, rgba(250, 204, 21, 0.22), rgba(17, 22, 31, 0.96));
+        color: #fde68a;
+        font-size: 42px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+      }
+      .loading-text {
+        color: #f8fafc;
+        font-size: 24px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        animation: loadingPulse 1.5s ease-in-out infinite;
+      }
+      @keyframes logoFloat {
+        0%, 100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-10px);
+        }
+      }
+      @keyframes loadingPulse {
+        0%, 100% {
+          opacity: 0.72;
+        }
+        50% {
+          opacity: 1;
+        }
+      }
     </style>
   </head>
   <body>
-    <section class="card">
-      <div class="eyebrow">In-Accord Desktop</div>
-      <h1>${escapeHtml(title)}</h1>
-      <p>${escapeHtml(status)}</p>
-      <div class="status">Live app mode</div>
-      <pre>${escapeHtml(detail)}</pre>
-    </section>
+    ${loading ? loadingMarkup : statusMarkup}
   </body>
 </html>`;
 
@@ -695,6 +772,28 @@ const clearWindowConnectRetry = (targetWindow) => {
 
   clearTimeout(retryHandle);
   windowConnectRetryHandles.delete(targetWindow.webContents.id);
+};
+
+const setWindowTargetPath = (targetWindow, targetPath) => {
+  if (!targetWindow || targetWindow.isDestroyed()) {
+    return;
+  }
+
+  windowTargetPaths.set(
+    targetWindow.webContents.id,
+    normalizeInAppPath(targetPath, "/"),
+  );
+};
+
+const getWindowTargetPath = (targetWindow) => {
+  if (!targetWindow || targetWindow.isDestroyed()) {
+    return "/";
+  }
+
+  return (
+    windowTargetPaths.get(targetWindow.webContents.id) ??
+    "/"
+  );
 };
 
 const registerSessionPolicy = (targetWindow) => {
@@ -736,6 +835,17 @@ const attachWindowOpenPolicy = (targetWindow) => {
     });
 
     return { action: "deny" };
+  });
+};
+
+const attachRetryNavigationPolicy = (targetWindow) => {
+  targetWindow.webContents.on("will-navigate", (event, url) => {
+    if (String(url || "").trim() !== DESKTOP_RETRY_URL) {
+      return;
+    }
+
+    event.preventDefault();
+    void connectWindowToInAccord(targetWindow, getWindowTargetPath(targetWindow));
   });
 };
 
@@ -797,7 +907,7 @@ const connectWindowToInAccord = async (
     const detailLines = [
       `Target: ${activeOrigin || "Unavailable"}`,
       `Attempt: ${attempt}`,
-      `Retry: every ${Math.round(APP_CONNECT_RETRY_DELAY_MS / 1000)} seconds`,
+      "Retry: manual only",
       "",
       error instanceof Error ? error.message : "Desktop app could not reach the live app.",
     ];
@@ -805,18 +915,10 @@ const connectWindowToInAccord = async (
     await loadDesktopStatusPage(targetWindow, {
       title: "Connecting to In-Accord",
       status:
-        "The desktop shell is waiting for the live app server. It will keep retrying automatically.",
+        "The desktop shell could not reach the live app server. Automatic retry is off.",
       detail: detailLines.join("\n"),
+      retryEnabled: true,
     });
-
-    if (targetWindow.isDestroyed()) {
-      return;
-    }
-
-    const retryHandle = setTimeout(() => {
-      void connectWindowToInAccord(targetWindow, targetPath, attempt + 1);
-    }, APP_CONNECT_RETRY_DELAY_MS);
-    windowConnectRetryHandles.set(targetWindow.webContents.id, retryHandle);
   }
 };
 
@@ -842,12 +944,15 @@ const createMainWindow = async () => {
 
   registerSessionPolicy(mainWindow);
   attachWindowOpenPolicy(mainWindow);
+  attachRetryNavigationPolicy(mainWindow);
   attachCloseProtectionBypass(mainWindow);
+  setWindowTargetPath(mainWindow, "/");
 
   await loadDesktopStatusPage(mainWindow, {
     title: "Opening In-Accord",
     status: "Connecting to the live app server now.",
     detail: `Target: ${isDevDesktop ? devServerOrigin : packagedAppOrigin || "Unavailable"}`,
+    loading: true,
   });
 
   mainWindow.once("ready-to-show", () => {
@@ -857,14 +962,10 @@ const createMainWindow = async () => {
   mainWindow.webContents.on("did-finish-load", () => {
     broadcastDesktopUpdaterState();
   });
-  mainWindow.on("focus", () => {
-    if (shouldRunFocusedUpdateCheck()) {
-      void runSquirrelUpdateCycle();
-    }
-  });
 
   mainWindow.on("closed", () => {
     clearWindowConnectRetry(mainWindow);
+    windowTargetPaths.delete(mainWindow?.webContents.id);
     mainWindow = null;
   });
 
@@ -889,13 +990,16 @@ const createMeetingPopoutWindow = async (meetingPath) => {
 
   registerSessionPolicy(popoutWindow);
   attachWindowOpenPolicy(popoutWindow);
+  attachRetryNavigationPolicy(popoutWindow);
   attachCloseProtectionBypass(popoutWindow);
+  setWindowTargetPath(popoutWindow, meetingPath);
 
   meetingWindows.add(popoutWindow);
   await loadDesktopStatusPage(popoutWindow, {
     title: "Opening meeting",
     status: "Connecting this window to the live app server now.",
     detail: `Target: ${isDevDesktop ? devServerOrigin : packagedAppOrigin || "Unavailable"}`,
+    loading: true,
   });
   popoutWindow.once("ready-to-show", () => {
     popoutWindow.show();
@@ -905,6 +1009,7 @@ const createMeetingPopoutWindow = async (meetingPath) => {
   });
   popoutWindow.on("closed", () => {
     clearWindowConnectRetry(popoutWindow);
+    windowTargetPaths.delete(popoutWindow.webContents.id);
     meetingWindows.delete(popoutWindow);
   });
 
@@ -969,7 +1074,6 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
-  stopSquirrelUpdater();
   if (hasDownloadedUpdate && shouldApplyDownloadedUpdateOnQuit) {
     spawnDetached(getUpdateExePath(), [
       "--processStartAndWait",
@@ -993,11 +1097,7 @@ if (!isHandlingSquirrelEvent) {
     .whenReady()
     .then(async () => {
       purgeTransientDesktopCachesForVersionChange();
-      if (relaunchIntoNewestInstalledVersion()) {
-        return;
-      }
       await createMainWindow();
-      startSquirrelUpdater();
     })
     .catch((error) => {
       console.error("[INACCORD_DESKTOP_BOOT]", error);
