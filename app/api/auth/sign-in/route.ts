@@ -2,17 +2,22 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { ensureLocalAuthSchema } from "@/lib/local-auth";
+import { getOptionalEffectiveDatabaseConnectionString } from "@/lib/database-runtime-control";
+import {
+  ensureLocalAuthSchema,
+  hasLegacyUserPasswordHashColumn,
+  hasLocalAuthSchema,
+} from "@/lib/local-auth";
 import { setSessionUserId } from "@/lib/session";
 import { verifyPassword } from "@/lib/password";
 
 export async function POST(request: Request) {
   try {
-    const connectionUrl = process.env.LIVE_DATABASE_URL?.trim() ?? "";
+    const connectionUrl = getOptionalEffectiveDatabaseConnectionString();
 
-    if (!connectionUrl || /^replace_/i.test(connectionUrl) || !/^postgres(ql)?:\/\//i.test(connectionUrl)) {
+    if (!connectionUrl) {
       return new NextResponse(
-        "Database unavailable. Configure LIVE_DATABASE_URL with a PostgreSQL connection string.",
+        "Database unavailable. Configure LIVE_DATABASE_URL or DATABASE_URL with a PostgreSQL connection string.",
         { status: 503 }
       );
     }
@@ -26,23 +31,64 @@ export async function POST(request: Request) {
       return new NextResponse("Email and password are required", { status: 400 });
     }
 
-    await ensureLocalAuthSchema();
+    let localAuthSchemaAvailable = false;
 
-    const userRowsResult = await db.execute(sql`
-      select
-        u."userId",
-        coalesce(lc."passwordHash", u."password_hash") as "passwordHash",
-        case
-          when lc."passwordHash" is not null then 0
-          when coalesce(u."password_hash", '') <> '' then 1
-          else 2
-        end as "priority"
-      from "Users"
-      u
-      left join "LocalCredential" lc on lc."userId" = u."userId"
-      where lower(coalesce("email", '')) = ${email}
-      order by "priority" asc, u."userId" asc
-    `);
+    try {
+      await ensureLocalAuthSchema();
+      localAuthSchemaAvailable = true;
+    } catch (error) {
+      console.warn("[AUTH_SIGN_IN_LOCAL_AUTH_SCHEMA]", error);
+      localAuthSchemaAvailable = await hasLocalAuthSchema().catch(() => false);
+    }
+
+    const legacyPasswordHashColumnAvailable =
+      await hasLegacyUserPasswordHashColumn().catch(() => false);
+
+    const userRowsResult = localAuthSchemaAvailable
+      ? legacyPasswordHashColumnAvailable
+        ? await db.execute(sql`
+            select
+              u."userId",
+              coalesce(lc."passwordHash", u."password_hash") as "passwordHash",
+              case
+                when lc."passwordHash" is not null then 0
+                when coalesce(u."password_hash", '') <> '' then 1
+                else 2
+              end as "priority"
+            from "Users"
+            u
+            left join "LocalCredential" lc on lc."userId" = u."userId"
+            where lower(coalesce("email", '')) = ${email}
+            order by "priority" asc, u."userId" asc
+          `)
+        : await db.execute(sql`
+            select
+              u."userId",
+              lc."passwordHash" as "passwordHash",
+              case
+                when lc."passwordHash" is not null then 0
+                else 2
+              end as "priority"
+            from "Users"
+            u
+            left join "LocalCredential" lc on lc."userId" = u."userId"
+            where lower(coalesce("email", '')) = ${email}
+            order by "priority" asc, u."userId" asc
+          `)
+      : legacyPasswordHashColumnAvailable
+        ? await db.execute(sql`
+            select
+              u."userId",
+              u."password_hash" as "passwordHash",
+              case
+                when coalesce(u."password_hash", '') <> '' then 1
+                else 2
+              end as "priority"
+            from "Users" u
+            where lower(coalesce("email", '')) = ${email}
+            order by "priority" asc, u."userId" asc
+          `)
+        : { rows: [] };
 
     const candidates = (userRowsResult as unknown as {
       rows: Array<{ userId: string; passwordHash: string | null }>;
@@ -94,7 +140,7 @@ export async function POST(request: Request) {
       /ETIMEDOUT|ECONNREFUSED|ENOTFOUND|57P01|08006|08001/i.test(serialized)
     ) {
       return new NextResponse(
-        "Database unavailable. Check LIVE_DATABASE_URL and required tables.",
+        "Database unavailable. Check LIVE_DATABASE_URL or DATABASE_URL and required tables.",
         { status: 503 }
       );
     }

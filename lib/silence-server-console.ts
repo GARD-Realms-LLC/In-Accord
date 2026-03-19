@@ -105,20 +105,62 @@ const resolveServerLogPath = () => {
 
 const serverLogPath = resolveServerLogPath();
 
-const formatLogMessage = (args: unknown[]) => {
-  return args
-    .map((arg) => {
-      if (typeof arg === "string") {
-        return arg;
-      }
+const formatErrorForLog = (
+  error: Error,
+  seen = new WeakSet<object>(),
+): Record<string, unknown> => {
+  if (seen.has(error)) {
+    return { name: error.name, message: error.message, circular: true };
+  }
 
-      try {
-        return JSON.stringify(arg);
-      } catch {
-        return String(arg);
-      }
-    })
-    .join(" ");
+  seen.add(error);
+
+  const next: Record<string, unknown> = {
+    name: error.name,
+    message: error.message,
+    stack: error.stack ?? null,
+  };
+
+  const cause = (error as Error & { cause?: unknown }).cause;
+  if (cause instanceof Error) {
+    next.cause = formatErrorForLog(cause, seen);
+  } else if (cause !== undefined) {
+    next.cause = String(cause);
+  }
+
+  for (const [key, value] of Object.entries(error)) {
+    if (key in next) {
+      continue;
+    }
+
+    next[key] = value;
+  }
+
+  return next;
+};
+
+const formatLogValue = (value: unknown) => {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (value instanceof Error) {
+    try {
+      return JSON.stringify(formatErrorForLog(value));
+    } catch {
+      return `${value.name}: ${value.message}`;
+    }
+  }
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+};
+
+const formatLogMessage = (args: unknown[]) => {
+  return args.map((arg) => formatLogValue(arg)).join(" ");
 };
 
 const deleteLogFileWhenTooLarge = () => {

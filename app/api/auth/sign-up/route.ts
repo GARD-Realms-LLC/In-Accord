@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
+import { getOptionalEffectiveDatabaseConnectionString } from "@/lib/database-runtime-control";
 import { ensureLocalAuthSchema } from "@/lib/local-auth";
 import { hashPassword } from "@/lib/password";
 import { setSessionUserId } from "@/lib/session";
@@ -10,11 +11,11 @@ import { ensureUserProfileSchema } from "@/lib/user-profile";
 
 export async function POST(request: Request) {
   try {
-    const connectionUrl = process.env.LIVE_DATABASE_URL?.trim() ?? "";
+    const connectionUrl = getOptionalEffectiveDatabaseConnectionString();
 
-    if (!connectionUrl || /^replace_/i.test(connectionUrl) || !/^postgres(ql)?:\/\//i.test(connectionUrl)) {
+    if (!connectionUrl) {
       return new NextResponse(
-        "Database unavailable. Configure LIVE_DATABASE_URL with a PostgreSQL connection string.",
+        "Database unavailable. Configure LIVE_DATABASE_URL or DATABASE_URL with a PostgreSQL connection string.",
         { status: 503 }
       );
     }
@@ -157,7 +158,7 @@ export async function POST(request: Request) {
       /ETIMEDOUT|ECONNREFUSED|ENOTFOUND|57P01|08006|08001/i.test(serialized)
     ) {
       return new NextResponse(
-        "Database unavailable. Check LIVE_DATABASE_URL and required tables.",
+        "Database unavailable. Check LIVE_DATABASE_URL or DATABASE_URL and required tables.",
         { status: 503 }
       );
     }

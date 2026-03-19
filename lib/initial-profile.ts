@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
+import { getOptionalEffectiveDatabaseConnectionString } from "@/lib/database-runtime-control";
 import { clearSessionUserId, getSessionUserId } from "@/lib/session";
 
 export const initialProfile = async () => {
@@ -11,9 +12,9 @@ export const initialProfile = async () => {
     return redirect("/sign-in");
   }
 
-  const connectionUrl = process.env.LIVE_DATABASE_URL?.trim() ?? "";
+  const connectionUrl = getOptionalEffectiveDatabaseConnectionString();
 
-  if (!connectionUrl || /^replace_/i.test(connectionUrl) || !/^postgres(ql)?:\/\//i.test(connectionUrl)) {
+  if (!connectionUrl) {
     await clearSessionUserId();
     return redirect("/sign-in");
   }

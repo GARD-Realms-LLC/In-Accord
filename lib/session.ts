@@ -3,6 +3,7 @@ import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
+import { getOptionalEffectiveDatabaseConnectionString } from "@/lib/database-runtime-control";
 
 export const SESSION_COOKIE_NAME = "inaccord_session_user_id";
 const PERSISTENT_SESSION_TTL_SECONDS = 60 * 60 * 24 * 5;
@@ -139,8 +140,25 @@ const signPayload = (payload: string) => {
     .digest("base64url");
 };
 
+const hasSessionSchema = async () => {
+  const result = await db.execute(sql`
+    select to_regclass('"InAccordSession"') is not null as "exists"
+  `);
+
+  const rows = (result as unknown as {
+    rows?: Array<{ exists?: boolean | null }>;
+  }).rows;
+
+  return rows?.[0]?.exists === true;
+};
+
 const ensureSessionSchema = async () => {
   if (sessionSchemaReady) {
+    return;
+  }
+
+  if (await hasSessionSchema()) {
+    sessionSchemaReady = true;
     return;
   }
 
@@ -282,12 +300,8 @@ export const getCurrentSessionContext = async () => {
     return null;
   }
 
-  const connectionUrl = process.env.LIVE_DATABASE_URL?.trim() ?? "";
-  if (
-    !connectionUrl ||
-    /^replace_/i.test(connectionUrl) ||
-    !/^postgres(ql)?:\/\//i.test(connectionUrl)
-  ) {
+  const connectionUrl = getOptionalEffectiveDatabaseConnectionString();
+  if (!connectionUrl) {
     await expireSessionCookie();
     return null;
   }
@@ -377,17 +391,13 @@ const resolveCurrentSessionState = async () => {
     };
   }
 
-  const connectionUrl = process.env.LIVE_DATABASE_URL?.trim() ?? "";
-  if (
-    !connectionUrl ||
-    /^replace_/i.test(connectionUrl) ||
-    !/^postgres(ql)?:\/\//i.test(connectionUrl)
-  ) {
+  const connectionUrl = getOptionalEffectiveDatabaseConnectionString();
+  if (!connectionUrl) {
     return {
       ok: false,
       code: "database-unavailable" as const,
       message:
-        "Database unavailable. Configure LIVE_DATABASE_URL with a valid PostgreSQL connection string.",
+        "Database unavailable. Configure LIVE_DATABASE_URL or DATABASE_URL with a valid PostgreSQL connection string.",
       userId: null,
       sessionId: null,
       shouldExpireCookie: false,

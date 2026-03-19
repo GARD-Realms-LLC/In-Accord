@@ -292,7 +292,7 @@ export const getDatabaseRuntimeSetup = (): DatabaseRuntimeSetup =>
 export const getEffectiveDatabaseTarget = (): DatabaseRuntimeTarget =>
   getDatabaseRuntimeSetup().effectiveTarget;
 
-export const getEffectiveDatabaseConnectionString = () => {
+export const getOptionalEffectiveDatabaseConnectionString = () => {
   const setup = getDatabaseRuntimeSetup();
   const connectionString =
     setup.effectiveTarget === "local"
@@ -300,6 +300,20 @@ export const getEffectiveDatabaseConnectionString = () => {
       : String(process.env.LIVE_DATABASE_URL ?? "").trim();
 
   if (isPlaceholderValue(connectionString)) {
+    return null;
+  }
+
+  if (!/^postgres(ql)?:\/\//i.test(connectionString)) {
+    return null;
+  }
+
+  return connectionString;
+};
+
+export const getEffectiveDatabaseConnectionString = () => {
+  const connectionString = getOptionalEffectiveDatabaseConnectionString();
+
+  if (!connectionString) {
     throw new Error(
       "No database URL configured. Set LIVE_DATABASE_URL or DATABASE_URL.",
     );
