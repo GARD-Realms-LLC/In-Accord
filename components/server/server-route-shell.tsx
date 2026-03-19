@@ -413,11 +413,16 @@ export const ServerRouteShell = ({
     }
 
     document.documentElement.style.setProperty("--inaccord-chat-left-edge", `${chatWindowLeftEdge}px`);
+    document.documentElement.style.setProperty(
+      "--inaccord-right-footer-safe-width",
+      isMembersCollapsed ? "var(--inaccord-footer-clock-width, 18rem)" : "0px"
+    );
 
     return () => {
       document.documentElement.style.removeProperty("--inaccord-chat-left-edge");
+      document.documentElement.style.removeProperty("--inaccord-right-footer-safe-width");
     };
-  }, [chatWindowLeftEdge]);
+  }, [RIGHT_RAIL_WIDTH, chatWindowLeftEdge, isMembersCollapsed]);
 
   useEffect(() => {
     updateTabScrollState();

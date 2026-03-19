@@ -24,6 +24,7 @@ type ServerEntry = {
   name: string;
   imageUrl: string | null;
   updatedAt?: Date | string;
+  hasUnreadAnnouncement?: boolean;
 };
 
 type ServerFolder = {
@@ -638,6 +639,7 @@ export const NavigationServersCollection = ({
         name={server.name}
         imageUrl={server.imageUrl}
         updatedAt={server.updatedAt}
+        hasUnreadMarker={server.hasUnreadAnnouncement === true}
         appearance={options?.inFolder ? "foldered" : "default"}
         onContextMenu={(event) => openServerContextMenu(event, server.id)}
         draggable
@@ -827,6 +829,9 @@ export const NavigationServersCollection = ({
               .map((id) => allServerMap.get(id))
               .filter((server): server is ServerEntry => Boolean(server));
             const previewServers = containedServers.slice(0, 4);
+            const folderHasUnreadAnnouncements = containedServers.some(
+              (server) => server.hasUnreadAnnouncement === true
+            );
 
             return (
               <div key={folder.id} className="flex w-full justify-center">
@@ -924,6 +929,13 @@ export const NavigationServersCollection = ({
                     title={`${folder.name} (${folder.serverIds.length})`}
                     aria-label={`${folder.name} folder`}
                   >
+                    {folderHasUnreadAnnouncements ? (
+                      <span
+                        className="absolute top-1.5 right-1.5 z-10 h-3 w-3 rounded-full border-2 border-[#111214] bg-[#5865f2] shadow-lg shadow-[#5865f2]/45"
+                        aria-label="Unread announcements"
+                        title="Unread announcements"
+                      />
+                    ) : null}
                     {previewServers.length > 0 ? (
                       <div className="grid h-full w-full grid-cols-2 gap-0.5 overflow-hidden p-1 pb-4">
                         {previewServers.map((server) => {

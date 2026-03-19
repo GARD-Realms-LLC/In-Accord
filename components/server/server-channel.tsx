@@ -17,6 +17,7 @@ interface ServerChannelProps {
   role?: MemberRole;
   draggable?: boolean;
   connectedCount?: number;
+  hasUnreadMarker?: boolean;
 }
 
 const iconMap = {
@@ -32,6 +33,7 @@ export const ServerChannel = ({
   role,
   draggable = false,
   connectedCount = 0,
+  hasUnreadMarker = false,
 }: ServerChannelProps) => {
   const { onOpen } = useModal();
   const params = useParams();
@@ -259,6 +261,13 @@ export const ServerChannel = ({
       >
         {channel.name}
       </p>
+      {channel.type === ChannelType.ANNOUNCEMENT && hasUnreadMarker && !isActiveChannel ? (
+        <span
+          className="h-2.5 w-2.5 shrink-0 rounded-full bg-[#5865f2] shadow-[0_0_0_2px_rgba(17,18,20,0.9)]"
+          aria-label="Unread announcements"
+          title="Unread announcements"
+        />
+      ) : null}
       {showConnectedCount ? (
         <span className="rounded-full border border-emerald-500/45 bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-emerald-200">
           {connectedCount}

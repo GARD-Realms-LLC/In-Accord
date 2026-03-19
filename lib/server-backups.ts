@@ -2,9 +2,9 @@ import "server-only";
 
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { sql } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
-import path from "node:path";
-import { Readable } from "node:stream";
+import { randomUUID } from "crypto";
+import path from "path";
+import { Readable } from "stream";
 
 import { ensureChannelGroupSchema } from "@/lib/channel-groups";
 import { db } from "@/lib/db";

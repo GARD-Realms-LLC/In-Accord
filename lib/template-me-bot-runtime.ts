@@ -1,6 +1,7 @@
-import { createServer, type Server as HttpServer } from "node:http";
-
 type TemplateMeRuntimeStatus = "stopped" | "starting" | "running" | "stopping" | "error";
+
+type HttpModule = typeof import("http");
+type HttpServer = import("http").Server;
 
 export type TemplateMeRuntimeState = {
   status: TemplateMeRuntimeStatus;
@@ -59,6 +60,21 @@ class TemplateMeBotRuntimeManager {
   private controlServer: HttpServer | null = null;
   private readonly controlHost = "127.0.0.1";
   private readonly fixedControlPort = 3030;
+
+  private getHttpModule(): HttpModule {
+    const builtinLoader = (process as typeof process & {
+      getBuiltinModule?: (moduleName: string) => HttpModule | undefined;
+    }).getBuiltinModule;
+
+    if (typeof builtinLoader === "function") {
+      const loaded = builtinLoader("http");
+      if (loaded) {
+        return loaded;
+      }
+    }
+
+    throw new Error("Builtin module 'http' is unavailable in this runtime.");
+  }
 
   private state: TemplateMeRuntimeState = {
     status: "stopped",
@@ -140,6 +156,7 @@ class TemplateMeBotRuntimeManager {
       return;
     }
 
+    const { createServer } = this.getHttpModule();
     const server = createServer((req, res) => {
       const requestUrl = String(req.url ?? "").trim().toLowerCase();
 

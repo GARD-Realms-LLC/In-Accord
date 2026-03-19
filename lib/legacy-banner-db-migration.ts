@@ -1,5 +1,5 @@
-import { access, readFile } from "node:fs/promises";
-import path from "node:path";
+import { access, readFile } from "fs/promises";
+import path from "path";
 import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
@@ -17,7 +17,7 @@ declare global {
   var inAccordLegacyServerBannerImportPromise: Promise<void> | undefined;
 }
 
-const runtimeStoresDir = path.join(RUNTIME_DATA_DIR, "stores");
+const FILE_DATA_DISABLED = String(process.env.INACCORD_DISABLE_FILE_DATA ?? "").trim() === "1";
 
 const pathExists = async (targetPath: string) => {
   try {
@@ -29,6 +29,7 @@ const pathExists = async (targetPath: string) => {
 };
 
 const readFirstExistingJson = async <T>(relativeFileName: string): Promise<T | null> => {
+  const runtimeStoresDir = path.join(RUNTIME_DATA_DIR, "stores");
   const candidates = [
     path.join(runtimeStoresDir, relativeFileName),
     path.join(LEGACY_WORKSPACE_DATA_DIR, relativeFileName),
@@ -100,6 +101,10 @@ const normalizeLegacyBannerPointer = (value: unknown): string | null => {
 };
 
 export const ensureLegacyUserBannerPointersImported = async () => {
+  if (FILE_DATA_DISABLED) {
+    return;
+  }
+
   if (globalThis.inAccordLegacyUserBannerImportPromise) {
     return globalThis.inAccordLegacyUserBannerImportPromise;
   }
@@ -145,6 +150,10 @@ export const ensureLegacyUserBannerPointersImported = async () => {
 };
 
 export const ensureLegacyServerBannerPointersImported = async () => {
+  if (FILE_DATA_DISABLED) {
+    return;
+  }
+
   if (globalThis.inAccordLegacyServerBannerImportPromise) {
     return globalThis.inAccordLegacyServerBannerImportPromise;
   }

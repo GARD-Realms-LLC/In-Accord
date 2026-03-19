@@ -1,5 +1,5 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { execFile } from "child_process";
+import { promisify } from "util";
 import { NextResponse } from "next/server";
 
 import { currentProfile } from "@/lib/current-profile";
@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
 
 const execFileAsync = promisify(execFile);
 const ADMIN_GIT_STAGE_CHUNK_SIZE = 200;
+const getSafeGitDirectory = () => process.cwd().replace(/\\/g, "/");
 
 type GitCommandResult = {
   stdout: string;
@@ -34,11 +35,17 @@ const parseLineList = (value: string) =>
 const ensureAdmin = async () => {
   const profile = await currentProfile();
   if (!profile) {
-    return { ok: false as const, response: new NextResponse("Unauthorized", { status: 401 }) };
+    return {
+      ok: false as const,
+      response: new NextResponse("Unauthorized", { status: 401 }),
+    };
   }
 
   if (!hasInAccordAdministrativeAccess(profile.role)) {
-    return { ok: false as const, response: new NextResponse("Forbidden", { status: 403 }) };
+    return {
+      ok: false as const,
+      response: new NextResponse("Forbidden", { status: 403 }),
+    };
   }
 
   return { ok: true as const, profile };
@@ -51,19 +58,27 @@ const formatGitError = (args: string[], stdout: string, stderr: string) => {
 
 const runGit = async (args: string[]): Promise<GitCommandResult> => {
   try {
-    const { stdout, stderr } = await execFileAsync("git", args, {
-      cwd: process.cwd(),
-      windowsHide: true,
-      maxBuffer: 1024 * 1024 * 16,
-    });
+    const { stdout, stderr } = await execFileAsync(
+      "git",
+      ["-c", `safe.directory=${getSafeGitDirectory()}`, ...args],
+      {
+        cwd: process.cwd(),
+        windowsHide: true,
+        maxBuffer: 1024 * 1024 * 16,
+      },
+    );
 
     return {
       stdout: String(stdout ?? "").trim(),
       stderr: String(stderr ?? "").trim(),
     };
   } catch (error) {
-    const stdout = String((error as { stdout?: string | Buffer | null })?.stdout ?? "").trim();
-    const stderr = String((error as { stderr?: string | Buffer | null })?.stderr ?? "").trim();
+    const stdout = String(
+      (error as { stdout?: string | Buffer | null })?.stdout ?? "",
+    ).trim();
+    const stderr = String(
+      (error as { stderr?: string | Buffer | null })?.stderr ?? "",
+    ).trim();
     throw new Error(formatGitError(args, stdout, stderr));
   }
 };
@@ -96,15 +111,23 @@ const getPushCandidatePaths = async () => {
 
   return Array.from(
     new Set(
-      [...parseLineList(cachedDiff.stdout), ...parseLineList(workingTreeDiff.stdout), ...parseLineList(untrackedFiles.stdout)]
+      [
+        ...parseLineList(cachedDiff.stdout),
+        ...parseLineList(workingTreeDiff.stdout),
+        ...parseLineList(untrackedFiles.stdout),
+      ]
         .map((filePath) => filePath.replace(/\\/g, "/"))
-        .filter((filePath) => !isExcludedPushPath(filePath))
-    )
+        .filter((filePath) => !isExcludedPushPath(filePath)),
+    ),
   );
 };
 
 const stagePushCandidateChanges = async (paths: string[]) => {
-  for (let index = 0; index < paths.length; index += ADMIN_GIT_STAGE_CHUNK_SIZE) {
+  for (
+    let index = 0;
+    index < paths.length;
+    index += ADMIN_GIT_STAGE_CHUNK_SIZE
+  ) {
     const chunk = paths.slice(index, index + ADMIN_GIT_STAGE_CHUNK_SIZE);
     if (!chunk.length) {
       continue;
@@ -114,14 +137,18 @@ const stagePushCandidateChanges = async (paths: string[]) => {
   }
 };
 
-const readResponse = (message: string, status = 500, extra?: Record<string, unknown>) =>
+const readResponse = (
+  message: string,
+  status = 500,
+  extra?: Record<string, unknown>,
+) =>
   NextResponse.json(
     {
       ok: false,
       message,
       ...(extra ?? {}),
     },
-    { status }
+    { status },
   );
 
 export async function POST() {
@@ -138,7 +165,9 @@ export async function POST() {
     const localHead = await runGit(["rev-parse", "HEAD"]);
 
     const remoteBeforeResult = await runGitSafe(["rev-parse", "origin/main"]);
-    const remoteBefore = remoteBeforeResult.ok ? remoteBeforeResult.stdout : null;
+    const remoteBefore = remoteBeforeResult.ok
+      ? remoteBeforeResult.stdout
+      : null;
 
     const pushCandidatePaths = await getPushCandidatePaths();
     const hasLocalChanges = pushCandidatePaths.length > 0;
@@ -148,16 +177,30 @@ export async function POST() {
       await stagePushCandidateChanges(pushCandidatePaths);
 
       const commitMessage = `chore: admin push ${new Date().toISOString()}`;
-      const firstCommitAttempt = await runGitSafe(["commit", "-m", commitMessage]);
+      const firstCommitAttempt = await runGitSafe([
+        "commit",
+        "-m",
+        commitMessage,
+      ]);
 
       if (!firstCommitAttempt.ok) {
-        const adminName = String((auth.profile as { name?: string | null }).name ?? "").trim() || "In-Accord Admin";
-        const adminEmail = String((auth.profile as { email?: string | null }).email ?? "").trim() || "admin@local.in-accord";
+        const adminName =
+          String(
+            (auth.profile as { name?: string | null }).name ?? "",
+          ).trim() || "In-Accord Admin";
+        const adminEmail =
+          String(
+            (auth.profile as { email?: string | null }).email ?? "",
+          ).trim() || "admin@local.in-accord";
 
         await runGit(["config", "user.name", adminName]);
         await runGit(["config", "user.email", adminEmail]);
 
-        const secondCommitAttempt = await runGitSafe(["commit", "-m", commitMessage]);
+        const secondCommitAttempt = await runGitSafe([
+          "commit",
+          "-m",
+          commitMessage,
+        ]);
         if (!secondCommitAttempt.ok) {
           throw secondCommitAttempt.error instanceof Error
             ? secondCommitAttempt.error
@@ -174,7 +217,8 @@ export async function POST() {
         hadLocalChanges: false,
         remoteBefore,
         remoteAfter: remoteBefore,
-        message: "No pushable repository changes were found after excluding temporary desktop inspection artifacts.",
+        message:
+          "No pushable repository changes were found after excluding temporary desktop inspection artifacts.",
       });
     }
 
@@ -196,7 +240,7 @@ export async function POST() {
     console.error("[ADMIN_GIT_PUSH_MAIN_POST]", error);
     return readResponse(
       error instanceof Error ? error.message : "Failed to force push main.",
-      500
+      500,
     );
   }
 }

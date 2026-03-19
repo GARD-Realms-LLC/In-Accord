@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { CircleHelp, ExternalLink, LifeBuoy, X } from "lucide-react";
 import { NavigationBetaBugRow } from "@/components/navigation/navigation-beta-bug-row";
+import { DesktopUpdateButton } from "@/components/settings/desktop-update-button";
 
 type SupportHelpControlsProps = {
   supportUrl?: string;
@@ -70,18 +71,18 @@ export const SupportHelpControls = ({
           <CircleHelp className="h-4 w-4" suppressHydrationWarning />
         </button>
 
-        {showInvisibleBoxes ? (
-          <NavigationBetaBugRow
-            showBugReportsIcon={true}
-            openBugCount={openBugCount}
-            profileId={profileId}
-            profileName={profileName}
-            profileRole={profileRole}
-            profileEmail={profileEmail}
-            profileImageUrl={profileImageUrl}
-            className="mt-0"
-          />
-        ) : null}
+        {showInvisibleBoxes ? <DesktopUpdateButton /> : null}
+
+        <NavigationBetaBugRow
+          showBugReportsIcon={true}
+          openBugCount={openBugCount}
+          profileId={profileId}
+          profileName={profileName}
+          profileRole={profileRole}
+          profileEmail={profileEmail}
+          profileImageUrl={profileImageUrl}
+          className="mt-0"
+        />
       </div>
 
       {isHelpOpen ? (

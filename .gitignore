@@ -10,6 +10,8 @@
 
 # next.js
 /.next/
+/.next-desktop/
+/.n/
 /out/
 /dist/
 /.cache/
@@ -29,6 +31,7 @@
 
 # production
 /build
+/build-metadata.json
 
 # misc
 .DS_Store

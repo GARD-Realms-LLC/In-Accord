@@ -16,6 +16,7 @@ interface PendingRequestItemProps {
   avatarDecorationUrl?: string | null;
   isIncoming: boolean;
   isSpam?: boolean;
+  onUpdated?: () => void | Promise<void>;
 }
 
 export const PendingRequestItem = ({
@@ -27,32 +28,42 @@ export const PendingRequestItem = ({
   avatarDecorationUrl,
   isIncoming,
   isSpam = false,
+  onUpdated,
 }: PendingRequestItemProps) => {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const handleAction = async (action: "accept" | "decline" | "cancel" | "block") => {
+  const handleAction = async (
+    action: "accept" | "decline" | "cancel" | "block",
+  ) => {
     try {
       setIsSubmitting(true);
       setSubmitError(null);
 
-      const response = await fetch(`/api/friends/requests/${encodeURIComponent(requestId)}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
+      const response = await fetch(
+        `/api/friends/requests/${encodeURIComponent(requestId)}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ action }),
         },
-        body: JSON.stringify({ action }),
-      });
+      );
 
       if (!response.ok) {
         const message = await response.text();
         throw new Error(message || "Failed to update friend request.");
       }
 
+      await onUpdated?.();
       router.refresh();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to update friend request.";
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to update friend request.";
       setSubmitError(message);
     } finally {
       setIsSubmitting(false);
@@ -65,7 +76,11 @@ export const PendingRequestItem = ({
       data-request-id={requestId}
     >
       <div className="flex items-center gap-2">
-        <UserAvatar src={imageUrl ?? undefined} decorationSrc={avatarDecorationUrl} className="h-8 w-8" />
+        <UserAvatar
+          src={imageUrl ?? undefined}
+          decorationSrc={avatarDecorationUrl}
+          className="h-8 w-8"
+        />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-foreground">
             <ProfileNameWithServerTag

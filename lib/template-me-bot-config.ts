@@ -33,29 +33,13 @@ const sortTemplateCandidates = (left: OtherBotConfig, right: OtherBotConfig) => 
 
 export const isTemplateMeBotName = (value: unknown) => normalizeTemplateBotName(value) === "template me bot";
 
-export const ensureTemplateMeBotConfigForUser = async (userId: string): Promise<OtherBotConfig> => {
-  const preferences = await getUserPreferences(userId);
-  const allBots = [...preferences.OtherBots];
+const reconcileExistingTemplateMeBotConfigs = async (
+  userId: string,
+  allBots: OtherBotConfig[]
+): Promise<OtherBotConfig | null> => {
   const templateBots = allBots.filter((item) => isTemplateMeBotName(item.name));
-
   if (templateBots.length === 0) {
-    const created: OtherBotConfig = {
-      id: createConfigId(),
-      name: TEMPLATE_ME_BOT_NAME,
-      applicationId: TEMPLATE_ME_BOT_FALLBACK_APPLICATION_ID,
-      botUserId: "",
-      tokenHint: "",
-      commands: ["help", "ping", "echo"],
-      permissions: [],
-      enabled: true,
-      createdAt: new Date().toISOString(),
-    };
-
-    await updateUserPreferences(userId, {
-      OtherBots: [...allBots, created],
-    });
-
-    return created;
+    return null;
   }
 
   const [primary] = [...templateBots].sort(sortTemplateCandidates);
@@ -93,4 +77,37 @@ export const ensureTemplateMeBotConfigForUser = async (userId: string): Promise<
   }
 
   return primary;
+};
+
+export const getExistingTemplateMeBotConfigForUser = async (userId: string): Promise<OtherBotConfig | null> => {
+  const preferences = await getUserPreferences(userId);
+  return reconcileExistingTemplateMeBotConfigs(userId, [...preferences.OtherBots]);
+};
+
+export const ensureTemplateMeBotConfigForUser = async (userId: string): Promise<OtherBotConfig> => {
+  const preferences = await getUserPreferences(userId);
+  const allBots = [...preferences.OtherBots];
+  const existing = await reconcileExistingTemplateMeBotConfigs(userId, allBots);
+
+  if (existing) {
+    return existing;
+  }
+
+  const created: OtherBotConfig = {
+    id: createConfigId(),
+    name: TEMPLATE_ME_BOT_NAME,
+    applicationId: TEMPLATE_ME_BOT_FALLBACK_APPLICATION_ID,
+    botUserId: "",
+    tokenHint: "",
+    commands: ["help", "ping", "echo"],
+    permissions: [],
+    enabled: true,
+    createdAt: new Date().toISOString(),
+  };
+
+  await updateUserPreferences(userId, {
+    OtherBots: [...allBots, created],
+  });
+
+  return created;
 };

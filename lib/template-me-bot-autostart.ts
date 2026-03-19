@@ -1,13 +1,14 @@
+import "server-only";
+
 import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { isTemplateMeBotName } from "@/lib/template-me-bot-config";
 import { getTemplateMeBotRuntimeManager } from "@/lib/template-me-bot-runtime";
-import { getDecryptedOtherBotToken } from "@/lib/user-preferences";
 
 type PreferenceRow = {
   userId: string | null;
   OtherBotsJson: string | null;
+  OtherBotTokenSecretsJson: string | null;
 };
 
 type TemplateMeBootCandidate = {
@@ -17,6 +18,124 @@ type TemplateMeBootCandidate = {
   applicationId: string;
   tokenUpdatedAt: string | null;
   createdAt: string | null;
+};
+
+type CryptoModule = typeof import("crypto");
+
+let cachedCryptoModule: CryptoModule | null = null;
+
+const TEMPLATE_ME_BOOT_RETRY_DELAYS_MS = [0, 1500, 5000] as const;
+
+const waitFor = async (delayMs: number) => {
+  if (delayMs <= 0) {
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
+};
+
+const getCryptoModule = (): CryptoModule => {
+  if (cachedCryptoModule) {
+    return cachedCryptoModule;
+  }
+
+  const builtinLoader = (process as typeof process & {
+    getBuiltinModule?: (moduleName: string) => CryptoModule | undefined;
+  }).getBuiltinModule;
+
+  if (typeof builtinLoader !== "function") {
+    throw new Error("Builtin module 'crypto' is unavailable in this runtime.");
+  }
+
+  const loaded = builtinLoader("crypto");
+  if (!loaded) {
+    throw new Error("Builtin module 'crypto' is unavailable in this runtime.");
+  }
+
+  cachedCryptoModule = loaded;
+  return cachedCryptoModule;
+};
+
+const normalizeTemplateBotName = (value: unknown) =>
+  String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/["'`]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const isTemplateMeBotName = (value: unknown) => normalizeTemplateBotName(value) === "template me bot";
+
+const normalizeIdLike = (value: unknown, maxLength = 80): string => {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  return /^[a-zA-Z0-9_\-:.]{2,}$/.test(trimmed) ? trimmed.slice(0, maxLength) : "";
+};
+
+const normalizeBotTokenCipherMap = (value: unknown): Record<string, string> => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  const source = value as Record<string, unknown>;
+  const next: Record<string, string> = {};
+
+  for (const [rawBotId, rawCipher] of Object.entries(source)) {
+    const botId = normalizeIdLike(rawBotId, 80);
+    if (!botId || typeof rawCipher !== "string") {
+      continue;
+    }
+
+    const cipher = rawCipher.trim();
+    if (!cipher) {
+      continue;
+    }
+
+    next[botId] = cipher;
+  }
+
+  return next;
+};
+
+const getBotTokenEncryptionKey = () => {
+  const configured = String(process.env.BOT_TOKEN_ENCRYPTION_KEY ?? process.env.SESSION_SECRET ?? "").trim();
+  if (!configured) {
+    return null;
+  }
+
+  const { createHash } = getCryptoModule();
+  return createHash("sha256").update(configured).digest();
+};
+
+const decryptBotToken = (cipherText: string) => {
+  const key = getBotTokenEncryptionKey();
+  if (!key) {
+    throw new Error("Missing BOT_TOKEN_ENCRYPTION_KEY or SESSION_SECRET for bot token encryption.");
+  }
+
+  const [ivRaw, tagRaw, encryptedRaw] = cipherText.split(".");
+  if (!ivRaw || !tagRaw || !encryptedRaw) {
+    throw new Error("Invalid encrypted bot token payload.");
+  }
+
+  const iv = Buffer.from(ivRaw, "base64");
+  const tag = Buffer.from(tagRaw, "base64");
+  const encrypted = Buffer.from(encryptedRaw, "base64");
+
+  const { createDecipheriv } = getCryptoModule();
+  const decipher = createDecipheriv("aes-256-gcm", key, iv);
+  decipher.setAuthTag(tag);
+
+  return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8");
 };
 
 const parseJsonSafely = (raw: string | null): unknown => {
@@ -62,7 +181,8 @@ const readTemplateMeBootCandidates = async (): Promise<TemplateMeBootCandidate[]
   const preferenceResult = await db.execute(sql`
     select
       up."userId" as "userId",
-      up."OtherBotsJson" as "OtherBotsJson"
+      up."OtherBotsJson" as "OtherBotsJson",
+      up."OtherBotTokenSecretsJson" as "OtherBotTokenSecretsJson"
     from "UserPreference" up
   `);
 
@@ -80,38 +200,33 @@ const readTemplateMeBootCandidates = async (): Promise<TemplateMeBootCandidate[]
       continue;
     }
 
-    for (const item of parsedBots) {
-      if (!item || typeof item !== "object") {
-        continue;
-      }
-
-      const typed = item as {
-        id?: unknown;
-        name?: unknown;
-        applicationId?: unknown;
-        enabled?: unknown;
-        tokenUpdatedAt?: unknown;
-        createdAt?: unknown;
-      };
-
-      if (!isTemplateMeBotName(typed.name) || typed.enabled !== true) {
-        continue;
-      }
-
-      const botId = String(typed.id ?? "").trim();
-      if (!botId) {
-        continue;
-      }
-
-      candidates.push({
+    const templateBots = parsedBots
+      .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+      .map((item) => ({
         userId,
-        botId,
-        botName: String(typed.name ?? "").trim() || "Template Me Bot",
-        applicationId: String(typed.applicationId ?? "").trim(),
-        tokenUpdatedAt: String(typed.tokenUpdatedAt ?? "").trim() || null,
-        createdAt: String(typed.createdAt ?? "").trim() || null,
-      });
+        botId: normalizeIdLike(item.id, 80),
+        botName: String(item.name ?? "").trim() || "Template Me Bot",
+        applicationId: String(item.applicationId ?? "").trim(),
+        tokenUpdatedAt: String(item.tokenUpdatedAt ?? "").trim() || null,
+        createdAt: String(item.createdAt ?? "").trim() || null,
+        enabled: item.enabled === true,
+      }))
+      .filter((item) => item.botId && item.enabled && isTemplateMeBotName(item.botName));
+
+    if (templateBots.length === 0) {
+      continue;
     }
+
+    const [canonicalBot] = [...templateBots].sort(compareTemplateMeBootCandidates);
+
+    candidates.push({
+      userId,
+      botId: canonicalBot.botId,
+      botName: canonicalBot.botName.trim() || "Template Me Bot",
+      applicationId: canonicalBot.applicationId,
+      tokenUpdatedAt: canonicalBot.tokenUpdatedAt,
+      createdAt: canonicalBot.createdAt,
+    });
   }
 
   return candidates.sort(compareTemplateMeBootCandidates);
@@ -124,7 +239,28 @@ const resolveTemplateMeBootSelection = async () => {
   }
 
   for (const candidate of candidates) {
-    const token = await getDecryptedOtherBotToken(candidate.userId, candidate.botId);
+    const preferenceResult = await db.execute(sql`
+      select up."OtherBotTokenSecretsJson" as "OtherBotTokenSecretsJson"
+      from "UserPreference" up
+      where up."userId" = ${candidate.userId}
+      limit 1
+    `);
+
+    const row = (preferenceResult as unknown as { rows?: PreferenceRow[] }).rows?.[0];
+    const secretMap = normalizeBotTokenCipherMap(parseJsonSafely(row?.OtherBotTokenSecretsJson ?? null));
+    const cipher = secretMap[candidate.botId];
+    if (!cipher) {
+      continue;
+    }
+
+    let token: string | null = null;
+    try {
+      const decrypted = decryptBotToken(cipher).trim();
+      token = decrypted.length > 0 ? decrypted : null;
+    } catch {
+      token = null;
+    }
+
     if (!token) {
       continue;
     }
@@ -148,21 +284,48 @@ const autoStartTemplateMeBotOnBoot = async () => {
   }
 
   const manager = getTemplateMeBotRuntimeManager();
-  await manager.stop("Server startup restart");
+  let lastError: unknown = null;
 
-  const state = await manager.start({
-    userId: selection.userId,
-    botId: selection.botId,
-    botName: selection.botName,
-    applicationId: selection.applicationId,
-    token: selection.token,
-  });
+  for (let attemptIndex = 0; attemptIndex < TEMPLATE_ME_BOOT_RETRY_DELAYS_MS.length; attemptIndex += 1) {
+    const attemptNumber = attemptIndex + 1;
+    const delayMs = TEMPLATE_ME_BOOT_RETRY_DELAYS_MS[attemptIndex];
 
-  console.info(
-    `[TEMPLATE_ME_AUTOSTART] Started ${selection.botName} (${selection.botId}) for user ${selection.userId}.`
-  );
+    if (delayMs > 0) {
+      console.warn(
+        `[TEMPLATE_ME_AUTOSTART] Retrying startup for ${selection.botName} (${selection.botId}) in ${delayMs}ms (attempt ${attemptNumber}/${TEMPLATE_ME_BOOT_RETRY_DELAYS_MS.length}).`
+      );
+      await waitFor(delayMs);
+    }
 
-  return state;
+    try {
+      await manager.stop("Server startup restart");
+
+      const state = await manager.start({
+        userId: selection.userId,
+        botId: selection.botId,
+        botName: selection.botName,
+        applicationId: selection.applicationId,
+        token: selection.token,
+      });
+
+      console.info(
+        `[TEMPLATE_ME_AUTOSTART] Started ${selection.botName} (${selection.botId}) for user ${selection.userId} on attempt ${attemptNumber}.`
+      );
+
+      return state;
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error ?? "Unknown Template Me startup failure");
+      console.error(
+        `[TEMPLATE_ME_AUTOSTART] Attempt ${attemptNumber}/${TEMPLATE_ME_BOOT_RETRY_DELAYS_MS.length} failed for ${selection.botName} (${selection.botId}): ${message}`,
+        error
+      );
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Template Me bot auto-start failed after all startup attempts.");
 };
 
 declare global {

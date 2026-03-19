@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { CLIENT_PERSISTENCE_DISABLED } from "@/lib/client-persistence-policy";
 
 type GameOverlayPreferences = {
   enabled: boolean;
@@ -72,10 +73,12 @@ const applyGameOverlayPreferencesToDocument = (preferences: GameOverlayPreferenc
   root.setAttribute("data-inaccord-game-overlay-opacity", String(preferences.opacity));
   root.setAttribute("data-inaccord-game-overlay-position", preferences.position);
 
-  try {
-    window.localStorage.setItem("inaccord:game-overlay", JSON.stringify(preferences));
-  } catch {
-    // ignore storage failures
+  if (!CLIENT_PERSISTENCE_DISABLED) {
+    try {
+      window.localStorage.setItem("inaccord:game-overlay", JSON.stringify(preferences));
+    } catch {
+      // ignore storage failures
+    }
   }
 };
 

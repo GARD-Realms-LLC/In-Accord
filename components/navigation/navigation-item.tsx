@@ -16,6 +16,7 @@ interface NavigationItemProps {
   imageUrl?: string | null;
   updatedAt?: string | Date | null;
   name: string;
+  hasUnreadMarker?: boolean;
   appearance?: "default" | "foldered";
   draggable?: boolean;
   onDragStart?: () => void;
@@ -56,6 +57,7 @@ export const NavigationItem = ({
   imageUrl,
   updatedAt,
   name,
+  hasUnreadMarker = false,
   appearance = "default",
   draggable = false,
   onDragStart,
@@ -250,6 +252,16 @@ export const NavigationItem = ({
               </div>
             </div>
           )}
+          {hasUnreadMarker && !isActiveServer ? (
+            <span
+              className={cn(
+                "absolute top-1.5 right-1.5 z-10 h-3 w-3 rounded-full border-2 border-[#111214] bg-[#5865f2] shadow-lg shadow-[#5865f2]/45",
+                isFolderedAppearance && "top-0.5 right-0.5"
+              )}
+              aria-label="Unread announcements"
+              title="Unread announcements"
+            />
+          ) : null}
         </button>
       </PopoverTrigger>
 

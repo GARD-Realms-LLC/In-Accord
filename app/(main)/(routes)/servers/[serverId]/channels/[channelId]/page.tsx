@@ -9,7 +9,8 @@ import { ChatHeader } from "@/components/chat/chat-header";
 import { ChatInput } from "@/components/chat/chat-input";
 import { LiveChannelMessagesPane } from "@/components/chat/live-channel-messages-pane";
 import { VoiceStateSession } from "@/components/server/voice-state-session";
-import { VideoChannelMeetingPanel } from "@/components/server/video-channel-meeting-panel";
+import { VideoChannelMeetingPanel as VideoChannelMeetingPanelMesh } from "@/components/server/video-channel-meeting-panel";
+import { VideoChannelMeetingPanel as VideoChannelMeetingPanelSfu } from "@/components/server/video-channel-meeting-panel-sfu";
 import { MeetingParticipantsRail } from "@/components/server/meeting-participants-rail";
 // import { MediaRoom } from "@/components/media-room";
 import { channel, db, member, message, server } from "@/lib/db";
@@ -27,6 +28,7 @@ import { resolveChannelRouteContext, resolveServerRouteContext } from "@/lib/rou
 import { buildChannelPath, buildServerPath } from "@/lib/route-slugs";
 import { pickDefaultServerChannel } from "@/lib/default-server-channel";
 import { MemberRole } from "@/lib/db/types";
+import { markChannelRead } from "@/lib/channel-read-state";
 
 interface ChannelIdPageProps {
   params: Promise<{
@@ -197,6 +199,13 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
   if (!channelPermissions.allowView) {
     const defaultChannelPath = await resolveDefaultVisibleChannelPath();
     redirect(defaultChannelPath ?? serverPath);
+  }
+
+  if (currentChannel.type === ChannelType.ANNOUNCEMENT) {
+    await markChannelRead({
+      channelId: currentChannel.id,
+      profileId: profile.id,
+    });
   }
 
   const canonicalChannelPath = buildChannelPath({
@@ -428,6 +437,13 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
 
   const isAudioChannel = currentChannel.type === ChannelType.AUDIO;
   const isVideoChannel = currentChannel.type === ChannelType.VIDEO;
+  const hasLiveKitMeetingTransport =
+    Boolean(String(process.env.NEXT_PUBLIC_LIVEKIT_URL ?? "").trim()) &&
+    Boolean(String(process.env.LIVEKIT_API_KEY ?? "").trim()) &&
+    Boolean(String(process.env.LIVEKIT_API_SECRET ?? "").trim());
+  const VideoMeetingPanelComponent = hasLiveKitMeetingTransport
+    ? VideoChannelMeetingPanelSfu
+    : VideoChannelMeetingPanelMesh;
   const canPublishAnnouncement =
     currentChannel.type !== ChannelType.ANNOUNCEMENT || currentMember.role !== MemberRole.GUEST;
   const canSendToChannel = channelPermissions.allowSend && canPublishAnnouncement;
@@ -509,7 +525,7 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
               )}
 
               {isVideoChannel ? (
-                <VideoChannelMeetingPanel
+                <VideoMeetingPanelComponent
                   serverId={serverId}
                   channelId={currentChannel.id}
                   channelPath={canonicalChannelPath}
@@ -720,7 +736,13 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
       </div>
 
       {isMeetingPopoutView || isVideoChannel ? null : (
-        <div className="theme-server-chat-bar w-[calc(100vw-584px)] max-w-full rounded-2xl border border-border bg-card shadow-lg shadow-black/25">
+        <div
+          className="theme-server-chat-bar self-start rounded-2xl border border-border bg-card shadow-lg shadow-black/25"
+          style={{
+            width: "calc(100% - var(--inaccord-right-footer-safe-width, 0px))",
+            maxWidth: "100%",
+          }}
+        >
           <ChatInput
             name={currentChannel.name}
             type="channel"

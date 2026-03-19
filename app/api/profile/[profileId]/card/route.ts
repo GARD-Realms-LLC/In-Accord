@@ -27,6 +27,7 @@ import { resolveProfileIcons } from "@/lib/profile-icons";
 import { ensureUserProfileSchema } from "@/lib/user-profile";
 import { resolveAvatarUrl, resolveBannerUrl } from "@/lib/asset-url";
 import { getFamilyLifecycleState } from "@/lib/family-lifecycle";
+import { type DirectFriendStatus } from "@/lib/direct-friend-status";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -46,14 +47,19 @@ type MutualFriendCardItem = {
   imageUrl: string;
 };
 
-type DirectFriendStatus = "self" | "friends" | "not_friends";
-
 const toSafePercent = (numerator: number, denominator: number) => {
-  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) {
+  if (
+    !Number.isFinite(numerator) ||
+    !Number.isFinite(denominator) ||
+    denominator <= 0
+  ) {
     return 0;
   }
 
-  return Math.max(0, Math.min(100, Math.round((numerator / denominator) * 100)));
+  return Math.max(
+    0,
+    Math.min(100, Math.round((numerator / denominator) * 100)),
+  );
 };
 
 const resolveNormalizedProfileId = async (value: string) => {
@@ -73,9 +79,13 @@ const resolveNormalizedProfileId = async (value: string) => {
     limit 1
   `);
 
-  const normalizedMemberProfileId = String((memberResult as unknown as {
-    rows?: Array<{ profileId: string | null }>;
-  }).rows?.[0]?.profileId ?? "").trim();
+  const normalizedMemberProfileId = String(
+    (
+      memberResult as unknown as {
+        rows?: Array<{ profileId: string | null }>;
+      }
+    ).rows?.[0]?.profileId ?? "",
+  ).trim();
 
   if (normalizedMemberProfileId) {
     return normalizedMemberProfileId;
@@ -88,9 +98,13 @@ const resolveNormalizedProfileId = async (value: string) => {
     limit 1
   `);
 
-  const resolvedUserProfileId = String((userResult as unknown as {
-    rows?: Array<{ profileId: string | null }>;
-  }).rows?.[0]?.profileId ?? "").trim();
+  const resolvedUserProfileId = String(
+    (
+      userResult as unknown as {
+        rows?: Array<{ profileId: string | null }>;
+      }
+    ).rows?.[0]?.profileId ?? "",
+  ).trim();
 
   if (resolvedUserProfileId) {
     return resolvedUserProfileId;
@@ -104,9 +118,13 @@ const resolveNormalizedProfileId = async (value: string) => {
     limit 1
   `);
 
-  return String((memberProfileResult as unknown as {
-    rows?: Array<{ profileId: string | null }>;
-  }).rows?.[0]?.profileId ?? trimmedValue).trim();
+  return String(
+    (
+      memberProfileResult as unknown as {
+        rows?: Array<{ profileId: string | null }>;
+      }
+    ).rows?.[0]?.profileId ?? trimmedValue,
+  ).trim();
 };
 
 const resolveProfileIdFromMemberId = async (memberId: string) => {
@@ -122,20 +140,26 @@ const resolveProfileIdFromMemberId = async (memberId: string) => {
     limit 1
   `);
 
-  return String((memberResult as unknown as {
-    rows?: Array<{ profileId: string | null }>;
-  }).rows?.[0]?.profileId ?? "").trim();
+  return String(
+    (
+      memberResult as unknown as {
+        rows?: Array<{ profileId: string | null }>;
+      }
+    ).rows?.[0]?.profileId ?? "",
+  ).trim();
 };
 
 export async function GET(
   req: Request,
-  { params }: { params: Promise<{ profileId: string }> }
+  { params }: { params: Promise<{ profileId: string }> },
 ) {
   try {
     const { profileId: rawProfileId } = await params;
     const { searchParams } = new URL(req.url);
-    const explicitViewerMemberId = searchParams.get("viewerMemberId")?.trim() ?? "";
-    const explicitViewerProfileId = searchParams.get("viewerProfileId")?.trim() ?? "";
+    const explicitViewerMemberId =
+      searchParams.get("viewerMemberId")?.trim() ?? "";
+    const explicitViewerProfileId =
+      searchParams.get("viewerProfileId")?.trim() ?? "";
     let resolvedViewerProfileId = "";
 
     if (explicitViewerMemberId) {
@@ -147,25 +171,39 @@ export async function GET(
         limit 1
       `);
 
-      resolvedViewerProfileId = String((viewerMemberResult as unknown as {
-        rows?: Array<{ profileId: string | null }>;
-      }).rows?.[0]?.profileId ?? "").trim();
+      resolvedViewerProfileId = String(
+        (
+          viewerMemberResult as unknown as {
+            rows?: Array<{ profileId: string | null }>;
+          }
+        ).rows?.[0]?.profileId ?? "",
+      ).trim();
     }
 
     if (!resolvedViewerProfileId && explicitViewerProfileId) {
-      resolvedViewerProfileId = await resolveNormalizedProfileId(explicitViewerProfileId);
+      resolvedViewerProfileId = await resolveNormalizedProfileId(
+        explicitViewerProfileId,
+      );
     }
 
-    const profile = resolvedViewerProfileId || explicitViewerProfileId ? null : await currentProfile();
+    const profile =
+      resolvedViewerProfileId || explicitViewerProfileId
+        ? null
+        : await currentProfile();
 
     const memberId = searchParams.get("memberId")?.trim() ?? "";
     const rawTargetProfileId = rawProfileId?.trim() ?? "";
     const targetProfileIdFromMemberId = memberId
       ? await resolveProfileIdFromMemberId(memberId)
       : "";
-    const profileId = targetProfileIdFromMemberId
-      || (rawTargetProfileId ? await resolveNormalizedProfileId(rawTargetProfileId) : "");
-    const viewerProfileId = resolvedViewerProfileId || String(profile?.userId ?? profile?.id ?? "").trim();
+    const profileId =
+      targetProfileIdFromMemberId ||
+      (rawTargetProfileId
+        ? await resolveNormalizedProfileId(rawTargetProfileId)
+        : "");
+    const viewerProfileId =
+      resolvedViewerProfileId ||
+      String(profile?.userId ?? profile?.id ?? "").trim();
 
     if (!profileId) {
       return new NextResponse("Profile ID missing", { status: 400 });
@@ -192,13 +230,15 @@ export async function GET(
         limit 1
       `);
 
-      const membership = (membershipResult as unknown as {
-        rows?: Array<{
-          id: string;
-          serverId: string;
-          serverName: string;
-        }>;
-      }).rows?.[0];
+      const membership = (
+        membershipResult as unknown as {
+          rows?: Array<{
+            id: string;
+            serverId: string;
+            serverName: string;
+          }>;
+        }
+      ).rows?.[0];
 
       if (membership) {
         memberServerId = membership.serverId;
@@ -244,40 +284,44 @@ export async function GET(
       limit 1
     `);
 
-    const row = (result as unknown as {
-      rows: Array<{
-        id: string;
-        realName: string | null;
-        profileName: string | null;
-        profileNameStyle: string | null;
-        nameplateLabel: string | null;
-        nameplateColor: string | null;
-        nameplateImageUrl: string | null;
-        pronouns: string | null;
-        businessRole: string | null;
-        businessSection: string | null;
-        comment: string | null;
-        avatarDecorationUrl: string | null;
-        profileEffectUrl: string | null;
-        bannerUrl: string | null;
-        presenceStatus: string | null;
-        currentGame: string | null;
-        dateOfBirth: string | null;
-        familyParentUserId: string | null;
-        businessParentUserId: string | null;
-        role: string | null;
-        email: string | null;
-        imageUrl: string | null;
-        createdAt: Date | string | null;
-        lastLogonAt: Date | string | null;
-      }>;
-    }).rows?.[0];
+    const row = (
+      result as unknown as {
+        rows: Array<{
+          id: string;
+          realName: string | null;
+          profileName: string | null;
+          profileNameStyle: string | null;
+          nameplateLabel: string | null;
+          nameplateColor: string | null;
+          nameplateImageUrl: string | null;
+          pronouns: string | null;
+          businessRole: string | null;
+          businessSection: string | null;
+          comment: string | null;
+          avatarDecorationUrl: string | null;
+          profileEffectUrl: string | null;
+          bannerUrl: string | null;
+          presenceStatus: string | null;
+          currentGame: string | null;
+          dateOfBirth: string | null;
+          familyParentUserId: string | null;
+          businessParentUserId: string | null;
+          role: string | null;
+          email: string | null;
+          imageUrl: string | null;
+          createdAt: Date | string | null;
+          lastLogonAt: Date | string | null;
+        }>;
+      }
+    ).rows?.[0];
 
     if (!row) {
       return new NextResponse("Not found", { status: 404 });
     }
 
-    const mutualServersResult = isSelfProfile ? { rows: [{ count: 0 }] } : await db.execute(sql`
+    const mutualServersResult = isSelfProfile
+      ? { rows: [{ count: 0 }] }
+      : await db.execute(sql`
       with normalized_members as (
         select
           m."id" as "memberId",
@@ -294,11 +338,17 @@ export async function GET(
         and other_member."normalizedProfileId" = ${profileId}
     `);
 
-    const rawMutualServersCount = Number((mutualServersResult as unknown as {
-      rows?: Array<{ count: number | string | null }>;
-    }).rows?.[0]?.count ?? 0);
+    const rawMutualServersCount = Number(
+      (
+        mutualServersResult as unknown as {
+          rows?: Array<{ count: number | string | null }>;
+        }
+      ).rows?.[0]?.count ?? 0,
+    );
 
-    const mutualServersListResult = isSelfProfile ? { rows: [] } : await db.execute(sql`
+    const mutualServersListResult = isSelfProfile
+      ? { rows: [] }
+      : await db.execute(sql`
       with normalized_members as (
         select
           m."id" as "memberId",
@@ -321,15 +371,32 @@ export async function GET(
       order by s."name" asc
     `);
 
-    const mutualServers = ((mutualServersListResult as unknown as {
-      rows?: Array<{ id: string; name: string; imageUrl: string | null }>;
-    }).rows ?? []).map((item): MutualServerCardItem => ({
-      id: item.id,
-      name: item.name,
-      imageUrl: resolveAvatarUrl(item.imageUrl) ?? "/in-accord-steampunk-logo.png",
-    }));
+    const mutualServers = (
+      (
+        mutualServersListResult as unknown as {
+          rows?: Array<{ id: string; name: string; imageUrl: string | null }>;
+        }
+      ).rows ?? []
+    ).map(
+      (item): MutualServerCardItem => ({
+        id: item.id,
+        name: item.name,
+        imageUrl:
+          resolveAvatarUrl(item.imageUrl) ?? "/in-accord-steampunk-logo.png",
+      }),
+    );
 
-    const directFriendshipResult = isSelfProfile ? { rows: [{ isDirectFriend: false }] } : await db.execute(sql`
+    const directFriendshipResult = isSelfProfile
+      ? {
+          rows: [
+            {
+              isDirectFriend: false,
+              hasOutgoingPending: false,
+              hasIncomingPending: false,
+            },
+          ],
+        }
+      : await db.execute(sql`
       with normalized_friend_requests as (
         select
           upper(trim(coalesce(fr."status", ''))) as "status",
@@ -339,28 +406,61 @@ export async function GET(
         left join "Member" reqm on reqm."id" = fr."requesterProfileId"
         left join "Member" recm on recm."id" = fr."recipientProfileId"
       )
-      select exists(
-        select 1
-        from normalized_friend_requests nfr
-        where nfr."status" = 'ACCEPTED'
-          and (
-            (nfr."requesterProfileId" = ${viewerProfileId} and nfr."recipientProfileId" = ${profileId})
-            or
-            (nfr."requesterProfileId" = ${profileId} and nfr."recipientProfileId" = ${viewerProfileId})
-          )
-      ) as "isDirectFriend"
+      select
+        exists(
+          select 1
+          from normalized_friend_requests nfr
+          where nfr."status" = 'ACCEPTED'
+            and (
+              (nfr."requesterProfileId" = ${viewerProfileId} and nfr."recipientProfileId" = ${profileId})
+              or
+              (nfr."requesterProfileId" = ${profileId} and nfr."recipientProfileId" = ${viewerProfileId})
+            )
+        ) as "isDirectFriend",
+        exists(
+          select 1
+          from normalized_friend_requests nfr
+          where nfr."status" = 'PENDING'
+            and nfr."requesterProfileId" = ${viewerProfileId}
+            and nfr."recipientProfileId" = ${profileId}
+        ) as "hasOutgoingPending",
+        exists(
+          select 1
+          from normalized_friend_requests nfr
+          where nfr."status" = 'PENDING'
+            and nfr."requesterProfileId" = ${profileId}
+            and nfr."recipientProfileId" = ${viewerProfileId}
+        ) as "hasIncomingPending"
     `);
 
-    const isDirectFriend = !isSelfProfile && Boolean((directFriendshipResult as unknown as {
-      rows?: Array<{ isDirectFriend: boolean | string | number | null }>;
-    }).rows?.[0]?.isDirectFriend);
+    const directFriendshipRow = (
+      directFriendshipResult as unknown as {
+        rows?: Array<{
+          isDirectFriend: boolean | string | number | null;
+          hasOutgoingPending: boolean | string | number | null;
+          hasIncomingPending: boolean | string | number | null;
+        }>;
+      }
+    ).rows?.[0];
+    const isDirectFriend =
+      !isSelfProfile && Boolean(directFriendshipRow?.isDirectFriend);
+    const hasOutgoingPending =
+      !isSelfProfile && Boolean(directFriendshipRow?.hasOutgoingPending);
+    const hasIncomingPending =
+      !isSelfProfile && Boolean(directFriendshipRow?.hasIncomingPending);
     const directFriendStatus: DirectFriendStatus = isSelfProfile
       ? "self"
       : isDirectFriend
         ? "friends"
-        : "not_friends";
+        : hasIncomingPending
+          ? "incoming_pending"
+          : hasOutgoingPending
+            ? "outgoing_pending"
+            : "not_friends";
 
-    const mutualFriendsResult = isSelfProfile ? { rows: [{ count: 0 }] } : await db.execute(sql`
+    const mutualFriendsResult = isSelfProfile
+      ? { rows: [{ count: 0 }] }
+      : await db.execute(sql`
       with normalized_friend_requests as (
         select
           upper(trim(coalesce(fr."status", ''))) as "status",
@@ -407,11 +507,17 @@ export async function GET(
       where sf."friendProfileId" not in (${viewerProfileId}, ${profileId})
     `);
 
-    const rawMutualFriendsCount = Number((mutualFriendsResult as unknown as {
-      rows?: Array<{ count: number | string | null }>;
-    }).rows?.[0]?.count ?? 0);
+    const rawMutualFriendsCount = Number(
+      (
+        mutualFriendsResult as unknown as {
+          rows?: Array<{ count: number | string | null }>;
+        }
+      ).rows?.[0]?.count ?? 0,
+    );
 
-    const mutualFriendsListResult = isSelfProfile ? { rows: [] } : await db.execute(sql`
+    const mutualFriendsListResult = isSelfProfile
+      ? { rows: [] }
+      : await db.execute(sql`
       with normalized_friend_requests as (
         select
           upper(trim(coalesce(fr."status", ''))) as "status",
@@ -489,25 +595,34 @@ export async function GET(
       order by "displayName" asc, "profileId" asc
     `);
 
-    const mutualFriends = ((mutualFriendsListResult as unknown as {
-      rows?: Array<{
-        profileId: string;
-        memberId: string | null;
-        serverId: string | null;
-        displayName: string;
-        email: string | null;
-        imageUrl: string | null;
-      }>;
-    }).rows ?? []).map((item): MutualFriendCardItem => ({
-      profileId: item.profileId,
-      memberId: item.memberId,
-      serverId: item.serverId,
-      displayName: item.displayName,
-      email: item.email,
-      imageUrl: resolveAvatarUrl(item.imageUrl) ?? "/in-accord-steampunk-logo.png",
-    }));
+    const mutualFriends = (
+      (
+        mutualFriendsListResult as unknown as {
+          rows?: Array<{
+            profileId: string;
+            memberId: string | null;
+            serverId: string | null;
+            displayName: string;
+            email: string | null;
+            imageUrl: string | null;
+          }>;
+        }
+      ).rows ?? []
+    ).map(
+      (item): MutualFriendCardItem => ({
+        profileId: item.profileId,
+        memberId: item.memberId,
+        serverId: item.serverId,
+        displayName: item.displayName,
+        email: item.email,
+        imageUrl:
+          resolveAvatarUrl(item.imageUrl) ?? "/in-accord-steampunk-logo.png",
+      }),
+    );
 
-    const targetServerCountResult = isSelfProfile ? { rows: [{ count: 0 }] } : await db.execute(sql`
+    const targetServerCountResult = isSelfProfile
+      ? { rows: [{ count: 0 }] }
+      : await db.execute(sql`
       with normalized_members as (
         select
           m."serverId" as "serverId",
@@ -519,25 +634,39 @@ export async function GET(
       where nm."normalizedProfileId" = ${profileId}
     `);
 
-    const targetServerCount = Number((targetServerCountResult as unknown as {
-      rows?: Array<{ count: number | string | null }>;
-    }).rows?.[0]?.count ?? 0);
+    const targetServerCount = Number(
+      (
+        targetServerCountResult as unknown as {
+          rows?: Array<{ count: number | string | null }>;
+        }
+      ).rows?.[0]?.count ?? 0,
+    );
 
     const mutualServersCount = mutualServers.length || rawMutualServersCount;
     const mutualFriendsCount = mutualFriends.length || rawMutualFriendsCount;
-    const mutualServersPercent = toSafePercent(mutualServersCount, targetServerCount);
+    const mutualServersPercent = toSafePercent(
+      mutualServersCount,
+      targetServerCount,
+    );
 
-    let lifecycle = getFamilyLifecycleState(row.dateOfBirth, row.familyParentUserId);
-    let businessLifecycle = getFamilyLifecycleState(row.dateOfBirth, row.businessParentUserId);
+    let lifecycle = getFamilyLifecycleState(
+      row.dateOfBirth,
+      row.familyParentUserId,
+    );
+    let businessLifecycle = getFamilyLifecycleState(
+      row.dateOfBirth,
+      row.businessParentUserId,
+    );
     let isPatron = false;
     let serverProfile: Awaited<ReturnType<typeof getUserServerProfile>> = null;
-    let preferences: Awaited<ReturnType<typeof getUserPreferences>> | null = null;
+    let preferences: Awaited<ReturnType<typeof getUserPreferences>> | null =
+      null;
 
     try {
       const normalizedFamily = await autoConvertFamilyAccountIfNeeded(
         row.id,
         row.dateOfBirth,
-        row.familyParentUserId
+        row.familyParentUserId,
       );
       lifecycle = normalizedFamily.lifecycle;
     } catch (error) {
@@ -548,7 +677,7 @@ export async function GET(
       const normalizedBusiness = await autoConvertBusinessAccountIfNeeded(
         row.id,
         row.dateOfBirth,
-        row.businessParentUserId
+        row.businessParentUserId,
       );
       businessLifecycle = normalizedBusiness.lifecycle;
     } catch (error) {
@@ -598,14 +727,16 @@ export async function GET(
           limit 1
         `);
 
-        const selectedTagRow = (selectedTagResult as unknown as {
-          rows: Array<{
-            serverId: string;
-            serverName: string;
-            tagCode: string;
-            iconKey: string;
-          }>;
-        }).rows?.[0];
+        const selectedTagRow = (
+          selectedTagResult as unknown as {
+            rows: Array<{
+              serverId: string;
+              serverName: string;
+              tagCode: string;
+              iconKey: string;
+            }>;
+          }
+        ).rows?.[0];
 
         if (selectedTagRow) {
           selectedServerTag = {
@@ -613,7 +744,10 @@ export async function GET(
             serverName: selectedTagRow.serverName,
             tagCode: selectedTagRow.tagCode,
             iconKey: selectedTagRow.iconKey,
-            iconEmoji: serverTagIconOptions.find((item) => item.key === selectedTagRow.iconKey)?.emoji ?? "🏷️",
+            iconEmoji:
+              serverTagIconOptions.find(
+                (item) => item.key === selectedTagRow.iconKey,
+              )?.emoji ?? "🏷️",
           };
         }
       } catch (error) {
@@ -655,27 +789,38 @@ export async function GET(
         nameplateLabel: row.nameplateLabel,
         nameplateColor: row.nameplateColor,
         nameplateImageUrl: row.nameplateImageUrl,
-        effectiveNameplateLabel: serverProfile?.nameplateLabel ?? row.nameplateLabel,
-        effectiveNameplateColor: serverProfile?.nameplateColor ?? row.nameplateColor,
-        effectiveNameplateImageUrl: serverProfile?.nameplateImageUrl ?? row.nameplateImageUrl,
+        effectiveNameplateLabel:
+          serverProfile?.nameplateLabel ?? row.nameplateLabel,
+        effectiveNameplateColor:
+          serverProfile?.nameplateColor ?? row.nameplateColor,
+        effectiveNameplateImageUrl:
+          serverProfile?.nameplateImageUrl ?? row.nameplateImageUrl,
         pronouns: row.pronouns,
         businessRole: row.businessRole,
         businessSection: row.businessSection,
         comment: serverProfile?.comment ?? row.comment,
         avatarDecorationUrl: row.avatarDecorationUrl,
         profileEffectUrl: row.profileEffectUrl,
-        effectiveImageUrl: resolveAvatarUrl(serverProfile?.imageUrl ?? row.imageUrl) ?? "/in-accord-steampunk-logo.png",
-        effectiveAvatarDecorationUrl: serverProfile?.avatarDecorationUrl ?? row.avatarDecorationUrl,
-        effectiveProfileEffectUrl: serverProfile?.profileEffectUrl ?? row.profileEffectUrl,
+        effectiveImageUrl:
+          resolveAvatarUrl(serverProfile?.imageUrl ?? row.imageUrl) ??
+          "/in-accord-steampunk-logo.png",
+        effectiveAvatarDecorationUrl:
+          serverProfile?.avatarDecorationUrl ?? row.avatarDecorationUrl,
+        effectiveProfileEffectUrl:
+          serverProfile?.profileEffectUrl ?? row.profileEffectUrl,
         effectiveProfileName: serverProfile?.profileName ?? row.profileName,
         effectiveProfileNameStyle:
-          serverProfile?.profileNameStyle && isProfileNameStyleValue(serverProfile.profileNameStyle)
+          serverProfile?.profileNameStyle &&
+          isProfileNameStyleValue(serverProfile.profileNameStyle)
             ? normalizeProfileNameStyleValue(serverProfile.profileNameStyle)
-            : row.profileNameStyle && isProfileNameStyleValue(row.profileNameStyle)
-            ? normalizeProfileNameStyleValue(row.profileNameStyle)
-            : DEFAULT_PROFILE_NAME_STYLE,
+            : row.profileNameStyle &&
+                isProfileNameStyleValue(row.profileNameStyle)
+              ? normalizeProfileNameStyleValue(row.profileNameStyle)
+              : DEFAULT_PROFILE_NAME_STYLE,
         bannerUrl: resolveBannerUrl(row.bannerUrl ?? null),
-        effectiveBannerUrl: resolveBannerUrl(serverProfile?.bannerUrl ?? row.bannerUrl ?? null),
+        effectiveBannerUrl: resolveBannerUrl(
+          serverProfile?.bannerUrl ?? row.bannerUrl ?? null,
+        ),
         serverProfile: memberServerId
           ? {
               serverId: memberServerId,
@@ -697,7 +842,8 @@ export async function GET(
         currentGame: row.currentGame ?? null,
         role: row.role,
         email: row.email ?? "",
-        imageUrl: resolveAvatarUrl(row.imageUrl) ?? "/in-accord-steampunk-logo.png",
+        imageUrl:
+          resolveAvatarUrl(row.imageUrl) ?? "/in-accord-steampunk-logo.png",
         isDirectFriend,
         directFriendStatus,
         mutualServersPercent,
@@ -706,7 +852,9 @@ export async function GET(
         mutualServers,
         mutualFriends,
         createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : null,
-        lastLogonAt: row.lastLogonAt ? new Date(row.lastLogonAt).toISOString() : null,
+        lastLogonAt: row.lastLogonAt
+          ? new Date(row.lastLogonAt).toISOString()
+          : null,
       },
       {
         headers: {
@@ -714,7 +862,7 @@ export async function GET(
           Pragma: "no-cache",
           Expires: "0",
         },
-      }
+      },
     );
   } catch (error) {
     console.error("[PROFILE_CARD_GET]", error);

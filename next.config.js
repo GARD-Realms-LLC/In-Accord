@@ -1,7 +1,25 @@
 /** @type {import('next').NextConfig} */
+const serverOnlyExternalPackages = new Set([
+  "pg",
+  "pg-pool",
+  "pg-connection-string",
+  "pgpass",
+  "split2",
+]);
+
 const nextConfig = {
   distDir: process.env.NEXT_DIST_DIR || ".next",
-  serverExternalPackages: ["zlib-sync", "bufferutil", "utf-8-validate"],
+  output: process.env.NEXT_OUTPUT_MODE === "standalone" ? "standalone" : undefined,
+  serverExternalPackages: [
+    "pg",
+    "pg-pool",
+    "pg-connection-string",
+    "pgpass",
+    "split2",
+    "zlib-sync",
+    "bufferutil",
+    "utf-8-validate",
+  ],
   typescript: {
     ignoreBuildErrors: process.env.NEXT_IGNORE_TYPE_ERRORS === "1",
   },
@@ -55,10 +73,23 @@ const nextConfig = {
     },
   },
   webpack: (config, { dev, isServer }) => {
-    if (dev) {
+    if (dev && process.env.INACCORD_DESKTOP_RUNTIME === "1") {
+      config.cache = false;
+    } else if (dev) {
       config.cache = {
         type: "memory",
       };
+    }
+
+    if (isServer) {
+      config.externals = config.externals || [];
+      config.externals.push(({ request }, callback) => {
+        if (request && serverOnlyExternalPackages.has(request)) {
+          return callback(null, `commonjs ${request}`);
+        }
+
+        return callback();
+      });
     }
 
     if (!isServer) {

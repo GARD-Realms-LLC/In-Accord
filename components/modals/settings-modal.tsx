@@ -55,13 +55,20 @@ import {
 import axios from "axios";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
+import {
+  Elements,
+  PaymentElement,
+  useElements,
+  useStripe,
+} from "@stripe/react-stripe-js";
 import { loadStripe, type StripeElementsOptions } from "@stripe/stripe-js";
 
 import { ModeToggle } from "@/components/mode-toggle";
 import { ModeratorLineIcon } from "@/components/moderator-line-icon";
 import { BusinessMemberIcon } from "@/components/business-member-icon";
+import { CLIENT_PERSISTENCE_DISABLED } from "@/lib/client-persistence-policy";
 import { OtherDeveloperPanel } from "@/components/settings/other-developer-panel";
+import { PendingRequestItem } from "@/components/friends/pending-request-item";
 import { FileUpload } from "@/components/file-upload";
 import { Button } from "@/components/ui/button";
 import { BannerImage } from "@/components/ui/banner-image";
@@ -80,7 +87,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useModal } from "@/hooks/use-modal-store";
-import { getInAccordStaffLabel, isInAccordAdministrator, isInAccordDeveloper, isInAccordModerator, isInAccordParent } from "@/lib/in-accord-admin";
+import {
+  getInAccordStaffLabel,
+  isInAccordAdministrator,
+  isInAccordDeveloper,
+  isInAccordModerator,
+  isInAccordParent,
+} from "@/lib/in-accord-admin";
 import { writeMentionsEnabled } from "@/lib/mentions";
 import {
   composeProfileNameStyleValue,
@@ -95,10 +108,18 @@ import {
   type ProfileNameEffectKey,
   type ProfileNameFontKey,
 } from "@/lib/profile-name-styles";
-import { formatPresenceStatusLabel, normalizePresenceStatus, presenceStatusLabelMap } from "@/lib/presence-status";
+import {
+  formatPresenceStatusLabel,
+  normalizePresenceStatus,
+  presenceStatusLabelMap,
+} from "@/lib/presence-status";
 import { resolveProfileIcons } from "@/lib/profile-icons";
 import { resolveBannerUrl } from "@/lib/asset-url";
-import { getCachedVoiceState, VOICE_STATE_SYNC_EVENT, type VoiceStateSyncDetail } from "@/lib/voice-state-sync";
+import {
+  getCachedVoiceState,
+  VOICE_STATE_SYNC_EVENT,
+  type VoiceStateSyncDetail,
+} from "@/lib/voice-state-sync";
 import type {
   AdvancedPreferences,
   ActivityPrivacyPreferences,
@@ -127,7 +148,10 @@ type PatronageEmbeddedPaymentFormProps = {
   onErrorMessage: (message: string) => void;
 };
 
-const PatronageEmbeddedPaymentForm = ({ onSuccess, onErrorMessage }: PatronageEmbeddedPaymentFormProps) => {
+const PatronageEmbeddedPaymentForm = ({
+  onSuccess,
+  onErrorMessage,
+}: PatronageEmbeddedPaymentFormProps) => {
   const stripe = useStripe();
   const elements = useElements();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -154,7 +178,9 @@ const PatronageEmbeddedPaymentForm = ({ onSuccess, onErrorMessage }: PatronageEm
 
       const paymentIntentId = String(result.paymentIntent?.id ?? "").trim();
       if (!paymentIntentId) {
-        onErrorMessage("Payment completed, but no payment reference was returned.");
+        onErrorMessage(
+          "Payment completed, but no payment reference was returned.",
+        );
         return;
       }
 
@@ -263,11 +289,7 @@ const sectionGroups: SectionGroup[] = [
   },
   {
     label: "Account Centers",
-    sections: [
-      "familyCenter",
-      "businessCenter",
-      "schoolCenter",
-    ],
+    sections: ["familyCenter", "businessCenter", "schoolCenter"],
   },
 ];
 
@@ -285,7 +307,7 @@ const sectionLabelMap: Record<SettingsSection, string> = {
   OtherDeveloper: "Bot/App Developer",
   devices: "Devices",
   connections: "Connections",
-  friendRequests: "Blocked Users",
+  friendRequests: "Friend Requests",
   nitro: "Nitro",
   serverBoost: "SERVER TAGS",
   subscriptions: "Subscriptions",
@@ -315,13 +337,15 @@ const sectionDescriptionMap: Record<SettingsSection, string> = {
   contentSocial: "Control social and content visibility preferences.",
   dataPrivacy: "Review data, privacy, and safety controls.",
   familyCenter: "Configure family center and family controls.",
-  businessCenter: "Configure business center controls and managed business accounts.",
+  businessCenter:
+    "Configure business center controls and managed business accounts.",
   schoolCenter: "Configure school center controls and managed school accounts.",
   authorizedApps: "Review third-party authorized app access.",
   OtherDeveloper: "Manage bots and apps connected to your In-Accord profile.",
   devices: "Manage signed-in devices and sessions.",
   connections: "Connect and manage linked external accounts.",
-  friendRequests: "Manage blocked users and request interactions.",
+  friendRequests:
+    "Manage incoming and outgoing friend requests, plus blocked users.",
   nitro: "View Nitro settings and perks.",
   serverBoost: "Configure server tags and profile tag display.",
   subscriptions: "Review active and available subscriptions.",
@@ -343,7 +367,10 @@ const sectionDescriptionMap: Record<SettingsSection, string> = {
   gameOverlay: "Configure in-game overlay behavior.",
 };
 
-const sectionIconMap: Record<SettingsSection, React.ComponentType<{ className?: string }>> = {
+const sectionIconMap: Record<
+  SettingsSection,
+  React.ComponentType<{ className?: string }>
+> = {
   myAccount: User,
   profiles: IdCard,
   bugReporting: Flag,
@@ -423,17 +450,31 @@ const PM_CAMERA_STATE_SYNC_EVENT = "inaccord:pm-camera-state-sync";
 
 const settingsSectionSet = new Set<SettingsSection>(settingsSections);
 
-const applyAccessibilityPreferencesToDocument = (preferences: AccessibilityPreferences) => {
+const applyAccessibilityPreferencesToDocument = (
+  preferences: AccessibilityPreferences,
+) => {
   if (typeof document === "undefined") {
     return;
   }
 
   const root = document.documentElement;
 
-  root.classList.toggle("inaccord-accessibility-reduced-motion", preferences.preferReducedMotion);
-  root.classList.toggle("inaccord-accessibility-high-contrast", preferences.highContrastMode);
-  root.classList.toggle("inaccord-accessibility-large-chat-font", preferences.largerChatFont);
-  root.setAttribute("data-inaccord-message-spacing", preferences.messageSpacing);
+  root.classList.toggle(
+    "inaccord-accessibility-reduced-motion",
+    preferences.preferReducedMotion,
+  );
+  root.classList.toggle(
+    "inaccord-accessibility-high-contrast",
+    preferences.highContrastMode,
+  );
+  root.classList.toggle(
+    "inaccord-accessibility-large-chat-font",
+    preferences.largerChatFont,
+  );
+  root.setAttribute(
+    "data-inaccord-message-spacing",
+    preferences.messageSpacing,
+  );
 };
 
 const normalizeSettingsSection = (value: unknown): SettingsSection | null => {
@@ -592,7 +633,12 @@ type RunningAppEntry = {
 };
 
 type RegisteredGamesProviderState = {
-  source: "live" | "fallback" | "native-installed-scan" | "unsupported-platform" | "none";
+  source:
+    | "live"
+    | "fallback"
+    | "native-installed-scan"
+    | "unsupported-platform"
+    | "none";
   count: number;
 };
 
@@ -604,12 +650,16 @@ const defaultBotGhostIntegration: BotGhostIntegrationConfig = {
   lastHealthCheckedAt: "",
 };
 
-const normalizeBotGhostIntegration = (value: unknown): BotGhostIntegrationConfig => {
+const normalizeBotGhostIntegration = (
+  value: unknown,
+): BotGhostIntegrationConfig => {
   if (!value || typeof value !== "object") {
     return { ...defaultBotGhostIntegration };
   }
 
-  const source = value as Partial<Record<keyof BotGhostIntegrationConfig, unknown>>;
+  const source = value as Partial<
+    Record<keyof BotGhostIntegrationConfig, unknown>
+  >;
   const lastHealthStatus =
     source.lastHealthStatus === "healthy" ||
     source.lastHealthStatus === "unhealthy" ||
@@ -618,23 +668,37 @@ const normalizeBotGhostIntegration = (value: unknown): BotGhostIntegrationConfig
       : defaultBotGhostIntegration.lastHealthStatus;
 
   return {
-    enabled: typeof source.enabled === "boolean" ? source.enabled : defaultBotGhostIntegration.enabled,
-    webhookUrl: typeof source.webhookUrl === "string" ? source.webhookUrl.trim().slice(0, 2048) : "",
-    apiKeyHint: typeof source.apiKeyHint === "string" ? source.apiKeyHint.trim().slice(0, 64) : "",
+    enabled:
+      typeof source.enabled === "boolean"
+        ? source.enabled
+        : defaultBotGhostIntegration.enabled,
+    webhookUrl:
+      typeof source.webhookUrl === "string"
+        ? source.webhookUrl.trim().slice(0, 2048)
+        : "",
+    apiKeyHint:
+      typeof source.apiKeyHint === "string"
+        ? source.apiKeyHint.trim().slice(0, 64)
+        : "",
     lastHealthStatus,
     lastHealthCheckedAt:
-      typeof source.lastHealthCheckedAt === "string" && !Number.isNaN(new Date(source.lastHealthCheckedAt).getTime())
+      typeof source.lastHealthCheckedAt === "string" &&
+      !Number.isNaN(new Date(source.lastHealthCheckedAt).getTime())
         ? new Date(source.lastHealthCheckedAt).toISOString()
         : "",
   };
 };
 
-const normalizeNotificationPreferences = (value: unknown): NotificationPreferences => {
+const normalizeNotificationPreferences = (
+  value: unknown,
+): NotificationPreferences => {
   if (!value || typeof value !== "object") {
     return { ...defaultNotificationPreferences };
   }
 
-  const source = value as Partial<Record<keyof NotificationPreferences, unknown>>;
+  const source = value as Partial<
+    Record<keyof NotificationPreferences, unknown>
+  >;
 
   return {
     enableDesktopNotifications:
@@ -664,7 +728,9 @@ const normalizeNotificationPreferences = (value: unknown): NotificationPreferenc
   };
 };
 
-const normalizeTextImagesPreferences = (value: unknown): TextImagesPreferences => {
+const normalizeTextImagesPreferences = (
+  value: unknown,
+): TextImagesPreferences => {
   if (!value || typeof value !== "object") {
     return { ...defaultTextImagesPreferences };
   }
@@ -699,14 +765,19 @@ const normalizeTextImagesPreferences = (value: unknown): TextImagesPreferences =
   };
 };
 
-const normalizeAccessibilityPreferences = (value: unknown): AccessibilityPreferences => {
+const normalizeAccessibilityPreferences = (
+  value: unknown,
+): AccessibilityPreferences => {
   if (!value || typeof value !== "object") {
     return { ...defaultAccessibilityPreferences };
   }
 
-  const source = value as Partial<Record<keyof AccessibilityPreferences, unknown>>;
+  const source = value as Partial<
+    Record<keyof AccessibilityPreferences, unknown>
+  >;
   const messageSpacing =
-    source.messageSpacing === "compact" || source.messageSpacing === "comfortable"
+    source.messageSpacing === "compact" ||
+    source.messageSpacing === "comfortable"
       ? source.messageSpacing
       : defaultAccessibilityPreferences.messageSpacing;
 
@@ -738,7 +809,8 @@ const normalizeEmojiPreferences = (value: unknown): EmojiPreferences => {
 
   const source = value as Partial<Record<keyof EmojiPreferences, unknown>>;
   const defaultComposerEmoji =
-    typeof source.defaultComposerEmoji === "string" && source.defaultComposerEmoji.trim().length > 0
+    typeof source.defaultComposerEmoji === "string" &&
+    source.defaultComposerEmoji.trim().length > 0
       ? source.defaultComposerEmoji.trim().slice(0, 16)
       : defaultEmojiPreferences.defaultComposerEmoji;
 
@@ -749,8 +821,8 @@ const normalizeEmojiPreferences = (value: unknown): EmojiPreferences => {
             .filter((item): item is string => typeof item === "string")
             .map((item) => item.trim())
             .filter((item) => item.length > 0)
-            .slice(0, 32)
-        )
+            .slice(0, 32),
+        ),
       )
     : [...defaultEmojiPreferences.favoriteEmojis];
 
@@ -761,8 +833,8 @@ const normalizeEmojiPreferences = (value: unknown): EmojiPreferences => {
             .filter((item): item is string => typeof item === "string")
             .map((item) => item.trim())
             .filter((item) => item.length > 0)
-            .slice(0, 120)
-        )
+            .slice(0, 120),
+        ),
       )
     : [];
 
@@ -799,8 +871,8 @@ const normalizeStickerPreferences = (value: unknown): StickerPreferences => {
             .filter((item): item is string => typeof item === "string")
             .map((item) => item.trim())
             .filter((item) => item.length > 0)
-            .slice(0, 48)
-        )
+            .slice(0, 48),
+        ),
       )
     : [...defaultStickerPreferences.favoriteStickers];
 
@@ -811,8 +883,8 @@ const normalizeStickerPreferences = (value: unknown): StickerPreferences => {
             .filter((item): item is string => typeof item === "string")
             .map((item) => item.trim())
             .filter((item) => item.length > 0)
-            .slice(0, 120)
-        )
+            .slice(0, 120),
+        ),
       )
     : [];
 
@@ -850,15 +922,24 @@ const normalizeKeybindPreferences = (value: unknown): KeybindPreferences => {
         : defaultKeybindPreferences.enableCustomKeybinds,
     openCommandPalette: normalizeKeybindString(
       source.openCommandPalette,
-      defaultKeybindPreferences.openCommandPalette
+      defaultKeybindPreferences.openCommandPalette,
     ),
     focusServerSearch: normalizeKeybindString(
       source.focusServerSearch,
-      defaultKeybindPreferences.focusServerSearch
+      defaultKeybindPreferences.focusServerSearch,
     ),
-    toggleMute: normalizeKeybindString(source.toggleMute, defaultKeybindPreferences.toggleMute),
-    toggleDeafen: normalizeKeybindString(source.toggleDeafen, defaultKeybindPreferences.toggleDeafen),
-    toggleCamera: normalizeKeybindString(source.toggleCamera, defaultKeybindPreferences.toggleCamera),
+    toggleMute: normalizeKeybindString(
+      source.toggleMute,
+      defaultKeybindPreferences.toggleMute,
+    ),
+    toggleDeafen: normalizeKeybindString(
+      source.toggleDeafen,
+      defaultKeybindPreferences.toggleDeafen,
+    ),
+    toggleCamera: normalizeKeybindString(
+      source.toggleCamera,
+      defaultKeybindPreferences.toggleCamera,
+    ),
   };
 };
 
@@ -900,15 +981,22 @@ const normalizeAdvancedPreferences = (value: unknown): AdvancedPreferences => {
   };
 };
 
-const normalizeStreamerModePreferences = (value: unknown): StreamerModePreferences => {
+const normalizeStreamerModePreferences = (
+  value: unknown,
+): StreamerModePreferences => {
   if (!value || typeof value !== "object") {
     return { ...defaultStreamerModePreferences };
   }
 
-  const source = value as Partial<Record<keyof StreamerModePreferences, unknown>>;
+  const source = value as Partial<
+    Record<keyof StreamerModePreferences, unknown>
+  >;
 
   return {
-    enabled: typeof source.enabled === "boolean" ? source.enabled : defaultStreamerModePreferences.enabled,
+    enabled:
+      typeof source.enabled === "boolean"
+        ? source.enabled
+        : defaultStreamerModePreferences.enabled,
     hidePersonalInfo:
       typeof source.hidePersonalInfo === "boolean"
         ? source.hidePersonalInfo
@@ -928,12 +1016,16 @@ const normalizeStreamerModePreferences = (value: unknown): StreamerModePreferenc
   };
 };
 
-const normalizeGameOverlayPreferences = (value: unknown): GameOverlayPreferences => {
+const normalizeGameOverlayPreferences = (
+  value: unknown,
+): GameOverlayPreferences => {
   if (!value || typeof value !== "object") {
     return { ...defaultGameOverlayPreferences };
   }
 
-  const source = value as Partial<Record<keyof GameOverlayPreferences, unknown>>;
+  const source = value as Partial<
+    Record<keyof GameOverlayPreferences, unknown>
+  >;
   const position =
     source.position === "top-left" ||
     source.position === "top-right" ||
@@ -947,7 +1039,10 @@ const normalizeGameOverlayPreferences = (value: unknown): GameOverlayPreferences
       : defaultGameOverlayPreferences.opacity;
 
   return {
-    enabled: typeof source.enabled === "boolean" ? source.enabled : defaultGameOverlayPreferences.enabled,
+    enabled:
+      typeof source.enabled === "boolean"
+        ? source.enabled
+        : defaultGameOverlayPreferences.enabled,
     showPerformanceStats:
       typeof source.showPerformanceStats === "boolean"
         ? source.showPerformanceStats
@@ -1059,7 +1154,9 @@ const businessRoleGroups = [
   },
 ] as const;
 
-const businessRoleOptions = businessRoleGroups.flatMap((group) => group.options);
+const businessRoleOptions = businessRoleGroups.flatMap(
+  (group) => group.options,
+);
 
 const businessSectionOptions = [
   "Finance",
@@ -1100,12 +1197,16 @@ const familyDesignationOptions = [
   "Legal Guardian",
 ] as const;
 
-const normalizeContentSocialPreferences = (value: unknown): ContentSocialPreferences => {
+const normalizeContentSocialPreferences = (
+  value: unknown,
+): ContentSocialPreferences => {
   if (!value || typeof value !== "object") {
     return { ...defaultContentSocialPreferences };
   }
 
-  const source = value as Partial<Record<keyof ContentSocialPreferences, unknown>>;
+  const source = value as Partial<
+    Record<keyof ContentSocialPreferences, unknown>
+  >;
   const matureContentFilter =
     source.matureContentFilter === "strict" ||
     source.matureContentFilter === "moderate" ||
@@ -1130,12 +1231,16 @@ const normalizeContentSocialPreferences = (value: unknown): ContentSocialPrefere
   };
 };
 
-const normalizeDataPrivacyPreferences = (value: unknown): DataPrivacyPreferences => {
+const normalizeDataPrivacyPreferences = (
+  value: unknown,
+): DataPrivacyPreferences => {
   if (!value || typeof value !== "object") {
     return { ...defaultDataPrivacyPreferences };
   }
 
-  const source = value as Partial<Record<keyof DataPrivacyPreferences, unknown>>;
+  const source = value as Partial<
+    Record<keyof DataPrivacyPreferences, unknown>
+  >;
   const retentionMode =
     source.retentionMode === "minimal" || source.retentionMode === "standard"
       ? source.retentionMode
@@ -1158,12 +1263,16 @@ const normalizeDataPrivacyPreferences = (value: unknown): DataPrivacyPreferences
   };
 };
 
-const normalizeActivityPrivacyPreferences = (value: unknown): ActivityPrivacyPreferences => {
+const normalizeActivityPrivacyPreferences = (
+  value: unknown,
+): ActivityPrivacyPreferences => {
   if (!value || typeof value !== "object") {
     return { ...defaultActivityPrivacyPreferences };
   }
 
-  const source = value as Partial<Record<keyof ActivityPrivacyPreferences, unknown>>;
+  const source = value as Partial<
+    Record<keyof ActivityPrivacyPreferences, unknown>
+  >;
   const activityVisibility =
     source.activityVisibility === "everyone" ||
     source.activityVisibility === "friends" ||
@@ -1196,12 +1305,16 @@ const normalizeActivityPrivacyPreferences = (value: unknown): ActivityPrivacyPre
   };
 };
 
-const normalizeFamilyCenterPreferences = (value: unknown): FamilyCenterPreferences => {
+const normalizeFamilyCenterPreferences = (
+  value: unknown,
+): FamilyCenterPreferences => {
   if (!value || typeof value !== "object") {
     return { ...defaultFamilyCenterPreferences };
   }
 
-  const source = value as Partial<Record<keyof FamilyCenterPreferences, unknown>>;
+  const source = value as Partial<
+    Record<keyof FamilyCenterPreferences, unknown>
+  >;
   const familyApplicationFiles = Array.isArray(source.familyApplicationFiles)
     ? source.familyApplicationFiles
         .filter((entry): entry is FamilyCenterApplicationFile => {
@@ -1210,22 +1323,39 @@ const normalizeFamilyCenterPreferences = (value: unknown): FamilyCenterPreferenc
           }
 
           const candidate = entry as Partial<FamilyCenterApplicationFile>;
-          return typeof candidate.name === "string" && typeof candidate.url === "string";
+          return (
+            typeof candidate.name === "string" &&
+            typeof candidate.url === "string"
+          );
         })
         .map((entry) => {
           const uploadedDate =
-            typeof entry.uploadedAt === "string" && !Number.isNaN(new Date(entry.uploadedAt).getTime())
+            typeof entry.uploadedAt === "string" &&
+            !Number.isNaN(new Date(entry.uploadedAt).getTime())
               ? new Date(entry.uploadedAt).toISOString()
               : new Date().toISOString();
 
-          const normalizedUrl = String(entry.url ?? "").trim().slice(0, 2048);
+          const normalizedUrl = String(entry.url ?? "")
+            .trim()
+            .slice(0, 2048);
 
           return {
-            name: String(entry.name ?? "").trim().slice(0, 200),
-            url: /^https?:\/\//i.test(normalizedUrl) || normalizedUrl.startsWith("/") ? normalizedUrl : "",
-            mimeType: String(entry.mimeType ?? "application/octet-stream").trim().slice(0, 120).toLowerCase(),
+            name: String(entry.name ?? "")
+              .trim()
+              .slice(0, 200),
+            url:
+              /^https?:\/\//i.test(normalizedUrl) ||
+              normalizedUrl.startsWith("/")
+                ? normalizedUrl
+                : "",
+            mimeType: String(entry.mimeType ?? "application/octet-stream")
+              .trim()
+              .slice(0, 120)
+              .toLowerCase(),
             size:
-              typeof entry.size === "number" && Number.isFinite(entry.size) && entry.size > 0
+              typeof entry.size === "number" &&
+              Number.isFinite(entry.size) &&
+              entry.size > 0
                 ? Math.min(Math.floor(entry.size), 100 * 1024 * 1024)
                 : 0,
             uploadedAt: uploadedDate,
@@ -1246,29 +1376,49 @@ const normalizeFamilyCenterPreferences = (value: unknown): FamilyCenterPreferenc
           return typeof candidate.accountIdentifier === "string";
         })
         .map((entry, index) => {
-          const accountIdentifier = String(entry.accountIdentifier ?? "").trim().slice(0, 160);
-          const childName = String(entry.childName ?? "").trim().slice(0, 60);
-          const id = String(entry.id ?? "").trim().slice(0, 80) || `family-member-${index + 1}`;
-          const createdAt = String(entry.createdAt ?? "").trim() || new Date().toISOString();
+          const accountIdentifier = String(entry.accountIdentifier ?? "")
+            .trim()
+            .slice(0, 160);
+          const childName = String(entry.childName ?? "")
+            .trim()
+            .slice(0, 60);
+          const id =
+            String(entry.id ?? "")
+              .trim()
+              .slice(0, 80) || `family-member-${index + 1}`;
+          const createdAt =
+            String(entry.createdAt ?? "").trim() || new Date().toISOString();
 
           return {
             id,
             childName,
             accountIdentifier,
             childRelation: familyMemberRelationOptions.includes(
-              (entry.childRelation ?? "") as (typeof familyMemberRelationOptions)[number]
+              (entry.childRelation ??
+                "") as (typeof familyMemberRelationOptions)[number],
             )
               ? (entry.childRelation as (typeof familyMemberRelationOptions)[number])
               : "",
-            childSection: String(entry.childSection ?? "").trim().slice(0, 80),
-            childEmail: String(entry.childEmail ?? "").trim().slice(0, 160),
-            childPassword: String(entry.childPassword ?? "").trim().slice(0, 128),
-            childPhone: String(entry.childPhone ?? "").trim().slice(0, 32),
+            childSection: String(entry.childSection ?? "")
+              .trim()
+              .slice(0, 80),
+            childEmail: String(entry.childEmail ?? "")
+              .trim()
+              .slice(0, 160),
+            childPassword: String(entry.childPassword ?? "")
+              .trim()
+              .slice(0, 128),
+            childPhone: String(entry.childPhone ?? "")
+              .trim()
+              .slice(0, 32),
             childDateOfBirth:
-              typeof entry.childDateOfBirth === "string" && /^\d{4}-\d{2}-\d{2}$/.test(entry.childDateOfBirth)
+              typeof entry.childDateOfBirth === "string" &&
+              /^\d{4}-\d{2}-\d{2}$/.test(entry.childDateOfBirth)
                 ? entry.childDateOfBirth
                 : "",
-            linkedUserId: String(entry.linkedUserId ?? "").trim().slice(0, 191),
+            linkedUserId: String(entry.linkedUserId ?? "")
+              .trim()
+              .slice(0, 191),
             familyLinkState:
               entry.familyLinkState === "managed-under-16" ||
               entry.familyLinkState === "eligible-16-plus" ||
@@ -1314,11 +1464,17 @@ const normalizeFamilyCenterPreferences = (value: unknown): FamilyCenterPreferenc
       typeof source.alertOnMatureContentInteractions === "boolean"
         ? source.alertOnMatureContentInteractions
         : defaultFamilyCenterPreferences.alertOnMatureContentInteractions,
-    familyDesignation: typeof source.familyDesignation === "string" ? source.familyDesignation.trim().slice(0, 80) : "",
+    familyDesignation:
+      typeof source.familyDesignation === "string"
+        ? source.familyDesignation.trim().slice(0, 80)
+        : "",
     familyApplicationStatus:
-      typeof source.familyApplicationStatus === "string" ? source.familyApplicationStatus.trim().slice(0, 80) : "",
+      typeof source.familyApplicationStatus === "string"
+        ? source.familyApplicationStatus.trim().slice(0, 80)
+        : "",
     familyApplicationSubmittedAt:
-      typeof source.familyApplicationSubmittedAt === "string" && !Number.isNaN(new Date(source.familyApplicationSubmittedAt).getTime())
+      typeof source.familyApplicationSubmittedAt === "string" &&
+      !Number.isNaN(new Date(source.familyApplicationSubmittedAt).getTime())
         ? new Date(source.familyApplicationSubmittedAt).toISOString()
         : "",
     familyApplicationFiles,
@@ -1326,7 +1482,9 @@ const normalizeFamilyCenterPreferences = (value: unknown): FamilyCenterPreferenc
   };
 };
 
-const normalizeBusinessCenterPreferences = (value: unknown): FamilyCenterPreferences => {
+const normalizeBusinessCenterPreferences = (
+  value: unknown,
+): FamilyCenterPreferences => {
   if (!value || typeof value !== "object") {
     return { ...defaultFamilyCenterPreferences };
   }
@@ -1334,7 +1492,8 @@ const normalizeBusinessCenterPreferences = (value: unknown): FamilyCenterPrefere
   const source = value as Record<string, unknown>;
 
   const normalized = normalizeFamilyCenterPreferences({
-    requireContentFilterForFamilyMembers: source.requireContentFilterForFamilyMembers,
+    requireContentFilterForFamilyMembers:
+      source.requireContentFilterForFamilyMembers,
     shareWeeklySafetySummary: source.shareWeeklySafetySummary,
     allowDirectMessagesFromNonFriends: source.allowDirectMessagesFromNonFriends,
     alertOnMatureContentInteractions: source.alertOnMatureContentInteractions,
@@ -1356,33 +1515,52 @@ const normalizeBusinessCenterPreferences = (value: unknown): FamilyCenterPrefere
           return typeof candidate.accountIdentifier === "string";
         })
         .map((entry, index) => {
-          const accountIdentifier = String(entry.accountIdentifier ?? "").trim().slice(0, 160);
-          const childName = String(entry.childName ?? "").trim().slice(0, 60);
-          const id = String(entry.id ?? "").trim().slice(0, 80) || `business-member-${index + 1}`;
-          const createdAt = String(entry.createdAt ?? "").trim() || new Date().toISOString();
+          const accountIdentifier = String(entry.accountIdentifier ?? "")
+            .trim()
+            .slice(0, 160);
+          const childName = String(entry.childName ?? "")
+            .trim()
+            .slice(0, 60);
+          const id =
+            String(entry.id ?? "")
+              .trim()
+              .slice(0, 80) || `business-member-${index + 1}`;
+          const createdAt =
+            String(entry.createdAt ?? "").trim() || new Date().toISOString();
 
           return {
             id,
             childName,
             accountIdentifier,
             childRelation: businessRoleOptions.includes(
-              (entry.childRelation ?? "") as (typeof businessRoleOptions)[number]
+              (entry.childRelation ??
+                "") as (typeof businessRoleOptions)[number],
             )
               ? (entry.childRelation as (typeof businessRoleOptions)[number])
               : "",
             childSection: businessSectionOptions.includes(
-              (entry.childSection ?? "") as (typeof businessSectionOptions)[number]
+              (entry.childSection ??
+                "") as (typeof businessSectionOptions)[number],
             )
               ? (entry.childSection as (typeof businessSectionOptions)[number])
               : "",
-            childEmail: String(entry.childEmail ?? "").trim().slice(0, 160),
-            childPassword: String(entry.childPassword ?? "").trim().slice(0, 128),
-            childPhone: String(entry.childPhone ?? "").trim().slice(0, 32),
+            childEmail: String(entry.childEmail ?? "")
+              .trim()
+              .slice(0, 160),
+            childPassword: String(entry.childPassword ?? "")
+              .trim()
+              .slice(0, 128),
+            childPhone: String(entry.childPhone ?? "")
+              .trim()
+              .slice(0, 32),
             childDateOfBirth:
-              typeof entry.childDateOfBirth === "string" && /^\d{4}-\d{2}-\d{2}$/.test(entry.childDateOfBirth)
+              typeof entry.childDateOfBirth === "string" &&
+              /^\d{4}-\d{2}-\d{2}$/.test(entry.childDateOfBirth)
                 ? entry.childDateOfBirth
                 : "",
-            linkedUserId: String(entry.linkedUserId ?? "").trim().slice(0, 191),
+            linkedUserId: String(entry.linkedUserId ?? "")
+              .trim()
+              .slice(0, 191),
             familyLinkState:
               entry.familyLinkState === "managed-under-16" ||
               entry.familyLinkState === "eligible-16-plus" ||
@@ -1417,9 +1595,12 @@ const normalizeBusinessCenterPreferences = (value: unknown): FamilyCenterPrefere
   };
 };
 
-const mapFamilyCenterToBusinessCenterPayload = (value: FamilyCenterPreferences) => {
+const mapFamilyCenterToBusinessCenterPayload = (
+  value: FamilyCenterPreferences,
+) => {
   return {
-    requireContentFilterForFamilyMembers: value.requireContentFilterForFamilyMembers,
+    requireContentFilterForFamilyMembers:
+      value.requireContentFilterForFamilyMembers,
     shareWeeklySafetySummary: value.shareWeeklySafetySummary,
     allowDirectMessagesFromNonFriends: value.allowDirectMessagesFromNonFriends,
     alertOnMatureContentInteractions: value.alertOnMatureContentInteractions,
@@ -1431,7 +1612,9 @@ const mapFamilyCenterToBusinessCenterPayload = (value: FamilyCenterPreferences) 
   };
 };
 
-const sanitizeFamilyApplicationErrorMessage = (value: string | null | undefined) => {
+const sanitizeFamilyApplicationErrorMessage = (
+  value: string | null | undefined,
+) => {
   const message = String(value ?? "").trim();
   if (!message) {
     return "Could not submit application. Please try again.";
@@ -1456,7 +1639,9 @@ const sanitizeFamilyApplicationErrorMessage = (value: string | null | undefined)
 
 type PasswordStrengthTone = "Weak" | "Fair" | "Good" | "Strong";
 
-const getPasswordStrength = (value: string): { label: PasswordStrengthTone; className: string; score: number } => {
+const getPasswordStrength = (
+  value: string,
+): { label: PasswordStrengthTone; className: string; score: number } => {
   const password = value.trim();
   if (!password) {
     return { label: "Weak", className: "text-rose-300", score: 0 };
@@ -1507,7 +1692,11 @@ const defaultDisplayStyleColors: CustomThemeColors = {
   border: "#2d5a66",
 };
 
-const displayStylePresets: Array<{ key: string; label: string; colors: CustomThemeColors }> = [
+const displayStylePresets: Array<{
+  key: string;
+  label: string;
+  colors: CustomThemeColors;
+}> = [
   {
     key: "ocean",
     label: "Ocean",
@@ -1552,7 +1741,10 @@ const displayStylePresets: Array<{ key: string; label: string; colors: CustomThe
   },
 ];
 
-const displayStyleColorFields: Array<{ key: keyof CustomThemeColors; label: string }> = [
+const displayStyleColorFields: Array<{
+  key: keyof CustomThemeColors;
+  label: string;
+}> = [
   { key: "background", label: "Main Background" },
   { key: "card", label: "Card Background" },
   { key: "secondary", label: "Secondary Surface" },
@@ -1588,10 +1780,7 @@ const hexToHslTokens = (hex: string) => {
 
   let h = 0;
   const l = (max + min) / 2;
-  const s =
-    delta === 0
-      ? 0
-      : delta / (1 - Math.abs(2 * l - 1));
+  const s = delta === 0 ? 0 : delta / (1 - Math.abs(2 * l - 1));
 
   if (delta !== 0) {
     switch (max) {
@@ -1620,6 +1809,17 @@ type BlockedProfileSummary = {
   email: string | null;
   imageUrl: string | null;
   blockedAt: string | null;
+};
+
+type PendingFriendRequestSummary = {
+  requestId: string;
+  profileId: string;
+  displayName: string;
+  email: string | null;
+  imageUrl: string | null;
+  avatarDecorationUrl: string | null;
+  createdAt: string | null;
+  isIncoming: boolean;
 };
 
 type PatronageHistoryEntry = {
@@ -1777,12 +1977,16 @@ const connectionProviders: ConnectionProvider[] = [
   },
 ];
 
-const normalizeRegisteredGamesPreferences = (value: unknown): RegisteredGamesPreferences => {
+const normalizeRegisteredGamesPreferences = (
+  value: unknown,
+): RegisteredGamesPreferences => {
   if (!value || typeof value !== "object") {
     return { ...defaultRegisteredGamesPreferences };
   }
 
-  const source = value as Partial<Record<keyof RegisteredGamesPreferences, unknown>>;
+  const source = value as Partial<
+    Record<keyof RegisteredGamesPreferences, unknown>
+  >;
   const hiddenGameIds = Array.isArray(source.hiddenGameIds)
     ? Array.from(
         new Set(
@@ -1790,21 +1994,30 @@ const normalizeRegisteredGamesPreferences = (value: unknown): RegisteredGamesPre
             .filter((entry): entry is string => typeof entry === "string")
             .map((entry) => entry.trim())
             .filter((entry) => entry.length > 0)
-            .slice(0, 240)
-        )
+            .slice(0, 240),
+        ),
       )
     : [];
 
   const manualGames = Array.isArray(source.manualGames)
     ? source.manualGames
-        .filter((entry): entry is RegisteredGameEntry => Boolean(entry && typeof entry === "object"))
+        .filter((entry): entry is RegisteredGameEntry =>
+          Boolean(entry && typeof entry === "object"),
+        )
         .map((entry, index) => {
           const sourceEntry = entry as Partial<RegisteredGameEntry>;
-          const name = typeof sourceEntry.name === "string" ? sourceEntry.name.trim().slice(0, 120) : "";
+          const name =
+            typeof sourceEntry.name === "string"
+              ? sourceEntry.name.trim().slice(0, 120)
+              : "";
           const id =
-            typeof sourceEntry.id === "string" && sourceEntry.id.trim().length > 0
+            typeof sourceEntry.id === "string" &&
+            sourceEntry.id.trim().length > 0
               ? sourceEntry.id.trim().slice(0, 120)
-              : `manual-${index + 1}-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+              : `manual-${index + 1}-${name
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]+/g, "-")
+                  .replace(/^-|-$/g, "")}`;
           const thumbnailUrl =
             typeof sourceEntry.thumbnailUrl === "string"
               ? sourceEntry.thumbnailUrl.trim().slice(0, 2048)
@@ -1814,7 +2027,8 @@ const normalizeRegisteredGamesPreferences = (value: unknown): RegisteredGamesPre
             id,
             name,
             provider:
-              typeof sourceEntry.provider === "string" && sourceEntry.provider.trim().length > 0
+              typeof sourceEntry.provider === "string" &&
+              sourceEntry.provider.trim().length > 0
                 ? sourceEntry.provider.trim().slice(0, 60)
                 : "manual",
             shortDescription:
@@ -1822,9 +2036,12 @@ const normalizeRegisteredGamesPreferences = (value: unknown): RegisteredGamesPre
                 ? sourceEntry.shortDescription.trim().slice(0, 280)
                 : "",
             thumbnailUrl:
-              /^https?:\/\//i.test(thumbnailUrl) || thumbnailUrl.startsWith("/") ? thumbnailUrl : "",
+              /^https?:\/\//i.test(thumbnailUrl) || thumbnailUrl.startsWith("/")
+                ? thumbnailUrl
+                : "",
             addedAt:
-              typeof sourceEntry.addedAt === "string" && !Number.isNaN(new Date(sourceEntry.addedAt).getTime())
+              typeof sourceEntry.addedAt === "string" &&
+              !Number.isNaN(new Date(sourceEntry.addedAt).getTime())
                 ? new Date(sourceEntry.addedAt).toISOString()
                 : new Date().toISOString(),
           } satisfies RegisteredGameEntry;
@@ -1843,21 +2060,34 @@ const normalizeRegisteredGamesPreferences = (value: unknown): RegisteredGamesPre
   };
 };
 
-const oauthConnectionProviders = new Set<string>(["github", "google", "steam", "twitch", "xbox", "youtube"]);
+const oauthConnectionProviders = new Set<string>([
+  "github",
+  "google",
+  "steam",
+  "twitch",
+  "xbox",
+  "youtube",
+]);
 
 export const SettingsModal = () => {
   const router = useRouter();
   const { isOpen, onClose, type, data } = useModal();
-  const [activeSection, setActiveSection] = useState<SettingsSection>("myAccount");
-  const [displaySection, setDisplaySection] = useState<SettingsSection>("myAccount");
+  const [activeSection, setActiveSection] =
+    useState<SettingsSection>("myAccount");
+  const [displaySection, setDisplaySection] =
+    useState<SettingsSection>("myAccount");
   const [isSectionVisible, setIsSectionVisible] = useState(true);
-  const [collapsedSectionGroups, setCollapsedSectionGroups] = useState<Record<string, boolean>>({});
+  const [collapsedSectionGroups, setCollapsedSectionGroups] = useState<
+    Record<string, boolean>
+  >({});
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isUploadingBanner, setIsUploadingBanner] = useState(false);
   const [isUploadingServerAvatar, setIsUploadingServerAvatar] = useState(false);
   const [isUploadingServerBanner, setIsUploadingServerBanner] = useState(false);
-  const [isUploadingNameplateImage, setIsUploadingNameplateImage] = useState(false);
-  const [isUploadingServerNameplateImage, setIsUploadingServerNameplateImage] = useState(false);
+  const [isUploadingNameplateImage, setIsUploadingNameplateImage] =
+    useState(false);
+  const [isUploadingServerNameplateImage, setIsUploadingServerNameplateImage] =
+    useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
@@ -1877,37 +2107,61 @@ export const SettingsModal = () => {
   const [comment, setComment] = useState("");
   const [nameplateLabel, setNameplateLabel] = useState("");
   const [nameplateColor, setNameplateColor] = useState("#5865f2");
-  const [nameplateImageUrl, setNameplateImageUrl] = useState<string | null>(null);
+  const [nameplateImageUrl, setNameplateImageUrl] = useState<string | null>(
+    null,
+  );
   const [nameplateLabelInput, setNameplateLabelInput] = useState("");
   const [nameplateColorInput, setNameplateColorInput] = useState("");
   const [nameplateImageUrlInput, setNameplateImageUrlInput] = useState("");
   const [isSavingNameplate, setIsSavingNameplate] = useState(false);
   const [nameplateStatus, setNameplateStatus] = useState<string | null>(null);
-  const [avatarDecorationUrl, setAvatarDecorationUrl] = useState<string | null>(null);
+  const [avatarDecorationUrl, setAvatarDecorationUrl] = useState<string | null>(
+    null,
+  );
   const [avatarDecorationInput, setAvatarDecorationInput] = useState("");
-  const [isSavingAvatarDecoration, setIsSavingAvatarDecoration] = useState(false);
-  const [avatarDecorationStatus, setAvatarDecorationStatus] = useState<string | null>(null);
+  const [isSavingAvatarDecoration, setIsSavingAvatarDecoration] =
+    useState(false);
+  const [avatarDecorationStatus, setAvatarDecorationStatus] = useState<
+    string | null
+  >(null);
   const [profileEffectUrl, setProfileEffectUrl] = useState<string | null>(null);
   const [profileEffectInput, setProfileEffectInput] = useState("");
   const [isSavingProfileEffect, setIsSavingProfileEffect] = useState(false);
-  const [profileEffectStatus, setProfileEffectStatus] = useState<string | null>(null);
+  const [profileEffectStatus, setProfileEffectStatus] = useState<string | null>(
+    null,
+  );
   const [phoneNumber, setPhoneNumber] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
-  const [profileRole, setProfileRole] = useState<string | null>(data.profileRole ?? null);
-  const [profilePresenceStatus, setProfilePresenceStatus] = useState(
-    normalizePresenceStatus(data.profilePresenceStatus)
+  const [profileRole, setProfileRole] = useState<string | null>(
+    data.profileRole ?? null,
   );
-  const [profileCurrentGame, setProfileCurrentGame] = useState<string | null>(data.profileCurrentGame?.trim() || null);
+  const [profilePresenceStatus, setProfilePresenceStatus] = useState(
+    normalizePresenceStatus(data.profilePresenceStatus),
+  );
+  const [profileCurrentGame, setProfileCurrentGame] = useState<string | null>(
+    data.profileCurrentGame?.trim() || null,
+  );
   const [profileNameError, setProfileNameError] = useState<string | null>(null);
-  const [profileNameSuccess, setProfileNameSuccess] = useState<string | null>(null);
-  const [isEditingDefaultProfileNameInline, setIsEditingDefaultProfileNameInline] = useState(false);
+  const [profileNameSuccess, setProfileNameSuccess] = useState<string | null>(
+    null,
+  );
+  const [
+    isEditingDefaultProfileNameInline,
+    setIsEditingDefaultProfileNameInline,
+  ] = useState(false);
   const [defaultProfileNameDraft, setDefaultProfileNameDraft] = useState("");
-  const [defaultProfileNameStyle, setDefaultProfileNameStyle] = useState<string>(DEFAULT_PROFILE_NAME_STYLE);
-  const [defaultProfileNameFont, setDefaultProfileNameFont] = useState<ProfileNameFontKey>("default");
-  const [defaultProfileNameEffect, setDefaultProfileNameEffect] = useState<ProfileNameEffectKey>("solid");
-  const [defaultProfileNameColor, setDefaultProfileNameColor] = useState<ProfileNameColorKey>("default");
-  const [isSavingDefaultProfileNameStyle, setIsSavingDefaultProfileNameStyle] = useState(false);
-  const [defaultProfileNameStyleStatus, setDefaultProfileNameStyleStatus] = useState<string | null>(null);
+  const [defaultProfileNameStyle, setDefaultProfileNameStyle] =
+    useState<string>(DEFAULT_PROFILE_NAME_STYLE);
+  const [defaultProfileNameFont, setDefaultProfileNameFont] =
+    useState<ProfileNameFontKey>("default");
+  const [defaultProfileNameEffect, setDefaultProfileNameEffect] =
+    useState<ProfileNameEffectKey>("solid");
+  const [defaultProfileNameColor, setDefaultProfileNameColor] =
+    useState<ProfileNameColorKey>("default");
+  const [isSavingDefaultProfileNameStyle, setIsSavingDefaultProfileNameStyle] =
+    useState(false);
+  const [defaultProfileNameStyleStatus, setDefaultProfileNameStyleStatus] =
+    useState<string | null>(null);
   const [isEditingPronounsInline, setIsEditingPronounsInline] = useState(false);
   const [pronounsDraft, setPronounsDraft] = useState("");
   const [isSavingPronouns, setIsSavingPronouns] = useState(false);
@@ -1916,102 +2170,174 @@ export const SettingsModal = () => {
   const [commentDraft, setCommentDraft] = useState("");
   const [isSavingComment, setIsSavingComment] = useState(false);
   const [commentStatus, setCommentStatus] = useState<string | null>(null);
-  const [isEditingPhoneNumberInline, setIsEditingPhoneNumberInline] = useState(false);
+  const [isEditingPhoneNumberInline, setIsEditingPhoneNumberInline] =
+    useState(false);
   const [phoneNumberDraft, setPhoneNumberDraft] = useState("");
   const [isSavingPhoneNumber, setIsSavingPhoneNumber] = useState(false);
-  const [phoneNumberStatus, setPhoneNumberStatus] = useState<string | null>(null);
+  const [phoneNumberStatus, setPhoneNumberStatus] = useState<string | null>(
+    null,
+  );
   const [dateOfBirthDraft, setDateOfBirthDraft] = useState("");
   const [isSavingDateOfBirth, setIsSavingDateOfBirth] = useState(false);
-  const [dateOfBirthStatus, setDateOfBirthStatus] = useState<string | null>(null);
+  const [dateOfBirthStatus, setDateOfBirthStatus] = useState<string | null>(
+    null,
+  );
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(data.profileImageUrl ?? null);
-  const [bannerUrl, setBannerUrl] = useState<string | null>(data.profileBannerUrl ?? null);
-  const [uploadedAvatarThumbnails, setUploadedAvatarThumbnails] = useState<string[]>([]);
-  const [uploadedBannerThumbnails, setUploadedBannerThumbnails] = useState<string[]>([]);
-  const [resolvedProfileId, setResolvedProfileId] = useState<string | null>(data.profileId ?? null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(
+    data.profileImageUrl ?? null,
+  );
+  const [bannerUrl, setBannerUrl] = useState<string | null>(
+    data.profileBannerUrl ?? null,
+  );
+  const [uploadedAvatarThumbnails, setUploadedAvatarThumbnails] = useState<
+    string[]
+  >([]);
+  const [uploadedBannerThumbnails, setUploadedBannerThumbnails] = useState<
+    string[]
+  >([]);
+  const [resolvedProfileId, setResolvedProfileId] = useState<string | null>(
+    data.profileId ?? null,
+  );
   const [mentionsEnabled, setMentionsEnabled] = useState(true);
-  const [contentSocialPreferences, setContentSocialPreferences] = useState<ContentSocialPreferences>({
-    ...defaultContentSocialPreferences,
-  });
-  const [isSavingContentSocialPreferences, setIsSavingContentSocialPreferences] = useState(false);
-  const [contentSocialStatus, setContentSocialStatus] = useState<string | null>(null);
-  const [dataPrivacyPreferences, setDataPrivacyPreferences] = useState<DataPrivacyPreferences>({
-    ...defaultDataPrivacyPreferences,
-  });
-  const [isSavingDataPrivacyPreferences, setIsSavingDataPrivacyPreferences] = useState(false);
-  const [dataPrivacyStatus, setDataPrivacyStatus] = useState<string | null>(null);
-  const [activityPrivacyPreferences, setActivityPrivacyPreferences] = useState<ActivityPrivacyPreferences>({
-    ...defaultActivityPrivacyPreferences,
-  });
-  const [isSavingActivityPrivacyPreferences, setIsSavingActivityPrivacyPreferences] = useState(false);
-  const [activityPrivacyStatus, setActivityPrivacyStatus] = useState<string | null>(null);
-  const [registeredGamesPreferences, setRegisteredGamesPreferences] = useState<RegisteredGamesPreferences>({
-    ...defaultRegisteredGamesPreferences,
-  });
+  const [contentSocialPreferences, setContentSocialPreferences] =
+    useState<ContentSocialPreferences>({
+      ...defaultContentSocialPreferences,
+    });
+  const [
+    isSavingContentSocialPreferences,
+    setIsSavingContentSocialPreferences,
+  ] = useState(false);
+  const [contentSocialStatus, setContentSocialStatus] = useState<string | null>(
+    null,
+  );
+  const [dataPrivacyPreferences, setDataPrivacyPreferences] =
+    useState<DataPrivacyPreferences>({
+      ...defaultDataPrivacyPreferences,
+    });
+  const [isSavingDataPrivacyPreferences, setIsSavingDataPrivacyPreferences] =
+    useState(false);
+  const [dataPrivacyStatus, setDataPrivacyStatus] = useState<string | null>(
+    null,
+  );
+  const [activityPrivacyPreferences, setActivityPrivacyPreferences] =
+    useState<ActivityPrivacyPreferences>({
+      ...defaultActivityPrivacyPreferences,
+    });
+  const [
+    isSavingActivityPrivacyPreferences,
+    setIsSavingActivityPrivacyPreferences,
+  ] = useState(false);
+  const [activityPrivacyStatus, setActivityPrivacyStatus] = useState<
+    string | null
+  >(null);
+  const [registeredGamesPreferences, setRegisteredGamesPreferences] =
+    useState<RegisteredGamesPreferences>({
+      ...defaultRegisteredGamesPreferences,
+    });
   const [manualGameNameInput, setManualGameNameInput] = useState("");
-  const [manualGameProviderInput, setManualGameProviderInput] = useState("manual");
-  const [manualGameDescriptionInput, setManualGameDescriptionInput] = useState("");
+  const [manualGameProviderInput, setManualGameProviderInput] =
+    useState("manual");
+  const [manualGameDescriptionInput, setManualGameDescriptionInput] =
+    useState("");
   const [manualGameThumbnailInput, setManualGameThumbnailInput] = useState("");
-  const [isSavingRegisteredGamesPreferences, setIsSavingRegisteredGamesPreferences] = useState(false);
-  const [registeredGamesStatus, setRegisteredGamesStatus] = useState<string | null>(null);
-  const [detectedRegisteredGames, setDetectedRegisteredGames] = useState<RegisteredConnectionGame[]>([]);
+  const [
+    isSavingRegisteredGamesPreferences,
+    setIsSavingRegisteredGamesPreferences,
+  ] = useState(false);
+  const [registeredGamesStatus, setRegisteredGamesStatus] = useState<
+    string | null
+  >(null);
+  const [detectedRegisteredGames, setDetectedRegisteredGames] = useState<
+    RegisteredConnectionGame[]
+  >([]);
   const [runningApps, setRunningApps] = useState<RunningAppEntry[]>([]);
   const [selectedRunningAppId, setSelectedRunningAppId] = useState("");
   const [isLoadingRunningApps, setIsLoadingRunningApps] = useState(false);
-  const [registeredGamesProviderStates, setRegisteredGamesProviderStates] = useState<
-    Record<string, RegisteredGamesProviderState>
-  >({});
-  const [isLoadingDetectedRegisteredGames, setIsLoadingDetectedRegisteredGames] = useState(false);
-  const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferences>({
-    ...defaultNotificationPreferences,
-  });
-  const [isSavingNotificationPreferences, setIsSavingNotificationPreferences] = useState(false);
-  const [notificationStatus, setNotificationStatus] = useState<string | null>(null);
-  const [textImagesPreferences, setTextImagesPreferences] = useState<TextImagesPreferences>({
-    ...defaultTextImagesPreferences,
-  });
-  const [isSavingTextImagesPreferences, setIsSavingTextImagesPreferences] = useState(false);
+  const [registeredGamesProviderStates, setRegisteredGamesProviderStates] =
+    useState<Record<string, RegisteredGamesProviderState>>({});
+  const [
+    isLoadingDetectedRegisteredGames,
+    setIsLoadingDetectedRegisteredGames,
+  ] = useState(false);
+  const [notificationPreferences, setNotificationPreferences] =
+    useState<NotificationPreferences>({
+      ...defaultNotificationPreferences,
+    });
+  const [isSavingNotificationPreferences, setIsSavingNotificationPreferences] =
+    useState(false);
+  const [notificationStatus, setNotificationStatus] = useState<string | null>(
+    null,
+  );
+  const [textImagesPreferences, setTextImagesPreferences] =
+    useState<TextImagesPreferences>({
+      ...defaultTextImagesPreferences,
+    });
+  const [isSavingTextImagesPreferences, setIsSavingTextImagesPreferences] =
+    useState(false);
   const [textImagesStatus, setTextImagesStatus] = useState<string | null>(null);
-  const [accessibilityPreferences, setAccessibilityPreferences] = useState<AccessibilityPreferences>({
-    ...defaultAccessibilityPreferences,
-  });
-  const [isSavingAccessibilityPreferences, setIsSavingAccessibilityPreferences] = useState(false);
-  const [accessibilityStatus, setAccessibilityStatus] = useState<string | null>(null);
+  const [accessibilityPreferences, setAccessibilityPreferences] =
+    useState<AccessibilityPreferences>({
+      ...defaultAccessibilityPreferences,
+    });
+  const [
+    isSavingAccessibilityPreferences,
+    setIsSavingAccessibilityPreferences,
+  ] = useState(false);
+  const [accessibilityStatus, setAccessibilityStatus] = useState<string | null>(
+    null,
+  );
   const [emojiPreferences, setEmojiPreferences] = useState<EmojiPreferences>({
     ...defaultEmojiPreferences,
   });
   const [emojiUploadDraftUrl, setEmojiUploadDraftUrl] = useState("");
-  const [emojiFavoritesInput, setEmojiFavoritesInput] = useState(defaultEmojiPreferences.favoriteEmojis.join(" "));
-  const [isSavingEmojiPreferences, setIsSavingEmojiPreferences] = useState(false);
+  const [emojiFavoritesInput, setEmojiFavoritesInput] = useState(
+    defaultEmojiPreferences.favoriteEmojis.join(" "),
+  );
+  const [isSavingEmojiPreferences, setIsSavingEmojiPreferences] =
+    useState(false);
   const [emojiStatus, setEmojiStatus] = useState<string | null>(null);
-  const [stickerPreferences, setStickerPreferences] = useState<StickerPreferences>({
-    ...defaultStickerPreferences,
-  });
+  const [stickerPreferences, setStickerPreferences] =
+    useState<StickerPreferences>({
+      ...defaultStickerPreferences,
+    });
   const [stickerUploadDraftUrl, setStickerUploadDraftUrl] = useState("");
   const [stickerFavoritesInput, setStickerFavoritesInput] = useState("");
-  const [isSavingStickerPreferences, setIsSavingStickerPreferences] = useState(false);
+  const [isSavingStickerPreferences, setIsSavingStickerPreferences] =
+    useState(false);
   const [stickerStatus, setStickerStatus] = useState<string | null>(null);
-  const [keybindPreferences, setKeybindPreferences] = useState<KeybindPreferences>({
-    ...defaultKeybindPreferences,
-  });
-  const [isSavingKeybindPreferences, setIsSavingKeybindPreferences] = useState(false);
+  const [keybindPreferences, setKeybindPreferences] =
+    useState<KeybindPreferences>({
+      ...defaultKeybindPreferences,
+    });
+  const [isSavingKeybindPreferences, setIsSavingKeybindPreferences] =
+    useState(false);
   const [keybindStatus, setKeybindStatus] = useState<string | null>(null);
-  const [advancedPreferences, setAdvancedPreferences] = useState<AdvancedPreferences>({
-    ...defaultAdvancedPreferences,
-  });
-  const [isSavingAdvancedPreferences, setIsSavingAdvancedPreferences] = useState(false);
+  const [advancedPreferences, setAdvancedPreferences] =
+    useState<AdvancedPreferences>({
+      ...defaultAdvancedPreferences,
+    });
+  const [isSavingAdvancedPreferences, setIsSavingAdvancedPreferences] =
+    useState(false);
   const [advancedStatus, setAdvancedStatus] = useState<string | null>(null);
-  const [streamerModePreferences, setStreamerModePreferences] = useState<StreamerModePreferences>({
-    ...defaultStreamerModePreferences,
-  });
-  const [isSavingStreamerModePreferences, setIsSavingStreamerModePreferences] = useState(false);
-  const [streamerModeStatus, setStreamerModeStatus] = useState<string | null>(null);
-  const [gameOverlayPreferences, setGameOverlayPreferences] = useState<GameOverlayPreferences>({
-    ...defaultGameOverlayPreferences,
-  });
-  const [isSavingGameOverlayPreferences, setIsSavingGameOverlayPreferences] = useState(false);
-  const [gameOverlayStatus, setGameOverlayStatus] = useState<string | null>(null);
+  const [streamerModePreferences, setStreamerModePreferences] =
+    useState<StreamerModePreferences>({
+      ...defaultStreamerModePreferences,
+    });
+  const [isSavingStreamerModePreferences, setIsSavingStreamerModePreferences] =
+    useState(false);
+  const [streamerModeStatus, setStreamerModeStatus] = useState<string | null>(
+    null,
+  );
+  const [gameOverlayPreferences, setGameOverlayPreferences] =
+    useState<GameOverlayPreferences>({
+      ...defaultGameOverlayPreferences,
+    });
+  const [isSavingGameOverlayPreferences, setIsSavingGameOverlayPreferences] =
+    useState(false);
+  const [gameOverlayStatus, setGameOverlayStatus] = useState<string | null>(
+    null,
+  );
   const [isVoiceMuted, setIsVoiceMuted] = useState(false);
   const [isVoiceDeafened, setIsVoiceDeafened] = useState(false);
   const [isVoiceSessionActive, setIsVoiceSessionActive] = useState(false);
@@ -2019,42 +2345,61 @@ export const SettingsModal = () => {
   const [isVoiceCameraOn, setIsVoiceCameraOn] = useState(false);
   const [isPmVideoSessionActive, setIsPmVideoSessionActive] = useState(false);
   const [isPmCameraOn, setIsPmCameraOn] = useState(false);
-  const [familyCenterPreferences, setFamilyCenterPreferences] = useState<FamilyCenterPreferences>({
-    ...defaultFamilyCenterPreferences,
-  });
-  const [familyCenterSnapshot, setFamilyCenterSnapshot] = useState<FamilyCenterPreferences>({
-    ...defaultFamilyCenterPreferences,
-  });
-  const [businessCenterSnapshot, setBusinessCenterSnapshot] = useState<FamilyCenterPreferences>({
-    ...defaultFamilyCenterPreferences,
-  });
-  const [schoolCenterSnapshot, setSchoolCenterSnapshot] = useState<FamilyCenterPreferences>({
-    ...defaultFamilyCenterPreferences,
-  });
-  const [isSavingFamilyCenterPreferences, setIsSavingFamilyCenterPreferences] = useState(false);
-  const [familyCenterStatus, setFamilyCenterStatus] = useState<string | null>(null);
+  const [familyCenterPreferences, setFamilyCenterPreferences] =
+    useState<FamilyCenterPreferences>({
+      ...defaultFamilyCenterPreferences,
+    });
+  const [familyCenterSnapshot, setFamilyCenterSnapshot] =
+    useState<FamilyCenterPreferences>({
+      ...defaultFamilyCenterPreferences,
+    });
+  const [businessCenterSnapshot, setBusinessCenterSnapshot] =
+    useState<FamilyCenterPreferences>({
+      ...defaultFamilyCenterPreferences,
+    });
+  const [schoolCenterSnapshot, setSchoolCenterSnapshot] =
+    useState<FamilyCenterPreferences>({
+      ...defaultFamilyCenterPreferences,
+    });
+  const [isSavingFamilyCenterPreferences, setIsSavingFamilyCenterPreferences] =
+    useState(false);
+  const [familyCenterStatus, setFamilyCenterStatus] = useState<string | null>(
+    null,
+  );
   const [familyMemberNameInput, setFamilyMemberNameInput] = useState("");
   const [familyMemberAccountInput, setFamilyMemberAccountInput] = useState("");
-  const [familyMemberRelationInput, setFamilyMemberRelationInput] = useState<string>("");
-  const [familyMemberSectionInput, setFamilyMemberSectionInput] = useState<string>("");
+  const [familyMemberRelationInput, setFamilyMemberRelationInput] =
+    useState<string>("");
+  const [familyMemberSectionInput, setFamilyMemberSectionInput] =
+    useState<string>("");
   const [familyMemberEmailInput, setFamilyMemberEmailInput] = useState("");
-  const [familyMemberPasswordInput, setFamilyMemberPasswordInput] = useState("");
-  const [familyMemberRepeatPasswordInput, setFamilyMemberRepeatPasswordInput] = useState("");
-  const [authenticatorAppStatus, setAuthenticatorAppStatus] = useState<AuthenticatorAppStatus>({
-    ...defaultAuthenticatorAppStatus,
-  });
+  const [familyMemberPasswordInput, setFamilyMemberPasswordInput] =
+    useState("");
+  const [familyMemberRepeatPasswordInput, setFamilyMemberRepeatPasswordInput] =
+    useState("");
+  const [authenticatorAppStatus, setAuthenticatorAppStatus] =
+    useState<AuthenticatorAppStatus>({
+      ...defaultAuthenticatorAppStatus,
+    });
   const [authenticatorSetupSecret, setAuthenticatorSetupSecret] = useState("");
   const [authenticatorSetupUri, setAuthenticatorSetupUri] = useState("");
   const [authenticatorCodeInput, setAuthenticatorCodeInput] = useState("");
-  const [authenticatorAppMessage, setAuthenticatorAppMessage] = useState<string | null>(null);
+  const [authenticatorAppMessage, setAuthenticatorAppMessage] = useState<
+    string | null
+  >(null);
   const [isAuthenticatorAppBusy, setIsAuthenticatorAppBusy] = useState(false);
-  const [isAuthenticatorAppModalOpen, setIsAuthenticatorAppModalOpen] = useState(false);
+  const [isAuthenticatorAppModalOpen, setIsAuthenticatorAppModalOpen] =
+    useState(false);
   const [isSecurityKeyModalOpen, setIsSecurityKeyModalOpen] = useState(false);
   const [securityKeys, setSecurityKeys] = useState<SecurityKeyItem[]>([]);
   const [isSecurityKeyBusy, setIsSecurityKeyBusy] = useState(false);
-  const [securityKeyMessage, setSecurityKeyMessage] = useState<string | null>(null);
+  const [securityKeyMessage, setSecurityKeyMessage] = useState<string | null>(
+    null,
+  );
   const [isSmsModalOpen, setIsSmsModalOpen] = useState(false);
-  const [smsAuthStatus, setSmsAuthStatus] = useState<SmsAuthStatus>({ ...defaultSmsAuthStatus });
+  const [smsAuthStatus, setSmsAuthStatus] = useState<SmsAuthStatus>({
+    ...defaultSmsAuthStatus,
+  });
   const [smsPhoneInput, setSmsPhoneInput] = useState("");
   const [smsCodeInput, setSmsCodeInput] = useState("");
   const [isSmsBusy, setIsSmsBusy] = useState(false);
@@ -2108,58 +2453,101 @@ export const SettingsModal = () => {
       }
     };
 
-    window.addEventListener(VOICE_STATE_SYNC_EVENT, onVoiceStateSync as EventListener);
-    window.addEventListener(PM_CAMERA_STATE_SYNC_EVENT, onPmCameraStateSync as EventListener);
+    window.addEventListener(
+      VOICE_STATE_SYNC_EVENT,
+      onVoiceStateSync as EventListener,
+    );
+    window.addEventListener(
+      PM_CAMERA_STATE_SYNC_EVENT,
+      onPmCameraStateSync as EventListener,
+    );
 
     return () => {
-      window.removeEventListener(VOICE_STATE_SYNC_EVENT, onVoiceStateSync as EventListener);
-      window.removeEventListener(PM_CAMERA_STATE_SYNC_EVENT, onPmCameraStateSync as EventListener);
+      window.removeEventListener(
+        VOICE_STATE_SYNC_EVENT,
+        onVoiceStateSync as EventListener,
+      );
+      window.removeEventListener(
+        PM_CAMERA_STATE_SYNC_EVENT,
+        onPmCameraStateSync as EventListener,
+      );
     };
   }, []);
   const [familyMemberPhoneInput, setFamilyMemberPhoneInput] = useState("");
-  const [familyMemberDateOfBirthInput, setFamilyMemberDateOfBirthInput] = useState("");
-  const [familyApplicationSectionInput, setFamilyApplicationSectionInput] = useState<string>("");
-  const [isCreatingFamilyMemberAccount, setIsCreatingFamilyMemberAccount] = useState(false);
-  const [isConvertingFamilyMemberUserId, setIsConvertingFamilyMemberUserId] = useState<string | null>(null);
-  const [familyMemberLifecycleByUserId, setFamilyMemberLifecycleByUserId] = useState<Record<string, FamilyMemberLifecycle>>({});
-  const [familyDesignationInput, setFamilyDesignationInput] = useState<string>("");
+  const [familyMemberDateOfBirthInput, setFamilyMemberDateOfBirthInput] =
+    useState("");
+  const [familyApplicationSectionInput, setFamilyApplicationSectionInput] =
+    useState<string>("");
+  const [isCreatingFamilyMemberAccount, setIsCreatingFamilyMemberAccount] =
+    useState(false);
+  const [isConvertingFamilyMemberUserId, setIsConvertingFamilyMemberUserId] =
+    useState<string | null>(null);
+  const [familyMemberLifecycleByUserId, setFamilyMemberLifecycleByUserId] =
+    useState<Record<string, FamilyMemberLifecycle>>({});
+  const [familyDesignationInput, setFamilyDesignationInput] =
+    useState<string>("");
   const [selectedFamilyMemberId, setSelectedFamilyMemberId] = useState("");
-  const [languagePreference, setLanguagePreference] = useState<string>("system");
-  const [isSavingLanguagePreference, setIsSavingLanguagePreference] = useState(false);
-  const [languagePreferenceStatus, setLanguagePreferenceStatus] = useState<string | null>(null);
+  const [languagePreference, setLanguagePreference] =
+    useState<string>("system");
+  const [isSavingLanguagePreference, setIsSavingLanguagePreference] =
+    useState(false);
+  const [languagePreferenceStatus, setLanguagePreferenceStatus] = useState<
+    string | null
+  >(null);
   const [deviceSessions, setDeviceSessions] = useState<DeviceSession[]>([]);
   const [isLoadingDeviceSessions, setIsLoadingDeviceSessions] = useState(false);
-  const [deviceSessionActionPending, setDeviceSessionActionPending] = useState<string | null>(null);
+  const [deviceSessionActionPending, setDeviceSessionActionPending] = useState<
+    string | null
+  >(null);
   const [devicesStatus, setDevicesStatus] = useState<string | null>(null);
   const [connectedAccounts, setConnectedAccounts] = useState<string[]>([]);
-  const [connectionProviderAvailability, setConnectionProviderAvailability] = useState<Record<string, boolean>>({});
-  const [connectionProviderOAuthSupport, setConnectionProviderOAuthSupport] = useState<Record<string, boolean>>({});
-  const [isSavingConnectionProvider, setIsSavingConnectionProvider] = useState<string | null>(null);
-  const [connectionsStatus, setConnectionsStatus] = useState<string | null>(null);
+  const [connectionProviderAvailability, setConnectionProviderAvailability] =
+    useState<Record<string, boolean>>({});
+  const [connectionProviderOAuthSupport, setConnectionProviderOAuthSupport] =
+    useState<Record<string, boolean>>({});
+  const [isSavingConnectionProvider, setIsSavingConnectionProvider] = useState<
+    string | null
+  >(null);
+  const [connectionsStatus, setConnectionsStatus] = useState<string | null>(
+    null,
+  );
   const [bugTitle, setBugTitle] = useState("");
   const [bugCategory, setBugCategory] = useState("general");
-  const [bugSeverity, setBugSeverity] = useState<"low" | "medium" | "high" | "critical">("medium");
+  const [bugSeverity, setBugSeverity] = useState<
+    "low" | "medium" | "high" | "critical"
+  >("medium");
   const [bugSteps, setBugSteps] = useState("");
   const [bugExpected, setBugExpected] = useState("");
   const [bugActual, setBugActual] = useState("");
   const [isSubmittingBugReport, setIsSubmittingBugReport] = useState(false);
   const [bugReportStatus, setBugReportStatus] = useState<string | null>(null);
-  const [patronageType, setPatronageType] = useState<"ONE_TIME" | "MONTHLY">("ONE_TIME");
+  const [patronageType, setPatronageType] = useState<"ONE_TIME" | "MONTHLY">(
+    "ONE_TIME",
+  );
   const [patronageAmount, setPatronageAmount] = useState("");
   const [patronageNote, setPatronageNote] = useState("");
   const [patronagePayerName, setPatronagePayerName] = useState("");
   const [patronagePayerEmail, setPatronagePayerEmail] = useState("");
   const [isSubmittingPatronage, setIsSubmittingPatronage] = useState(false);
   const [isCancellingPatronage, setIsCancellingPatronage] = useState(false);
-  const [isLoadingPatronageHistory, setIsLoadingPatronageHistory] = useState(false);
+  const [isLoadingPatronageHistory, setIsLoadingPatronageHistory] =
+    useState(false);
   const [patronageStatus, setPatronageStatus] = useState<string | null>(null);
-  const [patronageHistory, setPatronageHistory] = useState<PatronageHistoryEntry[]>([]);
-  const [pendingPatronageCheckoutUrl, setPendingPatronageCheckoutUrl] = useState<string | null>(null);
-  const [isPatronagePaymentPanelOpen, setIsPatronagePaymentPanelOpen] = useState(false);
-  const [isPreparingPatronageIntent, setIsPreparingPatronageIntent] = useState(false);
-  const [patronageIntentClientSecret, setPatronageIntentClientSecret] = useState<string | null>(null);
-  const [patronageStripePublishableKey, setPatronageStripePublishableKey] = useState<string | null>(null);
-  const [patronagePaymentPanelStatus, setPatronagePaymentPanelStatus] = useState<string | null>(null);
+  const [patronageHistory, setPatronageHistory] = useState<
+    PatronageHistoryEntry[]
+  >([]);
+  const [pendingPatronageCheckoutUrl, setPendingPatronageCheckoutUrl] =
+    useState<string | null>(null);
+  const [isPatronagePaymentPanelOpen, setIsPatronagePaymentPanelOpen] =
+    useState(false);
+  const [isPreparingPatronageIntent, setIsPreparingPatronageIntent] =
+    useState(false);
+  const [patronageIntentClientSecret, setPatronageIntentClientSecret] =
+    useState<string | null>(null);
+  const [patronageStripePublishableKey, setPatronageStripePublishableKey] =
+    useState<string | null>(null);
+  const [patronagePaymentPanelStatus, setPatronagePaymentPanelStatus] =
+    useState<string | null>(null);
   const [pendingPatronageRequest, setPendingPatronageRequest] = useState<{
     donationType: "ONE_TIME" | "MONTHLY";
     amountCents: number;
@@ -2170,69 +2558,145 @@ export const SettingsModal = () => {
   } | null>(null);
   const [OtherApps, setOtherApps] = useState<OtherAppConfig[]>([]);
   const [OtherBots, setOtherBots] = useState<OtherBotConfig[]>([]);
-  const [OtherBotAutoImportOnSave, setOtherBotAutoImportOnSave] = useState(true);
-  const [botGhostIntegration, setBotGhostIntegration] = useState<BotGhostIntegrationConfig>({
-    ...defaultBotGhostIntegration,
-  });
+  const [OtherBotAutoImportOnSave, setOtherBotAutoImportOnSave] =
+    useState(true);
+  const [botGhostIntegration, setBotGhostIntegration] =
+    useState<BotGhostIntegrationConfig>({
+      ...defaultBotGhostIntegration,
+    });
   const [isSavingOtherConfigs, setIsSavingOtherConfigs] = useState(false);
-  const [OtherConfigsStatus, setOtherConfigsStatus] = useState<string | null>(null);
+  const [OtherConfigsStatus, setOtherConfigsStatus] = useState<string | null>(
+    null,
+  );
   const [ownedServerTags, setOwnedServerTags] = useState<OwnedServerTag[]>([]);
-  const [memberServerTags, setMemberServerTags] = useState<MemberServerTag[]>([]);
-  const [memberProfileServers, setMemberProfileServers] = useState<MemberServerProfileOption[]>([]);
-  const [selectedProfileSettingsServerId, setSelectedProfileSettingsServerId] = useState<string>("");
+  const [memberServerTags, setMemberServerTags] = useState<MemberServerTag[]>(
+    [],
+  );
+  const [memberProfileServers, setMemberProfileServers] = useState<
+    MemberServerProfileOption[]
+  >([]);
+  const [selectedProfileSettingsServerId, setSelectedProfileSettingsServerId] =
+    useState<string>("");
   const [serverProfileNameInput, setServerProfileNameInput] = useState("");
-  const [serverProfileNameStyleInput, setServerProfileNameStyleInput] = useState<string>("");
-  const [serverProfileNameFontInput, setServerProfileNameFontInput] = useState<ProfileNameFontKey>("default");
-  const [serverProfileNameEffectInput, setServerProfileNameEffectInput] = useState<ProfileNameEffectKey>("solid");
-  const [serverProfileNameColorInput, setServerProfileNameColorInput] = useState<ProfileNameColorKey>("default");
-  const [serverProfileCommentInput, setServerProfileCommentInput] = useState("");
-  const [serverProfileNameplateLabelInput, setServerProfileNameplateLabelInput] = useState("");
-  const [serverProfileNameplateColorInput, setServerProfileNameplateColorInput] = useState("");
-  const [serverProfileNameplateImageUrlInput, setServerProfileNameplateImageUrlInput] = useState("");
+  const [serverProfileNameStyleInput, setServerProfileNameStyleInput] =
+    useState<string>("");
+  const [serverProfileNameFontInput, setServerProfileNameFontInput] =
+    useState<ProfileNameFontKey>("default");
+  const [serverProfileNameEffectInput, setServerProfileNameEffectInput] =
+    useState<ProfileNameEffectKey>("solid");
+  const [serverProfileNameColorInput, setServerProfileNameColorInput] =
+    useState<ProfileNameColorKey>("default");
+  const [serverProfileCommentInput, setServerProfileCommentInput] =
+    useState("");
+  const [
+    serverProfileNameplateLabelInput,
+    setServerProfileNameplateLabelInput,
+  ] = useState("");
+  const [
+    serverProfileNameplateColorInput,
+    setServerProfileNameplateColorInput,
+  ] = useState("");
+  const [
+    serverProfileNameplateImageUrlInput,
+    setServerProfileNameplateImageUrlInput,
+  ] = useState("");
   const [serverProfileImageInput, setServerProfileImageInput] = useState("");
-  const [serverProfileAvatarDecorationInput, setServerProfileAvatarDecorationInput] = useState("");
+  const [
+    serverProfileAvatarDecorationInput,
+    setServerProfileAvatarDecorationInput,
+  ] = useState("");
   const [serverProfileEffectInput, setServerProfileEffectInput] = useState("");
   const [serverProfileBannerInput, setServerProfileBannerInput] = useState("");
   const [isLoadingServerProfiles, setIsLoadingServerProfiles] = useState(false);
   const [isSavingServerProfile, setIsSavingServerProfile] = useState(false);
-  const [serverProfileStatus, setServerProfileStatus] = useState<string | null>(null);
-  const [selectedOwnedServerId, setSelectedOwnedServerId] = useState<string>("");
-  const [selectedProfileServerId, setSelectedProfileServerId] = useState<string>("");
+  const [serverProfileStatus, setServerProfileStatus] = useState<string | null>(
+    null,
+  );
+  const [selectedOwnedServerId, setSelectedOwnedServerId] =
+    useState<string>("");
+  const [selectedProfileServerId, setSelectedProfileServerId] =
+    useState<string>("");
   const [ownerTagCodeInput, setOwnerTagCodeInput] = useState("");
   const [ownerTagIconKey, setOwnerTagIconKey] = useState<string>("bolt");
-  const [serverTagIconOptions, setServerTagIconOptions] = useState<ServerTagIconOption[]>([]);
+  const [serverTagIconOptions, setServerTagIconOptions] = useState<
+    ServerTagIconOption[]
+  >([]);
   const [serverTagsStatus, setServerTagsStatus] = useState<string | null>(null);
   const [isSavingServerTags, setIsSavingServerTags] = useState(false);
   const [isLoadingServerTags, setIsLoadingServerTags] = useState(false);
   const [customCss, setCustomCss] = useState("");
   const [customCssStatus, setCustomCssStatus] = useState<string | null>(null);
   const [isCustomCssEditorOpen, setIsCustomCssEditorOpen] = useState(false);
-  const [isDefaultProfileNameStylesPanelOpen, setIsDefaultProfileNameStylesPanelOpen] = useState(false);
-  const [isServerProfileNameStylesPanelOpen, setIsServerProfileNameStylesPanelOpen] = useState(false);
+  const [
+    isDefaultProfileNameStylesPanelOpen,
+    setIsDefaultProfileNameStylesPanelOpen,
+  ] = useState(false);
+  const [
+    isServerProfileNameStylesPanelOpen,
+    setIsServerProfileNameStylesPanelOpen,
+  ] = useState(false);
   const [isAvatarPanelOpen, setIsAvatarPanelOpen] = useState(false);
-  const [isAvatarDecorationPanelOpen, setIsAvatarDecorationPanelOpen] = useState(false);
-  const [isProfileEffectPanelOpen, setIsProfileEffectPanelOpen] = useState(false);
+  const [isAvatarDecorationPanelOpen, setIsAvatarDecorationPanelOpen] =
+    useState(false);
+  const [isProfileEffectPanelOpen, setIsProfileEffectPanelOpen] =
+    useState(false);
   const [isNameplatePanelOpen, setIsNameplatePanelOpen] = useState(false);
-  const [isDefaultBannerPanelOpen, setIsDefaultBannerPanelOpen] = useState(false);
+  const [isDefaultBannerPanelOpen, setIsDefaultBannerPanelOpen] =
+    useState(false);
   const [isServerBannerPanelOpen, setIsServerBannerPanelOpen] = useState(false);
-  const [isServerNameplatePanelOpen, setIsServerNameplatePanelOpen] = useState(false);
+  const [isServerNameplatePanelOpen, setIsServerNameplatePanelOpen] =
+    useState(false);
   const [isServerAvatarPanelOpen, setIsServerAvatarPanelOpen] = useState(false);
-  const [isServerAvatarDecorationPanelOpen, setIsServerAvatarDecorationPanelOpen] = useState(false);
-  const [isServerProfileEffectPanelOpen, setIsServerProfileEffectPanelOpen] = useState(false);
-  const [isPluginsInstalledPanelOpen, setIsPluginsInstalledPanelOpen] = useState(false);
-  const [isDownloadedPluginsPanelOpen, setIsDownloadedPluginsPanelOpen] = useState(false);
-  const [isPluginUploadsPanelOpen, setIsPluginUploadsPanelOpen] = useState(false);
-  const [isFamilyAccountApplyPanelOpen, setIsFamilyAccountApplyPanelOpen] = useState(false);
-  const [isFamilyAccountVerificationPanelOpen, setIsFamilyAccountVerificationPanelOpen] = useState(false);
+  const [
+    isServerAvatarDecorationPanelOpen,
+    setIsServerAvatarDecorationPanelOpen,
+  ] = useState(false);
+  const [isServerProfileEffectPanelOpen, setIsServerProfileEffectPanelOpen] =
+    useState(false);
+  const [isPluginsInstalledPanelOpen, setIsPluginsInstalledPanelOpen] =
+    useState(false);
+  const [isDownloadedPluginsPanelOpen, setIsDownloadedPluginsPanelOpen] =
+    useState(false);
+  const [isPluginUploadsPanelOpen, setIsPluginUploadsPanelOpen] =
+    useState(false);
+  const [isFamilyAccountApplyPanelOpen, setIsFamilyAccountApplyPanelOpen] =
+    useState(false);
+  const [
+    isFamilyAccountVerificationPanelOpen,
+    setIsFamilyAccountVerificationPanelOpen,
+  ] = useState(false);
   const [isRemovingFamilyAccount, setIsRemovingFamilyAccount] = useState(false);
-  const [familyVerificationFiles, setFamilyVerificationFiles] = useState<File[]>([]);
-  const [familyVerificationUploadStatus, setFamilyVerificationUploadStatus] = useState<string | null>(null);
-  const [familyApplicationStatus, setFamilyApplicationStatus] = useState<string | null>(null);
+  const [familyVerificationFiles, setFamilyVerificationFiles] = useState<
+    File[]
+  >([]);
+  const [familyVerificationUploadStatus, setFamilyVerificationUploadStatus] =
+    useState<string | null>(null);
+  const [familyApplicationStatus, setFamilyApplicationStatus] = useState<
+    string | null
+  >(null);
   const [downloadedPlugins, setDownloadedPlugins] = useState<string[]>([]);
-  const [blockedProfiles, setBlockedProfiles] = useState<BlockedProfileSummary[]>([]);
-  const [isLoadingBlockedProfiles, setIsLoadingBlockedProfiles] = useState(false);
-  const [blockedProfilesError, setBlockedProfilesError] = useState<string | null>(null);
-  const [unblockingProfileId, setUnblockingProfileId] = useState<string | null>(null);
+  const [incomingPendingRequests, setIncomingPendingRequests] = useState<
+    PendingFriendRequestSummary[]
+  >([]);
+  const [outgoingPendingRequests, setOutgoingPendingRequests] = useState<
+    PendingFriendRequestSummary[]
+  >([]);
+  const [isLoadingPendingFriendRequests, setIsLoadingPendingFriendRequests] =
+    useState(false);
+  const [pendingFriendRequestsError, setPendingFriendRequestsError] = useState<
+    string | null
+  >(null);
+  const [blockedProfiles, setBlockedProfiles] = useState<
+    BlockedProfileSummary[]
+  >([]);
+  const [isLoadingBlockedProfiles, setIsLoadingBlockedProfiles] =
+    useState(false);
+  const [blockedProfilesError, setBlockedProfilesError] = useState<
+    string | null
+  >(null);
+  const [unblockingProfileId, setUnblockingProfileId] = useState<string | null>(
+    null,
+  );
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const avatarPanelInputRef = useRef<HTMLInputElement | null>(null);
   const serverAvatarPanelInputRef = useRef<HTMLInputElement | null>(null);
@@ -2244,10 +2708,15 @@ export const SettingsModal = () => {
 
   const isModalOpen = isOpen && type === "settings";
   const patronageStripePromise = useMemo(
-    () => (patronageStripePublishableKey ? loadStripe(patronageStripePublishableKey) : null),
-    [patronageStripePublishableKey]
+    () =>
+      patronageStripePublishableKey
+        ? loadStripe(patronageStripePublishableKey)
+        : null,
+    [patronageStripePublishableKey],
   );
-  const patronageElementsOptions = useMemo<StripeElementsOptions | undefined>(() => {
+  const patronageElementsOptions = useMemo<
+    StripeElementsOptions | undefined
+  >(() => {
     if (!patronageIntentClientSecret) {
       return undefined;
     }
@@ -2262,19 +2731,22 @@ export const SettingsModal = () => {
 
   const familyMemberPasswordStrength = useMemo(
     () => getPasswordStrength(familyMemberPasswordInput),
-    [familyMemberPasswordInput]
+    [familyMemberPasswordInput],
   );
 
   const familyMemberRepeatPasswordStrength = useMemo(
     () => getPasswordStrength(familyMemberRepeatPasswordInput),
-    [familyMemberRepeatPasswordInput]
+    [familyMemberRepeatPasswordInput],
   );
 
-  const installedPluginsCount = useMemo(() => downloadedPlugins.length, [downloadedPlugins.length]);
+  const installedPluginsCount = useMemo(
+    () => downloadedPlugins.length,
+    [downloadedPlugins.length],
+  );
 
   const installedPluginsCountLabel = useMemo(
     () => installedPluginsCount.toString().padStart(2, "0"),
-    [installedPluginsCount]
+    [installedPluginsCount],
   );
 
   const hasFamilyCenterAccess = useMemo(() => {
@@ -2283,12 +2755,16 @@ export const SettingsModal = () => {
   }, [data.profileRole, profileRole]);
   const isSchoolCenterSection = displaySection === "schoolCenter";
   const isBusinessCenterSection = displaySection === "businessCenter";
-  const centerLabel = isBusinessCenterSection ? "Business" : isSchoolCenterSection ? "School" : "Family";
+  const centerLabel = isBusinessCenterSection
+    ? "Business"
+    : isSchoolCenterSection
+      ? "School"
+      : "Family";
   const centerLabelLower = centerLabel.toLowerCase();
   const isFamilyCenterEditable = hasFamilyCenterAccess;
   const isFamilyApplicationApproved = useMemo(
     () => /approved|aproved/i.test(String(familyApplicationStatus ?? "")),
-    [familyApplicationStatus]
+    [familyApplicationStatus],
   );
   const formattedFamilyApplicationStatus = useMemo(() => {
     const source = String(familyApplicationStatus ?? "").trim();
@@ -2303,103 +2779,165 @@ export const SettingsModal = () => {
 
   const normalizeCenterDesignationInput = useCallback(
     (value: string, isBusinessCenter: boolean) => {
-      const options = isBusinessCenter ? businessRoleOptions : familyDesignationOptions;
+      const options = isBusinessCenter
+        ? businessRoleOptions
+        : familyDesignationOptions;
       return options.some((option) => option === value) ? value : "";
     },
-    []
+    [],
   );
 
   const visibleSectionGroups = useMemo<SectionGroup[]>(() => {
     return sectionGroups;
   }, []);
 
-  const sections = useMemo<SettingsSection[]>(() => sectionGroups.flatMap((group) => group.sections), []);
+  const sections = useMemo<SettingsSection[]>(
+    () => sectionGroups.flatMap((group) => group.sections),
+    [],
+  );
 
   useEffect(() => {
     if (displaySection === "businessCenter") {
       setFamilyCenterPreferences(businessCenterSnapshot);
-      setFamilyApplicationStatus(businessCenterSnapshot.familyApplicationStatus || null);
-      setFamilyDesignationInput(normalizeCenterDesignationInput(businessCenterSnapshot.familyDesignation, true));
+      setFamilyApplicationStatus(
+        businessCenterSnapshot.familyApplicationStatus || null,
+      );
+      setFamilyDesignationInput(
+        normalizeCenterDesignationInput(
+          businessCenterSnapshot.familyDesignation,
+          true,
+        ),
+      );
       return;
     }
 
     if (displaySection === "schoolCenter") {
       setFamilyCenterPreferences(schoolCenterSnapshot);
-      setFamilyApplicationStatus(schoolCenterSnapshot.familyApplicationStatus || null);
-      setFamilyDesignationInput(normalizeCenterDesignationInput(schoolCenterSnapshot.familyDesignation, false));
+      setFamilyApplicationStatus(
+        schoolCenterSnapshot.familyApplicationStatus || null,
+      );
+      setFamilyDesignationInput(
+        normalizeCenterDesignationInput(
+          schoolCenterSnapshot.familyDesignation,
+          false,
+        ),
+      );
       return;
     }
 
     if (displaySection === "familyCenter") {
       setFamilyCenterPreferences(familyCenterSnapshot);
-      setFamilyApplicationStatus(familyCenterSnapshot.familyApplicationStatus || null);
-      setFamilyDesignationInput(normalizeCenterDesignationInput(familyCenterSnapshot.familyDesignation, false));
+      setFamilyApplicationStatus(
+        familyCenterSnapshot.familyApplicationStatus || null,
+      );
+      setFamilyDesignationInput(
+        normalizeCenterDesignationInput(
+          familyCenterSnapshot.familyDesignation,
+          false,
+        ),
+      );
     }
-  }, [businessCenterSnapshot, displaySection, familyCenterSnapshot, normalizeCenterDesignationInput, schoolCenterSnapshot]);
+  }, [
+    businessCenterSnapshot,
+    displaySection,
+    familyCenterSnapshot,
+    normalizeCenterDesignationInput,
+    schoolCenterSnapshot,
+  ]);
 
   const bannerHistoryStorageKey = useMemo(() => {
-    const scopeId = String(data.profileId ?? resolvedProfileId ?? "anonymous").trim() || "anonymous";
+    const scopeId =
+      String(data.profileId ?? resolvedProfileId ?? "anonymous").trim() ||
+      "anonymous";
     return `inaccord:banner-history:${scopeId}`;
   }, [data.profileId, resolvedProfileId]);
 
   const avatarHistoryStorageKey = useMemo(() => {
-    const scopeId = String(data.profileId ?? resolvedProfileId ?? "anonymous").trim() || "anonymous";
+    const scopeId =
+      String(data.profileId ?? resolvedProfileId ?? "anonymous").trim() ||
+      "anonymous";
     return `inaccord:avatar-history:${scopeId}`;
   }, [data.profileId, resolvedProfileId]);
 
-  const rememberUploadedAvatar = useCallback((url?: string | null) => {
-    const normalized = String(url ?? "").trim();
-    if (!normalized) {
-      return;
-    }
-
-    setUploadedAvatarThumbnails((prev) => {
-      const next = [normalized, ...prev.filter((item) => item !== normalized)].slice(0, 16);
-
-      try {
-        if (typeof window !== "undefined") {
-          window.localStorage.setItem(avatarHistoryStorageKey, JSON.stringify(next));
-        }
-      } catch {
-        // ignore storage failures
+  const rememberUploadedAvatar = useCallback(
+    (url?: string | null) => {
+      const normalized = String(url ?? "").trim();
+      if (!normalized) {
+        return;
       }
 
-      void axios.patch("/api/profile/preferences", {
-        avatarUploads: next,
-      }).catch(() => {
-        // ignore preference persistence failures
-      });
+      setUploadedAvatarThumbnails((prev) => {
+        const next = [
+          normalized,
+          ...prev.filter((item) => item !== normalized),
+        ].slice(0, 16);
 
-      return next;
-    });
-  }, [avatarHistoryStorageKey]);
-
-  const rememberUploadedBanner = useCallback((url?: string | null) => {
-    const normalized = String(url ?? "").trim();
-    if (!normalized) {
-      return;
-    }
-
-    setUploadedBannerThumbnails((prev) => {
-      const next = [normalized, ...prev.filter((item) => item !== normalized)].slice(0, 16);
-
-      try {
-        if (typeof window !== "undefined") {
-          window.localStorage.setItem(bannerHistoryStorageKey, JSON.stringify(next));
+        if (!CLIENT_PERSISTENCE_DISABLED) {
+          try {
+            if (typeof window !== "undefined") {
+              window.localStorage.setItem(
+                avatarHistoryStorageKey,
+                JSON.stringify(next),
+              );
+            }
+          } catch {
+            // ignore storage failures
+          }
         }
-      } catch {
-        // ignore storage failures
+
+        void axios
+          .patch("/api/profile/preferences", {
+            avatarUploads: next,
+          })
+          .catch(() => {
+            // ignore preference persistence failures
+          });
+
+        return next;
+      });
+    },
+    [avatarHistoryStorageKey],
+  );
+
+  const rememberUploadedBanner = useCallback(
+    (url?: string | null) => {
+      const normalized = String(url ?? "").trim();
+      if (!normalized) {
+        return;
       }
 
-      void axios.patch("/api/profile/preferences", {
-        bannerUploads: next,
-      }).catch(() => {
-        // ignore preference persistence failures
-      });
+      setUploadedBannerThumbnails((prev) => {
+        const next = [
+          normalized,
+          ...prev.filter((item) => item !== normalized),
+        ].slice(0, 16);
 
-      return next;
-    });
-  }, [bannerHistoryStorageKey]);
+        if (!CLIENT_PERSISTENCE_DISABLED) {
+          try {
+            if (typeof window !== "undefined") {
+              window.localStorage.setItem(
+                bannerHistoryStorageKey,
+                JSON.stringify(next),
+              );
+            }
+          } catch {
+            // ignore storage failures
+          }
+        }
+
+        void axios
+          .patch("/api/profile/preferences", {
+            bannerUploads: next,
+          })
+          .catch(() => {
+            // ignore preference persistence failures
+          });
+
+        return next;
+      });
+    },
+    [bannerHistoryStorageKey],
+  );
 
   const normalizeOwnerTagCode = (value: string) => value.trim().toUpperCase();
 
@@ -2408,21 +2946,30 @@ export const SettingsModal = () => {
   }, [data.profileImageUrl]);
 
   useEffect(() => {
-    const initialDecoration = (data as { profileAvatarDecorationUrl?: string | null }).profileAvatarDecorationUrl ?? null;
+    const initialDecoration =
+      (data as { profileAvatarDecorationUrl?: string | null })
+        .profileAvatarDecorationUrl ?? null;
     setAvatarDecorationUrl(initialDecoration);
     setAvatarDecorationInput(initialDecoration ?? "");
   }, [data]);
 
   useEffect(() => {
-    const initialProfileEffect = (data as { profileEffectUrl?: string | null }).profileEffectUrl ?? null;
+    const initialProfileEffect =
+      (data as { profileEffectUrl?: string | null }).profileEffectUrl ?? null;
     setProfileEffectUrl(initialProfileEffect);
     setProfileEffectInput(initialProfileEffect ?? "");
   }, [data]);
 
   useEffect(() => {
-    const initialNameplateLabel = (data as { profileNameplateLabel?: string | null }).profileNameplateLabel ?? "";
-    const initialNameplateColor = (data as { profileNameplateColor?: string | null }).profileNameplateColor ?? "";
-    const initialNameplateImageUrl = (data as { profileNameplateImageUrl?: string | null }).profileNameplateImageUrl ?? null;
+    const initialNameplateLabel =
+      (data as { profileNameplateLabel?: string | null })
+        .profileNameplateLabel ?? "";
+    const initialNameplateColor =
+      (data as { profileNameplateColor?: string | null })
+        .profileNameplateColor ?? "";
+    const initialNameplateImageUrl =
+      (data as { profileNameplateImageUrl?: string | null })
+        .profileNameplateImageUrl ?? null;
     setNameplateLabel(initialNameplateLabel);
     setNameplateColor(initialNameplateColor || "");
     setNameplateImageUrl(initialNameplateImageUrl);
@@ -2443,7 +2990,7 @@ export const SettingsModal = () => {
     }
 
     setUploadedAvatarThumbnails((prev) =>
-      prev.includes(normalized) ? prev : [normalized, ...prev].slice(0, 16)
+      prev.includes(normalized) ? prev : [normalized, ...prev].slice(0, 16),
     );
   }, [avatarUrl]);
 
@@ -2454,11 +3001,15 @@ export const SettingsModal = () => {
     }
 
     setUploadedBannerThumbnails((prev) =>
-      prev.includes(normalized) ? prev : [normalized, ...prev].slice(0, 16)
+      prev.includes(normalized) ? prev : [normalized, ...prev].slice(0, 16),
     );
   }, [bannerUrl]);
 
   useEffect(() => {
+    if (CLIENT_PERSISTENCE_DISABLED) {
+      return;
+    }
+
     if (typeof window === "undefined") {
       return;
     }
@@ -2490,6 +3041,10 @@ export const SettingsModal = () => {
   }, [bannerHistoryStorageKey]);
 
   useEffect(() => {
+    if (CLIENT_PERSISTENCE_DISABLED) {
+      return;
+    }
+
     if (typeof window === "undefined") {
       return;
     }
@@ -2547,7 +3102,9 @@ export const SettingsModal = () => {
     setDateOfBirth("");
     setDateOfBirthDraft("");
     setProfileRole(data.profileRole ?? null);
-    setProfilePresenceStatus(normalizePresenceStatus(data.profilePresenceStatus));
+    setProfilePresenceStatus(
+      normalizePresenceStatus(data.profilePresenceStatus),
+    );
     setProfileCurrentGame(data.profileCurrentGame?.trim() || null);
     setProfileNameError(null);
     setProfileNameSuccess(null);
@@ -2555,7 +3112,14 @@ export const SettingsModal = () => {
     setCommentStatus(null);
     setPhoneNumberStatus(null);
     setDateOfBirthStatus(null);
-  }, [data.profileCurrentGame, data.profileName, data.profilePresenceStatus, data.profileRealName, data.profileRole, isModalOpen]);
+  }, [
+    data.profileCurrentGame,
+    data.profileName,
+    data.profilePresenceStatus,
+    data.profileRealName,
+    data.profileRole,
+    isModalOpen,
+  ]);
 
   useEffect(() => {
     setResolvedProfileId(data.profileId ?? null);
@@ -2606,48 +3170,92 @@ export const SettingsModal = () => {
         }
 
         const mentions = response.data?.mentionsEnabled !== false;
-        const hydratedContentSocial = normalizeContentSocialPreferences(response.data?.contentSocial);
-        const hydratedDataPrivacy = normalizeDataPrivacyPreferences(response.data?.dataPrivacy);
-        const hydratedActivityPrivacy = normalizeActivityPrivacyPreferences(response.data?.activityPrivacy);
-        const hydratedRegisteredGames = normalizeRegisteredGamesPreferences(response.data?.registeredGames);
-        const hydratedNotifications = normalizeNotificationPreferences(response.data?.notifications);
-        const hydratedTextImages = normalizeTextImagesPreferences(response.data?.textImages);
-        const hydratedAccessibility = normalizeAccessibilityPreferences(response.data?.accessibility);
+        const hydratedContentSocial = normalizeContentSocialPreferences(
+          response.data?.contentSocial,
+        );
+        const hydratedDataPrivacy = normalizeDataPrivacyPreferences(
+          response.data?.dataPrivacy,
+        );
+        const hydratedActivityPrivacy = normalizeActivityPrivacyPreferences(
+          response.data?.activityPrivacy,
+        );
+        const hydratedRegisteredGames = normalizeRegisteredGamesPreferences(
+          response.data?.registeredGames,
+        );
+        const hydratedNotifications = normalizeNotificationPreferences(
+          response.data?.notifications,
+        );
+        const hydratedTextImages = normalizeTextImagesPreferences(
+          response.data?.textImages,
+        );
+        const hydratedAccessibility = normalizeAccessibilityPreferences(
+          response.data?.accessibility,
+        );
         const hydratedEmoji = normalizeEmojiPreferences(response.data?.emoji);
-        const hydratedStickers = normalizeStickerPreferences(response.data?.stickers);
-        const hydratedKeybinds = normalizeKeybindPreferences(response.data?.keybinds);
-        const hydratedAdvanced = normalizeAdvancedPreferences(response.data?.advanced);
-        const hydratedStreamerMode = normalizeStreamerModePreferences(response.data?.streamerMode);
-        const hydratedGameOverlay = normalizeGameOverlayPreferences(response.data?.gameOverlay);
-        const hydratedBotGhost = normalizeBotGhostIntegration(response.data?.botGhost);
-        const hydratedFamilyCenter = normalizeFamilyCenterPreferences(response.data?.familyCenter);
-        const hydratedBusinessCenter = normalizeBusinessCenterPreferences(response.data?.businessCenter);
-        const hydratedSchoolCenter = normalizeFamilyCenterPreferences(response.data?.schoolCenter);
+        const hydratedStickers = normalizeStickerPreferences(
+          response.data?.stickers,
+        );
+        const hydratedKeybinds = normalizeKeybindPreferences(
+          response.data?.keybinds,
+        );
+        const hydratedAdvanced = normalizeAdvancedPreferences(
+          response.data?.advanced,
+        );
+        const hydratedStreamerMode = normalizeStreamerModePreferences(
+          response.data?.streamerMode,
+        );
+        const hydratedGameOverlay = normalizeGameOverlayPreferences(
+          response.data?.gameOverlay,
+        );
+        const hydratedBotGhost = normalizeBotGhostIntegration(
+          response.data?.botGhost,
+        );
+        const hydratedFamilyCenter = normalizeFamilyCenterPreferences(
+          response.data?.familyCenter,
+        );
+        const hydratedBusinessCenter = normalizeBusinessCenterPreferences(
+          response.data?.businessCenter,
+        );
+        const hydratedSchoolCenter = normalizeFamilyCenterPreferences(
+          response.data?.schoolCenter,
+        );
         const language =
           typeof response.data?.languagePreference === "string" &&
-          languageOptions.some((option) => option.value === response.data.languagePreference)
+          languageOptions.some(
+            (option) => option.value === response.data.languagePreference,
+          )
             ? response.data.languagePreference
             : "system";
-        const css = typeof response.data?.customCss === "string" ? response.data.customCss : "";
+        const css =
+          typeof response.data?.customCss === "string"
+            ? response.data.customCss
+            : "";
         const linked = Array.isArray(response.data?.connectedAccounts)
           ? response.data.connectedAccounts
               .filter((value): value is string => typeof value === "string")
               .map((value) => value.trim().toLowerCase())
-              .filter((value) => connectionProviders.some((provider) => provider.key === value))
+              .filter((value) =>
+                connectionProviders.some((provider) => provider.key === value),
+              )
           : [];
         const plugins = Array.isArray(response.data?.downloadedPlugins)
           ? response.data.downloadedPlugins.filter(
-              (value): value is string => typeof value === "string" && value.trim().length > 0
+              (value): value is string =>
+                typeof value === "string" && value.trim().length > 0,
             )
           : [];
-        const persistedBannerUploads = Array.isArray(response.data?.bannerUploads)
+        const persistedBannerUploads = Array.isArray(
+          response.data?.bannerUploads,
+        )
           ? response.data.bannerUploads
               .filter((value): value is string => typeof value === "string")
               .map((value) => value.trim())
               .filter((value) => value.length > 0)
               .slice(0, 16)
           : [];
-        const persistedAvatarUploads = Array.isArray(response.data?.avatarUploads)
+        const persistedAvatarUploads = Array.isArray(
+          response.data?.avatarUploads,
+        )
           ? response.data.avatarUploads
               .filter((value): value is string => typeof value === "string")
               .map((value) => value.trim())
@@ -2695,8 +3303,15 @@ export const SettingsModal = () => {
         setFamilyCenterSnapshot(hydratedFamilyCenter);
         setBusinessCenterSnapshot(hydratedBusinessCenter);
         setSchoolCenterSnapshot(hydratedSchoolCenter);
-        setFamilyDesignationInput(normalizeCenterDesignationInput(hydratedFamilyCenter.familyDesignation, false));
-        setFamilyApplicationStatus(hydratedFamilyCenter.familyApplicationStatus || null);
+        setFamilyDesignationInput(
+          normalizeCenterDesignationInput(
+            hydratedFamilyCenter.familyDesignation,
+            false,
+          ),
+        );
+        setFamilyApplicationStatus(
+          hydratedFamilyCenter.familyApplicationStatus || null,
+        );
         setFamilyCenterStatus(null);
         setLanguagePreference(language);
         setLanguagePreferenceStatus(null);
@@ -2707,14 +3322,16 @@ export const SettingsModal = () => {
         setOtherApps(
           Array.isArray(response.data?.OtherApps)
             ? (response.data.OtherApps as OtherAppConfig[])
-            : []
+            : [],
         );
         setOtherBots(
           Array.isArray(response.data?.OtherBots)
             ? (response.data.OtherBots as OtherBotConfig[])
-            : []
+            : [],
         );
-        setOtherBotAutoImportOnSave(response.data?.OtherBotAutoImportOnSave !== false);
+        setOtherBotAutoImportOnSave(
+          response.data?.OtherBotAutoImportOnSave !== false,
+        );
         setBotGhostIntegration(hydratedBotGhost);
         setOtherConfigsStatus(null);
         setCustomCss(css);
@@ -2759,7 +3376,9 @@ export const SettingsModal = () => {
         setAccessibilityStatus(null);
         setEmojiPreferences({ ...defaultEmojiPreferences });
         setEmojiUploadDraftUrl("");
-        setEmojiFavoritesInput(defaultEmojiPreferences.favoriteEmojis.join(" "));
+        setEmojiFavoritesInput(
+          defaultEmojiPreferences.favoriteEmojis.join(" "),
+        );
         setEmojiStatus(null);
         setStickerPreferences({ ...defaultStickerPreferences });
         setStickerUploadDraftUrl("");
@@ -2773,7 +3392,9 @@ export const SettingsModal = () => {
         setStreamerModeStatus(null);
         setGameOverlayPreferences({ ...defaultGameOverlayPreferences });
         setGameOverlayStatus(null);
-        applyAccessibilityPreferencesToDocument(defaultAccessibilityPreferences);
+        applyAccessibilityPreferencesToDocument(
+          defaultAccessibilityPreferences,
+        );
         setFamilyCenterPreferences({ ...defaultFamilyCenterPreferences });
         setFamilyCenterSnapshot({ ...defaultFamilyCenterPreferences });
         setBusinessCenterSnapshot({ ...defaultFamilyCenterPreferences });
@@ -2805,7 +3426,9 @@ export const SettingsModal = () => {
 
   const loadAuthenticatorAppStatus = useCallback(async () => {
     try {
-      const response = await axios.get<AuthenticatorAppStatus>("/api/profile/authenticator-app");
+      const response = await axios.get<AuthenticatorAppStatus>(
+        "/api/profile/authenticator-app",
+      );
       setAuthenticatorAppStatus({
         enabled: response.data?.enabled === true,
         hasPendingSetup: response.data?.hasPendingSetup === true,
@@ -2830,10 +3453,17 @@ export const SettingsModal = () => {
       return;
     }
 
-    if (authenticatorAppStatus.hasPendingSetup && !authenticatorAppStatus.enabled) {
+    if (
+      authenticatorAppStatus.hasPendingSetup &&
+      !authenticatorAppStatus.enabled
+    ) {
       setIsAuthenticatorAppModalOpen(true);
     }
-  }, [authenticatorAppStatus.enabled, authenticatorAppStatus.hasPendingSetup, isModalOpen]);
+  }, [
+    authenticatorAppStatus.enabled,
+    authenticatorAppStatus.hasPendingSetup,
+    isModalOpen,
+  ]);
 
   useEffect(() => {
     if (!isModalOpen) {
@@ -2841,7 +3471,7 @@ export const SettingsModal = () => {
     }
 
     const requestedSection = normalizeSettingsSection(
-      data.query?.settingsSection ?? data.query?.section
+      data.query?.settingsSection ?? data.query?.section,
     );
 
     if (!requestedSection) {
@@ -2871,7 +3501,7 @@ export const SettingsModal = () => {
         detail: {
           mentionsEnabled: next,
         },
-      })
+      }),
     );
   };
 
@@ -2885,9 +3515,12 @@ export const SettingsModal = () => {
       });
 
       const selectedLabel =
-        languageOptions.find((option) => option.value === languagePreference)?.label ?? "System Default";
+        languageOptions.find((option) => option.value === languagePreference)
+          ?.label ?? "System Default";
 
-      setLanguagePreferenceStatus(`Language preference saved: ${selectedLabel}.`);
+      setLanguagePreferenceStatus(
+        `Language preference saved: ${selectedLabel}.`,
+      );
     } catch {
       setLanguagePreferenceStatus("Could not save language preference.");
     } finally {
@@ -2911,11 +3544,14 @@ export const SettingsModal = () => {
       setAuthenticatorSetupUri(String(response.data?.otpauthUri ?? "").trim());
       setAuthenticatorCodeInput("");
       setIsAuthenticatorAppModalOpen(true);
-      setAuthenticatorAppMessage("Authenticator setup started. Add the key to your app, then verify with a 6-digit code.");
+      setAuthenticatorAppMessage(
+        "Authenticator setup started. Add the key to your app, then verify with a 6-digit code.",
+      );
       await loadAuthenticatorAppStatus();
     } catch (error) {
       const message =
-        axios.isAxiosError(error) && typeof error.response?.data?.error === "string"
+        axios.isAxiosError(error) &&
+        typeof error.response?.data?.error === "string"
           ? error.response?.data?.error
           : "Could not start authenticator setup.";
       setAuthenticatorAppMessage(message);
@@ -2929,10 +3565,13 @@ export const SettingsModal = () => {
       setIsAuthenticatorAppBusy(true);
       setAuthenticatorAppMessage(null);
 
-      const response = await axios.post<AuthenticatorAppStatus>("/api/profile/authenticator-app", {
-        action: "verify",
-        code: authenticatorCodeInput,
-      });
+      const response = await axios.post<AuthenticatorAppStatus>(
+        "/api/profile/authenticator-app",
+        {
+          action: "verify",
+          code: authenticatorCodeInput,
+        },
+      );
 
       setAuthenticatorAppStatus({
         enabled: response.data?.enabled === true,
@@ -2946,7 +3585,8 @@ export const SettingsModal = () => {
       setAuthenticatorAppMessage("Authenticator app enabled.");
     } catch (error) {
       const message =
-        axios.isAxiosError(error) && typeof error.response?.data?.error === "string"
+        axios.isAxiosError(error) &&
+        typeof error.response?.data?.error === "string"
           ? error.response?.data?.error
           : "Could not verify authenticator code.";
       setAuthenticatorAppMessage(message);
@@ -2960,11 +3600,14 @@ export const SettingsModal = () => {
       setIsAuthenticatorAppBusy(true);
       setAuthenticatorAppMessage(null);
 
-      const response = await axios.delete<AuthenticatorAppStatus>("/api/profile/authenticator-app", {
-        data: {
-          code: authenticatorCodeInput,
+      const response = await axios.delete<AuthenticatorAppStatus>(
+        "/api/profile/authenticator-app",
+        {
+          data: {
+            code: authenticatorCodeInput,
+          },
         },
-      });
+      );
 
       setAuthenticatorAppStatus({
         enabled: response.data?.enabled === true,
@@ -2978,7 +3621,8 @@ export const SettingsModal = () => {
       setAuthenticatorAppMessage("Authenticator app disabled.");
     } catch (error) {
       const message =
-        axios.isAxiosError(error) && typeof error.response?.data?.error === "string"
+        axios.isAxiosError(error) &&
+        typeof error.response?.data?.error === "string"
           ? error.response?.data?.error
           : "Could not disable authenticator app.";
       setAuthenticatorAppMessage(message);
@@ -3017,7 +3661,10 @@ export const SettingsModal = () => {
 
   const decodeBase64UrlToUint8Array = (value: string) => {
     const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
-    const padding = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4));
+    const padding =
+      normalized.length % 4 === 0
+        ? ""
+        : "=".repeat(4 - (normalized.length % 4));
     const binary = window.atob(`${normalized}${padding}`);
     const bytes = new Uint8Array(binary.length);
     for (let index = 0; index < binary.length; index += 1) {
@@ -3042,14 +3689,19 @@ export const SettingsModal = () => {
 
   const loadSecurityKeys = useCallback(async () => {
     try {
-      const response = await axios.get<{ keys?: SecurityKeyItem[] }>("/api/profile/security-keys");
+      const response = await axios.get<{ keys?: SecurityKeyItem[] }>(
+        "/api/profile/security-keys",
+      );
       const nextKeys = Array.isArray(response.data?.keys)
         ? response.data.keys.map((item, index) => ({
             id: String(item.id ?? "").trim(),
             credentialId: String(item.credentialId ?? "").trim(),
-            nickname: String(item.nickname ?? "").trim() || `Security Key ${index + 1}`,
+            nickname:
+              String(item.nickname ?? "").trim() || `Security Key ${index + 1}`,
             transports: Array.isArray(item.transports)
-              ? item.transports.filter((entry): entry is string => typeof entry === "string")
+              ? item.transports.filter(
+                  (entry): entry is string => typeof entry === "string",
+                )
               : [],
             createdAt: String(item.createdAt ?? "").trim(),
             lastUsedAt: item.lastUsedAt ? String(item.lastUsedAt) : null,
@@ -3070,12 +3722,16 @@ export const SettingsModal = () => {
 
   const onRegisterSecurityKey = async () => {
     if (typeof window === "undefined" || typeof navigator === "undefined") {
-      setSecurityKeyMessage("Security key registration is unavailable in this environment.");
+      setSecurityKeyMessage(
+        "Security key registration is unavailable in this environment.",
+      );
       return;
     }
 
     if (!window.isSecureContext || !window.PublicKeyCredential) {
-      setSecurityKeyMessage("Security keys require a secure context and browser WebAuthn support.");
+      setSecurityKeyMessage(
+        "Security keys require a secure context and browser WebAuthn support.",
+      );
       return;
     }
 
@@ -3090,7 +3746,11 @@ export const SettingsModal = () => {
         pubKeyCredParams: Array<{ type: "public-key"; alg: number }>;
         timeout: number;
         attestation: "none";
-        excludeCredentials: Array<{ type: "public-key"; id: string; transports: string[] }>;
+        excludeCredentials: Array<{
+          type: "public-key";
+          id: string;
+          transports: string[];
+        }>;
       }>("/api/profile/security-keys", {
         action: "begin",
         origin: window.location.origin,
@@ -3120,7 +3780,7 @@ export const SettingsModal = () => {
                     transport === "nfc" ||
                     transport === "ble" ||
                     transport === "hybrid" ||
-                    transport === "internal"
+                    transport === "internal",
                 )
               : undefined,
           })),
@@ -3138,22 +3798,32 @@ export const SettingsModal = () => {
           ? response.getTransports()
           : [];
 
-      const finishResponse = await axios.post<{ keys?: SecurityKeyItem[] }>("/api/profile/security-keys", {
-        action: "finish",
-        credential: {
-          id: credential.id,
-          response: {
-            clientDataJSON: encodeArrayBufferToBase64Url(response.clientDataJSON),
-            transports,
+      const finishResponse = await axios.post<{ keys?: SecurityKeyItem[] }>(
+        "/api/profile/security-keys",
+        {
+          action: "finish",
+          credential: {
+            id: credential.id,
+            response: {
+              clientDataJSON: encodeArrayBufferToBase64Url(
+                response.clientDataJSON,
+              ),
+              transports,
+            },
           },
         },
-      });
+      );
 
-      setSecurityKeys(Array.isArray(finishResponse.data?.keys) ? finishResponse.data.keys : []);
+      setSecurityKeys(
+        Array.isArray(finishResponse.data?.keys)
+          ? finishResponse.data.keys
+          : [],
+      );
       setSecurityKeyMessage("Security key registered.");
     } catch (error) {
       const message =
-        axios.isAxiosError(error) && typeof error.response?.data?.error === "string"
+        axios.isAxiosError(error) &&
+        typeof error.response?.data?.error === "string"
           ? error.response.data.error
           : "Could not register security key.";
       setSecurityKeyMessage(message);
@@ -3167,12 +3837,17 @@ export const SettingsModal = () => {
       setIsSecurityKeyBusy(true);
       setSecurityKeyMessage(null);
 
-      const response = await axios.delete<{ keys?: SecurityKeyItem[] }>(`/api/profile/security-keys/${securityKeyId}`);
-      setSecurityKeys(Array.isArray(response.data?.keys) ? response.data.keys : []);
+      const response = await axios.delete<{ keys?: SecurityKeyItem[] }>(
+        `/api/profile/security-keys/${securityKeyId}`,
+      );
+      setSecurityKeys(
+        Array.isArray(response.data?.keys) ? response.data.keys : [],
+      );
       setSecurityKeyMessage("Security key removed.");
     } catch (error) {
       const message =
-        axios.isAxiosError(error) && typeof error.response?.data?.error === "string"
+        axios.isAxiosError(error) &&
+        typeof error.response?.data?.error === "string"
           ? error.response.data.error
           : "Could not remove security key.";
       setSecurityKeyMessage(message);
@@ -3217,10 +3892,13 @@ export const SettingsModal = () => {
       setIsSmsBusy(true);
       setSmsMessage(null);
 
-      const response = await axios.post<SmsAuthStatus>("/api/profile/sms-auth", {
-        action: "begin",
-        phoneNumber: smsPhoneInput,
-      });
+      const response = await axios.post<SmsAuthStatus>(
+        "/api/profile/sms-auth",
+        {
+          action: "begin",
+          phoneNumber: smsPhoneInput,
+        },
+      );
 
       setSmsAuthStatus({
         enabled: response.data?.enabled === true,
@@ -3233,7 +3911,8 @@ export const SettingsModal = () => {
       setSmsMessage("Verification code sent.");
     } catch (error) {
       const message =
-        axios.isAxiosError(error) && typeof error.response?.data?.error === "string"
+        axios.isAxiosError(error) &&
+        typeof error.response?.data?.error === "string"
           ? error.response.data.error
           : "Could not send SMS verification code.";
       setSmsMessage(message);
@@ -3247,10 +3926,13 @@ export const SettingsModal = () => {
       setIsSmsBusy(true);
       setSmsMessage(null);
 
-      const response = await axios.post<SmsAuthStatus>("/api/profile/sms-auth", {
-        action: "verify",
-        code: smsCodeInput,
-      });
+      const response = await axios.post<SmsAuthStatus>(
+        "/api/profile/sms-auth",
+        {
+          action: "verify",
+          code: smsCodeInput,
+        },
+      );
 
       setSmsAuthStatus({
         enabled: response.data?.enabled === true,
@@ -3264,7 +3946,8 @@ export const SettingsModal = () => {
       setSmsMessage("SMS verification enabled.");
     } catch (error) {
       const message =
-        axios.isAxiosError(error) && typeof error.response?.data?.error === "string"
+        axios.isAxiosError(error) &&
+        typeof error.response?.data?.error === "string"
           ? error.response.data.error
           : "Could not verify SMS code.";
       setSmsMessage(message);
@@ -3278,7 +3961,9 @@ export const SettingsModal = () => {
       setIsSmsBusy(true);
       setSmsMessage(null);
 
-      const response = await axios.delete<SmsAuthStatus>("/api/profile/sms-auth");
+      const response = await axios.delete<SmsAuthStatus>(
+        "/api/profile/sms-auth",
+      );
       setSmsAuthStatus({
         enabled: response.data?.enabled === true,
         hasPendingVerification: response.data?.hasPendingVerification === true,
@@ -3290,7 +3975,8 @@ export const SettingsModal = () => {
       setSmsMessage("SMS verification disabled.");
     } catch (error) {
       const message =
-        axios.isAxiosError(error) && typeof error.response?.data?.error === "string"
+        axios.isAxiosError(error) &&
+        typeof error.response?.data?.error === "string"
           ? error.response.data.error
           : "Could not disable SMS verification.";
       setSmsMessage(message);
@@ -3338,7 +4024,9 @@ export const SettingsModal = () => {
       setIsSavingActivityPrivacyPreferences(true);
       setActivityPrivacyStatus(null);
 
-      const nextPreferences = normalizeActivityPrivacyPreferences(activityPrivacyPreferences);
+      const nextPreferences = normalizeActivityPrivacyPreferences(
+        activityPrivacyPreferences,
+      );
 
       await axios.patch("/api/profile/preferences", {
         activityPrivacy: nextPreferences,
@@ -3351,7 +4039,7 @@ export const SettingsModal = () => {
           detail: {
             activityPrivacy: nextPreferences,
           },
-        })
+        }),
       );
 
       setActivityPrivacyStatus("Activity Privacy preferences saved.");
@@ -3367,7 +4055,9 @@ export const SettingsModal = () => {
       setIsSavingRegisteredGamesPreferences(true);
       setRegisteredGamesStatus(null);
 
-      const nextPreferences = normalizeRegisteredGamesPreferences(registeredGamesPreferences);
+      const nextPreferences = normalizeRegisteredGamesPreferences(
+        registeredGamesPreferences,
+      );
 
       await axios.patch("/api/profile/preferences", {
         registeredGames: nextPreferences,
@@ -3380,7 +4070,7 @@ export const SettingsModal = () => {
           detail: {
             registeredGames: nextPreferences,
           },
-        })
+        }),
       );
 
       setRegisteredGamesStatus("Registered Games preferences saved.");
@@ -3402,8 +4092,13 @@ export const SettingsModal = () => {
     const shortDescription = manualGameDescriptionInput.trim().slice(0, 280);
     const thumbnailRaw = manualGameThumbnailInput.trim().slice(0, 2048);
     const thumbnailUrl =
-      /^https?:\/\//i.test(thumbnailRaw) || thumbnailRaw.startsWith("/") ? thumbnailRaw : "";
-    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      /^https?:\/\//i.test(thumbnailRaw) || thumbnailRaw.startsWith("/")
+        ? thumbnailRaw
+        : "";
+    const slug = name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
     const id = `manual:${provider}:${slug || `game-${Date.now()}`}`;
 
     setRegisteredGamesPreferences((current) => {
@@ -3432,13 +4127,18 @@ export const SettingsModal = () => {
   };
 
   const onAddRunningAppRegisteredGame = () => {
-    const selected = runningApps.find((entry) => entry.id === selectedRunningAppId);
+    const selected = runningApps.find(
+      (entry) => entry.id === selectedRunningAppId,
+    );
     if (!selected) {
       setRegisteredGamesStatus("No running app selected.");
       return;
     }
 
-    const preferredName = selected.windowTitle.trim() || selected.label.trim() || selected.processName.trim();
+    const preferredName =
+      selected.windowTitle.trim() ||
+      selected.label.trim() ||
+      selected.processName.trim();
     const name = preferredName.slice(0, 120);
     if (!name) {
       setRegisteredGamesStatus("Selected app does not have a usable name.");
@@ -3446,7 +4146,12 @@ export const SettingsModal = () => {
     }
 
     const processName = selected.processName.trim().slice(0, 120);
-    const idSuffix = processName || name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const idSuffix =
+      processName ||
+      name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "");
     const id = `manual:running:${idSuffix || Date.now()}`;
 
     setRegisteredGamesPreferences((current) => ({
@@ -3469,7 +4174,9 @@ export const SettingsModal = () => {
     setManualGameNameInput(name);
     setManualGameProviderInput("running-app");
     setManualGameDescriptionInput(
-      processName ? `Running process detected: ${processName}` : "Running app detected"
+      processName
+        ? `Running process detected: ${processName}`
+        : "Running app detected",
     );
     setManualGameThumbnailInput("");
     setRegisteredGamesStatus(`Added running app: ${name}.`);
@@ -3489,7 +4196,7 @@ export const SettingsModal = () => {
           detail: {
             notifications: notificationPreferences,
           },
-        })
+        }),
       );
 
       setNotificationStatus("Notification preferences saved.");
@@ -3514,7 +4221,7 @@ export const SettingsModal = () => {
           detail: {
             textImages: textImagesPreferences,
           },
-        })
+        }),
       );
 
       setTextImagesStatus("Text & Images preferences saved.");
@@ -3539,7 +4246,7 @@ export const SettingsModal = () => {
           detail: {
             accessibility: accessibilityPreferences,
           },
-        })
+        }),
       );
 
       setAccessibilityStatus("Accessibility preferences saved.");
@@ -3561,13 +4268,15 @@ export const SettingsModal = () => {
             .split(/\s+/)
             .map((value) => value.trim())
             .filter((value) => value.length > 0)
-            .slice(0, 32)
-        )
+            .slice(0, 32),
+        ),
       );
 
       const nextPreferences: EmojiPreferences = {
         ...emojiPreferences,
-        favoriteEmojis: parsedFavorites.length ? parsedFavorites : [...defaultEmojiPreferences.favoriteEmojis],
+        favoriteEmojis: parsedFavorites.length
+          ? parsedFavorites
+          : [...defaultEmojiPreferences.favoriteEmojis],
       };
 
       await axios.patch("/api/profile/preferences", {
@@ -3583,7 +4292,7 @@ export const SettingsModal = () => {
           detail: {
             emoji: nextPreferences,
           },
-        })
+        }),
       );
 
       setEmojiStatus("Emoji preferences saved.");
@@ -3605,8 +4314,8 @@ export const SettingsModal = () => {
             .split(/[\n,\s]+/)
             .map((value) => value.trim())
             .filter((value) => value.length > 0)
-            .slice(0, 48)
-        )
+            .slice(0, 48),
+        ),
       );
 
       const nextPreferences: StickerPreferences = {
@@ -3627,7 +4336,7 @@ export const SettingsModal = () => {
           detail: {
             stickers: nextPreferences,
           },
-        })
+        }),
       );
 
       setStickerStatus("Sticker preferences saved.");
@@ -3656,7 +4365,7 @@ export const SettingsModal = () => {
           detail: {
             keybinds: nextPreferences,
           },
-        })
+        }),
       );
 
       setKeybindStatus("Keybind preferences saved.");
@@ -3685,7 +4394,7 @@ export const SettingsModal = () => {
           detail: {
             advanced: nextPreferences,
           },
-        })
+        }),
       );
 
       setAdvancedStatus("Advanced preferences saved.");
@@ -3701,7 +4410,9 @@ export const SettingsModal = () => {
       setIsSavingStreamerModePreferences(true);
       setStreamerModeStatus(null);
 
-      const nextPreferences = normalizeStreamerModePreferences(streamerModePreferences);
+      const nextPreferences = normalizeStreamerModePreferences(
+        streamerModePreferences,
+      );
 
       await axios.patch("/api/profile/preferences", {
         streamerMode: nextPreferences,
@@ -3714,7 +4425,7 @@ export const SettingsModal = () => {
           detail: {
             streamerMode: nextPreferences,
           },
-        })
+        }),
       );
 
       setStreamerModeStatus("Streamer Mode preferences saved.");
@@ -3730,7 +4441,9 @@ export const SettingsModal = () => {
       setIsSavingGameOverlayPreferences(true);
       setGameOverlayStatus(null);
 
-      const nextPreferences = normalizeGameOverlayPreferences(gameOverlayPreferences);
+      const nextPreferences = normalizeGameOverlayPreferences(
+        gameOverlayPreferences,
+      );
 
       await axios.patch("/api/profile/preferences", {
         gameOverlay: nextPreferences,
@@ -3743,7 +4456,7 @@ export const SettingsModal = () => {
           detail: {
             gameOverlay: nextPreferences,
           },
-        })
+        }),
       );
 
       setGameOverlayStatus("Game Overlay preferences saved.");
@@ -3757,7 +4470,7 @@ export const SettingsModal = () => {
   const onSaveFamilyCenterPreferences = async () => {
     if (!isFamilyCenterEditable) {
       setFamilyCenterStatus(
-        `Only ${centerLabel} or Administrator roles can edit ${centerLabel} Center settings.`
+        `Only ${centerLabel} or Administrator roles can edit ${centerLabel} Center settings.`,
       );
       return;
     }
@@ -3766,11 +4479,18 @@ export const SettingsModal = () => {
       setIsSavingFamilyCenterPreferences(true);
       setFamilyCenterStatus(null);
 
-      await axios.patch("/api/profile/preferences", isBusinessCenterSection
-        ? { businessCenter: mapFamilyCenterToBusinessCenterPayload(familyCenterPreferences) }
-        : isSchoolCenterSection
-          ? { schoolCenter: familyCenterPreferences }
-          : { familyCenter: familyCenterPreferences });
+      await axios.patch(
+        "/api/profile/preferences",
+        isBusinessCenterSection
+          ? {
+              businessCenter: mapFamilyCenterToBusinessCenterPayload(
+                familyCenterPreferences,
+              ),
+            }
+          : isSchoolCenterSection
+            ? { schoolCenter: familyCenterPreferences }
+            : { familyCenter: familyCenterPreferences },
+      );
 
       if (isBusinessCenterSection) {
         setBusinessCenterSnapshot(familyCenterPreferences);
@@ -3788,7 +4508,7 @@ export const SettingsModal = () => {
           ? "Could not save Business Center preferences."
           : isSchoolCenterSection
             ? "Could not save School Center preferences."
-            : "Could not save Family Center preferences."
+            : "Could not save Family Center preferences.",
       );
     } finally {
       setIsSavingFamilyCenterPreferences(false);
@@ -3798,7 +4518,7 @@ export const SettingsModal = () => {
   const onAddFamilyMember = async () => {
     if (!isFamilyCenterEditable) {
       setFamilyCenterStatus(
-        `Only ${centerLabel} or Administrator roles can edit ${centerLabel} Center settings.`
+        `Only ${centerLabel} or Administrator roles can edit ${centerLabel} Center settings.`,
       );
       return;
     }
@@ -3841,9 +4561,19 @@ export const SettingsModal = () => {
       return candidate;
     })();
 
-    if (!childName || !accountIdentifier || !childRelation || (isBusinessCenterSection && !childSection) || !childEmail || !childPassword || !childRepeatPassword || !childPhone || (requiresDateOfBirth && !childDateOfBirthRaw)) {
+    if (
+      !childName ||
+      !accountIdentifier ||
+      !childRelation ||
+      (isBusinessCenterSection && !childSection) ||
+      !childEmail ||
+      !childPassword ||
+      !childRepeatPassword ||
+      !childPhone ||
+      (requiresDateOfBirth && !childDateOfBirthRaw)
+    ) {
       setFamilyCenterStatus(
-        `${centerLabel} Name, Profile Name, ${isBusinessCenterSection ? "Business Role and Business Section" : `${centerLabel} Relation`}, Email, Password, Repeat Password, Phone${isBusinessCenterSection ? "" : ", and Date of Birth"} are required.`
+        `${centerLabel} Name, Profile Name, ${isBusinessCenterSection ? "Business Role and Business Section" : `${centerLabel} Relation`}, Email, Password, Repeat Password, Phone${isBusinessCenterSection ? "" : ", and Date of Birth"} are required.`,
       );
       return;
     }
@@ -3870,13 +4600,14 @@ export const SettingsModal = () => {
 
     const alreadyExists = familyCenterPreferences.familyMembers.some(
       (entry) =>
-        entry.accountIdentifier.toLowerCase() === accountIdentifier.toLowerCase() ||
-        entry.childEmail.toLowerCase() === childEmail.toLowerCase()
+        entry.accountIdentifier.toLowerCase() ===
+          accountIdentifier.toLowerCase() ||
+        entry.childEmail.toLowerCase() === childEmail.toLowerCase(),
     );
 
     if (alreadyExists) {
       setFamilyCenterStatus(
-        `That account or email is already listed in ${centerLabel} Members.`
+        `That account or email is already listed in ${centerLabel} Members.`,
       );
       return;
     }
@@ -3888,66 +4619,79 @@ export const SettingsModal = () => {
         ok: boolean;
         memberUserId: string;
         lifecycle: FamilyMemberLifecycle;
-      }>(isBusinessCenterSection ? "/api/business-center/members" : isSchoolCenterSection ? "/api/school-center/members" : "/api/family-center/members", {
-        childName,
-        childRelation,
-        childSection: isBusinessCenterSection ? childSection : "",
-        accountIdentifier,
-        childEmail,
-        childPassword,
-        childPhone,
-        childDateOfBirth: normalizedChildDateOfBirth,
-      });
+      }>(
+        isBusinessCenterSection
+          ? "/api/business-center/members"
+          : isSchoolCenterSection
+            ? "/api/school-center/members"
+            : "/api/family-center/members",
+        {
+          childName,
+          childRelation,
+          childSection: isBusinessCenterSection ? childSection : "",
+          accountIdentifier,
+          childEmail,
+          childPassword,
+          childPhone,
+          childDateOfBirth: normalizedChildDateOfBirth,
+        },
+      );
 
       const nextMember: FamilyCenterMemberAccount = {
-      id: `family-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      childName: childName.slice(0, 60),
-      accountIdentifier: accountIdentifier.slice(0, 160),
-      childRelation,
-      childSection: isBusinessCenterSection ? childSection : "",
-      childEmail: childEmail.slice(0, 160),
-      childPassword: childPassword.slice(0, 128),
-      childPhone: childPhone.slice(0, 32),
-      childDateOfBirth: normalizedChildDateOfBirth ?? "",
-      linkedUserId: response.data.memberUserId,
-      familyLinkState: response.data.lifecycle.state,
-      createdAt: new Date().toISOString(),
-      requireContentFilterForFamilyMembers: familyCenterPreferences.requireContentFilterForFamilyMembers,
-      shareWeeklySafetySummary: familyCenterPreferences.shareWeeklySafetySummary,
-      allowDirectMessagesFromNonFriends: familyCenterPreferences.allowDirectMessagesFromNonFriends,
-      alertOnMatureContentInteractions: familyCenterPreferences.alertOnMatureContentInteractions,
-    };
+        id: `family-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        childName: childName.slice(0, 60),
+        accountIdentifier: accountIdentifier.slice(0, 160),
+        childRelation,
+        childSection: isBusinessCenterSection ? childSection : "",
+        childEmail: childEmail.slice(0, 160),
+        childPassword: childPassword.slice(0, 128),
+        childPhone: childPhone.slice(0, 32),
+        childDateOfBirth: normalizedChildDateOfBirth ?? "",
+        linkedUserId: response.data.memberUserId,
+        familyLinkState: response.data.lifecycle.state,
+        createdAt: new Date().toISOString(),
+        requireContentFilterForFamilyMembers:
+          familyCenterPreferences.requireContentFilterForFamilyMembers,
+        shareWeeklySafetySummary:
+          familyCenterPreferences.shareWeeklySafetySummary,
+        allowDirectMessagesFromNonFriends:
+          familyCenterPreferences.allowDirectMessagesFromNonFriends,
+        alertOnMatureContentInteractions:
+          familyCenterPreferences.alertOnMatureContentInteractions,
+      };
 
-    setFamilyCenterPreferences((current) => ({
-      ...current,
-      familyMembers: [...current.familyMembers, nextMember],
-    }));
+      setFamilyCenterPreferences((current) => ({
+        ...current,
+        familyMembers: [...current.familyMembers, nextMember],
+      }));
       setFamilyMemberLifecycleByUserId((current) => ({
         ...current,
         [response.data.memberUserId]: response.data.lifecycle,
       }));
-    setSelectedFamilyMemberId(nextMember.id);
-    setFamilyMemberNameInput("");
-    setFamilyMemberAccountInput("");
-    setFamilyMemberRelationInput("");
-    setFamilyMemberSectionInput("");
-    setFamilyMemberEmailInput("");
-    setFamilyMemberPasswordInput("");
-    setFamilyMemberRepeatPasswordInput("");
-    setFamilyMemberPhoneInput("");
-    setFamilyMemberDateOfBirthInput("");
+      setSelectedFamilyMemberId(nextMember.id);
+      setFamilyMemberNameInput("");
+      setFamilyMemberAccountInput("");
+      setFamilyMemberRelationInput("");
+      setFamilyMemberSectionInput("");
+      setFamilyMemberEmailInput("");
+      setFamilyMemberPasswordInput("");
+      setFamilyMemberRepeatPasswordInput("");
+      setFamilyMemberPhoneInput("");
+      setFamilyMemberDateOfBirthInput("");
       setFamilyCenterStatus(
-        `${centerLabel} account added and real user account created. Click Save Changes to persist.`
+        `${centerLabel} account added and real user account created. Click Save Changes to persist.`,
       );
     } catch (error) {
       const message = axios.isAxiosError(error)
-        ? (error.response?.data as { error?: string } | undefined)?.error || error.response?.data || error.message
+        ? (error.response?.data as { error?: string } | undefined)?.error ||
+          error.response?.data ||
+          error.message
         : `Could not create the ${centerLabelLower} member account.`;
 
       setFamilyCenterStatus(
         typeof message === "string"
           ? message
-          : `Could not create the ${centerLabelLower} member account.`
+          : `Could not create the ${centerLabelLower} member account.`,
       );
     } finally {
       setIsCreatingFamilyMemberAccount(false);
@@ -3957,13 +4701,15 @@ export const SettingsModal = () => {
   const onRemoveFamilyMember = (memberId: string) => {
     if (!isFamilyCenterEditable) {
       setFamilyCenterStatus(
-        `Only ${centerLabel} or Administrator roles can edit ${centerLabel} Center settings.`
+        `Only ${centerLabel} or Administrator roles can edit ${centerLabel} Center settings.`,
       );
       return;
     }
 
     setFamilyCenterPreferences((current) => {
-      const target = current.familyMembers.find((entry) => entry.id === memberId);
+      const target = current.familyMembers.find(
+        (entry) => entry.id === memberId,
+      );
       if (target?.linkedUserId) {
         setFamilyMemberLifecycleByUserId((existing) => {
           if (!existing[target.linkedUserId]) {
@@ -3978,11 +4724,13 @@ export const SettingsModal = () => {
 
       return {
         ...current,
-        familyMembers: current.familyMembers.filter((entry) => entry.id !== memberId),
+        familyMembers: current.familyMembers.filter(
+          (entry) => entry.id !== memberId,
+        ),
       };
     });
     setFamilyCenterStatus(
-      `${centerLabel} account removed. Click Save Changes to persist.`
+      `${centerLabel} account removed. Click Save Changes to persist.`,
     );
   };
 
@@ -3992,24 +4740,36 @@ export const SettingsModal = () => {
     }
 
     if (!isFamilyCenterEditable) {
-      setFamilyCenterStatus("Only Business or Administrator roles can edit Business Center settings.");
+      setFamilyCenterStatus(
+        "Only Business or Administrator roles can edit Business Center settings.",
+      );
       return;
     }
 
-    const linkedUserId = String(resolvedProfileId ?? data.profileId ?? "").trim();
+    const linkedUserId = String(
+      resolvedProfileId ?? data.profileId ?? "",
+    ).trim();
     const fallbackProfileName =
       String(profileName || "").trim() ||
       String(realName || "").trim() ||
-      String(data.profileEmail || "").trim().split("@")[0] ||
+      String(data.profileEmail || "")
+        .trim()
+        .split("@")[0] ||
       linkedUserId ||
       "Business Member";
 
-    const alreadyExists = familyCenterPreferences.familyMembers.some((entry) => {
-      const sameLinked = linkedUserId && String(entry.linkedUserId ?? "").trim() === linkedUserId;
-      const sameIdentifier =
-        String(entry.accountIdentifier ?? "").trim().toLowerCase() === fallbackProfileName.toLowerCase();
-      return sameLinked || sameIdentifier;
-    });
+    const alreadyExists = familyCenterPreferences.familyMembers.some(
+      (entry) => {
+        const sameLinked =
+          linkedUserId &&
+          String(entry.linkedUserId ?? "").trim() === linkedUserId;
+        const sameIdentifier =
+          String(entry.accountIdentifier ?? "")
+            .trim()
+            .toLowerCase() === fallbackProfileName.toLowerCase();
+        return sameLinked || sameIdentifier;
+      },
+    );
 
     if (alreadyExists) {
       setFamilyCenterStatus("Your business member profile is already listed.");
@@ -4020,19 +4780,33 @@ export const SettingsModal = () => {
       id: `business-member-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       childName: fallbackProfileName.slice(0, 60),
       accountIdentifier: fallbackProfileName.slice(0, 160),
-      childRelation: String(familyDesignationInput ?? "").trim().slice(0, 80),
-      childSection: String(familyApplicationSectionInput ?? "").trim().slice(0, 80),
-      childEmail: String(data.profileEmail ?? "").trim().slice(0, 160),
+      childRelation: String(familyDesignationInput ?? "")
+        .trim()
+        .slice(0, 80),
+      childSection: String(familyApplicationSectionInput ?? "")
+        .trim()
+        .slice(0, 80),
+      childEmail: String(data.profileEmail ?? "")
+        .trim()
+        .slice(0, 160),
       childPassword: "",
-      childPhone: String(phoneNumber ?? "").trim().slice(0, 32),
-      childDateOfBirth: String(dateOfBirth ?? "").trim().slice(0, 10),
+      childPhone: String(phoneNumber ?? "")
+        .trim()
+        .slice(0, 32),
+      childDateOfBirth: String(dateOfBirth ?? "")
+        .trim()
+        .slice(0, 10),
       linkedUserId,
       familyLinkState: "normal",
       createdAt: new Date().toISOString(),
-      requireContentFilterForFamilyMembers: familyCenterPreferences.requireContentFilterForFamilyMembers,
-      shareWeeklySafetySummary: familyCenterPreferences.shareWeeklySafetySummary,
-      allowDirectMessagesFromNonFriends: familyCenterPreferences.allowDirectMessagesFromNonFriends,
-      alertOnMatureContentInteractions: familyCenterPreferences.alertOnMatureContentInteractions,
+      requireContentFilterForFamilyMembers:
+        familyCenterPreferences.requireContentFilterForFamilyMembers,
+      shareWeeklySafetySummary:
+        familyCenterPreferences.shareWeeklySafetySummary,
+      allowDirectMessagesFromNonFriends:
+        familyCenterPreferences.allowDirectMessagesFromNonFriends,
+      alertOnMatureContentInteractions:
+        familyCenterPreferences.alertOnMatureContentInteractions,
     };
 
     setFamilyCenterPreferences((current) => ({
@@ -4040,18 +4814,26 @@ export const SettingsModal = () => {
       familyMembers: [...current.familyMembers, nextMember],
     }));
     setSelectedFamilyMemberId(nextMember.id);
-    setFamilyCenterStatus("Business member added. Click Save Changes to persist.");
+    setFamilyCenterStatus(
+      "Business member added. Click Save Changes to persist.",
+    );
   };
 
-  const onConvertFamilyMemberToNormal = async (member: FamilyCenterMemberAccount) => {
+  const onConvertFamilyMemberToNormal = async (
+    member: FamilyCenterMemberAccount,
+  ) => {
     if (!member.linkedUserId) {
-      setFamilyCenterStatus("This family member is not linked to a real account.");
+      setFamilyCenterStatus(
+        "This family member is not linked to a real account.",
+      );
       return;
     }
 
     const lifecycle = familyMemberLifecycleByUserId[member.linkedUserId];
     if (!lifecycle?.canConvertToNormal) {
-      setFamilyCenterStatus("This account can be converted when the member is 16 or older.");
+      setFamilyCenterStatus(
+        "This account can be converted when the member is 16 or older.",
+      );
       return;
     }
 
@@ -4062,10 +4844,17 @@ export const SettingsModal = () => {
         ok: boolean;
         memberUserId: string;
         lifecycle: FamilyMemberLifecycle;
-      }>(isBusinessCenterSection ? "/api/business-center/members" : isSchoolCenterSection ? "/api/school-center/members" : "/api/family-center/members", {
-        action: "convert-to-normal",
-        memberUserId: member.linkedUserId,
-      });
+      }>(
+        isBusinessCenterSection
+          ? "/api/business-center/members"
+          : isSchoolCenterSection
+            ? "/api/school-center/members"
+            : "/api/family-center/members",
+        {
+          action: "convert-to-normal",
+          memberUserId: member.linkedUserId,
+        },
+      );
 
       setFamilyMemberLifecycleByUserId((current) => ({
         ...current,
@@ -4080,19 +4869,23 @@ export const SettingsModal = () => {
                 ...entry,
                 familyLinkState: response.data.lifecycle.state,
               }
-            : entry
+            : entry,
         ),
       }));
 
-      setFamilyCenterStatus(`${centerLabel} account converted to normal account.`);
+      setFamilyCenterStatus(
+        `${centerLabel} account converted to normal account.`,
+      );
     } catch (error) {
       const message = axios.isAxiosError(error)
-        ? (error.response?.data as { error?: string } | undefined)?.error || error.response?.data || error.message
+        ? (error.response?.data as { error?: string } | undefined)?.error ||
+          error.response?.data ||
+          error.message
         : `Could not convert the ${centerLabelLower} account.`;
       setFamilyCenterStatus(
         typeof message === "string"
           ? message
-          : `Could not convert the ${centerLabelLower} account.`
+          : `Could not convert the ${centerLabelLower} account.`,
       );
     } finally {
       setIsConvertingFamilyMemberUserId(null);
@@ -4105,7 +4898,7 @@ export const SettingsModal = () => {
         .map((member) => member.linkedUserId)
         .filter((value) => value.trim().length > 0)
         .join(","),
-    [familyCenterPreferences.familyMembers]
+    [familyCenterPreferences.familyMembers],
   );
 
   useEffect(() => {
@@ -4126,18 +4919,29 @@ export const SettingsModal = () => {
 
     const hydrateLifecycle = async () => {
       try {
-        const response = await axios.get<{ members?: FamilyMemberLifecycle[] }>(isBusinessCenterSection ? "/api/business-center/members" : isSchoolCenterSection ? "/api/school-center/members" : "/api/family-center/members", {
-          params: {
-            ids: linkedUserIds.join(","),
+        const response = await axios.get<{ members?: FamilyMemberLifecycle[] }>(
+          isBusinessCenterSection
+            ? "/api/business-center/members"
+            : isSchoolCenterSection
+              ? "/api/school-center/members"
+              : "/api/family-center/members",
+          {
+            params: {
+              ids: linkedUserIds.join(","),
+            },
           },
-        });
+        );
 
         if (cancelled) {
           return;
         }
 
         const members = Array.isArray(response.data?.members)
-          ? response.data.members.filter((entry) => typeof entry.memberUserId === "string" && entry.memberUserId.trim().length > 0)
+          ? response.data.members.filter(
+              (entry) =>
+                typeof entry.memberUserId === "string" &&
+                entry.memberUserId.trim().length > 0,
+            )
           : [];
 
         setFamilyMemberLifecycleByUserId(() => {
@@ -4156,7 +4960,9 @@ export const SettingsModal = () => {
               return member;
             }
 
-            const entry = members.find((value) => value.memberUserId === member.linkedUserId);
+            const entry = members.find(
+              (value) => value.memberUserId === member.linkedUserId,
+            );
             if (!entry || entry.state === member.familyLinkState) {
               return member;
             }
@@ -4187,7 +4993,12 @@ export const SettingsModal = () => {
     return () => {
       cancelled = true;
     };
-  }, [isBusinessCenterSection, isModalOpen, isSchoolCenterSection, linkedFamilyMemberUserIds]);
+  }, [
+    isBusinessCenterSection,
+    isModalOpen,
+    isSchoolCenterSection,
+    linkedFamilyMemberUserIds,
+  ]);
 
   useEffect(() => {
     const members = familyCenterPreferences.familyMembers;
@@ -4199,7 +5010,9 @@ export const SettingsModal = () => {
       return;
     }
 
-    const exists = members.some((member) => member.id === selectedFamilyMemberId);
+    const exists = members.some(
+      (member) => member.id === selectedFamilyMemberId,
+    );
     if (!exists) {
       setSelectedFamilyMemberId(members[0]?.id ?? "");
     }
@@ -4207,7 +5020,9 @@ export const SettingsModal = () => {
 
   const selectedFamilyMember = useMemo(() => {
     return (
-      familyCenterPreferences.familyMembers.find((member) => member.id === selectedFamilyMemberId) ?? null
+      familyCenterPreferences.familyMembers.find(
+        (member) => member.id === selectedFamilyMemberId,
+      ) ?? null
     );
   }, [familyCenterPreferences.familyMembers, selectedFamilyMemberId]);
 
@@ -4216,11 +5031,11 @@ export const SettingsModal = () => {
       | "requireContentFilterForFamilyMembers"
       | "shareWeeklySafetySummary"
       | "allowDirectMessagesFromNonFriends"
-      | "alertOnMatureContentInteractions"
+      | "alertOnMatureContentInteractions",
   ) => {
     if (!isFamilyCenterEditable) {
       setFamilyCenterStatus(
-        `Only ${centerLabel} or Administrator roles can edit ${centerLabel} Center settings.`
+        `Only ${centerLabel} or Administrator roles can edit ${centerLabel} Center settings.`,
       );
       return;
     }
@@ -4249,7 +5064,7 @@ export const SettingsModal = () => {
   const onCopyDefaultsToSelectedChild = () => {
     if (!isFamilyCenterEditable) {
       setFamilyCenterStatus(
-        `Only ${centerLabel} or Administrator roles can edit ${centerLabel} Center settings.`
+        `Only ${centerLabel} or Administrator roles can edit ${centerLabel} Center settings.`,
       );
       return;
     }
@@ -4268,23 +5083,26 @@ export const SettingsModal = () => {
 
         return {
           ...member,
-          requireContentFilterForFamilyMembers: current.requireContentFilterForFamilyMembers,
+          requireContentFilterForFamilyMembers:
+            current.requireContentFilterForFamilyMembers,
           shareWeeklySafetySummary: current.shareWeeklySafetySummary,
-          allowDirectMessagesFromNonFriends: current.allowDirectMessagesFromNonFriends,
-          alertOnMatureContentInteractions: current.alertOnMatureContentInteractions,
+          allowDirectMessagesFromNonFriends:
+            current.allowDirectMessagesFromNonFriends,
+          alertOnMatureContentInteractions:
+            current.alertOnMatureContentInteractions,
         };
       }),
     }));
 
     setFamilyCenterStatus(
-      `Default ${centerLabel} Center controls copied to selected ${centerLabelLower} account. Click Save Changes to persist.`
+      `Default ${centerLabel} Center controls copied to selected ${centerLabelLower} account. Click Save Changes to persist.`,
     );
   };
 
   const onResetSelectedChildToAppDefaults = () => {
     if (!isFamilyCenterEditable) {
       setFamilyCenterStatus(
-        `Only ${centerLabel} or Administrator roles can edit ${centerLabel} Center settings.`
+        `Only ${centerLabel} or Administrator roles can edit ${centerLabel} Center settings.`,
       );
       return;
     }
@@ -4316,7 +5134,7 @@ export const SettingsModal = () => {
     }));
 
     setFamilyCenterStatus(
-      `Selected ${centerLabelLower} account controls reset to app defaults. Click Save Changes to persist.`
+      `Selected ${centerLabelLower} account controls reset to app defaults. Click Save Changes to persist.`,
     );
   };
 
@@ -4341,7 +5159,11 @@ export const SettingsModal = () => {
       return;
     }
 
-    const allowedMimeTypes = new Set(["image/jpeg", "image/png", "application/pdf"]);
+    const allowedMimeTypes = new Set([
+      "image/jpeg",
+      "image/png",
+      "application/pdf",
+    ]);
     const maxFileSizeBytes = 10 * 1024 * 1024;
     const accepted: File[] = [];
     const rejectedNames: string[] = [];
@@ -4366,7 +5188,7 @@ export const SettingsModal = () => {
             (existing) =>
               existing.name === candidate.name &&
               existing.size === candidate.size &&
-              existing.lastModified === candidate.lastModified
+              existing.lastModified === candidate.lastModified,
           );
 
           if (!exists) {
@@ -4380,10 +5202,12 @@ export const SettingsModal = () => {
 
     if (rejectedNames.length > 0) {
       setFamilyVerificationUploadStatus(
-        `Some files were skipped (${rejectedNames.join(", ")}). Only JPG, PNG, and PDF up to 10MB are allowed.`
+        `Some files were skipped (${rejectedNames.join(", ")}). Only JPG, PNG, and PDF up to 10MB are allowed.`,
       );
     } else {
-      setFamilyVerificationUploadStatus("Files attached. Upload area is now wired and ready for backend integration.");
+      setFamilyVerificationUploadStatus(
+        "Files attached. Upload area is now wired and ready for backend integration.",
+      );
     }
 
     if (familyVerificationFileInputRef.current) {
@@ -4392,14 +5216,16 @@ export const SettingsModal = () => {
   };
 
   const onRemoveFamilyVerificationFile = (index: number) => {
-    setFamilyVerificationFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
+    setFamilyVerificationFiles((current) =>
+      current.filter((_, fileIndex) => fileIndex !== index),
+    );
     setFamilyVerificationUploadStatus(null);
   };
 
   const onSubmitFamilyApplication = async () => {
     if (isFamilyApplicationApproved) {
       setFamilyVerificationUploadStatus(
-        `${centerLabel} account is already approved. Remove ${centerLabel} Account to apply again.`
+        `${centerLabel} account is already approved. Remove ${centerLabel} Account to apply again.`,
       );
       return;
     }
@@ -4408,28 +5234,34 @@ export const SettingsModal = () => {
       setFamilyVerificationUploadStatus(
         isBusinessCenterSection
           ? "Select a business role before submitting."
-          : "Select a family designation before submitting."
+          : "Select a family designation before submitting.",
       );
       return;
     }
 
     if (isBusinessCenterSection && !familyApplicationSectionInput) {
-      setFamilyVerificationUploadStatus("Select a business section before submitting.");
+      setFamilyVerificationUploadStatus(
+        "Select a business section before submitting.",
+      );
       return;
     }
 
     if (familyVerificationFiles.length === 0) {
-      setFamilyVerificationUploadStatus("Attach at least one verification file before submitting.");
+      setFamilyVerificationUploadStatus(
+        "Attach at least one verification file before submitting.",
+      );
       return;
     }
 
     try {
-      setFamilyVerificationUploadStatus("Preparing application PDF and uploading...");
+      setFamilyVerificationUploadStatus(
+        "Preparing application PDF and uploading...",
+      );
 
       const submitFormData = new FormData();
       submitFormData.append(
         isBusinessCenterSection ? "businessDesignation" : "familyDesignation",
-        familyDesignationInput
+        familyDesignationInput,
       );
       submitFormData.append("legalName", realName || "");
       submitFormData.append("profileName", profileName || "");
@@ -4452,9 +5284,9 @@ export const SettingsModal = () => {
             ? "/api/school-application/submit"
             : "/api/family-application/submit",
         {
-        method: "POST",
-        body: submitFormData,
-        }
+          method: "POST",
+          body: submitFormData,
+        },
       );
 
       if (!response.ok) {
@@ -4491,7 +5323,9 @@ export const SettingsModal = () => {
         setFamilyCenterSnapshot(nextCenter);
       }
       setFamilyApplicationStatus(nextCenter.familyApplicationStatus || null);
-      setFamilyCenterStatus(`${centerLabel} application submitted. Status has been added to the top bar.`);
+      setFamilyCenterStatus(
+        `${centerLabel} application submitted. Status has been added to the top bar.`,
+      );
       setFamilyVerificationUploadStatus("Application submitted successfully.");
       setFamilyVerificationFiles([]);
       if (isBusinessCenterSection) {
@@ -4499,8 +5333,13 @@ export const SettingsModal = () => {
       }
       setIsFamilyAccountVerificationPanelOpen(false);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not submit application. Please try again.";
-      setFamilyVerificationUploadStatus(sanitizeFamilyApplicationErrorMessage(message));
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Could not submit application. Please try again.";
+      setFamilyVerificationUploadStatus(
+        sanitizeFamilyApplicationErrorMessage(message),
+      );
     }
   };
 
@@ -4515,7 +5354,13 @@ export const SettingsModal = () => {
         familyCenter?: FamilyCenterPreferences;
         businessCenter?: unknown;
         schoolCenter?: unknown;
-      }>(isBusinessCenterSection ? "/api/business-application/remove" : isSchoolCenterSection ? "/api/school-application/remove" : "/api/family-application/remove");
+      }>(
+        isBusinessCenterSection
+          ? "/api/business-application/remove"
+          : isSchoolCenterSection
+            ? "/api/school-application/remove"
+            : "/api/family-application/remove",
+      );
 
       const nextCenter = isBusinessCenterSection
         ? normalizeBusinessCenterPreferences(response.data?.businessCenter)
@@ -4531,22 +5376,31 @@ export const SettingsModal = () => {
         setFamilyCenterSnapshot(nextCenter);
       }
       setFamilyApplicationStatus(nextCenter.familyApplicationStatus || null);
-      setFamilyDesignationInput(normalizeCenterDesignationInput(nextCenter.familyDesignation, isBusinessCenterSection));
+      setFamilyDesignationInput(
+        normalizeCenterDesignationInput(
+          nextCenter.familyDesignation,
+          isBusinessCenterSection,
+        ),
+      );
       setProfileRole(response.data?.role ?? null);
       setIsFamilyAccountApplyPanelOpen(false);
       setIsFamilyAccountVerificationPanelOpen(false);
       setFamilyVerificationFiles([]);
       setFamilyVerificationUploadStatus(null);
-      setFamilyCenterStatus(`${centerLabel} account removed. Apply is available again.`);
+      setFamilyCenterStatus(
+        `${centerLabel} account removed. Apply is available again.`,
+      );
     } catch (error) {
       const message = axios.isAxiosError(error)
-        ? (error.response?.data as { error?: string } | undefined)?.error || error.response?.data || error.message
+        ? (error.response?.data as { error?: string } | undefined)?.error ||
+          error.response?.data ||
+          error.message
         : `Could not remove ${centerLabelLower} account.`;
 
       setFamilyCenterStatus(
         typeof message === "string"
           ? message
-          : `Could not remove ${centerLabelLower} account.`
+          : `Could not remove ${centerLabelLower} account.`,
       );
     } finally {
       setIsRemovingFamilyAccount(false);
@@ -4559,7 +5413,9 @@ export const SettingsModal = () => {
     }
 
     const isConnected = connectedAccounts.includes(providerKey);
-    const isOAuthSupported = connectionProviderOAuthSupport[providerKey] ?? oauthConnectionProviders.has(providerKey);
+    const isOAuthSupported =
+      connectionProviderOAuthSupport[providerKey] ??
+      oauthConnectionProviders.has(providerKey);
     if (!isConnected && isOAuthSupported && typeof window !== "undefined") {
       const returnTo = `${window.location.pathname}?settingsSection=connections`;
       window.location.href = `/api/profile/connections/oauth/start?provider=${encodeURIComponent(providerKey)}&returnTo=${encodeURIComponent(returnTo)}`;
@@ -4582,28 +5438,39 @@ export const SettingsModal = () => {
         action: isConnected ? "disconnect" : "connect",
       });
 
-      const nextConnectedAccounts = Array.isArray(response.data?.connectedAccounts)
+      const nextConnectedAccounts = Array.isArray(
+        response.data?.connectedAccounts,
+      )
         ? response.data.connectedAccounts
             .filter((value): value is string => typeof value === "string")
             .map((value) => value.trim().toLowerCase())
-            .filter((value) => connectionProviders.some((provider) => provider.key === value))
+            .filter((value) =>
+              connectionProviders.some((provider) => provider.key === value),
+            )
         : [];
 
       setConnectedAccounts(Array.from(new Set(nextConnectedAccounts)));
-      setConnectionProviderAvailability(response.data?.providerAvailability ?? {});
-      setConnectionProviderOAuthSupport(response.data?.providerOAuthSupport ?? {});
+      setConnectionProviderAvailability(
+        response.data?.providerAvailability ?? {},
+      );
+      setConnectionProviderOAuthSupport(
+        response.data?.providerOAuthSupport ?? {},
+      );
 
       void loadDetectedRegisteredGames();
 
-      const providerLabel = connectionProviders.find((provider) => provider.key === providerKey)?.label ?? "Provider";
+      const providerLabel =
+        connectionProviders.find((provider) => provider.key === providerKey)
+          ?.label ?? "Provider";
       setConnectionsStatus(
         response.data?.connected
           ? `${providerLabel} connected.`
-          : `${providerLabel} disconnected.`
+          : `${providerLabel} disconnected.`,
       );
     } catch (error) {
       const message = axios.isAxiosError(error)
-        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Could not update connections."
+        ? ((error.response?.data as { error?: string } | undefined)?.error ??
+          "Could not update connections.")
         : "Could not update connections.";
       setConnectionsStatus(message);
     } finally {
@@ -4636,7 +5503,8 @@ export const SettingsModal = () => {
 
       const nativeGames = Array.isArray(response.data?.detectedGames)
         ? response.data.detectedGames.filter(
-            (entry): entry is RegisteredConnectionGame => Boolean(entry && typeof entry === "object")
+            (entry): entry is RegisteredConnectionGame =>
+              Boolean(entry && typeof entry === "object"),
           )
         : [];
 
@@ -4694,16 +5562,20 @@ export const SettingsModal = () => {
       }>("/api/profile/devices");
 
       const sessions = Array.isArray(response.data?.sessions)
-        ? response.data.sessions.filter(
-            (entry): entry is DeviceSession =>
-              Boolean(entry && typeof entry === "object" && typeof entry.sessionId === "string")
+        ? response.data.sessions.filter((entry): entry is DeviceSession =>
+            Boolean(
+              entry &&
+              typeof entry === "object" &&
+              typeof entry.sessionId === "string",
+            ),
           )
         : [];
 
       setDeviceSessions(sessions);
     } catch (error) {
       const message = axios.isAxiosError(error)
-        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Could not load devices."
+        ? ((error.response?.data as { error?: string } | undefined)?.error ??
+          "Could not load devices.")
         : "Could not load devices.";
       setDevicesStatus(message);
       setDeviceSessions([]);
@@ -4737,9 +5609,12 @@ export const SettingsModal = () => {
       }
 
       const sessions = Array.isArray(response.data?.sessions)
-        ? response.data.sessions.filter(
-            (entry): entry is DeviceSession =>
-              Boolean(entry && typeof entry === "object" && typeof entry.sessionId === "string")
+        ? response.data.sessions.filter((entry): entry is DeviceSession =>
+            Boolean(
+              entry &&
+              typeof entry === "object" &&
+              typeof entry.sessionId === "string",
+            ),
           )
         : [];
 
@@ -4747,7 +5622,8 @@ export const SettingsModal = () => {
       setDevicesStatus("Device session removed.");
     } catch (error) {
       const message = axios.isAxiosError(error)
-        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Could not update device session."
+        ? ((error.response?.data as { error?: string } | undefined)?.error ??
+          "Could not update device session.")
         : "Could not update device session.";
       setDevicesStatus(message);
     } finally {
@@ -4771,9 +5647,12 @@ export const SettingsModal = () => {
       });
 
       const sessions = Array.isArray(response.data?.sessions)
-        ? response.data.sessions.filter(
-            (entry): entry is DeviceSession =>
-              Boolean(entry && typeof entry === "object" && typeof entry.sessionId === "string")
+        ? response.data.sessions.filter((entry): entry is DeviceSession =>
+            Boolean(
+              entry &&
+              typeof entry === "object" &&
+              typeof entry.sessionId === "string",
+            ),
           )
         : [];
 
@@ -4781,7 +5660,8 @@ export const SettingsModal = () => {
       setDevicesStatus("Logged out of other devices.");
     } catch (error) {
       const message = axios.isAxiosError(error)
-        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Could not log out other devices."
+        ? ((error.response?.data as { error?: string } | undefined)?.error ??
+          "Could not log out other devices.")
         : "Could not log out other devices.";
       setDevicesStatus(message);
     } finally {
@@ -4812,12 +5692,18 @@ export const SettingsModal = () => {
           ? response.data.connectedAccounts
               .filter((value): value is string => typeof value === "string")
               .map((value) => value.trim().toLowerCase())
-              .filter((value) => connectionProviders.some((provider) => provider.key === value))
+              .filter((value) =>
+                connectionProviders.some((provider) => provider.key === value),
+              )
           : [];
 
         setConnectedAccounts(Array.from(new Set(linked)));
-        setConnectionProviderAvailability(response.data?.providerAvailability ?? {});
-        setConnectionProviderOAuthSupport(response.data?.providerOAuthSupport ?? {});
+        setConnectionProviderAvailability(
+          response.data?.providerAvailability ?? {},
+        );
+        setConnectionProviderOAuthSupport(
+          response.data?.providerOAuthSupport ?? {},
+        );
       } catch {
         if (cancelled) {
           return;
@@ -4841,13 +5727,24 @@ export const SettingsModal = () => {
   }, [displaySection, isOpen, loadDeviceSessions, type]);
 
   useEffect(() => {
-    if (!isOpen || type !== "settings" || displaySection !== "registeredGames") {
+    if (
+      !isOpen ||
+      type !== "settings" ||
+      displaySection !== "registeredGames"
+    ) {
       return;
     }
 
     void loadDetectedRegisteredGames();
     void loadRunningApps();
-  }, [connectedAccounts, displaySection, isOpen, loadDetectedRegisteredGames, loadRunningApps, type]);
+  }, [
+    connectedAccounts,
+    displaySection,
+    isOpen,
+    loadDetectedRegisteredGames,
+    loadRunningApps,
+    type,
+  ]);
 
   useEffect(() => {
     if (!isModalOpen || typeof window === "undefined") {
@@ -4857,14 +5754,17 @@ export const SettingsModal = () => {
     const url = new URL(window.location.href);
     const connectionStatus = url.searchParams.get("connectionStatus");
     const connectionError = url.searchParams.get("connectionError");
-    const providerKey = String(url.searchParams.get("provider") ?? "").trim().toLowerCase();
+    const providerKey = String(url.searchParams.get("provider") ?? "")
+      .trim()
+      .toLowerCase();
 
     if (!connectionStatus && !connectionError) {
       return;
     }
 
     const providerLabel =
-      connectionProviders.find((provider) => provider.key === providerKey)?.label ?? "Connection";
+      connectionProviders.find((provider) => provider.key === providerKey)
+        ?.label ?? "Connection";
 
     if (connectionStatus === "connected") {
       setConnectionsStatus(`${providerLabel} connected.`);
@@ -4885,7 +5785,11 @@ export const SettingsModal = () => {
     url.searchParams.delete("connectionStatus");
     url.searchParams.delete("connectionError");
     url.searchParams.delete("provider");
-    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    window.history.replaceState(
+      {},
+      "",
+      `${url.pathname}${url.search}${url.hash}`,
+    );
   }, [isModalOpen]);
 
   const onSubmitBugReport = async () => {
@@ -4909,7 +5813,11 @@ export const SettingsModal = () => {
     try {
       setIsSubmittingBugReport(true);
 
-      const reason = `[${bugSeverity.toUpperCase()}] ${bugCategory.toUpperCase()} — ${normalizedTitle}`.slice(0, 300);
+      const reason =
+        `[${bugSeverity.toUpperCase()}] ${bugCategory.toUpperCase()} — ${normalizedTitle}`.slice(
+          0,
+          300,
+        );
       const details = [
         `Category: ${bugCategory}`,
         `Severity: ${bugSeverity}`,
@@ -4928,7 +5836,9 @@ export const SettingsModal = () => {
         details,
       });
 
-      setBugReportStatus("Bug report submitted. Thanks for helping improve In-Accord.");
+      setBugReportStatus(
+        "Bug report submitted. Thanks for helping improve In-Accord.",
+      );
       setBugTitle("");
       setBugCategory("general");
       setBugSeverity("medium");
@@ -4937,7 +5847,8 @@ export const SettingsModal = () => {
       setBugActual("");
     } catch (error) {
       const message = axios.isAxiosError(error)
-        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Could not submit bug report."
+        ? ((error.response?.data as { error?: string } | undefined)?.error ??
+          "Could not submit bug report.")
         : "Could not submit bug report.";
       setBugReportStatus(message);
     } finally {
@@ -4959,9 +5870,10 @@ export const SettingsModal = () => {
           ? response.data.entries.filter(
               (entry): entry is PatronageHistoryEntry =>
                 typeof entry?.id === "string" &&
-                (entry.donationType === "ONE_TIME" || entry.donationType === "MONTHLY")
+                (entry.donationType === "ONE_TIME" ||
+                  entry.donationType === "MONTHLY"),
             )
-          : []
+          : [],
       );
     } catch {
       setPatronageHistory([]);
@@ -5025,7 +5937,9 @@ export const SettingsModal = () => {
           payerEmail,
           note: patronageNote.trim() ? patronageNote.trim() : null,
         });
-        setPatronageStatus("Payment request created. Continue in Billing → Payment Request Panel.");
+        setPatronageStatus(
+          "Payment request created. Continue in Billing → Payment Request Panel.",
+        );
         setActiveSection("billing");
         setDisplaySection("billing");
         setIsSectionVisible(true);
@@ -5035,7 +5949,7 @@ export const SettingsModal = () => {
       setPatronageStatus(
         patronageType === "MONTHLY"
           ? "Monthly patronage request submitted. Thank you for supporting In-Accord."
-          : "One-time patronage request submitted. Thank you for supporting In-Accord."
+          : "One-time patronage request submitted. Thank you for supporting In-Accord.",
       );
       setPatronageAmount("");
       setPatronageNote("");
@@ -5047,7 +5961,8 @@ export const SettingsModal = () => {
       await loadPatronageHistory();
     } catch (error) {
       const message = axios.isAxiosError(error)
-        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Could not submit patronage request."
+        ? ((error.response?.data as { error?: string } | undefined)?.error ??
+          "Could not submit patronage request.")
         : "Could not submit patronage request.";
       setPatronageStatus(message);
     } finally {
@@ -5071,7 +5986,9 @@ export const SettingsModal = () => {
     }
 
     if (!Number.isFinite(amount) || amount <= 0) {
-      setPatronagePaymentPanelStatus("Please enter a valid amount greater than 0.");
+      setPatronagePaymentPanelStatus(
+        "Please enter a valid amount greater than 0.",
+      );
       return;
     }
 
@@ -5107,10 +6024,13 @@ export const SettingsModal = () => {
 
       setPatronageIntentClientSecret(clientSecret);
       setPatronageStripePublishableKey(publishableKey);
-      setPatronagePaymentPanelStatus("Payment form ready. Enter card/bank details or choose PayPal if available.");
+      setPatronagePaymentPanelStatus(
+        "Payment form ready. Enter card/bank details or choose PayPal if available.",
+      );
     } catch (error) {
       const message = axios.isAxiosError(error)
-        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Could not initialize payment form."
+        ? ((error.response?.data as { error?: string } | undefined)?.error ??
+          "Could not initialize payment form.")
         : "Could not initialize payment form.";
       setPatronagePaymentPanelStatus(message);
     } finally {
@@ -5120,16 +6040,23 @@ export const SettingsModal = () => {
 
   const onConfirmPatronageIntent = async (paymentIntentId: string) => {
     try {
-      const response = await axios.post<{ status?: string }>("/api/patronage/intent-confirm", {
-        paymentIntentId,
-      });
+      const response = await axios.post<{ status?: string }>(
+        "/api/patronage/intent-confirm",
+        {
+          paymentIntentId,
+        },
+      );
 
       if (String(response.data?.status ?? "").toUpperCase() !== "SUCCEEDED") {
-        setPatronagePaymentPanelStatus("Payment is still processing. Please wait a moment and refresh history.");
+        setPatronagePaymentPanelStatus(
+          "Payment is still processing. Please wait a moment and refresh history.",
+        );
         return;
       }
 
-      setPatronageStatus("Payment confirmed. Thank you for supporting In-Accord.");
+      setPatronageStatus(
+        "Payment confirmed. Thank you for supporting In-Accord.",
+      );
       setPatronagePaymentPanelStatus("Payment completed successfully.");
       setPatronageIntentClientSecret(null);
       setPatronageStripePublishableKey(null);
@@ -5142,13 +6069,17 @@ export const SettingsModal = () => {
       setIsPatronagePaymentPanelOpen(false);
       await loadPatronageHistory();
     } catch {
-      setPatronagePaymentPanelStatus("Payment finished, but confirmation failed. Please refresh history.");
+      setPatronagePaymentPanelStatus(
+        "Payment finished, but confirmation failed. Please refresh history.",
+      );
       await loadPatronageHistory();
     }
   };
 
   const onCancelLatestPendingPatronage = async () => {
-    const latestPending = patronageHistory.find((entry) => entry.status === "PENDING");
+    const latestPending = patronageHistory.find(
+      (entry) => entry.status === "PENDING",
+    );
     if (!latestPending) {
       setPatronageStatus("No pending patronage request found.");
       return;
@@ -5166,7 +6097,8 @@ export const SettingsModal = () => {
       await loadPatronageHistory();
     } catch (error) {
       const message = axios.isAxiosError(error)
-        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Could not cancel patronage request."
+        ? ((error.response?.data as { error?: string } | undefined)?.error ??
+          "Could not cancel patronage request.")
         : "Could not cancel patronage request.";
       setPatronageStatus(message);
     } finally {
@@ -5183,14 +6115,26 @@ export const SettingsModal = () => {
   }, [activeSection, isModalOpen, loadPatronageHistory]);
 
   useEffect(() => {
-    if (!isModalOpen || activeSection !== "becomePatron" || typeof window === "undefined") {
+    if (
+      !isModalOpen ||
+      activeSection !== "becomePatron" ||
+      typeof window === "undefined"
+    ) {
       return;
     }
 
     const currentUrl = new URL(window.location.href);
-    const patronageState = String(currentUrl.searchParams.get("patronage") ?? "").trim().toLowerCase();
-    const patronageSessionId = String(currentUrl.searchParams.get("patronageSessionId") ?? "").trim();
-    const hasPatronageParams = currentUrl.searchParams.has("patronage") || currentUrl.searchParams.has("patronageSessionId");
+    const patronageState = String(
+      currentUrl.searchParams.get("patronage") ?? "",
+    )
+      .trim()
+      .toLowerCase();
+    const patronageSessionId = String(
+      currentUrl.searchParams.get("patronageSessionId") ?? "",
+    ).trim();
+    const hasPatronageParams =
+      currentUrl.searchParams.has("patronage") ||
+      currentUrl.searchParams.has("patronageSessionId");
 
     if (patronageState === "success") {
       setPendingPatronageCheckoutUrl(null);
@@ -5200,7 +6144,12 @@ export const SettingsModal = () => {
 
         void axios
           .get<{
-            status?: "PENDING" | "SUCCEEDED" | "FAILED" | "CANCELED" | "REFUNDED";
+            status?:
+              | "PENDING"
+              | "SUCCEEDED"
+              | "FAILED"
+              | "CANCELED"
+              | "REFUNDED";
           }>("/api/patronage/verify", {
             params: {
               sessionId: patronageSessionId,
@@ -5209,22 +6158,30 @@ export const SettingsModal = () => {
           .then((response) => {
             const status = response.data?.status;
             if (status === "SUCCEEDED") {
-              setPatronageStatus("Payment confirmed. Thank you for supporting In-Accord.");
+              setPatronageStatus(
+                "Payment confirmed. Thank you for supporting In-Accord.",
+              );
               return;
             }
 
             if (status === "PENDING") {
-              setPatronageStatus("Payment is still processing. Check back in a moment.");
+              setPatronageStatus(
+                "Payment is still processing. Check back in a moment.",
+              );
               return;
             }
 
             if (status === "FAILED") {
-              setPatronageStatus("Payment failed. You can try again whenever you’re ready.");
+              setPatronageStatus(
+                "Payment failed. You can try again whenever you’re ready.",
+              );
               return;
             }
 
             if (status === "CANCELED") {
-              setPatronageStatus("Checkout expired or was canceled. You can try again whenever you’re ready.");
+              setPatronageStatus(
+                "Checkout expired or was canceled. You can try again whenever you’re ready.",
+              );
               return;
             }
 
@@ -5233,22 +6190,30 @@ export const SettingsModal = () => {
               return;
             }
 
-            setPatronageStatus("Checkout completed. Thank you for supporting In-Accord.");
+            setPatronageStatus(
+              "Checkout completed. Thank you for supporting In-Accord.",
+            );
           })
           .catch(() => {
-            setPatronageStatus("Checkout completed. We couldn't verify payment yet, but it may still process shortly.");
+            setPatronageStatus(
+              "Checkout completed. We couldn't verify payment yet, but it may still process shortly.",
+            );
           })
           .finally(() => {
             void loadPatronageHistory();
           });
       } else {
-        setPatronageStatus("Checkout completed. Thank you for supporting In-Accord.");
+        setPatronageStatus(
+          "Checkout completed. Thank you for supporting In-Accord.",
+        );
         void loadPatronageHistory();
       }
     } else if (patronageState === "cancel") {
       setPendingPatronageCheckoutUrl(null);
       setPendingPatronageRequest(null);
-      setPatronageStatus("Checkout canceled. You can try again whenever you’re ready.");
+      setPatronageStatus(
+        "Checkout canceled. You can try again whenever you’re ready.",
+      );
     }
 
     if (hasPatronageParams) {
@@ -5274,7 +6239,8 @@ export const SettingsModal = () => {
       const owned = Array.isArray(response.data?.ownedServers)
         ? response.data.ownedServers.filter(
             (item): item is OwnedServerTag =>
-              typeof item?.serverId === "string" && typeof item?.serverName === "string"
+              typeof item?.serverId === "string" &&
+              typeof item?.serverName === "string",
           )
         : [];
 
@@ -5284,7 +6250,7 @@ export const SettingsModal = () => {
               typeof item?.serverId === "string" &&
               typeof item?.serverName === "string" &&
               typeof item?.tagCode === "string" &&
-              typeof item?.iconKey === "string"
+              typeof item?.iconKey === "string",
           )
         : [];
 
@@ -5293,7 +6259,7 @@ export const SettingsModal = () => {
             (item): item is ServerTagIconOption =>
               typeof item?.key === "string" &&
               typeof item?.label === "string" &&
-              typeof item?.emoji === "string"
+              typeof item?.emoji === "string",
           )
         : [];
 
@@ -5301,21 +6267,28 @@ export const SettingsModal = () => {
       setMemberServerTags(memberTags);
       setServerTagIconOptions(icons);
 
-      const selectedMemberServerId = memberTags.find((item) => item.isSelected)?.serverId ?? "";
+      const selectedMemberServerId =
+        memberTags.find((item) => item.isSelected)?.serverId ?? "";
       setSelectedProfileServerId(selectedMemberServerId);
 
       const nextSelectedOwnedServerId =
-        selectedOwnedServerId && owned.some((item) => item.serverId === selectedOwnedServerId)
+        selectedOwnedServerId &&
+        owned.some((item) => item.serverId === selectedOwnedServerId)
           ? selectedOwnedServerId
           : (owned[0]?.serverId ?? "");
 
       setSelectedOwnedServerId(nextSelectedOwnedServerId);
 
-      const selectedOwned = owned.find((item) => item.serverId === nextSelectedOwnedServerId);
+      const selectedOwned = owned.find(
+        (item) => item.serverId === nextSelectedOwnedServerId,
+      );
       setOwnerTagCodeInput(selectedOwned?.tagCode ?? "");
 
       const selectedIconKey = selectedOwned?.iconKey;
-      if (selectedIconKey && icons.some((item) => item.key === selectedIconKey)) {
+      if (
+        selectedIconKey &&
+        icons.some((item) => item.key === selectedIconKey)
+      ) {
         setOwnerTagIconKey(selectedIconKey);
       } else if (icons.length > 0) {
         setOwnerTagIconKey(icons[0].key);
@@ -5339,10 +6312,15 @@ export const SettingsModal = () => {
     setSelectedOwnedServerId(serverId);
     setServerTagsStatus(null);
 
-    const selectedOwned = ownedServerTags.find((item) => item.serverId === serverId);
+    const selectedOwned = ownedServerTags.find(
+      (item) => item.serverId === serverId,
+    );
     setOwnerTagCodeInput(selectedOwned?.tagCode ?? "");
 
-    if (selectedOwned?.iconKey && serverTagIconOptions.some((item) => item.key === selectedOwned.iconKey)) {
+    if (
+      selectedOwned?.iconKey &&
+      serverTagIconOptions.some((item) => item.key === selectedOwned.iconKey)
+    ) {
       setOwnerTagIconKey(selectedOwned.iconKey);
     }
   };
@@ -5370,11 +6348,14 @@ export const SettingsModal = () => {
         iconKey: ownerTagIconKey,
       });
 
-      setServerTagsStatus(normalizedTagCode ? "Server tag saved." : "Server tag removed.");
+      setServerTagsStatus(
+        normalizedTagCode ? "Server tag saved." : "Server tag removed.",
+      );
       await hydrateServerTags();
     } catch (error) {
       const message = axios.isAxiosError(error)
-        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Could not save server tag."
+        ? ((error.response?.data as { error?: string } | undefined)?.error ??
+          "Could not save server tag.")
         : "Could not save server tag.";
       setServerTagsStatus(message);
     } finally {
@@ -5400,16 +6381,23 @@ export const SettingsModal = () => {
               typeof item?.serverId === "string" &&
               typeof item?.serverName === "string" &&
               typeof item?.tagCode === "string" &&
-              typeof item?.iconKey === "string"
+              typeof item?.iconKey === "string",
           )
         : memberServerTags;
 
       setMemberServerTags(updatedMemberTags);
-      setSelectedProfileServerId(updatedMemberTags.find((item) => item.isSelected)?.serverId ?? "");
-      setServerTagsStatus(serverId ? "Profile server tag selected." : "Profile server tag cleared.");
+      setSelectedProfileServerId(
+        updatedMemberTags.find((item) => item.isSelected)?.serverId ?? "",
+      );
+      setServerTagsStatus(
+        serverId
+          ? "Profile server tag selected."
+          : "Profile server tag cleared.",
+      );
     } catch (error) {
       const message = axios.isAxiosError(error)
-        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Could not select profile tag."
+        ? ((error.response?.data as { error?: string } | undefined)?.error ??
+          "Could not select profile tag.")
         : "Could not select profile tag.";
       setServerTagsStatus(message);
     } finally {
@@ -5422,11 +6410,14 @@ export const SettingsModal = () => {
       setIsLoadingServerProfiles(true);
       setServerProfileStatus(null);
 
-      const response = await axios.get<{ servers?: MemberServerProfileOption[] }>("/api/profile/server");
+      const response = await axios.get<{
+        servers?: MemberServerProfileOption[];
+      }>("/api/profile/server");
       const servers = Array.isArray(response.data?.servers)
         ? response.data.servers.filter(
             (item): item is MemberServerProfileOption =>
-              typeof item?.serverId === "string" && typeof item?.serverName === "string"
+              typeof item?.serverId === "string" &&
+              typeof item?.serverName === "string",
           )
         : [];
 
@@ -5434,15 +6425,21 @@ export const SettingsModal = () => {
 
       const nextSelectedServerId =
         selectedProfileSettingsServerId &&
-        servers.some((item) => item.serverId === selectedProfileSettingsServerId)
+        servers.some(
+          (item) => item.serverId === selectedProfileSettingsServerId,
+        )
           ? selectedProfileSettingsServerId
           : (servers[0]?.serverId ?? "");
 
       setSelectedProfileSettingsServerId(nextSelectedServerId);
 
-      const selectedServer = servers.find((item) => item.serverId === nextSelectedServerId);
+      const selectedServer = servers.find(
+        (item) => item.serverId === nextSelectedServerId,
+      );
       setServerProfileNameInput(selectedServer?.profileName ?? "");
-      const normalizedServerStyle = normalizeProfileNameStyleValue(selectedServer?.profileNameStyle ?? "");
+      const normalizedServerStyle = normalizeProfileNameStyleValue(
+        selectedServer?.profileNameStyle ?? "",
+      );
       const serverStyleParts = getProfileNameStyleParts(normalizedServerStyle);
       setServerProfileNameStyleInput(selectedServer?.profileNameStyle ?? "");
       setServerProfileNameFontInput(serverStyleParts.font);
@@ -5451,9 +6448,13 @@ export const SettingsModal = () => {
       setServerProfileCommentInput(selectedServer?.comment ?? "");
       setServerProfileNameplateLabelInput(selectedServer?.nameplateLabel ?? "");
       setServerProfileNameplateColorInput(selectedServer?.nameplateColor ?? "");
-      setServerProfileNameplateImageUrlInput(selectedServer?.nameplateImageUrl ?? "");
+      setServerProfileNameplateImageUrlInput(
+        selectedServer?.nameplateImageUrl ?? "",
+      );
       setServerProfileImageInput(selectedServer?.imageUrl ?? "");
-      setServerProfileAvatarDecorationInput(selectedServer?.avatarDecorationUrl ?? "");
+      setServerProfileAvatarDecorationInput(
+        selectedServer?.avatarDecorationUrl ?? "",
+      );
       setServerProfileEffectInput(selectedServer?.profileEffectUrl ?? "");
       setServerProfileBannerInput(selectedServer?.bannerUrl ?? "");
     } catch {
@@ -5490,9 +6491,13 @@ export const SettingsModal = () => {
     setSelectedProfileSettingsServerId(serverId);
     setServerProfileStatus(null);
 
-    const selectedServer = memberProfileServers.find((item) => item.serverId === serverId);
+    const selectedServer = memberProfileServers.find(
+      (item) => item.serverId === serverId,
+    );
     setServerProfileNameInput(selectedServer?.profileName ?? "");
-    const normalizedServerStyle = normalizeProfileNameStyleValue(selectedServer?.profileNameStyle ?? "");
+    const normalizedServerStyle = normalizeProfileNameStyleValue(
+      selectedServer?.profileNameStyle ?? "",
+    );
     const serverStyleParts = getProfileNameStyleParts(normalizedServerStyle);
     setServerProfileNameStyleInput(selectedServer?.profileNameStyle ?? "");
     setServerProfileNameFontInput(serverStyleParts.font);
@@ -5501,9 +6506,13 @@ export const SettingsModal = () => {
     setServerProfileCommentInput(selectedServer?.comment ?? "");
     setServerProfileNameplateLabelInput(selectedServer?.nameplateLabel ?? "");
     setServerProfileNameplateColorInput(selectedServer?.nameplateColor ?? "");
-    setServerProfileNameplateImageUrlInput(selectedServer?.nameplateImageUrl ?? "");
+    setServerProfileNameplateImageUrlInput(
+      selectedServer?.nameplateImageUrl ?? "",
+    );
     setServerProfileImageInput(selectedServer?.imageUrl ?? "");
-    setServerProfileAvatarDecorationInput(selectedServer?.avatarDecorationUrl ?? "");
+    setServerProfileAvatarDecorationInput(
+      selectedServer?.avatarDecorationUrl ?? "",
+    );
     setServerProfileEffectInput(selectedServer?.profileEffectUrl ?? "");
     setServerProfileBannerInput(selectedServer?.bannerUrl ?? "");
   };
@@ -5515,19 +6524,22 @@ export const SettingsModal = () => {
     }
 
     const trimmedProfileName = serverProfileNameInput.trim();
-    const trimmedProfileNameStyle = serverProfileNameStyleInput.trim().length > 0
-      ? composeProfileNameStyleValue({
-          font: serverProfileNameFontInput,
-          effect: serverProfileNameEffectInput,
-          color: serverProfileNameColorInput,
-        })
-      : "";
+    const trimmedProfileNameStyle =
+      serverProfileNameStyleInput.trim().length > 0
+        ? composeProfileNameStyleValue({
+            font: serverProfileNameFontInput,
+            effect: serverProfileNameEffectInput,
+            color: serverProfileNameColorInput,
+          })
+        : "";
     const trimmedComment = serverProfileCommentInput.trim();
     const trimmedNameplateImageUrl = serverProfileNameplateImageUrlInput.trim();
     const trimmedImageUrl = serverProfileImageInput.trim();
     const inferredServerNameplateLabel = (
       trimmedProfileName ||
-      memberProfileServers.find((item) => item.serverId === selectedProfileSettingsServerId)?.effectiveProfileName ||
+      memberProfileServers.find(
+        (item) => item.serverId === selectedProfileSettingsServerId,
+      )?.effectiveProfileName ||
       profileName ||
       realName ||
       "User"
@@ -5535,11 +6547,13 @@ export const SettingsModal = () => {
       .trim()
       .slice(0, 40);
     const trimmedNameplateLabel =
-      serverProfileNameplateColorInput.trim().length > 0 || trimmedNameplateImageUrl.length > 0
+      serverProfileNameplateColorInput.trim().length > 0 ||
+      trimmedNameplateImageUrl.length > 0
         ? inferredServerNameplateLabel
         : "";
     const trimmedNameplateColor = serverProfileNameplateColorInput.trim();
-    const trimmedAvatarDecorationUrl = serverProfileAvatarDecorationInput.trim();
+    const trimmedAvatarDecorationUrl =
+      serverProfileAvatarDecorationInput.trim();
     const trimmedProfileEffectUrl = serverProfileEffectInput.trim();
     const trimmedBannerUrl = serverProfileBannerInput.trim();
 
@@ -5553,7 +6567,10 @@ export const SettingsModal = () => {
       return;
     }
 
-    if (trimmedNameplateColor.length > 0 && !/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(trimmedNameplateColor)) {
+    if (
+      trimmedNameplateColor.length > 0 &&
+      !/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(trimmedNameplateColor)
+    ) {
       setServerProfileStatus("Nameplate color must be a valid hex color.");
       return;
     }
@@ -5573,7 +6590,9 @@ export const SettingsModal = () => {
         profileNameStyle: trimmedProfileNameStyle || null,
         comment: trimmedComment || null,
         nameplateLabel: trimmedNameplateLabel || null,
-        nameplateColor: trimmedNameplateLabel ? (trimmedNameplateColor || "#5865f2") : null,
+        nameplateColor: trimmedNameplateLabel
+          ? trimmedNameplateColor || "#5865f2"
+          : null,
         nameplateImageUrl: trimmedNameplateImageUrl || null,
         imageUrl: trimmedImageUrl || null,
         avatarDecorationUrl: trimmedAvatarDecorationUrl || null,
@@ -5593,13 +6612,14 @@ export const SettingsModal = () => {
           trimmedProfileEffectUrl ||
           trimmedBannerUrl
           ? "Server profile saved."
-          : "Server profile reset to your global profile."
+          : "Server profile reset to your global profile.",
       );
 
       window.dispatchEvent(new CustomEvent("inaccord:profile-card-refresh"));
     } catch (error) {
       const message = axios.isAxiosError(error)
-        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Could not save server profile."
+        ? ((error.response?.data as { error?: string } | undefined)?.error ??
+          "Could not save server profile.")
         : "Could not save server profile.";
       setServerProfileStatus(message);
     } finally {
@@ -5639,7 +6659,8 @@ export const SettingsModal = () => {
       window.dispatchEvent(new CustomEvent("inaccord:profile-card-refresh"));
     } catch (error) {
       const message = axios.isAxiosError(error)
-        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Could not reset server profile."
+        ? ((error.response?.data as { error?: string } | undefined)?.error ??
+          "Could not reset server profile.")
         : "Could not reset server profile.";
       setServerProfileStatus(message);
     } finally {
@@ -5652,7 +6673,9 @@ export const SettingsModal = () => {
       return;
     }
 
-    let styleElement = document.getElementById(CUSTOM_CSS_STYLE_ID) as HTMLStyleElement | null;
+    let styleElement = document.getElementById(
+      CUSTOM_CSS_STYLE_ID,
+    ) as HTMLStyleElement | null;
     if (!styleElement) {
       styleElement = document.createElement("style");
       styleElement.id = CUSTOM_CSS_STYLE_ID;
@@ -5727,8 +6750,12 @@ export const SettingsModal = () => {
           setRealName(response.data?.realName ?? response.data?.name ?? "");
           setProfileName(response.data?.profileName ?? "");
           setDefaultProfileNameDraft(response.data?.profileName ?? "");
-          const normalizedDefaultStyle = normalizeProfileNameStyleValue(response.data?.profileNameStyle);
-          const defaultStyleParts = getProfileNameStyleParts(normalizedDefaultStyle);
+          const normalizedDefaultStyle = normalizeProfileNameStyleValue(
+            response.data?.profileNameStyle,
+          );
+          const defaultStyleParts = getProfileNameStyleParts(
+            normalizedDefaultStyle,
+          );
           setDefaultProfileNameStyle(normalizedDefaultStyle);
           setDefaultProfileNameFont(defaultStyleParts.font);
           setDefaultProfileNameEffect(defaultStyleParts.effect);
@@ -5742,7 +6769,8 @@ export const SettingsModal = () => {
           setCommentDraft(hydratedComment);
           const hydratedNameplateLabel = response.data?.nameplateLabel ?? "";
           const hydratedNameplateColor = response.data?.nameplateColor ?? "";
-          const hydratedNameplateImageUrl = response.data?.nameplateImageUrl ?? null;
+          const hydratedNameplateImageUrl =
+            response.data?.nameplateImageUrl ?? null;
           setNameplateLabel(hydratedNameplateLabel);
           setNameplateColor(hydratedNameplateColor || "");
           setNameplateImageUrl(hydratedNameplateImageUrl);
@@ -5750,11 +6778,13 @@ export const SettingsModal = () => {
           setNameplateColorInput(hydratedNameplateColor || "");
           setNameplateImageUrlInput(hydratedNameplateImageUrl ?? "");
           setNameplateStatus(null);
-          const hydratedAvatarDecorationUrl = response.data?.avatarDecorationUrl ?? null;
+          const hydratedAvatarDecorationUrl =
+            response.data?.avatarDecorationUrl ?? null;
           setAvatarDecorationUrl(hydratedAvatarDecorationUrl);
           setAvatarDecorationInput(hydratedAvatarDecorationUrl ?? "");
           setAvatarDecorationStatus(null);
-          const hydratedProfileEffectUrl = response.data?.profileEffectUrl ?? null;
+          const hydratedProfileEffectUrl =
+            response.data?.profileEffectUrl ?? null;
           setProfileEffectUrl(hydratedProfileEffectUrl);
           setProfileEffectInput(hydratedProfileEffectUrl ?? "");
           setProfileEffectStatus(null);
@@ -5767,7 +6797,9 @@ export const SettingsModal = () => {
           setDateOfBirthStatus(null);
           setBannerUrl(response.data?.bannerUrl ?? null);
           setProfileRole(response.data?.role ?? data.profileRole ?? null);
-          setProfilePresenceStatus(normalizePresenceStatus(response.data?.presenceStatus));
+          setProfilePresenceStatus(
+            normalizePresenceStatus(response.data?.presenceStatus),
+          );
           setProfileCurrentGame(response.data?.currentGame?.trim() || null);
         }
       } catch (error) {
@@ -5797,15 +6829,18 @@ export const SettingsModal = () => {
       setIsLoadingBlockedProfiles(true);
       setBlockedProfilesError(null);
 
-      const response = await axios.get<{ blocked?: BlockedProfileSummary[] }>("/api/friends/blocked");
+      const response = await axios.get<{ blocked?: BlockedProfileSummary[] }>(
+        "/api/friends/blocked",
+      );
 
       setBlockedProfiles(
         Array.isArray(response.data?.blocked)
           ? response.data.blocked.filter(
               (entry): entry is BlockedProfileSummary =>
-                typeof entry?.profileId === "string" && entry.profileId.trim().length > 0
+                typeof entry?.profileId === "string" &&
+                entry.profileId.trim().length > 0,
             )
-          : []
+          : [],
       );
     } catch (error) {
       setBlockedProfilesError("Could not load blocked users.");
@@ -5814,13 +6849,61 @@ export const SettingsModal = () => {
     }
   };
 
+  const loadPendingFriendRequests = async () => {
+    try {
+      setIsLoadingPendingFriendRequests(true);
+      setPendingFriendRequestsError(null);
+
+      const response = await axios.get<{
+        incoming?: PendingFriendRequestSummary[];
+        outgoing?: PendingFriendRequestSummary[];
+      }>("/api/friends/requests");
+
+      const normalizePendingRequests = (
+        entries: PendingFriendRequestSummary[] | undefined,
+        isIncoming: boolean,
+      ) =>
+        Array.isArray(entries)
+          ? entries.filter(
+              (entry): entry is PendingFriendRequestSummary =>
+                typeof entry?.requestId === "string" &&
+                entry.requestId.trim().length > 0 &&
+                typeof entry?.profileId === "string" &&
+                entry.profileId.trim().length > 0 &&
+                typeof entry?.displayName === "string" &&
+                entry.displayName.trim().length > 0 &&
+                entry.isIncoming === isIncoming,
+            )
+          : [];
+
+      setIncomingPendingRequests(
+        normalizePendingRequests(response.data?.incoming, true),
+      );
+      setOutgoingPendingRequests(
+        normalizePendingRequests(response.data?.outgoing, false),
+      );
+    } catch {
+      setPendingFriendRequestsError("Could not load pending friend requests.");
+    } finally {
+      setIsLoadingPendingFriendRequests(false);
+    }
+  };
+
+  const loadFriendRequestSectionData = async () => {
+    await Promise.all([loadPendingFriendRequests(), loadBlockedProfiles()]);
+  };
+
   useEffect(() => {
     if (!isModalOpen || activeSection !== "friendRequests") {
       return;
     }
 
-    void loadBlockedProfiles();
+    void loadFriendRequestSectionData();
   }, [activeSection, isModalOpen]);
+
+  const onFriendRequestSectionUpdated = async () => {
+    await loadFriendRequestSectionData();
+  };
 
   const onUnblockProfile = async (targetProfileId: string) => {
     if (!targetProfileId || unblockingProfileId) {
@@ -5837,7 +6920,9 @@ export const SettingsModal = () => {
         },
       });
 
-      setBlockedProfiles((prev) => prev.filter((entry) => entry.profileId !== targetProfileId));
+      setBlockedProfiles((prev) =>
+        prev.filter((entry) => entry.profileId !== targetProfileId),
+      );
       router.refresh();
     } catch {
       setBlockedProfilesError("Could not unblock this user.");
@@ -5865,9 +6950,12 @@ export const SettingsModal = () => {
     try {
       setIsSavingProfileName(true);
 
-      const response = await axios.patch<{ ok: boolean; profileName: string }>("/api/profile/name", {
-        profileName: trimmedName,
-      });
+      const response = await axios.patch<{ ok: boolean; profileName: string }>(
+        "/api/profile/name",
+        {
+          profileName: trimmedName,
+        },
+      );
 
       const savedName = response.data?.profileName ?? trimmedName;
       setProfileName(savedName);
@@ -5879,7 +6967,7 @@ export const SettingsModal = () => {
             profileId: resolvedProfileId,
             profileName: savedName,
           },
-        })
+        }),
       );
       router.refresh();
       return true;
@@ -5910,14 +6998,16 @@ export const SettingsModal = () => {
         color: defaultProfileNameColor,
       });
 
-      const response = await axios.patch<{ ok: boolean; profileNameStyle: string }>(
-        "/api/profile/name-style",
-        {
-          profileNameStyle: composedStyleValue,
-        }
-      );
+      const response = await axios.patch<{
+        ok: boolean;
+        profileNameStyle: string;
+      }>("/api/profile/name-style", {
+        profileNameStyle: composedStyleValue,
+      });
 
-      const savedStyle = normalizeProfileNameStyleValue(response.data?.profileNameStyle);
+      const savedStyle = normalizeProfileNameStyleValue(
+        response.data?.profileNameStyle,
+      );
       const savedParts = getProfileNameStyleParts(savedStyle);
 
       setDefaultProfileNameStyle(savedStyle);
@@ -5954,17 +7044,19 @@ export const SettingsModal = () => {
       setIsSavingPronouns(true);
       setPronounsStatus(null);
 
-      const response = await axios.patch<{ ok: boolean; pronouns: string | null }>(
-        "/api/profile/pronouns",
-        {
-          pronouns: trimmedPronouns || null,
-        }
-      );
+      const response = await axios.patch<{
+        ok: boolean;
+        pronouns: string | null;
+      }>("/api/profile/pronouns", {
+        pronouns: trimmedPronouns || null,
+      });
 
       const savedPronouns = response.data?.pronouns ?? "";
       setPronouns(savedPronouns);
       setPronounsDraft(savedPronouns);
-      setPronounsStatus(trimmedPronouns ? "Pronouns updated." : "Pronouns cleared.");
+      setPronounsStatus(
+        trimmedPronouns ? "Pronouns updated." : "Pronouns cleared.",
+      );
       window.dispatchEvent(new CustomEvent("inaccord:profile-card-refresh"));
       router.refresh();
       return true;
@@ -5996,17 +7088,19 @@ export const SettingsModal = () => {
       setIsSavingComment(true);
       setCommentStatus(null);
 
-      const response = await axios.patch<{ ok: boolean; comment: string | null }>(
-        "/api/profile/comment",
-        {
-          comment: trimmedComment || null,
-        }
-      );
+      const response = await axios.patch<{
+        ok: boolean;
+        comment: string | null;
+      }>("/api/profile/comment", {
+        comment: trimmedComment || null,
+      });
 
       const savedComment = response.data?.comment ?? "";
       setComment(savedComment);
       setCommentDraft(savedComment);
-      setCommentStatus(trimmedComment ? "Comment updated." : "Comment cleared.");
+      setCommentStatus(
+        trimmedComment ? "Comment updated." : "Comment cleared.",
+      );
       window.dispatchEvent(new CustomEvent("inaccord:profile-card-refresh"));
       router.refresh();
       return true;
@@ -6038,17 +7132,19 @@ export const SettingsModal = () => {
       setIsSavingPhoneNumber(true);
       setPhoneNumberStatus(null);
 
-      const response = await axios.patch<{ ok: boolean; phoneNumber: string | null }>(
-        "/api/profile/phone",
-        {
-          phoneNumber: trimmedPhoneNumber || null,
-        }
-      );
+      const response = await axios.patch<{
+        ok: boolean;
+        phoneNumber: string | null;
+      }>("/api/profile/phone", {
+        phoneNumber: trimmedPhoneNumber || null,
+      });
 
       const savedPhoneNumber = response.data?.phoneNumber ?? "";
       setPhoneNumber(savedPhoneNumber);
       setPhoneNumberDraft(savedPhoneNumber);
-      setPhoneNumberStatus(trimmedPhoneNumber ? "Phone Number updated." : "Phone Number cleared.");
+      setPhoneNumberStatus(
+        trimmedPhoneNumber ? "Phone Number updated." : "Phone Number cleared.",
+      );
       router.refresh();
       return true;
     } catch (error) {
@@ -6070,7 +7166,10 @@ export const SettingsModal = () => {
   const onSaveDateOfBirth = async (dateOfBirthOverride?: string) => {
     const trimmedDateOfBirth = (dateOfBirthOverride ?? dateOfBirth).trim();
 
-    if (trimmedDateOfBirth.length > 0 && !/^\d{4}-\d{2}-\d{2}$/.test(trimmedDateOfBirth)) {
+    if (
+      trimmedDateOfBirth.length > 0 &&
+      !/^\d{4}-\d{2}-\d{2}$/.test(trimmedDateOfBirth)
+    ) {
       setDateOfBirthStatus("Date Of Birth must use YYYY-MM-DD format.");
       return false;
     }
@@ -6079,17 +7178,21 @@ export const SettingsModal = () => {
       setIsSavingDateOfBirth(true);
       setDateOfBirthStatus(null);
 
-      const response = await axios.patch<{ ok: boolean; dateOfBirth: string | null }>(
-        "/api/profile/dob",
-        {
-          dateOfBirth: trimmedDateOfBirth || null,
-        }
-      );
+      const response = await axios.patch<{
+        ok: boolean;
+        dateOfBirth: string | null;
+      }>("/api/profile/dob", {
+        dateOfBirth: trimmedDateOfBirth || null,
+      });
 
       const savedDateOfBirth = response.data?.dateOfBirth ?? "";
       setDateOfBirth(savedDateOfBirth);
       setDateOfBirthDraft(savedDateOfBirth);
-      setDateOfBirthStatus(trimmedDateOfBirth ? "Date Of Birth updated." : "Date Of Birth cleared.");
+      setDateOfBirthStatus(
+        trimmedDateOfBirth
+          ? "Date Of Birth updated."
+          : "Date Of Birth cleared.",
+      );
       router.refresh();
       return true;
     } catch (error) {
@@ -6108,8 +7211,10 @@ export const SettingsModal = () => {
     }
   };
 
-  const canEditDateOfBirth = isInAccordAdministrator(profileRole ?? data.profileRole) || !dateOfBirth;
-  const hasDateOfBirthChanges = canEditDateOfBirth && dateOfBirthDraft !== dateOfBirth;
+  const canEditDateOfBirth =
+    isInAccordAdministrator(profileRole ?? data.profileRole) || !dateOfBirth;
+  const hasDateOfBirthChanges =
+    canEditDateOfBirth && dateOfBirthDraft !== dateOfBirth;
 
   useEffect(() => {
     if (activeSection === displaySection) {
@@ -6166,7 +7271,7 @@ export const SettingsModal = () => {
         formData,
         {
           headers: { "Content-Type": "multipart/form-data" },
-        }
+        },
       );
 
       await axios.patch("/api/profile/avatar", {
@@ -6181,7 +7286,7 @@ export const SettingsModal = () => {
             profileId: resolvedProfileId,
             imageUrl: upload.data.url,
           },
-        })
+        }),
       );
       router.refresh();
     } catch (error) {
@@ -6190,7 +7295,10 @@ export const SettingsModal = () => {
           (error.response?.data as { error?: string })?.error ||
           error.message ||
           "Upload failed";
-        console.error("[SETTINGS_AVATAR_UPLOAD]", error.response?.data ?? error.message);
+        console.error(
+          "[SETTINGS_AVATAR_UPLOAD]",
+          error.response?.data ?? error.message,
+        );
         window.alert(message);
       } else {
         console.error("[SETTINGS_AVATAR_UPLOAD]", error);
@@ -6220,7 +7328,7 @@ export const SettingsModal = () => {
         formData,
         {
           headers: { "Content-Type": "multipart/form-data" },
-        }
+        },
       );
 
       await axios.patch("/api/profile/avatar", {
@@ -6235,7 +7343,7 @@ export const SettingsModal = () => {
             profileId: resolvedProfileId,
             imageUrl: upload.data.url,
           },
-        })
+        }),
       );
       router.refresh();
     } catch (error) {
@@ -6244,7 +7352,10 @@ export const SettingsModal = () => {
           (error.response?.data as { error?: string })?.error ||
           error.message ||
           "Upload failed";
-        console.error("[SETTINGS_AVATAR_UPLOAD]", error.response?.data ?? error.message);
+        console.error(
+          "[SETTINGS_AVATAR_UPLOAD]",
+          error.response?.data ?? error.message,
+        );
         window.alert(message);
       } else {
         console.error("[SETTINGS_AVATAR_UPLOAD]", error);
@@ -6273,7 +7384,7 @@ export const SettingsModal = () => {
             profileId: resolvedProfileId,
             imageUrl: null,
           },
-        })
+        }),
       );
       router.refresh();
     } catch (error) {
@@ -6282,7 +7393,10 @@ export const SettingsModal = () => {
           (error.response?.data as { error?: string })?.error ||
           error.message ||
           "Failed to remove avatar";
-        console.error("[SETTINGS_AVATAR_REMOVE]", error.response?.data ?? error.message);
+        console.error(
+          "[SETTINGS_AVATAR_REMOVE]",
+          error.response?.data ?? error.message,
+        );
         window.alert(message);
       } else {
         console.error("[SETTINGS_AVATAR_REMOVE]", error);
@@ -6309,7 +7423,7 @@ export const SettingsModal = () => {
         formData,
         {
           headers: { "Content-Type": "multipart/form-data" },
-        }
+        },
       );
 
       const uploadedUrl = String(upload.data?.url ?? "").trim();
@@ -6345,24 +7459,29 @@ export const SettingsModal = () => {
       setIsSavingAvatarDecoration(true);
       setAvatarDecorationStatus(null);
 
-      const response = await axios.patch<{ ok: boolean; avatarDecorationUrl: string | null }>(
-        "/api/profile/avatar-decoration",
-        {
-          avatarDecorationUrl: trimmedAvatarDecorationUrl || null,
-        }
-      );
+      const response = await axios.patch<{
+        ok: boolean;
+        avatarDecorationUrl: string | null;
+      }>("/api/profile/avatar-decoration", {
+        avatarDecorationUrl: trimmedAvatarDecorationUrl || null,
+      });
 
-      const savedAvatarDecorationUrl = response.data?.avatarDecorationUrl ?? null;
+      const savedAvatarDecorationUrl =
+        response.data?.avatarDecorationUrl ?? null;
       setAvatarDecorationUrl(savedAvatarDecorationUrl);
       setAvatarDecorationInput(savedAvatarDecorationUrl ?? "");
-      setAvatarDecorationStatus(savedAvatarDecorationUrl ? "Avatar decoration updated." : "Avatar decoration cleared.");
+      setAvatarDecorationStatus(
+        savedAvatarDecorationUrl
+          ? "Avatar decoration updated."
+          : "Avatar decoration cleared.",
+      );
       window.dispatchEvent(
         new CustomEvent("inaccord:profile-updated", {
           detail: {
             profileId: resolvedProfileId,
             avatarDecorationUrl: savedAvatarDecorationUrl,
           },
-        })
+        }),
       );
       window.dispatchEvent(new CustomEvent("inaccord:profile-card-refresh"));
       router.refresh();
@@ -6388,24 +7507,28 @@ export const SettingsModal = () => {
       setIsSavingProfileEffect(true);
       setProfileEffectStatus(null);
 
-      const response = await axios.patch<{ ok: boolean; profileEffectUrl: string | null }>(
-        "/api/profile/profile-effect",
-        {
-          profileEffectUrl: trimmedProfileEffectUrl || null,
-        }
-      );
+      const response = await axios.patch<{
+        ok: boolean;
+        profileEffectUrl: string | null;
+      }>("/api/profile/profile-effect", {
+        profileEffectUrl: trimmedProfileEffectUrl || null,
+      });
 
       const savedProfileEffectUrl = response.data?.profileEffectUrl ?? null;
       setProfileEffectUrl(savedProfileEffectUrl);
       setProfileEffectInput(savedProfileEffectUrl ?? "");
-      setProfileEffectStatus(savedProfileEffectUrl ? "Profile effect updated." : "Profile effect cleared.");
+      setProfileEffectStatus(
+        savedProfileEffectUrl
+          ? "Profile effect updated."
+          : "Profile effect cleared.",
+      );
       window.dispatchEvent(
         new CustomEvent("inaccord:profile-updated", {
           detail: {
             profileId: resolvedProfileId,
             profileEffectUrl: savedProfileEffectUrl,
           },
-        })
+        }),
       );
       window.dispatchEvent(new CustomEvent("inaccord:profile-card-refresh"));
       router.refresh();
@@ -6424,17 +7547,26 @@ export const SettingsModal = () => {
     }
   };
 
-  const onSaveNameplate = async (labelOverride?: string, colorOverride?: string, imageOverride?: string) => {
+  const onSaveNameplate = async (
+    labelOverride?: string,
+    colorOverride?: string,
+    imageOverride?: string,
+  ) => {
     const trimmedNameplateLabel = (labelOverride ?? nameplateLabelInput).trim();
     const trimmedNameplateColor = (colorOverride ?? nameplateColorInput).trim();
-    const trimmedNameplateImageUrl = (imageOverride ?? nameplateImageUrlInput).trim();
+    const trimmedNameplateImageUrl = (
+      imageOverride ?? nameplateImageUrlInput
+    ).trim();
 
     if (trimmedNameplateLabel.length > 40) {
       setNameplateStatus("Nameplate label must be 40 characters or fewer.");
       return false;
     }
 
-    if (trimmedNameplateColor.length > 0 && !/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(trimmedNameplateColor)) {
+    if (
+      trimmedNameplateColor.length > 0 &&
+      !/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(trimmedNameplateColor)
+    ) {
       setNameplateStatus("Nameplate color must be a valid hex color.");
       return false;
     }
@@ -6453,14 +7585,13 @@ export const SettingsModal = () => {
         nameplateLabel: string | null;
         nameplateColor: string | null;
         nameplateImageUrl: string | null;
-      }>(
-        "/api/profile/nameplate",
-        {
-          nameplateLabel: trimmedNameplateLabel || null,
-          nameplateColor: trimmedNameplateLabel ? (trimmedNameplateColor || "#5865f2") : null,
-          nameplateImageUrl: trimmedNameplateImageUrl || null,
-        }
-      );
+      }>("/api/profile/nameplate", {
+        nameplateLabel: trimmedNameplateLabel || null,
+        nameplateColor: trimmedNameplateLabel
+          ? trimmedNameplateColor || "#5865f2"
+          : null,
+        nameplateImageUrl: trimmedNameplateImageUrl || null,
+      });
 
       const savedNameplateLabel = response.data?.nameplateLabel ?? "";
       const savedNameplateColor = response.data?.nameplateColor ?? "";
@@ -6472,17 +7603,21 @@ export const SettingsModal = () => {
       setNameplateLabelInput(savedNameplateLabel);
       setNameplateColorInput(savedNameplateColor || "");
       setNameplateImageUrlInput(savedNameplateImageUrl ?? "");
-      setNameplateStatus(savedNameplateLabel ? "Nameplate updated." : "Nameplate cleared.");
+      setNameplateStatus(
+        savedNameplateLabel ? "Nameplate updated." : "Nameplate cleared.",
+      );
 
       window.dispatchEvent(
         new CustomEvent("inaccord:profile-updated", {
           detail: {
             profileId: resolvedProfileId,
             nameplateLabel: savedNameplateLabel || null,
-            nameplateColor: savedNameplateLabel ? (savedNameplateColor || "#5865f2") : null,
+            nameplateColor: savedNameplateLabel
+              ? savedNameplateColor || "#5865f2"
+              : null,
             nameplateImageUrl: savedNameplateImageUrl,
           },
-        })
+        }),
       );
       window.dispatchEvent(new CustomEvent("inaccord:profile-card-refresh"));
       router.refresh();
@@ -6551,7 +7686,7 @@ export const SettingsModal = () => {
         formData,
         {
           headers: { "Content-Type": "multipart/form-data" },
-        }
+        },
       );
 
       await axios.patch("/api/profile/banner", {
@@ -6566,7 +7701,7 @@ export const SettingsModal = () => {
             profileId: resolvedProfileId,
             bannerUrl: upload.data.url,
           },
-        })
+        }),
       );
       router.refresh();
     } catch (error) {
@@ -6575,7 +7710,10 @@ export const SettingsModal = () => {
           (error.response?.data as { error?: string })?.error ||
           error.message ||
           "Banner upload failed";
-        console.error("[SETTINGS_BANNER_UPLOAD]", error.response?.data ?? error.message);
+        console.error(
+          "[SETTINGS_BANNER_UPLOAD]",
+          error.response?.data ?? error.message,
+        );
         window.alert(message);
       } else {
         console.error("[SETTINGS_BANNER_UPLOAD]", error);
@@ -6605,7 +7743,7 @@ export const SettingsModal = () => {
         formData,
         {
           headers: { "Content-Type": "multipart/form-data" },
-        }
+        },
       );
 
       const uploadedUrl = String(upload.data?.url ?? "").trim();
@@ -6650,7 +7788,7 @@ export const SettingsModal = () => {
         formData,
         {
           headers: { "Content-Type": "multipart/form-data" },
-        }
+        },
       );
 
       const uploadedUrl = String(upload.data?.url ?? "").trim();
@@ -6695,7 +7833,7 @@ export const SettingsModal = () => {
         formData,
         {
           headers: { "Content-Type": "multipart/form-data" },
-        }
+        },
       );
 
       const uploadedUrl = String(upload.data?.url ?? "").trim();
@@ -6704,7 +7842,9 @@ export const SettingsModal = () => {
       }
 
       setServerProfileNameplateImageUrlInput(uploadedUrl);
-      setServerProfileStatus("Custom nameplate image uploaded. Save server profile to apply.");
+      setServerProfileStatus(
+        "Custom nameplate image uploaded. Save server profile to apply.",
+      );
       rememberUploadedBanner(uploadedUrl);
     } catch (error) {
       if (axios.isAxiosError(error)) {
@@ -6737,7 +7877,7 @@ export const SettingsModal = () => {
             profileId: resolvedProfileId,
             bannerUrl: null,
           },
-        })
+        }),
       );
       router.refresh();
     } catch (error) {
@@ -6746,7 +7886,10 @@ export const SettingsModal = () => {
           (error.response?.data as { error?: string })?.error ||
           error.message ||
           "Failed to remove banner";
-        console.error("[SETTINGS_BANNER_REMOVE]", error.response?.data ?? error.message);
+        console.error(
+          "[SETTINGS_BANNER_REMOVE]",
+          error.response?.data ?? error.message,
+        );
         window.alert(message);
       } else {
         console.error("[SETTINGS_BANNER_REMOVE]", error);
@@ -6770,7 +7913,10 @@ export const SettingsModal = () => {
           (error.response?.data as { error?: string })?.error ||
           error.message ||
           "Logout failed";
-        console.error("[SETTINGS_LOGOUT]", error.response?.data ?? error.message);
+        console.error(
+          "[SETTINGS_LOGOUT]",
+          error.response?.data ?? error.message,
+        );
         window.alert(message);
       } else {
         console.error("[SETTINGS_LOGOUT]", error);
@@ -6812,7 +7958,11 @@ export const SettingsModal = () => {
       return;
     }
 
-    if (!trimmedCredentialPin || !trimmedCredentialPinConfirmOne || !trimmedCredentialPinConfirmTwo) {
+    if (
+      !trimmedCredentialPin ||
+      !trimmedCredentialPinConfirmOne ||
+      !trimmedCredentialPinConfirmTwo
+    ) {
       setPasswordError("Security PIN and both confirmations are required.");
       return;
     }
@@ -6858,7 +8008,9 @@ export const SettingsModal = () => {
     }
   };
 
-  const joinedDateValue = data.profileJoinedAt ? new Date(data.profileJoinedAt) : null;
+  const joinedDateValue = data.profileJoinedAt
+    ? new Date(data.profileJoinedAt)
+    : null;
   const joinedDisplay =
     joinedDateValue && !Number.isNaN(joinedDateValue.getTime())
       ? joinedDateValue.toLocaleString(undefined, {
@@ -6870,7 +8022,9 @@ export const SettingsModal = () => {
         })
       : "Unknown";
 
-  const lastLogonDateValue = data.profileLastLogonAt ? new Date(data.profileLastLogonAt) : null;
+  const lastLogonDateValue = data.profileLastLogonAt
+    ? new Date(data.profileLastLogonAt)
+    : null;
   const lastLogonDisplay =
     lastLogonDateValue && !Number.isNaN(lastLogonDateValue.getTime())
       ? lastLogonDateValue.toLocaleString(undefined, {
@@ -6882,15 +8036,23 @@ export const SettingsModal = () => {
         })
       : "Unknown";
 
-  const hasAdminCrown = isInAccordAdministrator(profileRole ?? data.profileRole);
-  const hasDeveloperWrench = isInAccordDeveloper(profileRole ?? data.profileRole);
-  const hasModeratorShield = isInAccordModerator(profileRole ?? data.profileRole);
-  const inAccordStaffRoleLabel = getInAccordStaffLabel(profileRole ?? data.profileRole);
+  const hasAdminCrown = isInAccordAdministrator(
+    profileRole ?? data.profileRole,
+  );
+  const hasDeveloperWrench = isInAccordDeveloper(
+    profileRole ?? data.profileRole,
+  );
+  const hasModeratorShield = isInAccordModerator(
+    profileRole ?? data.profileRole,
+  );
+  const inAccordStaffRoleLabel = getInAccordStaffLabel(
+    profileRole ?? data.profileRole,
+  );
   const familyCenterStatusIsError = Boolean(
     familyCenterStatus &&
-      /(required|valid|only|could not|does not match|already|failed|forbidden|unauthorized|missing)/i.test(
-        familyCenterStatus
-      )
+    /(required|valid|only|could not|does not match|already|failed|forbidden|unauthorized|missing)/i.test(
+      familyCenterStatus,
+    ),
   );
   const profileIcons = resolveProfileIcons({
     userId: resolvedProfileId,
@@ -6906,7 +8068,8 @@ export const SettingsModal = () => {
           <p className="text-sm font-medium text-white">{title}</p>
           <p className="mt-1 text-xs text-[#949ba4]">{subtitle}</p>
           <div className="mt-4 rounded-xl border border-[#5865f2]/25 bg-[#5865f2]/10 px-3 py-2 text-xs text-[#cdd2ff]">
-            This section is now available in the menu and ready for feature wiring.
+            This section is now available in the menu and ready for feature
+            wiring.
           </div>
         </div>
       </div>
@@ -6931,7 +8094,9 @@ export const SettingsModal = () => {
       return (
         <div className="space-y-12">
           <div className="mx-auto mt-8 max-h-[88vh] min-h-[80vh] w-full max-w-6xl overflow-y-auto rounded-[2.5rem] border border-black/20 bg-[#1e1f22] p-4 shadow-xl shadow-black/35">
-            <p className="text-center text-sm font-medium text-white">Account Actions</p>
+            <p className="text-center text-sm font-medium text-white">
+              Account Actions
+            </p>
 
             <div className="mx-auto mt-8 w-full max-w-md space-y-3 rounded-3xl border border-white/10 bg-[#232428] p-4">
               <p className="text-center text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
@@ -6950,10 +8115,22 @@ export const SettingsModal = () => {
                   type="button"
                   onClick={() => setShowCurrentPassword((current) => !current)}
                   className="absolute inset-y-0 right-0 inline-flex w-10 items-center justify-center text-[#a4aab4] transition hover:text-white"
-                  aria-label={showCurrentPassword ? "Hide current password" : "Show current password"}
-                  title={showCurrentPassword ? "Hide current password" : "Show current password"}
+                  aria-label={
+                    showCurrentPassword
+                      ? "Hide current password"
+                      : "Show current password"
+                  }
+                  title={
+                    showCurrentPassword
+                      ? "Hide current password"
+                      : "Show current password"
+                  }
                 >
-                  {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showCurrentPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
                 </button>
               </div>
               <div className="relative">
@@ -6968,10 +8145,18 @@ export const SettingsModal = () => {
                   type="button"
                   onClick={() => setShowNewPassword((current) => !current)}
                   className="absolute inset-y-0 right-0 inline-flex w-10 items-center justify-center text-[#a4aab4] transition hover:text-white"
-                  aria-label={showNewPassword ? "Hide new password" : "Show new password"}
-                  title={showNewPassword ? "Hide new password" : "Show new password"}
+                  aria-label={
+                    showNewPassword ? "Hide new password" : "Show new password"
+                  }
+                  title={
+                    showNewPassword ? "Hide new password" : "Show new password"
+                  }
                 >
-                  {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showNewPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
                 </button>
               </div>
               <div className="relative">
@@ -6986,10 +8171,22 @@ export const SettingsModal = () => {
                   type="button"
                   onClick={() => setShowConfirmPassword((current) => !current)}
                   className="absolute inset-y-0 right-0 inline-flex w-10 items-center justify-center text-[#a4aab4] transition hover:text-white"
-                  aria-label={showConfirmPassword ? "Hide confirmation password" : "Show confirmation password"}
-                  title={showConfirmPassword ? "Hide confirmation password" : "Show confirmation password"}
+                  aria-label={
+                    showConfirmPassword
+                      ? "Hide confirmation password"
+                      : "Show confirmation password"
+                  }
+                  title={
+                    showConfirmPassword
+                      ? "Hide confirmation password"
+                      : "Show confirmation password"
+                  }
                 >
-                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showConfirmPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
                 </button>
               </div>
 
@@ -7005,17 +8202,31 @@ export const SettingsModal = () => {
                   type="button"
                   onClick={() => setShowCredentialPin((current) => !current)}
                   className="absolute inset-y-0 right-0 inline-flex w-10 items-center justify-center text-[#a4aab4] transition hover:text-white"
-                  aria-label={showCredentialPin ? "Hide security PIN" : "Show security PIN"}
-                  title={showCredentialPin ? "Hide security PIN" : "Show security PIN"}
+                  aria-label={
+                    showCredentialPin
+                      ? "Hide security PIN"
+                      : "Show security PIN"
+                  }
+                  title={
+                    showCredentialPin
+                      ? "Hide security PIN"
+                      : "Show security PIN"
+                  }
                 >
-                  {showCredentialPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showCredentialPin ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
                 </button>
               </div>
 
               <input
                 type={showCredentialPin ? "text" : "password"}
                 value={credentialPinConfirmOne}
-                onChange={(event) => setCredentialPinConfirmOne(event.target.value)}
+                onChange={(event) =>
+                  setCredentialPinConfirmOne(event.target.value)
+                }
                 placeholder="Confirm security PIN (1/2)"
                 className="w-full rounded-xl border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
               />
@@ -7023,7 +8234,9 @@ export const SettingsModal = () => {
               <input
                 type={showCredentialPin ? "text" : "password"}
                 value={credentialPinConfirmTwo}
-                onChange={(event) => setCredentialPinConfirmTwo(event.target.value)}
+                onChange={(event) =>
+                  setCredentialPinConfirmTwo(event.target.value)
+                }
                 placeholder="Confirm security PIN (2/2)"
                 className="w-full rounded-xl border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
               />
@@ -7062,7 +8275,8 @@ export const SettingsModal = () => {
                 Patronage
               </p>
               <p className="mt-2 text-center text-xs text-yellow-100/90">
-                Open your patron area to submit support or cancel any pending payment.
+                Open your patron area to submit support or cancel any pending
+                payment.
               </p>
               <Button
                 type="button"
@@ -7086,12 +8300,18 @@ export const SettingsModal = () => {
               </p>
 
               <p className="mt-3 text-center text-[11px] text-[#949ba4]">
-                Status: {authenticatorAppStatus.enabled ? "Enabled" : authenticatorAppStatus.hasPendingSetup ? "Pending Setup" : "Disabled"}
+                Status:{" "}
+                {authenticatorAppStatus.enabled
+                  ? "Enabled"
+                  : authenticatorAppStatus.hasPendingSetup
+                    ? "Pending Setup"
+                    : "Disabled"}
               </p>
 
               {authenticatorAppStatus.verifiedAt ? (
                 <p className="mt-1 text-center text-[11px] text-[#949ba4]">
-                  Verified: {new Date(authenticatorAppStatus.verifiedAt).toLocaleString()}
+                  Verified:{" "}
+                  {new Date(authenticatorAppStatus.verifiedAt).toLocaleString()}
                 </p>
               ) : null}
 
@@ -7109,7 +8329,11 @@ export const SettingsModal = () => {
                     disabled={isAuthenticatorAppBusy}
                     className="w-full bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {isAuthenticatorAppBusy ? "Working..." : authenticatorAppStatus.hasPendingSetup ? "Regenerate Setup Key" : "Set Up Authenticator App"}
+                    {isAuthenticatorAppBusy
+                      ? "Working..."
+                      : authenticatorAppStatus.hasPendingSetup
+                        ? "Regenerate Setup Key"
+                        : "Set Up Authenticator App"}
                   </Button>
                 ) : null}
 
@@ -7118,12 +8342,17 @@ export const SettingsModal = () => {
                   onClick={() => setIsAuthenticatorAppModalOpen(true)}
                   className="w-full border border-white/15 bg-[#1a1b1e] text-[#dbdee1] hover:bg-[#2a2b30]"
                 >
-                  {authenticatorAppStatus.enabled ? "Manage Authenticator App" : "Open Setup Popup"}
+                  {authenticatorAppStatus.enabled
+                    ? "Manage Authenticator App"
+                    : "Open Setup Popup"}
                 </Button>
               </div>
             </div>
 
-            <Dialog open={isAuthenticatorAppModalOpen} onOpenChange={setIsAuthenticatorAppModalOpen}>
+            <Dialog
+              open={isAuthenticatorAppModalOpen}
+              onOpenChange={setIsAuthenticatorAppModalOpen}
+            >
               <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle>Authenticator App</DialogTitle>
@@ -7134,20 +8363,29 @@ export const SettingsModal = () => {
 
                 <div className="space-y-3">
                   <p className="text-xs text-[#949ba4]">
-                    Status: {authenticatorAppStatus.enabled ? "Enabled" : authenticatorAppStatus.hasPendingSetup ? "Pending Setup" : "Disabled"}
+                    Status:{" "}
+                    {authenticatorAppStatus.enabled
+                      ? "Enabled"
+                      : authenticatorAppStatus.hasPendingSetup
+                        ? "Pending Setup"
+                        : "Disabled"}
                   </p>
 
-                  {(authenticatorSetupSecret || authenticatorSetupUri) ? (
+                  {authenticatorSetupSecret || authenticatorSetupUri ? (
                     <div className="space-y-2 rounded-xl border border-white/10 bg-[#1a1b1e] p-3">
                       <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">Manual key</p>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                          Manual key
+                        </p>
                         <p className="mt-1 break-all rounded-md border border-white/10 bg-black/20 px-2 py-1.5 text-xs text-white">
                           {authenticatorSetupSecret}
                         </p>
                       </div>
 
                       <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">OTP URI</p>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                          OTP URI
+                        </p>
                         <p className="mt-1 break-all rounded-md border border-white/10 bg-black/20 px-2 py-1.5 text-[11px] text-[#b5bac1]">
                           {authenticatorSetupUri}
                         </p>
@@ -7172,12 +8410,16 @@ export const SettingsModal = () => {
                     </div>
                   ) : null}
 
-                  {(authenticatorAppStatus.enabled || authenticatorAppStatus.hasPendingSetup || authenticatorSetupSecret) ? (
+                  {authenticatorAppStatus.enabled ||
+                  authenticatorAppStatus.hasPendingSetup ||
+                  authenticatorSetupSecret ? (
                     <input
                       type="text"
                       value={authenticatorCodeInput}
                       onChange={(event) => {
-                        const digitsOnly = event.target.value.replace(/\D/g, "").slice(0, 6);
+                        const digitsOnly = event.target.value
+                          .replace(/\D/g, "")
+                          .slice(0, 6);
                         setAuthenticatorCodeInput(digitsOnly);
                         setAuthenticatorAppMessage(null);
                       }}
@@ -7197,14 +8439,21 @@ export const SettingsModal = () => {
 
                 <DialogFooter className="gap-2 sm:justify-between">
                   <div className="flex flex-wrap gap-2">
-                    {(authenticatorAppStatus.hasPendingSetup || authenticatorSetupSecret) && !authenticatorAppStatus.enabled ? (
+                    {(authenticatorAppStatus.hasPendingSetup ||
+                      authenticatorSetupSecret) &&
+                    !authenticatorAppStatus.enabled ? (
                       <Button
                         type="button"
                         onClick={() => void onVerifyAuthenticatorAppSetup()}
-                        disabled={isAuthenticatorAppBusy || authenticatorCodeInput.trim().length !== 6}
+                        disabled={
+                          isAuthenticatorAppBusy ||
+                          authenticatorCodeInput.trim().length !== 6
+                        }
                         className="border border-emerald-500/35 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/30 disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        {isAuthenticatorAppBusy ? "Verifying..." : "Verify & Enable"}
+                        {isAuthenticatorAppBusy
+                          ? "Verifying..."
+                          : "Verify & Enable"}
                       </Button>
                     ) : null}
 
@@ -7212,10 +8461,15 @@ export const SettingsModal = () => {
                       <Button
                         type="button"
                         onClick={() => void onDisableAuthenticatorApp()}
-                        disabled={isAuthenticatorAppBusy || authenticatorCodeInput.trim().length !== 6}
+                        disabled={
+                          isAuthenticatorAppBusy ||
+                          authenticatorCodeInput.trim().length !== 6
+                        }
                         className="border border-rose-500/35 bg-rose-500/20 text-rose-100 hover:bg-rose-500/30 disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        {isAuthenticatorAppBusy ? "Disabling..." : "Disable Authenticator App"}
+                        {isAuthenticatorAppBusy
+                          ? "Disabling..."
+                          : "Disable Authenticator App"}
                       </Button>
                     ) : null}
                   </div>
@@ -7236,7 +8490,8 @@ export const SettingsModal = () => {
                 Security Key
               </p>
               <p className="mt-2 text-center text-xs text-[#b5bac1]">
-                Register a physical security key for stronger sign-in protection.
+                Register a physical security key for stronger sign-in
+                protection.
               </p>
               <Button
                 type="button"
@@ -7251,7 +8506,10 @@ export const SettingsModal = () => {
               </p>
             </div>
 
-            <Dialog open={isSecurityKeyModalOpen} onOpenChange={setIsSecurityKeyModalOpen}>
+            <Dialog
+              open={isSecurityKeyModalOpen}
+              onOpenChange={setIsSecurityKeyModalOpen}
+            >
               <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle>Security Key</DialogTitle>
@@ -7267,7 +8525,9 @@ export const SettingsModal = () => {
                     disabled={isSecurityKeyBusy}
                     className="w-full bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {isSecurityKeyBusy ? "Working..." : "Register New Security Key"}
+                    {isSecurityKeyBusy
+                      ? "Working..."
+                      : "Register New Security Key"}
                   </Button>
 
                   <div className="max-h-60 space-y-2 overflow-y-auto">
@@ -7281,9 +8541,14 @@ export const SettingsModal = () => {
                           key={key.id}
                           className="rounded-md border border-white/10 bg-black/20 px-3 py-2"
                         >
-                          <p className="text-xs font-semibold text-white">{key.nickname || "Security Key"}</p>
+                          <p className="text-xs font-semibold text-white">
+                            {key.nickname || "Security Key"}
+                          </p>
                           <p className="mt-1 text-[11px] text-[#949ba4]">
-                            Added: {key.createdAt ? new Date(key.createdAt).toLocaleString() : "Unknown"}
+                            Added:{" "}
+                            {key.createdAt
+                              ? new Date(key.createdAt).toLocaleString()
+                              : "Unknown"}
                           </p>
                           {key.transports.length > 0 ? (
                             <p className="mt-1 text-[11px] text-[#949ba4]">
@@ -7340,10 +8605,17 @@ export const SettingsModal = () => {
               </Button>
 
               <p className="mt-2 text-center text-[11px] text-[#949ba4]">
-                Status: {smsAuthStatus.enabled ? "Enabled" : smsAuthStatus.hasPendingVerification ? "Pending Verification" : "Disabled"}
+                Status:{" "}
+                {smsAuthStatus.enabled
+                  ? "Enabled"
+                  : smsAuthStatus.hasPendingVerification
+                    ? "Pending Verification"
+                    : "Disabled"}
               </p>
               {smsAuthStatus.maskedPhoneNumber ? (
-                <p className="mt-1 text-center text-[11px] text-[#949ba4]">Phone: {smsAuthStatus.maskedPhoneNumber}</p>
+                <p className="mt-1 text-center text-[11px] text-[#949ba4]">
+                  Phone: {smsAuthStatus.maskedPhoneNumber}
+                </p>
               ) : null}
             </div>
 
@@ -7358,7 +8630,12 @@ export const SettingsModal = () => {
 
                 <div className="space-y-3">
                   <p className="text-xs text-[#949ba4]">
-                    Status: {smsAuthStatus.enabled ? "Enabled" : smsAuthStatus.hasPendingVerification ? "Pending Verification" : "Disabled"}
+                    Status:{" "}
+                    {smsAuthStatus.enabled
+                      ? "Enabled"
+                      : smsAuthStatus.hasPendingVerification
+                        ? "Pending Verification"
+                        : "Disabled"}
                   </p>
 
                   {!smsAuthStatus.enabled ? (
@@ -7374,12 +8651,15 @@ export const SettingsModal = () => {
                     />
                   ) : null}
 
-                  {(smsAuthStatus.hasPendingVerification || smsAuthStatus.enabled) ? (
+                  {smsAuthStatus.hasPendingVerification ||
+                  smsAuthStatus.enabled ? (
                     <input
                       type="text"
                       value={smsCodeInput}
                       onChange={(event) => {
-                        const digitsOnly = event.target.value.replace(/\D/g, "").slice(0, 6);
+                        const digitsOnly = event.target.value
+                          .replace(/\D/g, "")
+                          .slice(0, 6);
                         setSmsCodeInput(digitsOnly);
                         setSmsMessage(null);
                       }}
@@ -7406,7 +8686,11 @@ export const SettingsModal = () => {
                         disabled={isSmsBusy || !smsPhoneInput.trim()}
                         className="bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        {isSmsBusy ? "Sending..." : smsAuthStatus.hasPendingVerification ? "Resend Code" : "Send Code"}
+                        {isSmsBusy
+                          ? "Sending..."
+                          : smsAuthStatus.hasPendingVerification
+                            ? "Resend Code"
+                            : "Send Code"}
                       </Button>
                     ) : null}
 
@@ -7433,7 +8717,11 @@ export const SettingsModal = () => {
                     ) : null}
                   </div>
 
-                  <Button type="button" variant="outline" onClick={() => setIsSmsModalOpen(false)}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsSmsModalOpen(false)}
+                  >
                     Close
                   </Button>
                 </DialogFooter>
@@ -7462,22 +8750,38 @@ export const SettingsModal = () => {
 
     if (displaySection === "profiles") {
       const selectedServer = memberProfileServers.find(
-        (item) => item.serverId === selectedProfileSettingsServerId
+        (item) => item.serverId === selectedProfileSettingsServerId,
       );
       const previewDisplayName =
-        serverProfileNameInput.trim() || selectedServer?.effectiveProfileName || profileName || realName || "User";
+        serverProfileNameInput.trim() ||
+        selectedServer?.effectiveProfileName ||
+        profileName ||
+        realName ||
+        "User";
       const previewProfileNameStyle =
         serverProfileNameStyleInput.trim() ||
         selectedServer?.effectiveProfileNameStyle ||
         defaultProfileNameStyle;
       const previewComment =
-        serverProfileCommentInput.trim() || selectedServer?.effectiveComment || comment || "";
+        serverProfileCommentInput.trim() ||
+        selectedServer?.effectiveComment ||
+        comment ||
+        "";
       const previewNameplateLabel =
-        serverProfileNameplateLabelInput.trim() || selectedServer?.effectiveNameplateLabel || nameplateLabel || "";
+        serverProfileNameplateLabelInput.trim() ||
+        selectedServer?.effectiveNameplateLabel ||
+        nameplateLabel ||
+        "";
       const previewNameplateColor =
-        serverProfileNameplateColorInput.trim() || selectedServer?.effectiveNameplateColor || nameplateColor || "#5865f2";
+        serverProfileNameplateColorInput.trim() ||
+        selectedServer?.effectiveNameplateColor ||
+        nameplateColor ||
+        "#5865f2";
       const previewNameplateImageUrl =
-        serverProfileNameplateImageUrlInput.trim() || selectedServer?.effectiveNameplateImageUrl || nameplateImageUrl || null;
+        serverProfileNameplateImageUrlInput.trim() ||
+        selectedServer?.effectiveNameplateImageUrl ||
+        nameplateImageUrl ||
+        null;
       const previewAvatarUrl =
         serverProfileImageInput.trim() ||
         selectedServer?.imageUrl ||
@@ -7506,15 +8810,18 @@ export const SettingsModal = () => {
           selectedServer?.bannerUrl ||
           selectedServer?.effectiveBannerUrl ||
           bannerUrl ||
-          null
+          null,
       );
 
       return (
         <div className="space-y-4">
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
-            <p className="text-sm font-medium text-white">Per-Server Profiles</p>
+            <p className="text-sm font-medium text-white">
+              Per-Server Profiles
+            </p>
             <p className="mt-1 text-xs text-[#949ba4]">
-              Customize how your profile appears in each server you&apos;re a member of.
+              Customize how your profile appears in each server you&apos;re a
+              member of.
             </p>
 
             {isLoadingServerProfiles ? (
@@ -7534,7 +8841,9 @@ export const SettingsModal = () => {
                   </label>
                   <select
                     value={selectedProfileSettingsServerId}
-                    onChange={(event) => onChangeProfileSettingsServer(event.target.value)}
+                    onChange={(event) =>
+                      onChangeProfileSettingsServer(event.target.value)
+                    }
                     disabled={isSavingServerProfile}
                     className="h-9 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35 disabled:cursor-not-allowed disabled:opacity-60"
                   >
@@ -7574,7 +8883,10 @@ export const SettingsModal = () => {
                         </div>
 
                         <div className="min-w-0">
-                          <ProfileIconRow icons={profileIcons} className="mb-1" />
+                          <ProfileIconRow
+                            icons={profileIcons}
+                            className="mb-1"
+                          />
                           <NameplatePill
                             label={previewNameplateLabel}
                             color={previewNameplateColor}
@@ -7585,7 +8897,7 @@ export const SettingsModal = () => {
                             name={previewDisplayName}
                             profileId={resolvedProfileId}
                             nameClassName={`text-base font-bold text-white ${getProfileNameStyleClass(
-                              previewProfileNameStyle
+                              previewProfileNameStyle,
                             )}`}
                           />
                           <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">
@@ -7598,7 +8910,10 @@ export const SettingsModal = () => {
                             <p>Name: {previewDisplayName}</p>
                             <p>Pronouns: {pronouns.trim() || "Not set"}</p>
                             <p>Comment: {previewComment || "Not set"}</p>
-                            <p>Server: {selectedServer?.serverName ?? "Selected server"}</p>
+                            <p>
+                              Server:{" "}
+                              {selectedServer?.serverName ?? "Selected server"}
+                            </p>
                           </div>
                         </div>
                       </div>
@@ -7625,7 +8940,9 @@ export const SettingsModal = () => {
                         </Button>
                         <Button
                           type="button"
-                          onClick={() => setIsServerProfileNameStylesPanelOpen(true)}
+                          onClick={() =>
+                            setIsServerProfileNameStylesPanelOpen(true)
+                          }
                           disabled={isSavingServerProfile}
                           className="h-8 border border-white/15 bg-[#1a1b1e] px-3 text-xs text-[#dbdee1] hover:bg-[#2a2b30] disabled:cursor-not-allowed disabled:opacity-60"
                         >
@@ -7649,7 +8966,9 @@ export const SettingsModal = () => {
                         </Button>
                         <Button
                           type="button"
-                          onClick={() => setIsServerAvatarDecorationPanelOpen(true)}
+                          onClick={() =>
+                            setIsServerAvatarDecorationPanelOpen(true)
+                          }
                           disabled={isSavingServerProfile}
                           className="h-8 border border-white/15 bg-[#1a1b1e] px-3 text-xs text-[#dbdee1] hover:bg-[#2a2b30] disabled:cursor-not-allowed disabled:opacity-60"
                         >
@@ -7657,7 +8976,9 @@ export const SettingsModal = () => {
                         </Button>
                         <Button
                           type="button"
-                          onClick={() => setIsServerProfileEffectPanelOpen(true)}
+                          onClick={() =>
+                            setIsServerProfileEffectPanelOpen(true)
+                          }
                           disabled={isSavingServerProfile}
                           className="h-8 border border-white/15 bg-[#1a1b1e] px-3 text-xs text-[#dbdee1] hover:bg-[#2a2b30] disabled:cursor-not-allowed disabled:opacity-60"
                         >
@@ -7665,19 +8986,29 @@ export const SettingsModal = () => {
                         </Button>
                       </div>
                       {serverProfileImageInput.trim() ? (
-                        <p className="mt-1 text-[11px] text-[#949ba4]">Custom avatar set.</p>
+                        <p className="mt-1 text-[11px] text-[#949ba4]">
+                          Custom avatar set.
+                        </p>
                       ) : null}
                       {serverProfileBannerInput.trim() ? (
-                        <p className="mt-1 text-[11px] text-[#949ba4]">Custom URL set.</p>
+                        <p className="mt-1 text-[11px] text-[#949ba4]">
+                          Custom URL set.
+                        </p>
                       ) : null}
                       {serverProfileAvatarDecorationInput.trim() ? (
-                        <p className="mt-1 text-[11px] text-[#949ba4]">Custom decoration set.</p>
+                        <p className="mt-1 text-[11px] text-[#949ba4]">
+                          Custom decoration set.
+                        </p>
                       ) : null}
                       {serverProfileEffectInput.trim() ? (
-                        <p className="mt-1 text-[11px] text-[#949ba4]">Custom profile effect set.</p>
+                        <p className="mt-1 text-[11px] text-[#949ba4]">
+                          Custom profile effect set.
+                        </p>
                       ) : null}
                       {serverProfileNameplateLabelInput.trim() ? (
-                        <p className="mt-1 text-[11px] text-[#949ba4]">Custom nameplate set.</p>
+                        <p className="mt-1 text-[11px] text-[#949ba4]">
+                          Custom nameplate set.
+                        </p>
                       ) : null}
                     </div>
 
@@ -7693,11 +9024,15 @@ export const SettingsModal = () => {
                           setServerProfileStatus(null);
                         }}
                         maxLength={80}
-                        placeholder={profileName || realName || "Use global profile name"}
+                        placeholder={
+                          profileName || realName || "Use global profile name"
+                        }
                         disabled={isSavingServerProfile}
                         className="w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35 disabled:cursor-not-allowed disabled:opacity-60"
                       />
-                      <p className="mt-1 text-[11px] text-[#949ba4]">Leave blank to use your global profile name.</p>
+                      <p className="mt-1 text-[11px] text-[#949ba4]">
+                        Leave blank to use your global profile name.
+                      </p>
 
                       <div className="mt-3">
                         <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
@@ -7716,7 +9051,9 @@ export const SettingsModal = () => {
                           className="w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35 disabled:cursor-not-allowed disabled:opacity-60"
                         />
                         <div className="mt-2 flex items-center justify-between gap-2">
-                          <p className="text-[11px] text-[#949ba4]">Optional and shown on your profile card.</p>
+                          <p className="text-[11px] text-[#949ba4]">
+                            Optional and shown on your profile card.
+                          </p>
                           <Button
                             type="button"
                             onClick={() => void onSavePronouns()}
@@ -7755,35 +9092,68 @@ export const SettingsModal = () => {
                           disabled={isSavingServerProfile}
                           className="w-full resize-y rounded-md border border-black/25 bg-[#1a1b1e] px-3 py-2 text-sm text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35 disabled:cursor-not-allowed disabled:opacity-60"
                         />
-                        <p className="mt-1 text-[11px] text-[#949ba4]">Leave blank to use your global comment.</p>
-
+                        <p className="mt-1 text-[11px] text-[#949ba4]">
+                          Leave blank to use your global comment.
+                        </p>
                       </div>
                     </div>
 
                     <div className="rounded-md border border-white/10 bg-[#1a1b1e] px-3 py-2 text-xs text-[#dbdee1]">
                       <p>
-                        Current for {selectedServer?.serverName ?? "selected server"}: {" "}
+                        Current for{" "}
+                        {selectedServer?.serverName ?? "selected server"}:{" "}
                         <span className="font-semibold text-white">
-                          {selectedServer?.effectiveProfileName || "Global profile name"}
+                          {selectedServer?.effectiveProfileName ||
+                            "Global profile name"}
                         </span>
                       </p>
                       <p className="mt-1 text-[#b5bac1]">
-                        Nameplate: {selectedServer?.nameplateLabel ? "Custom nameplate set" : (selectedServer?.effectiveNameplateLabel ? "Global nameplate" : "No nameplate")}
+                        Nameplate:{" "}
+                        {selectedServer?.nameplateLabel
+                          ? "Custom nameplate set"
+                          : selectedServer?.effectiveNameplateLabel
+                            ? "Global nameplate"
+                            : "No nameplate"}
                       </p>
                       <p className="mt-1 text-[#b5bac1]">
-                        Avatar: {selectedServer?.imageUrl ? "Custom avatar set" : (selectedServer?.effectiveImageUrl ? "Global avatar" : "No avatar")}
+                        Avatar:{" "}
+                        {selectedServer?.imageUrl
+                          ? "Custom avatar set"
+                          : selectedServer?.effectiveImageUrl
+                            ? "Global avatar"
+                            : "No avatar"}
                       </p>
                       <p className="mt-1 text-[#b5bac1]">
-                        Decoration: {selectedServer?.avatarDecorationUrl ? "Custom decoration set" : (selectedServer?.effectiveAvatarDecorationUrl ? "Global decoration" : "No decoration")}
+                        Decoration:{" "}
+                        {selectedServer?.avatarDecorationUrl
+                          ? "Custom decoration set"
+                          : selectedServer?.effectiveAvatarDecorationUrl
+                            ? "Global decoration"
+                            : "No decoration"}
                       </p>
                       <p className="mt-1 text-[#b5bac1]">
-                        Effect: {selectedServer?.profileEffectUrl ? "Custom effect set" : (selectedServer?.effectiveProfileEffectUrl ? "Global effect" : "No effect")}
+                        Effect:{" "}
+                        {selectedServer?.profileEffectUrl
+                          ? "Custom effect set"
+                          : selectedServer?.effectiveProfileEffectUrl
+                            ? "Global effect"
+                            : "No effect"}
                       </p>
                       <p className="mt-1 text-[#b5bac1]">
-                        Banner: {selectedServer?.bannerUrl ? "Custom banner set" : (selectedServer?.effectiveBannerUrl ? "Global banner" : "No banner")}
+                        Banner:{" "}
+                        {selectedServer?.bannerUrl
+                          ? "Custom banner set"
+                          : selectedServer?.effectiveBannerUrl
+                            ? "Global banner"
+                            : "No banner"}
                       </p>
                       <p className="mt-1 text-[#b5bac1]">
-                        Comment: {selectedServer?.comment ? "Custom comment set" : (selectedServer?.effectiveComment ? "Global comment" : "No comment")}
+                        Comment:{" "}
+                        {selectedServer?.comment
+                          ? "Custom comment set"
+                          : selectedServer?.effectiveComment
+                            ? "Global comment"
+                            : "No comment"}
                       </p>
                     </div>
 
@@ -7813,12 +9183,16 @@ export const SettingsModal = () => {
                       </Button>
                     </div>
 
-                    <Dialog open={isServerBannerPanelOpen} onOpenChange={setIsServerBannerPanelOpen}>
+                    <Dialog
+                      open={isServerBannerPanelOpen}
+                      onOpenChange={setIsServerBannerPanelOpen}
+                    >
                       <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
                         <DialogHeader>
                           <DialogTitle>Edit Server Banner URL</DialogTitle>
                           <DialogDescription className="text-[#949ba4]">
-                            Set a server-specific banner URL. Leave blank to fall back to your global banner.
+                            Set a server-specific banner URL. Leave blank to
+                            fall back to your global banner.
                           </DialogDescription>
                         </DialogHeader>
 
@@ -7851,7 +9225,9 @@ export const SettingsModal = () => {
                           className="hidden"
                           type="file"
                           accept="image/*"
-                          onChange={(event) => onServerBannerChange(event.target.files?.[0])}
+                          onChange={(event) =>
+                            onServerBannerChange(event.target.files?.[0])
+                          }
                         />
 
                         {uploadedBannerThumbnails.length > 0 ? (
@@ -7924,7 +9300,10 @@ export const SettingsModal = () => {
                       </DialogContent>
                     </Dialog>
 
-                    <Dialog open={isServerAvatarPanelOpen} onOpenChange={setIsServerAvatarPanelOpen}>
+                    <Dialog
+                      open={isServerAvatarPanelOpen}
+                      onOpenChange={setIsServerAvatarPanelOpen}
+                    >
                       <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
                         <DialogHeader>
                           <DialogTitle>Avatar</DialogTitle>
@@ -7937,7 +9316,10 @@ export const SettingsModal = () => {
                           <div className="rounded-xl border border-white/10 bg-[#1a1b1e] p-4">
                             <div className="flex items-center gap-3">
                               <div className="relative overflow-hidden rounded-full">
-                                <ProfileEffectLayer src={previewProfileEffectUrl} className="rounded-full" />
+                                <ProfileEffectLayer
+                                  src={previewProfileEffectUrl}
+                                  className="rounded-full"
+                                />
                                 <UserAvatar
                                   src={previewAvatarUrl ?? undefined}
                                   decorationSrc={previewAvatarDecorationUrl}
@@ -7945,8 +9327,12 @@ export const SettingsModal = () => {
                                 />
                               </div>
                               <div>
-                                <p className="text-sm font-semibold text-white">Current Avatar</p>
-                                <p className="text-xs text-[#949ba4]">Server profile avatar</p>
+                                <p className="text-sm font-semibold text-white">
+                                  Current Avatar
+                                </p>
+                                <p className="text-xs text-[#949ba4]">
+                                  Server profile avatar
+                                </p>
                               </div>
                             </div>
                           </div>
@@ -7958,29 +9344,35 @@ export const SettingsModal = () => {
                                   Uploaded Avatars
                                 </p>
                                 <div className="grid grid-cols-6 gap-2">
-                                  {uploadedAvatarThumbnails.map((thumbnailUrl) => (
-                                    <button
-                                      key={`server-avatar-thumb-${thumbnailUrl}`}
-                                      type="button"
-                                      onClick={() => {
-                                        setServerProfileImageInput(thumbnailUrl);
-                                        setServerProfileStatus("Avatar selected. Save server profile to apply.");
-                                        rememberUploadedAvatar(thumbnailUrl);
-                                      }}
-                                      className="overflow-hidden rounded-full border border-white/15 bg-[#111214] transition hover:border-[#5865f2]/60"
-                                      title="Use this uploaded avatar"
-                                    >
-                                      <div className="relative h-10 w-10">
-                                        <Image
-                                          src={thumbnailUrl}
-                                          alt="Uploaded avatar thumbnail"
-                                          fill
-                                          className="object-cover"
-                                          unoptimized
-                                        />
-                                      </div>
-                                    </button>
-                                  ))}
+                                  {uploadedAvatarThumbnails.map(
+                                    (thumbnailUrl) => (
+                                      <button
+                                        key={`server-avatar-thumb-${thumbnailUrl}`}
+                                        type="button"
+                                        onClick={() => {
+                                          setServerProfileImageInput(
+                                            thumbnailUrl,
+                                          );
+                                          setServerProfileStatus(
+                                            "Avatar selected. Save server profile to apply.",
+                                          );
+                                          rememberUploadedAvatar(thumbnailUrl);
+                                        }}
+                                        className="overflow-hidden rounded-full border border-white/15 bg-[#111214] transition hover:border-[#5865f2]/60"
+                                        title="Use this uploaded avatar"
+                                      >
+                                        <div className="relative h-10 w-10">
+                                          <Image
+                                            src={thumbnailUrl}
+                                            alt="Uploaded avatar thumbnail"
+                                            fill
+                                            className="object-cover"
+                                            unoptimized
+                                          />
+                                        </div>
+                                      </button>
+                                    ),
+                                  )}
                                 </div>
                               </div>
                             ) : null}
@@ -7990,7 +9382,9 @@ export const SettingsModal = () => {
                                 type="button"
                                 onClick={() => {
                                   setServerProfileImageInput("");
-                                  setServerProfileStatus("Server avatar cleared. Save server profile to apply.");
+                                  setServerProfileStatus(
+                                    "Server avatar cleared. Save server profile to apply.",
+                                  );
                                 }}
                                 disabled={isUploadingServerAvatar}
                                 className="border border-rose-500/35 bg-rose-500/15 text-rose-200 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60"
@@ -8015,7 +9409,11 @@ export const SettingsModal = () => {
                               )}
                             </Button>
 
-                            <Button type="button" variant="outline" onClick={() => setIsServerAvatarPanelOpen(false)}>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => setIsServerAvatarPanelOpen(false)}
+                            >
                               Close
                             </Button>
                           </div>
@@ -8025,12 +9423,16 @@ export const SettingsModal = () => {
                             className="hidden"
                             type="file"
                             accept="image/*"
-                            onChange={(event) => onServerAvatarPanelChange(event.target.files?.[0])}
+                            onChange={(event) =>
+                              onServerAvatarPanelChange(event.target.files?.[0])
+                            }
                           />
                         </div>
 
                         <DialogFooter className="gap-2 sm:justify-between">
-                          <div className="text-xs text-[#949ba4]">Save server profile to apply avatar changes.</div>
+                          <div className="text-xs text-[#949ba4]">
+                            Save server profile to apply avatar changes.
+                          </div>
                           <Button
                             type="button"
                             onClick={() => setIsServerAvatarPanelOpen(false)}
@@ -8042,12 +9444,16 @@ export const SettingsModal = () => {
                       </DialogContent>
                     </Dialog>
 
-                    <Dialog open={isServerAvatarDecorationPanelOpen} onOpenChange={setIsServerAvatarDecorationPanelOpen}>
+                    <Dialog
+                      open={isServerAvatarDecorationPanelOpen}
+                      onOpenChange={setIsServerAvatarDecorationPanelOpen}
+                    >
                       <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
                         <DialogHeader>
                           <DialogTitle>Avatar Decoration</DialogTitle>
                           <DialogDescription className="text-[#949ba4]">
-                            Set a server-specific avatar decoration. Leave blank to use your global decoration.
+                            Set a server-specific avatar decoration. Leave blank
+                            to use your global decoration.
                           </DialogDescription>
                         </DialogHeader>
 
@@ -8055,7 +9461,10 @@ export const SettingsModal = () => {
                           <div className="rounded-xl border border-white/10 bg-[#1a1b1e] p-4">
                             <div className="flex items-center gap-3">
                               <div className="relative overflow-hidden rounded-full">
-                                <ProfileEffectLayer src={previewProfileEffectUrl} className="rounded-full" />
+                                <ProfileEffectLayer
+                                  src={previewProfileEffectUrl}
+                                  className="rounded-full"
+                                />
                                 <UserAvatar
                                   src={previewAvatarUrl ?? undefined}
                                   decorationSrc={previewAvatarDecorationUrl}
@@ -8063,8 +9472,12 @@ export const SettingsModal = () => {
                                 />
                               </div>
                               <div>
-                                <p className="text-sm font-semibold text-white">Current Decoration</p>
-                                <p className="text-xs text-[#949ba4]">Server profile decoration preview</p>
+                                <p className="text-sm font-semibold text-white">
+                                  Current Decoration
+                                </p>
+                                <p className="text-xs text-[#949ba4]">
+                                  Server profile decoration preview
+                                </p>
                               </div>
                             </div>
                           </div>
@@ -8077,7 +9490,9 @@ export const SettingsModal = () => {
                               type="text"
                               value={serverProfileAvatarDecorationInput}
                               onChange={(event) => {
-                                setServerProfileAvatarDecorationInput(event.target.value);
+                                setServerProfileAvatarDecorationInput(
+                                  event.target.value,
+                                );
                                 setServerProfileStatus(null);
                               }}
                               placeholder="https://..."
@@ -8096,7 +9511,13 @@ export const SettingsModal = () => {
                               >
                                 Clear
                               </Button>
-                              <Button type="button" variant="outline" onClick={() => setIsServerAvatarDecorationPanelOpen(false)}>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() =>
+                                  setIsServerAvatarDecorationPanelOpen(false)
+                                }
+                              >
                                 Close
                               </Button>
                             </div>
@@ -8104,10 +9525,14 @@ export const SettingsModal = () => {
                         </div>
 
                         <DialogFooter className="gap-2 sm:justify-between">
-                          <div className="text-xs text-[#949ba4]">Save server profile to apply decoration changes.</div>
+                          <div className="text-xs text-[#949ba4]">
+                            Save server profile to apply decoration changes.
+                          </div>
                           <Button
                             type="button"
-                            onClick={() => setIsServerAvatarDecorationPanelOpen(false)}
+                            onClick={() =>
+                              setIsServerAvatarDecorationPanelOpen(false)
+                            }
                             className="bg-[#5865f2] text-white hover:bg-[#4752c4]"
                           >
                             Done
@@ -8116,12 +9541,16 @@ export const SettingsModal = () => {
                       </DialogContent>
                     </Dialog>
 
-                    <Dialog open={isServerProfileEffectPanelOpen} onOpenChange={setIsServerProfileEffectPanelOpen}>
+                    <Dialog
+                      open={isServerProfileEffectPanelOpen}
+                      onOpenChange={setIsServerProfileEffectPanelOpen}
+                    >
                       <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
                         <DialogHeader>
                           <DialogTitle>Profile Effect</DialogTitle>
                           <DialogDescription className="text-[#949ba4]">
-                            Set a server-specific profile effect. Leave blank to use your global effect.
+                            Set a server-specific profile effect. Leave blank to
+                            use your global effect.
                           </DialogDescription>
                         </DialogHeader>
 
@@ -8148,7 +9577,9 @@ export const SettingsModal = () => {
                               </div>
 
                               <div className="min-w-0">
-                                <p className={`text-base font-bold text-white ${getProfileNameStyleClass(previewProfileNameStyle)}`}>
+                                <p
+                                  className={`text-base font-bold text-white ${getProfileNameStyleClass(previewProfileNameStyle)}`}
+                                >
                                   {previewDisplayName}
                                 </p>
                                 <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">
@@ -8185,7 +9616,13 @@ export const SettingsModal = () => {
                               >
                                 Clear
                               </Button>
-                              <Button type="button" variant="outline" onClick={() => setIsServerProfileEffectPanelOpen(false)}>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() =>
+                                  setIsServerProfileEffectPanelOpen(false)
+                                }
+                              >
                                 Close
                               </Button>
                             </div>
@@ -8193,10 +9630,14 @@ export const SettingsModal = () => {
                         </div>
 
                         <DialogFooter className="gap-2 sm:justify-between">
-                          <div className="text-xs text-[#949ba4]">Save server profile to apply effect changes.</div>
+                          <div className="text-xs text-[#949ba4]">
+                            Save server profile to apply effect changes.
+                          </div>
                           <Button
                             type="button"
-                            onClick={() => setIsServerProfileEffectPanelOpen(false)}
+                            onClick={() =>
+                              setIsServerProfileEffectPanelOpen(false)
+                            }
                             className="bg-[#5865f2] text-white hover:bg-[#4752c4]"
                           >
                             Done
@@ -8205,23 +9646,30 @@ export const SettingsModal = () => {
                       </DialogContent>
                     </Dialog>
 
-                    <Dialog open={isServerNameplatePanelOpen} onOpenChange={setIsServerNameplatePanelOpen}>
+                    <Dialog
+                      open={isServerNameplatePanelOpen}
+                      onOpenChange={setIsServerNameplatePanelOpen}
+                    >
                       <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
                         <DialogHeader>
                           <DialogTitle>Edit Server Nameplate</DialogTitle>
                           <DialogDescription className="text-[#949ba4]">
-                            Create a server nameplate banner behind your profile name.
+                            Create a server nameplate banner behind your profile
+                            name.
                           </DialogDescription>
                         </DialogHeader>
 
                         <div className="space-y-3">
-
                           <input
                             ref={serverNameplateImageInputRef}
                             className="hidden"
                             type="file"
                             accept="image/*"
-                            onChange={(event) => onServerNameplateImageChange(event.target.files?.[0])}
+                            onChange={(event) =>
+                              onServerNameplateImageChange(
+                                event.target.files?.[0],
+                              )
+                            }
                           />
 
                           <div>
@@ -8230,7 +9678,12 @@ export const SettingsModal = () => {
                             </label>
                             <div className="grid grid-cols-3 gap-2">
                               {NAMEPLATE_COLOR_PRESETS.map((preset) => {
-                                const isActive = (serverProfileNameplateColorInput || "#5865f2").toLowerCase() === preset.color.toLowerCase();
+                                const isActive =
+                                  (
+                                    serverProfileNameplateColorInput ||
+                                    "#5865f2"
+                                  ).toLowerCase() ===
+                                  preset.color.toLowerCase();
 
                                 return (
                                   <button
@@ -8238,7 +9691,9 @@ export const SettingsModal = () => {
                                     type="button"
                                     disabled={isSavingServerProfile}
                                     onClick={() => {
-                                      setServerProfileNameplateColorInput(preset.color);
+                                      setServerProfileNameplateColorInput(
+                                        preset.color,
+                                      );
                                       setServerProfileStatus(null);
                                     }}
                                     className={`overflow-hidden rounded-md border text-left transition ${
@@ -8247,8 +9702,13 @@ export const SettingsModal = () => {
                                         : "border-white/15 hover:border-white/35"
                                     } disabled:cursor-not-allowed disabled:opacity-60`}
                                   >
-                                    <span className="block h-6" style={{ backgroundColor: preset.color }} />
-                                    <span className="block bg-[#1a1b1e] px-2 py-1 text-[10px] text-[#dbdee1]">{preset.label}</span>
+                                    <span
+                                      className="block h-6"
+                                      style={{ backgroundColor: preset.color }}
+                                    />
+                                    <span className="block bg-[#1a1b1e] px-2 py-1 text-[10px] text-[#dbdee1]">
+                                      {preset.label}
+                                    </span>
                                   </button>
                                 );
                               })}
@@ -8266,7 +9726,9 @@ export const SettingsModal = () => {
                                 disabled={isUploadingServerNameplateImage}
                                 className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
                               >
-                                {isUploadingServerNameplateImage ? "Uploading..." : "Upload Image"}
+                                {isUploadingServerNameplateImage
+                                  ? "Uploading..."
+                                  : "Upload Image"}
                               </Button>
                               <Button
                                 type="button"
@@ -8283,28 +9745,32 @@ export const SettingsModal = () => {
 
                             {uploadedBannerThumbnails.length > 0 ? (
                               <div className="mt-2 grid grid-cols-4 gap-2">
-                                {uploadedBannerThumbnails.map((thumbnailUrl) => (
-                                  <button
-                                    key={`server-nameplate-thumb-${thumbnailUrl}`}
-                                    type="button"
-                                    onClick={() => {
-                                      setServerProfileNameplateImageUrlInput(thumbnailUrl);
-                                      setServerProfileStatus(null);
-                                    }}
-                                    className="overflow-hidden rounded-md border border-white/15 bg-[#111214] transition hover:border-[#5865f2]/60"
-                                    title="Use this uploaded image"
-                                  >
-                                    <div className="relative h-10 w-full">
-                                      <Image
-                                        src={thumbnailUrl}
-                                        alt="Uploaded nameplate thumbnail"
-                                        fill
-                                        className="object-cover"
-                                        unoptimized
-                                      />
-                                    </div>
-                                  </button>
-                                ))}
+                                {uploadedBannerThumbnails.map(
+                                  (thumbnailUrl) => (
+                                    <button
+                                      key={`server-nameplate-thumb-${thumbnailUrl}`}
+                                      type="button"
+                                      onClick={() => {
+                                        setServerProfileNameplateImageUrlInput(
+                                          thumbnailUrl,
+                                        );
+                                        setServerProfileStatus(null);
+                                      }}
+                                      className="overflow-hidden rounded-md border border-white/15 bg-[#111214] transition hover:border-[#5865f2]/60"
+                                      title="Use this uploaded image"
+                                    >
+                                      <div className="relative h-10 w-full">
+                                        <Image
+                                          src={thumbnailUrl}
+                                          alt="Uploaded nameplate thumbnail"
+                                          fill
+                                          className="object-cover"
+                                          unoptimized
+                                        />
+                                      </div>
+                                    </button>
+                                  ),
+                                )}
                               </div>
                             ) : null}
                           </div>
@@ -8334,11 +9800,14 @@ export const SettingsModal = () => {
                               <span
                                 className="absolute inset-y-0 left-0 w-1.5"
                                 style={{
-                                  backgroundColor: (serverProfileNameplateColorInput || "#5865f2").trim(),
+                                  backgroundColor: (
+                                    serverProfileNameplateColorInput ||
+                                    "#5865f2"
+                                  ).trim(),
                                 }}
                               />
                               <p className="relative truncate pl-1 text-sm font-semibold text-white">
-                                    {previewDisplayName}
+                                {previewDisplayName}
                               </p>
                             </div>
                           </div>
@@ -8374,9 +9843,12 @@ export const SettingsModal = () => {
                     >
                       <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
                         <DialogHeader>
-                          <DialogTitle>Profile Name Styles (Server)</DialogTitle>
+                          <DialogTitle>
+                            Profile Name Styles (Server)
+                          </DialogTitle>
                           <DialogDescription className="text-[#949ba4]">
-                            Make your profile name look fancy in this server. This is separate from your default profile style.
+                            Make your profile name look fancy in this server.
+                            This is separate from your default profile style.
                           </DialogDescription>
                         </DialogHeader>
 
@@ -8392,17 +9864,26 @@ export const SettingsModal = () => {
                                 onClick={() => {
                                   if (serverProfileNameStyleInput.trim()) {
                                     setServerProfileNameStyleInput("");
-                                    const fallbackParts = getProfileNameStyleParts(defaultProfileNameStyle);
-                                    setServerProfileNameFontInput(fallbackParts.font);
-                                    setServerProfileNameEffectInput(fallbackParts.effect);
-                                    setServerProfileNameColorInput(fallbackParts.color);
+                                    const fallbackParts =
+                                      getProfileNameStyleParts(
+                                        defaultProfileNameStyle,
+                                      );
+                                    setServerProfileNameFontInput(
+                                      fallbackParts.font,
+                                    );
+                                    setServerProfileNameEffectInput(
+                                      fallbackParts.effect,
+                                    );
+                                    setServerProfileNameColorInput(
+                                      fallbackParts.color,
+                                    );
                                   } else {
                                     setServerProfileNameStyleInput(
                                       composeProfileNameStyleValue({
                                         font: serverProfileNameFontInput,
                                         effect: serverProfileNameEffectInput,
                                         color: serverProfileNameColorInput,
-                                      })
+                                      }),
                                     );
                                   }
                                   setServerProfileStatus(null);
@@ -8410,12 +9891,15 @@ export const SettingsModal = () => {
                                 disabled={isSavingServerProfile}
                                 className="h-7 px-2 text-[11px]"
                               >
-                                {serverProfileNameStyleInput.trim() ? "Use Default" : "Override"}
+                                {serverProfileNameStyleInput.trim()
+                                  ? "Use Default"
+                                  : "Override"}
                               </Button>
                             </div>
 
                             <p className="mt-1 text-[11px] text-[#949ba4]">
-                              Server: {selectedServer?.serverName ?? "Selected server"}
+                              Server:{" "}
+                              {selectedServer?.serverName ?? "Selected server"}
                             </p>
 
                             <div className="mt-3 space-y-3">
@@ -8425,17 +9909,18 @@ export const SettingsModal = () => {
                                 </label>
                                 <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
                                   {PROFILE_NAME_FONT_OPTIONS.map((option) => {
-                                    const isActive = serverProfileNameFontInput === option.key;
+                                    const isActive =
+                                      serverProfileNameFontInput === option.key;
                                     const iconClass =
                                       option.key === "bold"
                                         ? "font-black"
                                         : option.key === "italic"
-                                        ? "italic font-semibold"
-                                        : option.key === "mono"
-                                        ? "font-mono"
-                                        : option.key === "serif"
-                                        ? "font-serif"
-                                        : "";
+                                          ? "italic font-semibold"
+                                          : option.key === "mono"
+                                            ? "font-mono"
+                                            : option.key === "serif"
+                                              ? "font-serif"
+                                              : "";
 
                                     return (
                                       <button
@@ -8443,14 +9928,17 @@ export const SettingsModal = () => {
                                         type="button"
                                         disabled={isSavingServerProfile}
                                         onClick={() => {
-                                          const next = option.key as ProfileNameFontKey;
+                                          const next =
+                                            option.key as ProfileNameFontKey;
                                           setServerProfileNameFontInput(next);
                                           setServerProfileNameStyleInput(
                                             composeProfileNameStyleValue({
                                               font: next,
-                                              effect: serverProfileNameEffectInput,
-                                              color: serverProfileNameColorInput,
-                                            })
+                                              effect:
+                                                serverProfileNameEffectInput,
+                                              color:
+                                                serverProfileNameColorInput,
+                                            }),
                                           );
                                           setServerProfileStatus(null);
                                         }}
@@ -8461,8 +9949,14 @@ export const SettingsModal = () => {
                                             : "border-white/15 bg-[#1a1b1e] text-[#c8ccd1] hover:bg-[#2a2b30]"
                                         } disabled:cursor-not-allowed disabled:opacity-60`}
                                       >
-                                        <span className={`block text-4xl leading-none ${iconClass}`}>Aa</span>
-                                        <span className="mt-0.5 block truncate">{option.label}</span>
+                                        <span
+                                          className={`block text-4xl leading-none ${iconClass}`}
+                                        >
+                                          Aa
+                                        </span>
+                                        <span className="mt-0.5 block truncate">
+                                          {option.label}
+                                        </span>
                                       </button>
                                     );
                                   })}
@@ -8475,17 +9969,19 @@ export const SettingsModal = () => {
                                 </label>
                                 <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
                                   {PROFILE_NAME_EFFECT_OPTIONS.map((option) => {
-                                    const isActive = serverProfileNameEffectInput === option.key;
+                                    const isActive =
+                                      serverProfileNameEffectInput ===
+                                      option.key;
                                     const icon =
                                       option.key === "solid"
                                         ? "⬤"
                                         : option.key === "gradient"
-                                        ? "🌈"
-                                        : option.key === "neon"
-                                        ? "✨"
-                                        : option.key === "toon"
-                                        ? "🎭"
-                                        : "💥";
+                                          ? "🌈"
+                                          : option.key === "neon"
+                                            ? "✨"
+                                            : option.key === "toon"
+                                              ? "🎭"
+                                              : "💥";
 
                                     return (
                                       <button
@@ -8493,14 +9989,16 @@ export const SettingsModal = () => {
                                         type="button"
                                         disabled={isSavingServerProfile}
                                         onClick={() => {
-                                          const next = option.key as ProfileNameEffectKey;
+                                          const next =
+                                            option.key as ProfileNameEffectKey;
                                           setServerProfileNameEffectInput(next);
                                           setServerProfileNameStyleInput(
                                             composeProfileNameStyleValue({
                                               font: serverProfileNameFontInput,
                                               effect: next,
-                                              color: serverProfileNameColorInput,
-                                            })
+                                              color:
+                                                serverProfileNameColorInput,
+                                            }),
                                           );
                                           setServerProfileStatus(null);
                                         }}
@@ -8511,8 +10009,12 @@ export const SettingsModal = () => {
                                             : "border-white/15 bg-[#1a1b1e] text-[#c8ccd1] hover:bg-[#2a2b30]"
                                         } disabled:cursor-not-allowed disabled:opacity-60`}
                                       >
-                                        <span className="block text-4xl leading-none">{icon}</span>
-                                        <span className="mt-0.5 block truncate">{option.label}</span>
+                                        <span className="block text-4xl leading-none">
+                                          {icon}
+                                        </span>
+                                        <span className="mt-0.5 block truncate">
+                                          {option.label}
+                                        </span>
                                       </button>
                                     );
                                   })}
@@ -8525,17 +10027,19 @@ export const SettingsModal = () => {
                                 </label>
                                 <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
                                   {PROFILE_NAME_COLOR_OPTIONS.map((option) => {
-                                    const isActive = serverProfileNameColorInput === option.key;
+                                    const isActive =
+                                      serverProfileNameColorInput ===
+                                      option.key;
                                     const dotClass =
                                       option.key === "blurb"
                                         ? "bg-[#7b88ff]"
                                         : option.key === "sunset"
-                                        ? "bg-[#ff8a5b]"
-                                        : option.key === "frost"
-                                        ? "bg-[#66d9ff]"
-                                        : option.key === "ruby"
-                                        ? "bg-[#ff6b81]"
-                                        : "bg-white/70";
+                                          ? "bg-[#ff8a5b]"
+                                          : option.key === "frost"
+                                            ? "bg-[#66d9ff]"
+                                            : option.key === "ruby"
+                                              ? "bg-[#ff6b81]"
+                                              : "bg-white/70";
 
                                     return (
                                       <button
@@ -8543,14 +10047,16 @@ export const SettingsModal = () => {
                                         type="button"
                                         disabled={isSavingServerProfile}
                                         onClick={() => {
-                                          const next = option.key as ProfileNameColorKey;
+                                          const next =
+                                            option.key as ProfileNameColorKey;
                                           setServerProfileNameColorInput(next);
                                           setServerProfileNameStyleInput(
                                             composeProfileNameStyleValue({
                                               font: serverProfileNameFontInput,
-                                              effect: serverProfileNameEffectInput,
+                                              effect:
+                                                serverProfileNameEffectInput,
                                               color: next,
-                                            })
+                                            }),
                                           );
                                           setServerProfileStatus(null);
                                         }}
@@ -8561,8 +10067,12 @@ export const SettingsModal = () => {
                                             : "border-white/15 bg-[#1a1b1e] text-[#c8ccd1] hover:bg-[#2a2b30]"
                                         } disabled:cursor-not-allowed disabled:opacity-60`}
                                       >
-                                        <span className={`mx-auto block h-7 w-7 rounded-full ${dotClass}`} />
-                                        <span className="mt-0.5 block truncate">{option.label}</span>
+                                        <span
+                                          className={`mx-auto block h-7 w-7 rounded-full ${dotClass}`}
+                                        />
+                                        <span className="mt-0.5 block truncate">
+                                          {option.label}
+                                        </span>
                                       </button>
                                     );
                                   })}
@@ -8581,7 +10091,7 @@ export const SettingsModal = () => {
                                       effect: serverProfileNameEffectInput,
                                       color: serverProfileNameColorInput,
                                     })
-                                  : defaultProfileNameStyle
+                                  : defaultProfileNameStyle,
                               )}`}
                             >
                               {previewDisplayName}
@@ -8600,7 +10110,7 @@ export const SettingsModal = () => {
                                       effect: serverProfileNameEffectInput,
                                       color: serverProfileNameColorInput,
                                     })
-                                  : defaultProfileNameStyle
+                                  : defaultProfileNameStyle,
                               )}`}
                             >
                               The quick brown fox jumps over the lazy dog.
@@ -8612,15 +10122,24 @@ export const SettingsModal = () => {
                               type="button"
                               variant="outline"
                               onClick={() => {
-                                const resetStyle = selectedServer?.profileNameStyle ?? "";
-                                const normalizedResetStyle = normalizeProfileNameStyleValue(
-                                  resetStyle || defaultProfileNameStyle
-                                );
-                                const resetParts = getProfileNameStyleParts(normalizedResetStyle);
+                                const resetStyle =
+                                  selectedServer?.profileNameStyle ?? "";
+                                const normalizedResetStyle =
+                                  normalizeProfileNameStyleValue(
+                                    resetStyle || defaultProfileNameStyle,
+                                  );
+                                const resetParts =
+                                  getProfileNameStyleParts(
+                                    normalizedResetStyle,
+                                  );
                                 setServerProfileNameStyleInput(resetStyle);
                                 setServerProfileNameFontInput(resetParts.font);
-                                setServerProfileNameEffectInput(resetParts.effect);
-                                setServerProfileNameColorInput(resetParts.color);
+                                setServerProfileNameEffectInput(
+                                  resetParts.effect,
+                                );
+                                setServerProfileNameColorInput(
+                                  resetParts.color,
+                                );
                                 setServerProfileStatus(null);
                               }}
                               disabled={isSavingServerProfile}
@@ -8634,12 +10153,16 @@ export const SettingsModal = () => {
                                 disabled={isSavingServerProfile}
                                 className="bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
                               >
-                                {isSavingServerProfile ? "Saving..." : "Save Server Style"}
+                                {isSavingServerProfile
+                                  ? "Saving..."
+                                  : "Save Server Style"}
                               </Button>
                               <Button
                                 type="button"
                                 variant="outline"
-                                onClick={() => setIsServerProfileNameStylesPanelOpen(false)}
+                                onClick={() =>
+                                  setIsServerProfileNameStylesPanelOpen(false)
+                                }
                               >
                                 Close
                               </Button>
@@ -8674,7 +10197,9 @@ export const SettingsModal = () => {
           </div>
 
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
-            <p className="text-sm font-medium text-white">Plugins - Comming Soon!</p>
+            <p className="text-sm font-medium text-white">
+              Plugins - Comming Soon!
+            </p>
             <p className="mt-1 text-xs text-[#949ba4]">
               Manage Plugins and review uploaded plugin assets.
             </p>
@@ -8689,7 +10214,9 @@ export const SettingsModal = () => {
                   <div className="flex items-center justify-between gap-2">
                     <span>
                       <span className="text-[#949ba4]">Plugins Installed:</span>{" "}
-                      <span className="text-white">{installedPluginsCountLabel}</span>
+                      <span className="text-white">
+                        {installedPluginsCountLabel}
+                      </span>
                     </span>
 
                     <button
@@ -8707,8 +10234,12 @@ export const SettingsModal = () => {
                 <li className="rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2">
                   <div className="flex items-center justify-between gap-2">
                     <span>
-                      <span className="text-[#949ba4]">Downloaded Plugins:</span>{" "}
-                      <span className="text-white">{downloadedPlugins.length.toString().padStart(2, "0")}</span>
+                      <span className="text-[#949ba4]">
+                        Downloaded Plugins:
+                      </span>{" "}
+                      <span className="text-white">
+                        {downloadedPlugins.length.toString().padStart(2, "0")}
+                      </span>
                     </span>
 
                     <button
@@ -8739,7 +10270,10 @@ export const SettingsModal = () => {
               </div>
             </div>
 
-            <Dialog open={isPluginsInstalledPanelOpen} onOpenChange={setIsPluginsInstalledPanelOpen}>
+            <Dialog
+              open={isPluginsInstalledPanelOpen}
+              onOpenChange={setIsPluginsInstalledPanelOpen}
+            >
               <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-2xl">
                 <DialogHeader>
                   <DialogTitle>Plugins Installed</DialogTitle>
@@ -8772,14 +10306,20 @@ export const SettingsModal = () => {
                 </div>
 
                 <DialogFooter>
-                  <Button type="button" onClick={() => setIsPluginsInstalledPanelOpen(false)}>
+                  <Button
+                    type="button"
+                    onClick={() => setIsPluginsInstalledPanelOpen(false)}
+                  >
                     Close
                   </Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
 
-            <Dialog open={isDownloadedPluginsPanelOpen} onOpenChange={setIsDownloadedPluginsPanelOpen}>
+            <Dialog
+              open={isDownloadedPluginsPanelOpen}
+              onOpenChange={setIsDownloadedPluginsPanelOpen}
+            >
               <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-2xl">
                 <DialogHeader>
                   <DialogTitle>Downloaded Plugins</DialogTitle>
@@ -8790,7 +10330,8 @@ export const SettingsModal = () => {
 
                 <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
-                    Downloaded Plugins: {downloadedPlugins.length.toString().padStart(2, "0")}
+                    Downloaded Plugins:{" "}
+                    {downloadedPlugins.length.toString().padStart(2, "0")}
                   </p>
 
                   {downloadedPlugins.length > 0 ? (
@@ -8812,14 +10353,20 @@ export const SettingsModal = () => {
                 </div>
 
                 <DialogFooter>
-                  <Button type="button" onClick={() => setIsDownloadedPluginsPanelOpen(false)}>
+                  <Button
+                    type="button"
+                    onClick={() => setIsDownloadedPluginsPanelOpen(false)}
+                  >
                     Close
                   </Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
 
-            <Dialog open={isPluginUploadsPanelOpen} onOpenChange={setIsPluginUploadsPanelOpen}>
+            <Dialog
+              open={isPluginUploadsPanelOpen}
+              onOpenChange={setIsPluginUploadsPanelOpen}
+            >
               <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-2xl">
                 <DialogHeader>
                   <DialogTitle>Plugin Uploads</DialogTitle>
@@ -8850,7 +10397,10 @@ export const SettingsModal = () => {
                 </div>
 
                 <DialogFooter>
-                  <Button type="button" onClick={() => setIsPluginUploadsPanelOpen(false)}>
+                  <Button
+                    type="button"
+                    onClick={() => setIsPluginUploadsPanelOpen(false)}
+                  >
                     Close
                   </Button>
                 </DialogFooter>
@@ -8907,7 +10457,10 @@ export const SettingsModal = () => {
             </div>
           </div>
 
-          <Dialog open={isCustomCssEditorOpen} onOpenChange={setIsCustomCssEditorOpen}>
+          <Dialog
+            open={isCustomCssEditorOpen}
+            onOpenChange={setIsCustomCssEditorOpen}
+          >
             <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-[90vw]">
               <DialogHeader>
                 <DialogTitle>Custom CSS Editor</DialogTitle>
@@ -8952,7 +10505,11 @@ export const SettingsModal = () => {
                   >
                     Close
                   </Button>
-                  <Button type="button" onClick={onSaveCustomCss} className="bg-[#5865f2] text-white hover:bg-[#4752c4]">
+                  <Button
+                    type="button"
+                    onClick={onSaveCustomCss}
+                    className="bg-[#5865f2] text-white hover:bg-[#4752c4]"
+                  >
                     Save CSS
                   </Button>
                 </div>
@@ -8975,8 +10532,12 @@ export const SettingsModal = () => {
             <div className="mt-4 space-y-2">
               <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-white">Allow private messages from server members</p>
-                  <p className="text-xs text-[#949ba4]">If disabled, only friends can PM you directly.</p>
+                  <p className="text-sm font-semibold text-white">
+                    Allow private messages from server members
+                  </p>
+                  <p className="text-xs text-[#949ba4]">
+                    If disabled, only friends can PM you directly.
+                  </p>
                 </div>
 
                 <button
@@ -8984,7 +10545,8 @@ export const SettingsModal = () => {
                   onClick={() => {
                     setContentSocialPreferences((current) => ({
                       ...current,
-                      allowDirectMessagesFromServerMembers: !current.allowDirectMessagesFromServerMembers,
+                      allowDirectMessagesFromServerMembers:
+                        !current.allowDirectMessagesFromServerMembers,
                     }));
                     setContentSocialStatus(null);
                   }}
@@ -8993,12 +10555,16 @@ export const SettingsModal = () => {
                       ? "border-emerald-400/50 bg-emerald-500/40"
                       : "border-zinc-600 bg-zinc-700"
                   }`}
-                  aria-pressed={contentSocialPreferences.allowDirectMessagesFromServerMembers}
+                  aria-pressed={
+                    contentSocialPreferences.allowDirectMessagesFromServerMembers
+                  }
                   aria-label="Toggle private messages from server members"
                 >
                   <span
                     className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
-                      contentSocialPreferences.allowDirectMessagesFromServerMembers ? "translate-x-6" : "translate-x-1"
+                      contentSocialPreferences.allowDirectMessagesFromServerMembers
+                        ? "translate-x-6"
+                        : "translate-x-1"
                     }`}
                   />
                 </button>
@@ -9006,8 +10572,12 @@ export const SettingsModal = () => {
 
               <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-white">Allow friend requests</p>
-                  <p className="text-xs text-[#949ba4]">Disable to prevent new incoming friend requests.</p>
+                  <p className="text-sm font-semibold text-white">
+                    Allow friend requests
+                  </p>
+                  <p className="text-xs text-[#949ba4]">
+                    Disable to prevent new incoming friend requests.
+                  </p>
                 </div>
 
                 <button
@@ -9029,7 +10599,9 @@ export const SettingsModal = () => {
                 >
                   <span
                     className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
-                      contentSocialPreferences.allowFriendRequests ? "translate-x-6" : "translate-x-1"
+                      contentSocialPreferences.allowFriendRequests
+                        ? "translate-x-6"
+                        : "translate-x-1"
                     }`}
                   />
                 </button>
@@ -9039,7 +10611,9 @@ export const SettingsModal = () => {
 
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
             <p className="text-sm font-medium text-white">Content Filters</p>
-            <p className="mt-1 text-xs text-[#949ba4]">Tune how sensitive content is previewed in your client.</p>
+            <p className="mt-1 text-xs text-[#949ba4]">
+              Tune how sensitive content is previewed in your client.
+            </p>
 
             <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
               <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
@@ -9049,7 +10623,8 @@ export const SettingsModal = () => {
               <select
                 value={contentSocialPreferences.matureContentFilter}
                 onChange={(event) => {
-                  const next = event.target.value as ContentSocialPreferences["matureContentFilter"];
+                  const next = event.target
+                    .value as ContentSocialPreferences["matureContentFilter"];
                   setContentSocialPreferences((current) => ({
                     ...current,
                     matureContentFilter: next,
@@ -9058,15 +10633,23 @@ export const SettingsModal = () => {
                 }}
                 className="h-9 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
               >
-                <option value="strict">Strict (blur all potentially sensitive media)</option>
-                <option value="moderate">Moderate (blur only flagged previews)</option>
+                <option value="strict">
+                  Strict (blur all potentially sensitive media)
+                </option>
+                <option value="moderate">
+                  Moderate (blur only flagged previews)
+                </option>
                 <option value="off">Off (show all previews)</option>
               </select>
 
               <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2">
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-white">Hide sensitive link previews</p>
-                  <p className="text-xs text-[#949ba4]">Mask preview cards that are flagged as sensitive.</p>
+                  <p className="text-sm font-semibold text-white">
+                    Hide sensitive link previews
+                  </p>
+                  <p className="text-xs text-[#949ba4]">
+                    Mask preview cards that are flagged as sensitive.
+                  </p>
                 </div>
 
                 <button
@@ -9074,7 +10657,8 @@ export const SettingsModal = () => {
                   onClick={() => {
                     setContentSocialPreferences((current) => ({
                       ...current,
-                      hideSensitiveLinkPreviews: !current.hideSensitiveLinkPreviews,
+                      hideSensitiveLinkPreviews:
+                        !current.hideSensitiveLinkPreviews,
                     }));
                     setContentSocialStatus(null);
                   }}
@@ -9083,12 +10667,16 @@ export const SettingsModal = () => {
                       ? "border-emerald-400/50 bg-emerald-500/40"
                       : "border-zinc-600 bg-zinc-700"
                   }`}
-                  aria-pressed={contentSocialPreferences.hideSensitiveLinkPreviews}
+                  aria-pressed={
+                    contentSocialPreferences.hideSensitiveLinkPreviews
+                  }
                   aria-label="Toggle sensitive link previews"
                 >
                   <span
                     className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
-                      contentSocialPreferences.hideSensitiveLinkPreviews ? "translate-x-6" : "translate-x-1"
+                      contentSocialPreferences.hideSensitiveLinkPreviews
+                        ? "translate-x-6"
+                        : "translate-x-1"
                     }`}
                   />
                 </button>
@@ -9129,7 +10717,8 @@ export const SettingsModal = () => {
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
             <p className="text-sm font-medium text-white">Bug Reporting</p>
             <p className="mt-1 text-xs text-[#949ba4]">
-              Found a bug? Send details directly to staff so it shows up in the Issues & Bugs queue.
+              Found a bug? Send details directly to staff so it shows up in the
+              Issues & Bugs queue.
             </p>
 
             <div className="mt-3 grid gap-3 rounded-xl border border-white/10 bg-black/20 p-3">
@@ -9254,9 +10843,15 @@ export const SettingsModal = () => {
 
             <div className="mt-3 grid gap-3 rounded-xl border border-white/10 bg-black/20 p-3">
               <div className="rounded-lg border border-white/10 bg-[#15161a] p-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#b5bac1]">Payment Information Panel</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#b5bac1]">
+                  Payment Information Panel
+                </p>
                 <p className="mt-1 text-xs text-[#949ba4]">
-                  Press <span className="font-semibold text-white">Create Payment Request</span> to open a dedicated payment information popup panel.
+                  Press{" "}
+                  <span className="font-semibold text-white">
+                    Create Payment Request
+                  </span>{" "}
+                  to open a dedicated payment information popup panel.
                 </p>
               </div>
 
@@ -9264,7 +10859,9 @@ export const SettingsModal = () => {
                 <select
                   value={patronageType}
                   onChange={(event) => {
-                    setPatronageType(event.target.value as "ONE_TIME" | "MONTHLY");
+                    setPatronageType(
+                      event.target.value as "ONE_TIME" | "MONTHLY",
+                    );
                     setPatronageStatus(null);
                     setPendingPatronageCheckoutUrl(null);
                     setPendingPatronageRequest(null);
@@ -9307,7 +10904,9 @@ export const SettingsModal = () => {
 
               {pendingPatronageCheckoutUrl ? (
                 <p className="rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
-                  Payment request is ready. Open the <span className="font-semibold">Billing</span> panel to continue payment.
+                  Payment request is ready. Open the{" "}
+                  <span className="font-semibold">Billing</span> panel to
+                  continue payment.
                 </p>
               ) : null}
 
@@ -9322,7 +10921,12 @@ export const SettingsModal = () => {
                   type="button"
                   variant="outline"
                   onClick={() => void onCancelLatestPendingPatronage()}
-                  disabled={isCancellingPatronage || !patronageHistory.some((entry) => entry.status === "PENDING")}
+                  disabled={
+                    isCancellingPatronage ||
+                    !patronageHistory.some(
+                      (entry) => entry.status === "PENDING",
+                    )
+                  }
                   className="border-rose-500/35 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isCancellingPatronage ? "Canceling..." : "Cancel Pending"}
@@ -9334,7 +10938,9 @@ export const SettingsModal = () => {
                   disabled={isLoadingPatronageHistory}
                   className="border-white/20 bg-transparent text-white hover:bg-white/10"
                 >
-                  {isLoadingPatronageHistory ? "Refreshing..." : "Refresh History"}
+                  {isLoadingPatronageHistory
+                    ? "Refreshing..."
+                    : "Refresh History"}
                 </Button>
                 <Button
                   type="button"
@@ -9360,12 +10966,17 @@ export const SettingsModal = () => {
             </div>
           </div>
 
-          <Dialog open={isPatronagePaymentPanelOpen} onOpenChange={setIsPatronagePaymentPanelOpen}>
+          <Dialog
+            open={isPatronagePaymentPanelOpen}
+            onOpenChange={setIsPatronagePaymentPanelOpen}
+          >
             <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
               <DialogHeader>
                 <DialogTitle>Payment Information</DialogTitle>
                 <DialogDescription>
-                  Fill in payer details, then load the in-app secure payment form. Card/bank details are entered directly below. PayPal appears if enabled in Stripe.
+                  Fill in payer details, then load the in-app secure payment
+                  form. Card/bank details are entered directly below. PayPal
+                  appears if enabled in Stripe.
                 </DialogDescription>
               </DialogHeader>
 
@@ -9398,15 +11009,22 @@ export const SettingsModal = () => {
                 </div>
 
                 <div className="rounded-md border border-white/10 bg-black/20 px-3 py-2 text-xs text-[#b5bac1]">
-                  <p>Type: {patronageType === "MONTHLY" ? "Monthly" : "One-Time"}</p>
+                  <p>
+                    Type: {patronageType === "MONTHLY" ? "Monthly" : "One-Time"}
+                  </p>
                   <p>Amount: {patronageAmount || "0"} USD</p>
                 </div>
 
                 {patronageStripePromise && patronageElementsOptions ? (
-                  <Elements stripe={patronageStripePromise} options={patronageElementsOptions}>
+                  <Elements
+                    stripe={patronageStripePromise}
+                    options={patronageElementsOptions}
+                  >
                     <PatronageEmbeddedPaymentForm
                       onSuccess={onConfirmPatronageIntent}
-                      onErrorMessage={(message) => setPatronagePaymentPanelStatus(message || null)}
+                      onErrorMessage={(message) =>
+                        setPatronagePaymentPanelStatus(message || null)
+                      }
                     />
                   </Elements>
                 ) : null}
@@ -9433,15 +11051,21 @@ export const SettingsModal = () => {
                   disabled={isPreparingPatronageIntent}
                   className="bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {isPreparingPatronageIntent ? "Loading Form..." : "Load Card/Bank + PayPal Form"}
+                  {isPreparingPatronageIntent
+                    ? "Loading Form..."
+                    : "Load Card/Bank + PayPal Form"}
                 </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
 
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
-            <p className="text-sm font-medium text-white">Your Patronage History</p>
-            <p className="mt-1 text-xs text-[#949ba4]">Recent donations and patronage requests tied to your account.</p>
+            <p className="text-sm font-medium text-white">
+              Your Patronage History
+            </p>
+            <p className="mt-1 text-xs text-[#949ba4]">
+              Recent donations and patronage requests tied to your account.
+            </p>
 
             <div className="mt-3 overflow-hidden rounded-xl border border-white/10 bg-black/20">
               <div className="grid grid-cols-[0.8fr_0.8fr_0.9fr_1fr] gap-2 border-b border-white/10 bg-[#1a1b1e] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
@@ -9453,9 +11077,13 @@ export const SettingsModal = () => {
 
               <div>
                 {isLoadingPatronageHistory ? (
-                  <p className="px-3 py-3 text-xs text-[#b5bac1]">Loading history...</p>
+                  <p className="px-3 py-3 text-xs text-[#b5bac1]">
+                    Loading history...
+                  </p>
                 ) : patronageHistory.length === 0 ? (
-                  <p className="px-3 py-3 text-xs text-[#949ba4]">No patronage records yet.</p>
+                  <p className="px-3 py-3 text-xs text-[#949ba4]">
+                    No patronage records yet.
+                  </p>
                 ) : (
                   patronageHistory.map((entry, index) => (
                     <div
@@ -9464,10 +11092,20 @@ export const SettingsModal = () => {
                         index % 2 === 0 ? "bg-[#17181b]" : "bg-[#1d1f24]"
                       }`}
                     >
-                      <p>{entry.donationType === "ONE_TIME" ? "One-Time" : "Monthly"}</p>
+                      <p>
+                        {entry.donationType === "ONE_TIME"
+                          ? "One-Time"
+                          : "Monthly"}
+                      </p>
                       <p>{entry.status}</p>
-                      <p>{(entry.amountCents / 100).toFixed(2)} {entry.currency}</p>
-                      <p>{entry.createdAt ? new Date(entry.createdAt).toLocaleString() : "N/A"}</p>
+                      <p>
+                        {(entry.amountCents / 100).toFixed(2)} {entry.currency}
+                      </p>
+                      <p>
+                        {entry.createdAt
+                          ? new Date(entry.createdAt).toLocaleString()
+                          : "N/A"}
+                      </p>
                     </div>
                   ))
                 )}
@@ -9479,23 +11117,37 @@ export const SettingsModal = () => {
     }
 
     if (displaySection === "billing") {
-      const hasPendingPatronage = patronageHistory.some((entry) => entry.status === "PENDING");
-      const latestSucceeded = patronageHistory.find((entry) => entry.status === "SUCCEEDED");
+      const hasPendingPatronage = patronageHistory.some(
+        (entry) => entry.status === "PENDING",
+      );
+      const latestSucceeded = patronageHistory.find(
+        (entry) => entry.status === "SUCCEEDED",
+      );
 
       return (
         <div className="space-y-4">
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
-            <p className="text-sm font-medium text-white">Payment Information</p>
+            <p className="text-sm font-medium text-white">
+              Payment Information
+            </p>
             <p className="mt-1 text-xs text-[#949ba4]">
-              Patron payments are handled through secure Stripe Checkout. This app does not collect raw card/bank numbers. Enter card/bank details on the Stripe page.
+              Patron payments are handled through secure Stripe Checkout. This
+              app does not collect raw card/bank numbers. Enter card/bank
+              details on the Stripe page.
             </p>
 
             <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-[#b5bac1]">
               <p>• Checkout provider: Stripe</p>
-              <p>• Supported at checkout: cards and Stripe-supported methods for your region</p>
+              <p>
+                • Supported at checkout: cards and Stripe-supported methods for
+                your region
+              </p>
               <p>• Stored on In-Accord: no raw card numbers</p>
               <p>
-                • Latest successful payment: {latestSucceeded ? `${(latestSucceeded.amountCents / 100).toFixed(2)} ${latestSucceeded.currency}` : "None yet"}
+                • Latest successful payment:{" "}
+                {latestSucceeded
+                  ? `${(latestSucceeded.amountCents / 100).toFixed(2)} ${latestSucceeded.currency}`
+                  : "None yet"}
               </p>
               <p>
                 • Pending payment request: {hasPendingPatronage ? "Yes" : "No"}
@@ -9505,14 +11157,20 @@ export const SettingsModal = () => {
             {pendingPatronageCheckoutUrl ? (
               <div className="mt-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-xs text-emerald-100">
                 <p className="font-semibold">Pending Stripe Checkout</p>
-                <p className="mt-1 break-all text-emerald-200/90">{pendingPatronageCheckoutUrl}</p>
+                <p className="mt-1 break-all text-emerald-200/90">
+                  {pendingPatronageCheckoutUrl}
+                </p>
 
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <Button
                     type="button"
                     onClick={() => {
                       if (typeof window !== "undefined") {
-                        window.open(pendingPatronageCheckoutUrl, "_blank", "noopener,noreferrer");
+                        window.open(
+                          pendingPatronageCheckoutUrl,
+                          "_blank",
+                          "noopener,noreferrer",
+                        );
                       }
                     }}
                     className="h-8 bg-emerald-600 px-3 text-xs text-white hover:bg-emerald-500"
@@ -9574,14 +11232,17 @@ export const SettingsModal = () => {
         {
           key: "notifyOnServerMessages",
           title: "Server Message Alerts",
-          description: "Notify for server channel activity based on your subscriptions.",
+          description:
+            "Notify for server channel activity based on your subscriptions.",
         },
       ];
 
       return (
         <div className="space-y-4">
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
-            <p className="text-sm font-medium text-white">Notification Preferences</p>
+            <p className="text-sm font-medium text-white">
+              Notification Preferences
+            </p>
             <p className="mt-1 text-xs text-[#949ba4]">
               Notification toggles can be configured here.
             </p>
@@ -9590,10 +11251,17 @@ export const SettingsModal = () => {
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
             <div className="space-y-2">
               {notificationRows.map((item) => (
-                <div key={`notification-setting-${item.key}`} className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                <div
+                  key={`notification-setting-${item.key}`}
+                  className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-2"
+                >
                   <div>
-                    <p className="text-sm font-medium text-white">{item.title}</p>
-                    <p className="mt-1 text-xs text-[#949ba4]">{item.description}</p>
+                    <p className="text-sm font-medium text-white">
+                      {item.title}
+                    </p>
+                    <p className="mt-1 text-xs text-[#949ba4]">
+                      {item.description}
+                    </p>
                   </div>
 
                   <button
@@ -9615,7 +11283,9 @@ export const SettingsModal = () => {
                   >
                     <span
                       className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
-                        notificationPreferences[item.key] ? "translate-x-6" : "translate-x-1"
+                        notificationPreferences[item.key]
+                          ? "translate-x-6"
+                          : "translate-x-1"
                       }`}
                     />
                   </button>
@@ -9624,9 +11294,13 @@ export const SettingsModal = () => {
 
               <div className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
                 <div>
-                  <p className="text-sm font-medium text-white">Enable @Mentions</p>
+                  <p className="text-sm font-medium text-white">
+                    Enable @Mentions
+                  </p>
                   <p className="mt-1 text-xs text-[#949ba4]">
-                    When enabled, typing <span className="font-semibold text-[#c9cdfb]">@</span> in chat suggests users and server roles.
+                    When enabled, typing{" "}
+                    <span className="font-semibold text-[#c9cdfb]">@</span> in
+                    chat suggests users and server roles.
                   </p>
                 </div>
 
@@ -9652,7 +11326,10 @@ export const SettingsModal = () => {
 
             <div className="mt-3 flex items-center justify-between gap-2">
               <p className="rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
-                @Mentions: <span className="font-semibold text-white">{mentionsEnabled ? "On" : "Off"}</span>
+                @Mentions:{" "}
+                <span className="font-semibold text-white">
+                  {mentionsEnabled ? "On" : "Off"}
+                </span>
               </p>
               <Button
                 type="button"
@@ -9660,7 +11337,9 @@ export const SettingsModal = () => {
                 disabled={isSavingNotificationPreferences}
                 className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isSavingNotificationPreferences ? "Saving..." : "Save Notifications"}
+                {isSavingNotificationPreferences
+                  ? "Saving..."
+                  : "Save Notifications"}
               </Button>
             </div>
 
@@ -9693,7 +11372,8 @@ export const SettingsModal = () => {
         {
           key: "showInlineMedia",
           title: "Show Inline Media",
-          description: "Show images and media inline instead of as plain attachments.",
+          description:
+            "Show images and media inline instead of as plain attachments.",
         },
         {
           key: "autoplayGifs",
@@ -9715,7 +11395,9 @@ export const SettingsModal = () => {
       return (
         <div className="space-y-4">
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
-            <p className="text-sm font-medium text-white">Text &amp; Images Preferences</p>
+            <p className="text-sm font-medium text-white">
+              Text &amp; Images Preferences
+            </p>
             <p className="mt-1 text-xs text-[#949ba4]">
               Control how text, links, and media are displayed throughout chat.
             </p>
@@ -9724,10 +11406,17 @@ export const SettingsModal = () => {
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
             <div className="space-y-2">
               {textImageRows.map((item) => (
-                <div key={`text-images-setting-${item.key}`} className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                <div
+                  key={`text-images-setting-${item.key}`}
+                  className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-2"
+                >
                   <div>
-                    <p className="text-sm font-medium text-white">{item.title}</p>
-                    <p className="mt-1 text-xs text-[#949ba4]">{item.description}</p>
+                    <p className="text-sm font-medium text-white">
+                      {item.title}
+                    </p>
+                    <p className="mt-1 text-xs text-[#949ba4]">
+                      {item.description}
+                    </p>
                   </div>
 
                   <button
@@ -9749,7 +11438,9 @@ export const SettingsModal = () => {
                   >
                     <span
                       className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
-                        textImagesPreferences[item.key] ? "translate-x-6" : "translate-x-1"
+                        textImagesPreferences[item.key]
+                          ? "translate-x-6"
+                          : "translate-x-1"
                       }`}
                     />
                   </button>
@@ -9759,7 +11450,10 @@ export const SettingsModal = () => {
 
             <div className="mt-3 flex items-center justify-between gap-2">
               <p className="rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
-                Inline media: <span className="font-semibold text-white">{textImagesPreferences.showInlineMedia ? "On" : "Off"}</span>
+                Inline media:{" "}
+                <span className="font-semibold text-white">
+                  {textImagesPreferences.showInlineMedia ? "On" : "Off"}
+                </span>
               </p>
               <Button
                 type="button"
@@ -9767,7 +11461,9 @@ export const SettingsModal = () => {
                 disabled={isSavingTextImagesPreferences}
                 className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isSavingTextImagesPreferences ? "Saving..." : "Save Text & Images"}
+                {isSavingTextImagesPreferences
+                  ? "Saving..."
+                  : "Save Text & Images"}
               </Button>
             </div>
 
@@ -9793,22 +11489,33 @@ export const SettingsModal = () => {
             </p>
 
             <div className="mt-3 space-y-2">
-              {([
-                {
-                  key: "showComposerEmojiButton",
-                  title: "Show Composer Emoji Button",
-                  description: "Display a quick emoji button next to chat input tools.",
-                },
-                {
-                  key: "compactReactionButtons",
-                  title: "Compact Reaction Buttons",
-                  description: "Use tighter spacing for message reaction chips.",
-                },
-              ] as const).map((item) => (
-                <div key={`emoji-setting-${item.key}`} className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+              {(
+                [
+                  {
+                    key: "showComposerEmojiButton",
+                    title: "Show Composer Emoji Button",
+                    description:
+                      "Display a quick emoji button next to chat input tools.",
+                  },
+                  {
+                    key: "compactReactionButtons",
+                    title: "Compact Reaction Buttons",
+                    description:
+                      "Use tighter spacing for message reaction chips.",
+                  },
+                ] as const
+              ).map((item) => (
+                <div
+                  key={`emoji-setting-${item.key}`}
+                  className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-2"
+                >
                   <div>
-                    <p className="text-sm font-medium text-white">{item.title}</p>
-                    <p className="mt-1 text-xs text-[#949ba4]">{item.description}</p>
+                    <p className="text-sm font-medium text-white">
+                      {item.title}
+                    </p>
+                    <p className="mt-1 text-xs text-[#949ba4]">
+                      {item.description}
+                    </p>
                   </div>
 
                   <button
@@ -9830,7 +11537,9 @@ export const SettingsModal = () => {
                   >
                     <span
                       className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
-                        emojiPreferences[item.key] ? "translate-x-6" : "translate-x-1"
+                        emojiPreferences[item.key]
+                          ? "translate-x-6"
+                          : "translate-x-1"
                       }`}
                     />
                   </button>
@@ -9887,11 +11596,16 @@ export const SettingsModal = () => {
                 </p>
 
                 {uploadedEmojiUrls.length === 0 ? (
-                  <p className="mt-2 text-[11px] text-[#949ba4]">No uploaded emojis yet.</p>
+                  <p className="mt-2 text-[11px] text-[#949ba4]">
+                    No uploaded emojis yet.
+                  </p>
                 ) : (
                   <div className="mt-2 grid grid-cols-5 gap-2 sm:grid-cols-6">
                     {uploadedEmojiUrls.map((url) => (
-                      <div key={`uploaded-emoji-${url}`} className="group relative">
+                      <div
+                        key={`uploaded-emoji-${url}`}
+                        className="group relative"
+                      >
                         <div className="relative h-10 w-10 overflow-hidden rounded-md border border-white/10 bg-[#15161a]">
                           <Image
                             src={url}
@@ -9907,9 +11621,14 @@ export const SettingsModal = () => {
                           onClick={() => {
                             setEmojiPreferences((current) => ({
                               ...current,
-                              uploadedEmojiUrls: current.uploadedEmojiUrls.filter((item) => item !== url),
+                              uploadedEmojiUrls:
+                                current.uploadedEmojiUrls.filter(
+                                  (item) => item !== url,
+                                ),
                             }));
-                            setEmojiStatus("Emoji removed from library. Click Save Emoji to persist.");
+                            setEmojiStatus(
+                              "Emoji removed from library. Click Save Emoji to persist.",
+                            );
                           }}
                           className="absolute -right-1 -top-1 hidden h-4 w-4 items-center justify-center rounded-full border border-rose-500/50 bg-rose-500/70 text-[10px] text-white group-hover:inline-flex"
                           aria-label="Remove uploaded emoji"
@@ -9928,7 +11647,8 @@ export const SettingsModal = () => {
                   Upload Emoji
                 </p>
                 <p className="mt-1 text-[11px] text-[#949ba4]">
-                  Upload multiple emoji images at once (PNG, JPG, GIF, WEBP, SVG).
+                  Upload multiple emoji images at once (PNG, JPG, GIF, WEBP,
+                  SVG).
                 </p>
 
                 <div className="mt-2 rounded-md border border-white/10 bg-[#1a1b1e] p-2">
@@ -9946,20 +11666,27 @@ export const SettingsModal = () => {
                         .filter((item) => item.length > 0);
 
                       if (uploadedUrls.length === 0) {
-                        setEmojiStatus("Upload finished, but no emoji URL was returned.");
+                        setEmojiStatus(
+                          "Upload finished, but no emoji URL was returned.",
+                        );
                         return;
                       }
 
                       setEmojiPreferences((current) => ({
                         ...current,
-                        uploadedEmojiUrls: [...uploadedUrls, ...current.uploadedEmojiUrls]
-                          .filter((item, index, arr) => arr.indexOf(item) === index)
+                        uploadedEmojiUrls: [
+                          ...uploadedUrls,
+                          ...current.uploadedEmojiUrls,
+                        ]
+                          .filter(
+                            (item, index, arr) => arr.indexOf(item) === index,
+                          )
                           .slice(0, 120),
                       }));
                       setEmojiStatus(
                         uploadedUrls.length === 1
                           ? "1 emoji uploaded. Click Save Emoji to persist."
-                          : `${uploadedUrls.length} emojis uploaded. Click Save Emoji to persist.`
+                          : `${uploadedUrls.length} emojis uploaded. Click Save Emoji to persist.`,
                       );
                     }}
                     onUploadError={(message) => {
@@ -9972,7 +11699,10 @@ export const SettingsModal = () => {
 
             <div className="mt-3 flex items-center justify-between gap-2">
               <p className="rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
-                Composer button: <span className="font-semibold text-white">{emojiPreferences.showComposerEmojiButton ? "On" : "Off"}</span>
+                Composer button:{" "}
+                <span className="font-semibold text-white">
+                  {emojiPreferences.showComposerEmojiButton ? "On" : "Off"}
+                </span>
               </p>
               <Button
                 type="button"
@@ -10006,22 +11736,33 @@ export const SettingsModal = () => {
             </p>
 
             <div className="mt-3 space-y-2">
-              {([
-                {
-                  key: "showComposerStickerButton",
-                  title: "Show Composer Sticker Button",
-                  description: "Display a quick sticker button next to chat input tools.",
-                },
-                {
-                  key: "preferAnimatedStickers",
-                  title: "Prefer Animated Stickers",
-                  description: "Prefer animated sticker variants when available.",
-                },
-              ] as const).map((item) => (
-                <div key={`sticker-setting-${item.key}`} className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+              {(
+                [
+                  {
+                    key: "showComposerStickerButton",
+                    title: "Show Composer Sticker Button",
+                    description:
+                      "Display a quick sticker button next to chat input tools.",
+                  },
+                  {
+                    key: "preferAnimatedStickers",
+                    title: "Prefer Animated Stickers",
+                    description:
+                      "Prefer animated sticker variants when available.",
+                  },
+                ] as const
+              ).map((item) => (
+                <div
+                  key={`sticker-setting-${item.key}`}
+                  className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-2"
+                >
                   <div>
-                    <p className="text-sm font-medium text-white">{item.title}</p>
-                    <p className="mt-1 text-xs text-[#949ba4]">{item.description}</p>
+                    <p className="text-sm font-medium text-white">
+                      {item.title}
+                    </p>
+                    <p className="mt-1 text-xs text-[#949ba4]">
+                      {item.description}
+                    </p>
                   </div>
 
                   <button
@@ -10043,7 +11784,9 @@ export const SettingsModal = () => {
                   >
                     <span
                       className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
-                        stickerPreferences[item.key] ? "translate-x-6" : "translate-x-1"
+                        stickerPreferences[item.key]
+                          ? "translate-x-6"
+                          : "translate-x-1"
                       }`}
                     />
                   </button>
@@ -10100,11 +11843,16 @@ export const SettingsModal = () => {
                 </p>
 
                 {uploadedStickerUrls.length === 0 ? (
-                  <p className="mt-2 text-[11px] text-[#949ba4]">No uploaded stickers yet.</p>
+                  <p className="mt-2 text-[11px] text-[#949ba4]">
+                    No uploaded stickers yet.
+                  </p>
                 ) : (
                   <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
                     {uploadedStickerUrls.map((url) => (
-                      <div key={`uploaded-sticker-${url}`} className="group relative">
+                      <div
+                        key={`uploaded-sticker-${url}`}
+                        className="group relative"
+                      >
                         <div className="relative h-16 w-full overflow-hidden rounded-md border border-white/10 bg-[#15161a]">
                           <Image
                             src={url}
@@ -10120,9 +11868,14 @@ export const SettingsModal = () => {
                           onClick={() => {
                             setStickerPreferences((current) => ({
                               ...current,
-                              uploadedStickerUrls: current.uploadedStickerUrls.filter((item) => item !== url),
+                              uploadedStickerUrls:
+                                current.uploadedStickerUrls.filter(
+                                  (item) => item !== url,
+                                ),
                             }));
-                            setStickerStatus("Sticker removed from library. Click Save Stickers to persist.");
+                            setStickerStatus(
+                              "Sticker removed from library. Click Save Stickers to persist.",
+                            );
                           }}
                           className="absolute -right-1 -top-1 hidden h-4 w-4 items-center justify-center rounded-full border border-rose-500/50 bg-rose-500/70 text-[10px] text-white group-hover:inline-flex"
                           aria-label="Remove uploaded sticker"
@@ -10141,7 +11894,8 @@ export const SettingsModal = () => {
                   Upload Stickers
                 </p>
                 <p className="mt-1 text-[11px] text-[#949ba4]">
-                  Upload multiple sticker images at once (PNG, JPG, GIF, WEBP, SVG).
+                  Upload multiple sticker images at once (PNG, JPG, GIF, WEBP,
+                  SVG).
                 </p>
 
                 <div className="mt-2 rounded-md border border-white/10 bg-[#1a1b1e] p-2">
@@ -10159,20 +11913,27 @@ export const SettingsModal = () => {
                         .filter((item) => item.length > 0);
 
                       if (uploadedUrls.length === 0) {
-                        setStickerStatus("Upload finished, but no sticker URL was returned.");
+                        setStickerStatus(
+                          "Upload finished, but no sticker URL was returned.",
+                        );
                         return;
                       }
 
                       setStickerPreferences((current) => ({
                         ...current,
-                        uploadedStickerUrls: [...uploadedUrls, ...current.uploadedStickerUrls]
-                          .filter((item, index, arr) => arr.indexOf(item) === index)
+                        uploadedStickerUrls: [
+                          ...uploadedUrls,
+                          ...current.uploadedStickerUrls,
+                        ]
+                          .filter(
+                            (item, index, arr) => arr.indexOf(item) === index,
+                          )
                           .slice(0, 120),
                       }));
                       setStickerStatus(
                         uploadedUrls.length === 1
                           ? "1 sticker uploaded. Click Save Stickers to persist."
-                          : `${uploadedUrls.length} stickers uploaded. Click Save Stickers to persist.`
+                          : `${uploadedUrls.length} stickers uploaded. Click Save Stickers to persist.`,
                       );
                     }}
                     onUploadError={(message) => {
@@ -10185,7 +11946,10 @@ export const SettingsModal = () => {
 
             <div className="mt-3 flex items-center justify-between gap-2">
               <p className="rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
-                Composer button: <span className="font-semibold text-white">{stickerPreferences.showComposerStickerButton ? "On" : "Off"}</span>
+                Composer button:{" "}
+                <span className="font-semibold text-white">
+                  {stickerPreferences.showComposerStickerButton ? "On" : "Off"}
+                </span>
               </p>
               <Button
                 type="button"
@@ -10209,16 +11973,20 @@ export const SettingsModal = () => {
 
     if (displaySection === "language") {
       const selectedLanguageLabel =
-        languageOptions.find((option) => option.value === languagePreference)?.label ?? "System Default";
+        languageOptions.find((option) => option.value === languagePreference)
+          ?.label ?? "System Default";
       const browserLanguage =
-        typeof navigator !== "undefined" && navigator.language ? navigator.language : "Unknown";
+        typeof navigator !== "undefined" && navigator.language
+          ? navigator.language
+          : "Unknown";
 
       return (
         <div className="space-y-4">
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
             <p className="text-sm font-medium text-white">Display Language</p>
             <p className="mt-1 text-xs text-[#949ba4]">
-              Choose your preferred language for In-Accord settings and interface text.
+              Choose your preferred language for In-Accord settings and
+              interface text.
             </p>
 
             <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
@@ -10243,10 +12011,16 @@ export const SettingsModal = () => {
 
               <div className="mt-3 rounded-md border border-white/10 bg-[#15161a] px-3 py-2 text-xs text-[#b5bac1]">
                 <p>
-                  Selected: <span className="font-semibold text-white">{selectedLanguageLabel}</span>
+                  Selected:{" "}
+                  <span className="font-semibold text-white">
+                    {selectedLanguageLabel}
+                  </span>
                 </p>
                 <p className="mt-1">
-                  Browser detected: <span className="font-semibold text-white">{browserLanguage}</span>
+                  Browser detected:{" "}
+                  <span className="font-semibold text-white">
+                    {browserLanguage}
+                  </span>
                 </p>
               </div>
 
@@ -10315,7 +12089,9 @@ export const SettingsModal = () => {
       return (
         <div className="space-y-4">
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
-            <p className="text-sm font-medium text-white">Keybind Preferences</p>
+            <p className="text-sm font-medium text-white">
+              Keybind Preferences
+            </p>
             <p className="mt-1 text-xs text-[#949ba4]">
               Configure keyboard shortcuts used by the In-Accord client.
             </p>
@@ -10323,7 +12099,9 @@ export const SettingsModal = () => {
             <div className="mt-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <p className="text-sm font-medium text-white">Enable Custom Keybinds</p>
+                  <p className="text-sm font-medium text-white">
+                    Enable Custom Keybinds
+                  </p>
                   <p className="mt-1 text-xs text-[#949ba4]">
                     Turn this on to use the custom keybinds below.
                   </p>
@@ -10348,7 +12126,9 @@ export const SettingsModal = () => {
                 >
                   <span
                     className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
-                      keybindPreferences.enableCustomKeybinds ? "translate-x-6" : "translate-x-1"
+                      keybindPreferences.enableCustomKeybinds
+                        ? "translate-x-6"
+                        : "translate-x-1"
                     }`}
                   />
                 </button>
@@ -10357,9 +12137,14 @@ export const SettingsModal = () => {
 
             <div className="mt-3 space-y-2">
               {keybindRows.map((item) => (
-                <div key={`keybind-row-${item.key}`} className="rounded-lg border border-white/10 bg-black/20 p-3">
+                <div
+                  key={`keybind-row-${item.key}`}
+                  className="rounded-lg border border-white/10 bg-black/20 p-3"
+                >
                   <p className="text-sm font-medium text-white">{item.label}</p>
-                  <p className="mt-1 text-xs text-[#949ba4]">{item.description}</p>
+                  <p className="mt-1 text-xs text-[#949ba4]">
+                    {item.description}
+                  </p>
                   <input
                     value={keybindPreferences[item.key]}
                     onChange={(event) => {
@@ -10378,7 +12163,10 @@ export const SettingsModal = () => {
 
             <div className="mt-3 flex items-center justify-between gap-2">
               <p className="rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
-                Custom keybinds: <span className="font-semibold text-white">{keybindPreferences.enableCustomKeybinds ? "On" : "Off"}</span>
+                Custom keybinds:{" "}
+                <span className="font-semibold text-white">
+                  {keybindPreferences.enableCustomKeybinds ? "On" : "Off"}
+                </span>
               </p>
               <Button
                 type="button"
@@ -10409,12 +12197,14 @@ export const SettingsModal = () => {
         {
           key: "enableHardwareAcceleration",
           title: "Hardware Acceleration",
-          description: "Use GPU acceleration where available for smoother rendering.",
+          description:
+            "Use GPU acceleration where available for smoother rendering.",
         },
         {
           key: "openLinksInApp",
           title: "Open Links In-App",
-          description: "Open supported links inside In-Accord instead of external browser windows.",
+          description:
+            "Open supported links inside In-Accord instead of external browser windows.",
         },
         {
           key: "confirmBeforeQuit",
@@ -10424,29 +12214,40 @@ export const SettingsModal = () => {
         {
           key: "enableDebugOverlay",
           title: "Debug Overlay",
-          description: "Display additional runtime diagnostics in overlay panels.",
+          description:
+            "Display additional runtime diagnostics in overlay panels.",
         },
         {
           key: "enableSpellCheck",
           title: "Spell Check",
-          description: "Enable desktop spell checking across sign-in, chat, and other text inputs.",
+          description:
+            "Enable desktop spell checking across sign-in, chat, and other text inputs.",
         },
       ];
 
       return (
         <div className="space-y-4">
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
-            <p className="text-sm font-medium text-white">Advanced Preferences</p>
+            <p className="text-sm font-medium text-white">
+              Advanced Preferences
+            </p>
             <p className="mt-1 text-xs text-[#949ba4]">
               Configure advanced app behavior and diagnostics controls.
             </p>
 
             <div className="mt-3 space-y-2">
               {advancedToggleRows.map((item) => (
-                <div key={`advanced-setting-${item.key}`} className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                <div
+                  key={`advanced-setting-${item.key}`}
+                  className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-2"
+                >
                   <div>
-                    <p className="text-sm font-medium text-white">{item.title}</p>
-                    <p className="mt-1 text-xs text-[#949ba4]">{item.description}</p>
+                    <p className="text-sm font-medium text-white">
+                      {item.title}
+                    </p>
+                    <p className="mt-1 text-xs text-[#949ba4]">
+                      {item.description}
+                    </p>
                   </div>
 
                   <button
@@ -10468,7 +12269,9 @@ export const SettingsModal = () => {
                   >
                     <span
                       className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
-                        advancedPreferences[item.key] ? "translate-x-6" : "translate-x-1"
+                        advancedPreferences[item.key]
+                          ? "translate-x-6"
+                          : "translate-x-1"
                       }`}
                     />
                   </button>
@@ -10482,12 +12285,15 @@ export const SettingsModal = () => {
               </p>
 
               <div className="mt-2 inline-flex rounded-md border border-white/10 bg-[#1a1b1e] p-1">
-                {([
-                  { value: "off", label: "Off" },
-                  { value: "basic", label: "Basic" },
-                  { value: "verbose", label: "Verbose" },
-                ] as const).map((option) => {
-                  const selected = advancedPreferences.diagnosticsLevel === option.value;
+                {(
+                  [
+                    { value: "off", label: "Off" },
+                    { value: "basic", label: "Basic" },
+                    { value: "verbose", label: "Verbose" },
+                  ] as const
+                ).map((option) => {
+                  const selected =
+                    advancedPreferences.diagnosticsLevel === option.value;
 
                   return (
                     <button
@@ -10513,13 +12319,17 @@ export const SettingsModal = () => {
                 })}
               </div>
               <p className="mt-2 text-[11px] text-[#949ba4]">
-                Choose how much runtime diagnostics the app should collect and surface.
+                Choose how much runtime diagnostics the app should collect and
+                surface.
               </p>
             </div>
 
             <div className="mt-3 flex items-center justify-between gap-2">
               <p className="rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
-                Diagnostics: <span className="font-semibold text-white">{advancedPreferences.diagnosticsLevel}</span>
+                Diagnostics:{" "}
+                <span className="font-semibold text-white">
+                  {advancedPreferences.diagnosticsLevel}
+                </span>
               </p>
               <Button
                 type="button"
@@ -10550,22 +12360,26 @@ export const SettingsModal = () => {
         {
           key: "hidePersonalInfo",
           title: "Hide Personal Info",
-          description: "Mask profile identifiers and personal details while streaming.",
+          description:
+            "Mask profile identifiers and personal details while streaming.",
         },
         {
           key: "hideInviteLinks",
           title: "Hide Invite Links",
-          description: "Redact or suppress visible invite links in app surfaces.",
+          description:
+            "Redact or suppress visible invite links in app surfaces.",
         },
         {
           key: "hideNotificationContent",
           title: "Hide Notification Content",
-          description: "Suppress message body previews in on-screen notification content.",
+          description:
+            "Suppress message body previews in on-screen notification content.",
         },
         {
           key: "suppressSounds",
           title: "Suppress Sounds",
-          description: "Mute non-essential app sounds while Streamer Mode is enabled.",
+          description:
+            "Mute non-essential app sounds while Streamer Mode is enabled.",
         },
       ];
 
@@ -10580,8 +12394,12 @@ export const SettingsModal = () => {
             <div className="mt-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <p className="text-sm font-medium text-white">Enable Streamer Mode</p>
-                  <p className="mt-1 text-xs text-[#949ba4]">Apply privacy-first behavior designed for live streaming.</p>
+                  <p className="text-sm font-medium text-white">
+                    Enable Streamer Mode
+                  </p>
+                  <p className="mt-1 text-xs text-[#949ba4]">
+                    Apply privacy-first behavior designed for live streaming.
+                  </p>
                 </div>
 
                 <button
@@ -10603,7 +12421,9 @@ export const SettingsModal = () => {
                 >
                   <span
                     className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
-                      streamerModePreferences.enabled ? "translate-x-6" : "translate-x-1"
+                      streamerModePreferences.enabled
+                        ? "translate-x-6"
+                        : "translate-x-1"
                     }`}
                   />
                 </button>
@@ -10612,10 +12432,17 @@ export const SettingsModal = () => {
 
             <div className="mt-3 space-y-2">
               {streamerModeRows.map((item) => (
-                <div key={`streamer-mode-setting-${item.key}`} className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                <div
+                  key={`streamer-mode-setting-${item.key}`}
+                  className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-2"
+                >
                   <div>
-                    <p className="text-sm font-medium text-white">{item.title}</p>
-                    <p className="mt-1 text-xs text-[#949ba4]">{item.description}</p>
+                    <p className="text-sm font-medium text-white">
+                      {item.title}
+                    </p>
+                    <p className="mt-1 text-xs text-[#949ba4]">
+                      {item.description}
+                    </p>
                   </div>
 
                   <button
@@ -10637,7 +12464,9 @@ export const SettingsModal = () => {
                   >
                     <span
                       className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
-                        streamerModePreferences[item.key] ? "translate-x-6" : "translate-x-1"
+                        streamerModePreferences[item.key]
+                          ? "translate-x-6"
+                          : "translate-x-1"
                       }`}
                     />
                   </button>
@@ -10647,7 +12476,10 @@ export const SettingsModal = () => {
 
             <div className="mt-3 flex items-center justify-between gap-2">
               <p className="rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
-                Status: <span className="font-semibold text-white">{streamerModePreferences.enabled ? "Enabled" : "Disabled"}</span>
+                Status:{" "}
+                <span className="font-semibold text-white">
+                  {streamerModePreferences.enabled ? "Enabled" : "Disabled"}
+                </span>
               </p>
               <Button
                 type="button"
@@ -10655,7 +12487,9 @@ export const SettingsModal = () => {
                 disabled={isSavingStreamerModePreferences}
                 className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isSavingStreamerModePreferences ? "Saving..." : "Save Streamer Mode"}
+                {isSavingStreamerModePreferences
+                  ? "Saving..."
+                  : "Save Streamer Mode"}
               </Button>
             </div>
 
@@ -10678,7 +12512,8 @@ export const SettingsModal = () => {
         {
           key: "enabled",
           title: "Enable In-Game Overlay",
-          description: "Show the In-Accord game overlay while supported games are active.",
+          description:
+            "Show the In-Accord game overlay while supported games are active.",
         },
         {
           key: "showPerformanceStats",
@@ -10688,7 +12523,8 @@ export const SettingsModal = () => {
         {
           key: "enableClickThrough",
           title: "Enable Click-Through",
-          description: "Allow mouse input to pass through overlay when not focused.",
+          description:
+            "Allow mouse input to pass through overlay when not focused.",
         },
       ];
 
@@ -10702,10 +12538,17 @@ export const SettingsModal = () => {
 
             <div className="mt-3 space-y-2">
               {toggleRows.map((item) => (
-                <div key={`game-overlay-setting-${item.key}`} className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                <div
+                  key={`game-overlay-setting-${item.key}`}
+                  className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-2"
+                >
                   <div>
-                    <p className="text-sm font-medium text-white">{item.title}</p>
-                    <p className="mt-1 text-xs text-[#949ba4]">{item.description}</p>
+                    <p className="text-sm font-medium text-white">
+                      {item.title}
+                    </p>
+                    <p className="mt-1 text-xs text-[#949ba4]">
+                      {item.description}
+                    </p>
                   </div>
 
                   <button
@@ -10727,7 +12570,9 @@ export const SettingsModal = () => {
                   >
                     <span
                       className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
-                        gameOverlayPreferences[item.key] ? "translate-x-6" : "translate-x-1"
+                        gameOverlayPreferences[item.key]
+                          ? "translate-x-6"
+                          : "translate-x-1"
                       }`}
                     />
                   </button>
@@ -10763,7 +12608,8 @@ export const SettingsModal = () => {
               <select
                 value={gameOverlayPreferences.position}
                 onChange={(event) => {
-                  const nextPosition = event.target.value as GameOverlayPreferences["position"];
+                  const nextPosition = event.target
+                    .value as GameOverlayPreferences["position"];
                   setGameOverlayPreferences((current) => ({
                     ...current,
                     position: nextPosition,
@@ -10781,7 +12627,10 @@ export const SettingsModal = () => {
 
             <div className="mt-3 flex items-center justify-between gap-2">
               <p className="rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
-                Status: <span className="font-semibold text-white">{gameOverlayPreferences.enabled ? "Enabled" : "Disabled"}</span>
+                Status:{" "}
+                <span className="font-semibold text-white">
+                  {gameOverlayPreferences.enabled ? "Enabled" : "Disabled"}
+                </span>
               </p>
               <Button
                 type="button"
@@ -10789,7 +12638,9 @@ export const SettingsModal = () => {
                 disabled={isSavingGameOverlayPreferences}
                 className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isSavingGameOverlayPreferences ? "Saving..." : "Save Game Overlay"}
+                {isSavingGameOverlayPreferences
+                  ? "Saving..."
+                  : "Save Game Overlay"}
               </Button>
             </div>
 
@@ -10812,27 +12663,32 @@ export const SettingsModal = () => {
         {
           key: "shareActivityStatus",
           title: "Share Activity Status",
-          description: "Allow others to see when you are active and what you're doing.",
+          description:
+            "Allow others to see when you are active and what you're doing.",
         },
         {
           key: "shareCurrentGame",
           title: "Share Current Game",
-          description: "Show your currently played game in profile and friend list contexts.",
+          description:
+            "Show your currently played game in profile and friend list contexts.",
         },
         {
           key: "allowFriendJoinRequests",
           title: "Allow Friend Join Requests",
-          description: "Permit friends to request joining your activity when supported.",
+          description:
+            "Permit friends to request joining your activity when supported.",
         },
         {
           key: "allowSpectateRequests",
           title: "Allow Spectate Requests",
-          description: "Allow friends to request spectating your active sessions.",
+          description:
+            "Allow friends to request spectating your active sessions.",
         },
         {
           key: "logActivityHistory",
           title: "Log Activity History",
-          description: "Store recent activity history for quick resume and insights.",
+          description:
+            "Store recent activity history for quick resume and insights.",
         },
       ];
 
@@ -10840,14 +12696,23 @@ export const SettingsModal = () => {
         <div className="space-y-4">
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
             <p className="text-sm font-medium text-white">Activity Privacy</p>
-            <p className="mt-1 text-xs text-[#949ba4]">Control how your activity is shared.</p>
+            <p className="mt-1 text-xs text-[#949ba4]">
+              Control how your activity is shared.
+            </p>
 
             <div className="mt-3 space-y-2">
               {toggleRows.map((item) => (
-                <div key={`activity-privacy-setting-${item.key}`} className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                <div
+                  key={`activity-privacy-setting-${item.key}`}
+                  className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-2"
+                >
                   <div>
-                    <p className="text-sm font-medium text-white">{item.title}</p>
-                    <p className="mt-1 text-xs text-[#949ba4]">{item.description}</p>
+                    <p className="text-sm font-medium text-white">
+                      {item.title}
+                    </p>
+                    <p className="mt-1 text-xs text-[#949ba4]">
+                      {item.description}
+                    </p>
                   </div>
 
                   <button
@@ -10869,7 +12734,9 @@ export const SettingsModal = () => {
                   >
                     <span
                       className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
-                        activityPrivacyPreferences[item.key] ? "translate-x-6" : "translate-x-1"
+                        activityPrivacyPreferences[item.key]
+                          ? "translate-x-6"
+                          : "translate-x-1"
                       }`}
                     />
                   </button>
@@ -10884,7 +12751,8 @@ export const SettingsModal = () => {
               <select
                 value={activityPrivacyPreferences.activityVisibility}
                 onChange={(event) => {
-                  const nextValue = event.target.value as ActivityPrivacyPreferences["activityVisibility"];
+                  const nextValue = event.target
+                    .value as ActivityPrivacyPreferences["activityVisibility"];
                   setActivityPrivacyPreferences((current) => ({
                     ...current,
                     activityVisibility: nextValue,
@@ -10901,7 +12769,10 @@ export const SettingsModal = () => {
 
             <div className="mt-3 flex items-center justify-between gap-2">
               <p className="rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
-                Visibility: <span className="font-semibold text-white">{activityPrivacyPreferences.activityVisibility}</span>
+                Visibility:{" "}
+                <span className="font-semibold text-white">
+                  {activityPrivacyPreferences.activityVisibility}
+                </span>
               </p>
               <Button
                 type="button"
@@ -10909,7 +12780,9 @@ export const SettingsModal = () => {
                 disabled={isSavingActivityPrivacyPreferences}
                 className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isSavingActivityPrivacyPreferences ? "Saving..." : "Save Activity Privacy"}
+                {isSavingActivityPrivacyPreferences
+                  ? "Saving..."
+                  : "Save Activity Privacy"}
               </Button>
             </div>
 
@@ -10928,10 +12801,12 @@ export const SettingsModal = () => {
         .map((provider) => provider.key)
         .filter((providerKey) => connectedAccounts.includes(providerKey));
 
-      const detectedGames = detectedRegisteredGames
-        .filter((game) => !registeredGamesPreferences.hiddenGameIds.includes(game.id));
+      const detectedGames = detectedRegisteredGames.filter(
+        (game) => !registeredGamesPreferences.hiddenGameIds.includes(game.id),
+      );
 
-      const localInstalledCount = registeredGamesProviderStates.local?.count ?? detectedGames.length;
+      const localInstalledCount =
+        registeredGamesProviderStates.local?.count ?? detectedGames.length;
       const localInstalledSource = registeredGamesProviderStates.local?.source;
       const localInstalledSourceLabel =
         localInstalledSource === "native-installed-scan"
@@ -10942,13 +12817,15 @@ export const SettingsModal = () => {
               ? "native-unavailable"
               : localInstalledSource;
 
-      const visibleDetectedGames = registeredGamesPreferences.showDetectedGames ? detectedGames : [];
+      const visibleDetectedGames = registeredGamesPreferences.showDetectedGames
+        ? detectedGames
+        : [];
       const visibleManualGames = registeredGamesPreferences.manualGames.filter(
-        (game) => !registeredGamesPreferences.hiddenGameIds.includes(game.id)
+        (game) => !registeredGamesPreferences.hiddenGameIds.includes(game.id),
       );
 
       const manualProviderOptions = Array.from(
-        new Set(["manual", ...connectedProviderKeys])
+        new Set(["manual", ...connectedProviderKeys]),
       );
 
       return (
@@ -10956,9 +12833,12 @@ export const SettingsModal = () => {
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-medium text-white">Registered Games</p>
+                <p className="text-sm font-medium text-white">
+                  Registered Games
+                </p>
                 <p className="mt-1 text-xs text-[#949ba4]">
-                  Shows only games installed on this device, plus any manual entries you add.
+                  Shows only games installed on this device, plus any manual
+                  entries you add.
                 </p>
               </div>
 
@@ -10981,7 +12861,9 @@ export const SettingsModal = () => {
               >
                 <span
                   className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
-                    registeredGamesPreferences.showDetectedGames ? "translate-x-6" : "translate-x-1"
+                    registeredGamesPreferences.showDetectedGames
+                      ? "translate-x-6"
+                      : "translate-x-1"
                   }`}
                 />
               </button>
@@ -10989,26 +12871,44 @@ export const SettingsModal = () => {
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <span className="rounded-full border border-emerald-400/30 bg-emerald-500/20 px-2 py-1 text-[11px] text-emerald-200">
-                Local Installed: {localInstalledCount} found{localInstalledSourceLabel ? ` (${localInstalledSourceLabel})` : ""}
+                Local Installed: {localInstalledCount} found
+                {localInstalledSourceLabel
+                  ? ` (${localInstalledSourceLabel})`
+                  : ""}
               </span>
             </div>
 
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               {visibleDetectedGames.length > 0 ? (
                 visibleDetectedGames.map((game) => (
-                  <div key={`detected-game-${game.id}`} className="rounded-lg border border-white/10 bg-black/20 p-2">
+                  <div
+                    key={`detected-game-${game.id}`}
+                    className="rounded-lg border border-white/10 bg-black/20 p-2"
+                  >
                     <div className="flex items-start gap-2">
                       <div className="h-16 w-28 overflow-hidden rounded-md border border-white/10 bg-[#111]">
                         {game.thumbnailUrl ? (
-                          <img src={game.thumbnailUrl} alt={`${game.name} thumbnail`} className="h-full w-full object-cover" />
+                          <img
+                            src={game.thumbnailUrl}
+                            alt={`${game.name} thumbnail`}
+                            className="h-full w-full object-cover"
+                          />
                         ) : (
-                          <div className="flex h-full items-center justify-center text-xs text-[#949ba4]">No Image</div>
+                          <div className="flex h-full items-center justify-center text-xs text-[#949ba4]">
+                            No Image
+                          </div>
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-white">{game.name}</p>
-                        <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">{game.provider}</p>
-                        <p className="mt-1 line-clamp-2 text-xs text-[#b5bac1]">{game.shortDescription}</p>
+                        <p className="truncate text-sm font-semibold text-white">
+                          {game.name}
+                        </p>
+                        <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">
+                          {game.provider}
+                        </p>
+                        <p className="mt-1 line-clamp-2 text-xs text-[#b5bac1]">
+                          {game.shortDescription}
+                        </p>
                       </div>
                     </div>
 
@@ -11018,7 +12918,9 @@ export const SettingsModal = () => {
                         onClick={() => {
                           setRegisteredGamesPreferences((current) => ({
                             ...current,
-                            hiddenGameIds: Array.from(new Set([...current.hiddenGameIds, game.id])).slice(0, 240),
+                            hiddenGameIds: Array.from(
+                              new Set([...current.hiddenGameIds, game.id]),
+                            ).slice(0, 240),
                           }));
                           setRegisteredGamesStatus(null);
                         }}
@@ -11031,17 +12933,22 @@ export const SettingsModal = () => {
                 ))
               ) : (
                 <p className="col-span-full rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-xs text-[#949ba4]">
-                  No installed games detected on this device (or all detected games are hidden).
+                  No installed games detected on this device (or all detected
+                  games are hidden).
                 </p>
               )}
             </div>
 
             <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">Add a game manually</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                Add a game manually
+              </p>
               <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
                 <select
                   value={selectedRunningAppId}
-                  onChange={(event) => setSelectedRunningAppId(event.target.value)}
+                  onChange={(event) =>
+                    setSelectedRunningAppId(event.target.value)
+                  }
                   className="h-9 rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
                 >
                   {runningApps.length > 0 ? (
@@ -11052,7 +12959,9 @@ export const SettingsModal = () => {
                     ))
                   ) : (
                     <option value="">
-                      {isLoadingRunningApps ? "Loading running apps..." : "No running apps available"}
+                      {isLoadingRunningApps
+                        ? "Loading running apps..."
+                        : "No running apps available"}
                     </option>
                   )}
                 </select>
@@ -11062,7 +12971,9 @@ export const SettingsModal = () => {
                   onClick={() => void loadRunningApps()}
                   className="h-8 bg-[#3f4248] px-3 text-xs text-white hover:bg-[#4a4e55]"
                 >
-                  {isLoadingRunningApps ? "Refreshing..." : "Refresh Running Apps"}
+                  {isLoadingRunningApps
+                    ? "Refreshing..."
+                    : "Refresh Running Apps"}
                 </Button>
 
                 <Button
@@ -11078,30 +12989,41 @@ export const SettingsModal = () => {
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 <input
                   value={manualGameNameInput}
-                  onChange={(event) => setManualGameNameInput(event.target.value)}
+                  onChange={(event) =>
+                    setManualGameNameInput(event.target.value)
+                  }
                   placeholder="Game name"
                   className="h-9 rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
                 />
                 <select
                   value={manualGameProviderInput}
-                  onChange={(event) => setManualGameProviderInput(event.target.value)}
+                  onChange={(event) =>
+                    setManualGameProviderInput(event.target.value)
+                  }
                   className="h-9 rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
                 >
                   {manualProviderOptions.map((providerKey) => (
-                    <option key={`manual-game-provider-${providerKey}`} value={providerKey}>
+                    <option
+                      key={`manual-game-provider-${providerKey}`}
+                      value={providerKey}
+                    >
                       {providerKey}
                     </option>
                   ))}
                 </select>
                 <input
                   value={manualGameThumbnailInput}
-                  onChange={(event) => setManualGameThumbnailInput(event.target.value)}
+                  onChange={(event) =>
+                    setManualGameThumbnailInput(event.target.value)
+                  }
                   placeholder="Thumbnail URL (optional)"
                   className="h-9 rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
                 />
                 <input
                   value={manualGameDescriptionInput}
-                  onChange={(event) => setManualGameDescriptionInput(event.target.value)}
+                  onChange={(event) =>
+                    setManualGameDescriptionInput(event.target.value)
+                  }
                   placeholder="Short details"
                   className="h-9 rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
                 />
@@ -11121,19 +13043,34 @@ export const SettingsModal = () => {
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               {visibleManualGames.length > 0 ? (
                 visibleManualGames.map((game) => (
-                  <div key={`manual-game-${game.id}`} className="rounded-lg border border-white/10 bg-black/20 p-2">
+                  <div
+                    key={`manual-game-${game.id}`}
+                    className="rounded-lg border border-white/10 bg-black/20 p-2"
+                  >
                     <div className="flex items-start gap-2">
                       <div className="h-16 w-28 overflow-hidden rounded-md border border-white/10 bg-[#111]">
                         {game.thumbnailUrl ? (
-                          <img src={game.thumbnailUrl} alt={`${game.name} thumbnail`} className="h-full w-full object-cover" />
+                          <img
+                            src={game.thumbnailUrl}
+                            alt={`${game.name} thumbnail`}
+                            className="h-full w-full object-cover"
+                          />
                         ) : (
-                          <div className="flex h-full items-center justify-center text-xs text-[#949ba4]">No Image</div>
+                          <div className="flex h-full items-center justify-center text-xs text-[#949ba4]">
+                            No Image
+                          </div>
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-white">{game.name}</p>
-                        <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">{game.provider}</p>
-                        <p className="mt-1 line-clamp-2 text-xs text-[#b5bac1]">{game.shortDescription || "Manually added game."}</p>
+                        <p className="truncate text-sm font-semibold text-white">
+                          {game.name}
+                        </p>
+                        <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">
+                          {game.provider}
+                        </p>
+                        <p className="mt-1 line-clamp-2 text-xs text-[#b5bac1]">
+                          {game.shortDescription || "Manually added game."}
+                        </p>
                       </div>
                     </div>
 
@@ -11143,7 +13080,9 @@ export const SettingsModal = () => {
                         onClick={() => {
                           setRegisteredGamesPreferences((current) => ({
                             ...current,
-                            manualGames: current.manualGames.filter((entry) => entry.id !== game.id),
+                            manualGames: current.manualGames.filter(
+                              (entry) => entry.id !== game.id,
+                            ),
                           }));
                           setRegisteredGamesStatus(null);
                         }}
@@ -11163,7 +13102,11 @@ export const SettingsModal = () => {
 
             <div className="mt-3 flex items-center justify-between gap-2">
               <p className="rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
-                Showing <span className="font-semibold text-white">{visibleDetectedGames.length + visibleManualGames.length}</span> games
+                Showing{" "}
+                <span className="font-semibold text-white">
+                  {visibleDetectedGames.length + visibleManualGames.length}
+                </span>{" "}
+                games
               </p>
               <Button
                 type="button"
@@ -11171,7 +13114,9 @@ export const SettingsModal = () => {
                 disabled={isSavingRegisteredGamesPreferences}
                 className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isSavingRegisteredGamesPreferences ? "Saving..." : "Save Registered Games"}
+                {isSavingRegisteredGamesPreferences
+                  ? "Saving..."
+                  : "Save Registered Games"}
               </Button>
             </div>
 
@@ -11191,9 +13136,12 @@ export const SettingsModal = () => {
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-medium text-white">Connected Accounts</p>
+                <p className="text-sm font-medium text-white">
+                  Connected Accounts
+                </p>
                 <p className="mt-1 text-xs text-[#949ba4]">
-                  Connect or disconnect external profiles used by your In-Accord account.
+                  Connect or disconnect external profiles used by your In-Accord
+                  account.
                 </p>
               </div>
 
@@ -11206,10 +13154,18 @@ export const SettingsModal = () => {
               {connectionProviders.map((provider) => {
                 const isConnected = connectedAccounts.includes(provider.key);
                 const isSaving = isSavingConnectionProvider === provider.key;
-                const isProviderConfigured = connectionProviderAvailability[provider.key] !== false;
-                const isOAuthSupported = connectionProviderOAuthSupport[provider.key] ?? oauthConnectionProviders.has(provider.key);
-                const canConnect = isConnected || (isProviderConfigured && isOAuthSupported);
-                const connectLabel = isConnected ? "Disconnect" : isOAuthSupported ? "Connect" : "Coming Soon";
+                const isProviderConfigured =
+                  connectionProviderAvailability[provider.key] !== false;
+                const isOAuthSupported =
+                  connectionProviderOAuthSupport[provider.key] ??
+                  oauthConnectionProviders.has(provider.key);
+                const canConnect =
+                  isConnected || (isProviderConfigured && isOAuthSupported);
+                const connectLabel = isConnected
+                  ? "Disconnect"
+                  : isOAuthSupported
+                    ? "Connect"
+                    : "Coming Soon";
 
                 return (
                   <div
@@ -11218,23 +13174,33 @@ export const SettingsModal = () => {
                   >
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-white">
-                        {connectedAccounts.includes(provider.key) && (registeredGamesProviderStates[provider.key]?.count ?? 0) > 0
+                        {connectedAccounts.includes(provider.key) &&
+                        (registeredGamesProviderStates[provider.key]?.count ??
+                          0) > 0
                           ? "🎮 "
                           : ""}
                         {provider.label}
                       </p>
-                      <p className="truncate text-xs text-[#949ba4]">{provider.description}</p>
+                      <p className="truncate text-xs text-[#949ba4]">
+                        {provider.description}
+                      </p>
                       {!isProviderConfigured ? (
-                        <p className="mt-1 text-[10px] text-amber-300">Provider is not configured on this server yet.</p>
+                        <p className="mt-1 text-[10px] text-amber-300">
+                          Provider is not configured on this server yet.
+                        </p>
                       ) : !isOAuthSupported ? (
-                        <p className="mt-1 text-[10px] text-[#949ba4]">Connect flow is not available for this provider yet.</p>
+                        <p className="mt-1 text-[10px] text-[#949ba4]">
+                          Connect flow is not available for this provider yet.
+                        </p>
                       ) : null}
                     </div>
 
                     <Button
                       type="button"
                       onClick={() => onToggleConnectionProvider(provider.key)}
-                      disabled={Boolean(isSavingConnectionProvider) || !canConnect}
+                      disabled={
+                        Boolean(isSavingConnectionProvider) || !canConnect
+                      }
                       className={`h-8 px-3 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60 ${
                         isConnected
                           ? "border border-rose-500/35 bg-rose-500/15 text-rose-200 hover:bg-rose-500/25"
@@ -11275,7 +13241,9 @@ export const SettingsModal = () => {
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-medium text-white">Signed-in Devices</p>
+                <p className="text-sm font-medium text-white">
+                  Signed-in Devices
+                </p>
                 <p className="mt-1 text-xs text-[#949ba4]">
                   Manage active sessions for your account.
                 </p>
@@ -11290,7 +13258,9 @@ export const SettingsModal = () => {
               <Button
                 type="button"
                 onClick={() => void loadDeviceSessions()}
-                disabled={isLoadingDeviceSessions || Boolean(deviceSessionActionPending)}
+                disabled={
+                  isLoadingDeviceSessions || Boolean(deviceSessionActionPending)
+                }
                 className="h-8 border border-[#5865f2]/35 bg-[#5865f2]/15 px-3 text-xs font-semibold text-[#cdd4ff] hover:bg-[#5865f2]/25 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isLoadingDeviceSessions ? "Refreshing..." : "Refresh"}
@@ -11298,10 +13268,15 @@ export const SettingsModal = () => {
               <Button
                 type="button"
                 onClick={() => void onLogoutOtherDevices()}
-                disabled={Boolean(deviceSessionActionPending) || deviceSessions.length <= 1}
+                disabled={
+                  Boolean(deviceSessionActionPending) ||
+                  deviceSessions.length <= 1
+                }
                 className="h-8 border border-rose-500/35 bg-rose-500/15 px-3 text-xs font-semibold text-rose-200 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {deviceSessionActionPending === "logout-others" ? "Working..." : "Log Out Other Devices"}
+                {deviceSessionActionPending === "logout-others"
+                  ? "Working..."
+                  : "Log Out Other Devices"}
               </Button>
             </div>
 
@@ -11309,10 +13284,13 @@ export const SettingsModal = () => {
               {isLoadingDeviceSessions ? (
                 <p className="text-xs text-[#b5bac1]">Loading devices...</p>
               ) : deviceSessions.length === 0 ? (
-                <p className="text-xs text-[#b5bac1]">No active device sessions found.</p>
+                <p className="text-xs text-[#b5bac1]">
+                  No active device sessions found.
+                </p>
               ) : (
                 deviceSessions.map((session) => {
-                  const pending = deviceSessionActionPending === session.sessionId;
+                  const pending =
+                    deviceSessionActionPending === session.sessionId;
 
                   return (
                     <div
@@ -11329,21 +13307,32 @@ export const SettingsModal = () => {
                               </span>
                             ) : null}
                           </p>
-                          <p className="truncate text-xs text-[#949ba4]" title={session.userAgent || "Unknown user agent"}>
+                          <p
+                            className="truncate text-xs text-[#949ba4]"
+                            title={session.userAgent || "Unknown user agent"}
+                          >
                             {session.userAgent || "Unknown user agent"}
                           </p>
                           <p className="mt-1 text-[11px] text-[#b5bac1]">
-                            IP: {session.ipAddress || "Unknown"} · Created: {formatDeviceSessionDate(session.createdAt)} · Last Seen: {formatDeviceSessionDate(session.lastSeenAt)}
+                            IP: {session.ipAddress || "Unknown"} · Created:{" "}
+                            {formatDeviceSessionDate(session.createdAt)} · Last
+                            Seen: {formatDeviceSessionDate(session.lastSeenAt)}
                           </p>
                         </div>
 
                         <Button
                           type="button"
-                          onClick={() => void onRevokeDeviceSession(session.sessionId)}
+                          onClick={() =>
+                            void onRevokeDeviceSession(session.sessionId)
+                          }
                           disabled={Boolean(deviceSessionActionPending)}
                           className="h-8 border border-rose-500/35 bg-rose-500/15 px-3 text-xs font-semibold text-rose-200 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {pending ? "Working..." : session.isCurrent ? "Log Out" : "Remove"}
+                          {pending
+                            ? "Working..."
+                            : session.isCurrent
+                              ? "Log Out"
+                              : "Remove"}
                         </Button>
                       </div>
                     </div>
@@ -11387,11 +13376,15 @@ export const SettingsModal = () => {
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
             <p className="text-sm font-medium text-white">SERVER TAGS</p>
             <p className="mt-1 text-xs text-[#949ba4]">
-              Server owners can configure one 3–4 letter tag and icon per server. Members can select one server tag to display next to their profile name.
+              Server owners can configure one 3–4 letter tag and icon per
+              server. Members can select one server tag to display next to their
+              profile name.
             </p>
 
             <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">Owner Setup</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                Owner Setup
+              </p>
 
               {isLoadingServerTags ? (
                 <p className="mt-2 inline-flex items-center gap-2 text-xs text-[#b5bac1]">
@@ -11399,13 +13392,19 @@ export const SettingsModal = () => {
                   Loading server tag settings...
                 </p>
               ) : ownedServerTags.length === 0 ? (
-                <p className="mt-2 text-xs text-[#949ba4]">You don&apos;t own any servers yet.</p>
+                <p className="mt-2 text-xs text-[#949ba4]">
+                  You don&apos;t own any servers yet.
+                </p>
               ) : (
                 <>
-                  <label className="mt-2 block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">Owned server</label>
+                  <label className="mt-2 block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                    Owned server
+                  </label>
                   <select
                     value={selectedOwnedServerId}
-                    onChange={(event) => onChangeOwnedServer(event.target.value)}
+                    onChange={(event) =>
+                      onChangeOwnedServer(event.target.value)
+                    }
                     className="mt-1 h-9 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
                   >
                     {ownedServerTags.map((item) => (
@@ -11419,7 +13418,9 @@ export const SettingsModal = () => {
                     <input
                       value={ownerTagCodeInput}
                       onChange={(event) => {
-                        setOwnerTagCodeInput(normalizeOwnerTagCode(event.target.value));
+                        setOwnerTagCodeInput(
+                          normalizeOwnerTagCode(event.target.value),
+                        );
                         setServerTagsStatus(null);
                       }}
                       maxLength={4}
@@ -11427,10 +13428,14 @@ export const SettingsModal = () => {
                       className="h-9 w-28 rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-center text-sm font-bold uppercase tracking-[0.08em] text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
                     />
 
-                    <span className="text-xs text-[#949ba4]">3–4 uppercase letters</span>
+                    <span className="text-xs text-[#949ba4]">
+                      3–4 uppercase letters
+                    </span>
                   </div>
 
-                  <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">Icon</p>
+                  <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                    Icon
+                  </p>
                   <div className="mt-1 flex flex-wrap gap-2">
                     {serverTagIconOptions.map((iconOption) => (
                       <button
@@ -11474,10 +13479,14 @@ export const SettingsModal = () => {
             </div>
 
             <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">Your Profile Tag</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                Your Profile Tag
+              </p>
 
               {memberServerTags.length === 0 ? (
-                <p className="mt-2 text-xs text-[#949ba4]">No server tags are available from servers you&apos;re in.</p>
+                <p className="mt-2 text-xs text-[#949ba4]">
+                  No server tags are available from servers you&apos;re in.
+                </p>
               ) : (
                 <div className="mt-2 space-y-3">
                   <label className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
@@ -11502,19 +13511,36 @@ export const SettingsModal = () => {
                   </select>
 
                   <div className="rounded-md border border-white/10 bg-[#1a1b1e] px-3 py-2 text-xs text-[#dbdee1]">
-                    {memberServerTags.find((item) => item.serverId === selectedProfileServerId) ? (
+                    {memberServerTags.find(
+                      (item) => item.serverId === selectedProfileServerId,
+                    ) ? (
                       <span className="inline-flex items-center gap-2">
                         <span>Current:</span>
                         <span className="inline-flex items-center gap-1.5 rounded-full border border-[#5865f2]/35 bg-[#5865f2]/15 px-2 py-0.5 font-semibold uppercase tracking-[0.06em] text-[#d7dcff]">
                           <span>
-                            {memberServerTags.find((item) => item.serverId === selectedProfileServerId)?.iconEmoji}
+                            {
+                              memberServerTags.find(
+                                (item) =>
+                                  item.serverId === selectedProfileServerId,
+                              )?.iconEmoji
+                            }
                           </span>
                           <span>
-                            {memberServerTags.find((item) => item.serverId === selectedProfileServerId)?.tagCode}
+                            {
+                              memberServerTags.find(
+                                (item) =>
+                                  item.serverId === selectedProfileServerId,
+                              )?.tagCode
+                            }
                           </span>
                         </span>
                         <span className="text-[#b5bac1]">
-                          {memberServerTags.find((item) => item.serverId === selectedProfileServerId)?.serverName}
+                          {
+                            memberServerTags.find(
+                              (item) =>
+                                item.serverId === selectedProfileServerId,
+                            )?.serverName
+                          }
                         </span>
                       </span>
                     ) : (
@@ -11555,9 +13581,113 @@ export const SettingsModal = () => {
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
+                <p className="text-sm font-medium text-white">
+                  Friend Requests
+                </p>
+                <p className="mt-1 text-xs text-[#949ba4]">
+                  Review incoming requests, manage outgoing ones, and keep your
+                  blocked list underneath.
+                </p>
+              </div>
+
+              <span className="rounded bg-[#3f4248] px-2 py-1 text-xs text-[#dbdee1]">
+                Pending:{" "}
+                {incomingPendingRequests.length +
+                  outgoingPendingRequests.length}
+              </span>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3">
+              {isLoadingPendingFriendRequests ? (
+                <p className="inline-flex items-center gap-2 text-xs text-[#b5bac1]">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Loading friend requests...
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                        Incoming
+                      </p>
+                      <span className="rounded bg-[#3f4248] px-2 py-0.5 text-[10px] text-[#dbdee1]">
+                        {incomingPendingRequests.length}
+                      </span>
+                    </div>
+
+                    {incomingPendingRequests.length === 0 ? (
+                      <p className="text-xs text-[#949ba4]">
+                        No incoming friend requests.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {incomingPendingRequests.map((request) => (
+                          <PendingRequestItem
+                            key={request.requestId}
+                            requestId={request.requestId}
+                            profileId={request.profileId}
+                            displayName={request.displayName}
+                            email={request.email}
+                            imageUrl={request.imageUrl}
+                            avatarDecorationUrl={request.avatarDecorationUrl}
+                            isIncoming
+                            onUpdated={onFriendRequestSectionUpdated}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="border-t border-white/10 pt-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                        Outgoing
+                      </p>
+                      <span className="rounded bg-[#3f4248] px-2 py-0.5 text-[10px] text-[#dbdee1]">
+                        {outgoingPendingRequests.length}
+                      </span>
+                    </div>
+
+                    {outgoingPendingRequests.length === 0 ? (
+                      <p className="text-xs text-[#949ba4]">
+                        No outgoing friend requests.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {outgoingPendingRequests.map((request) => (
+                          <PendingRequestItem
+                            key={request.requestId}
+                            requestId={request.requestId}
+                            profileId={request.profileId}
+                            displayName={request.displayName}
+                            email={request.email}
+                            imageUrl={request.imageUrl}
+                            avatarDecorationUrl={request.avatarDecorationUrl}
+                            isIncoming={false}
+                            onUpdated={onFriendRequestSectionUpdated}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {pendingFriendRequestsError ? (
+              <p className="mt-3 rounded-lg border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+                {pendingFriendRequestsError}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
                 <p className="text-sm font-medium text-white">Blocked Users</p>
                 <p className="mt-1 text-xs text-[#949ba4]">
-                  People you block can&apos;t send new requests or message you directly.
+                  People you block can&apos;t send new requests or message you
+                  directly.
                 </p>
               </div>
 
@@ -11573,7 +13703,9 @@ export const SettingsModal = () => {
                   Loading blocked users...
                 </p>
               ) : blockedProfiles.length === 0 ? (
-                <p className="text-xs text-[#949ba4]">You have no blocked users.</p>
+                <p className="text-xs text-[#949ba4]">
+                  You have no blocked users.
+                </p>
               ) : (
                 <div className="space-y-2">
                   {blockedProfiles.map((blocked) => (
@@ -11581,7 +13713,10 @@ export const SettingsModal = () => {
                       key={blocked.profileId}
                       className="flex items-center gap-3 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2"
                     >
-                      <UserAvatar src={blocked.imageUrl ?? undefined} className="h-8 w-8" />
+                      <UserAvatar
+                        src={blocked.imageUrl ?? undefined}
+                        className="h-8 w-8"
+                      />
 
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-white">
@@ -11591,7 +13726,8 @@ export const SettingsModal = () => {
                           />
                         </p>
                         <p className="truncate text-xs text-[#949ba4]">
-                          {blocked.email || blocked.profileId} • Blocked {formatBlockedAt(blocked.blockedAt)}
+                          {blocked.email || blocked.profileId} • Blocked{" "}
+                          {formatBlockedAt(blocked.blockedAt)}
                         </p>
                       </div>
 
@@ -11628,7 +13764,8 @@ export const SettingsModal = () => {
                 Tip
               </p>
               <p className="mt-1 text-rose-100/90">
-                Use the block button on a user card from chat or online users to add them here.
+                Use the block button on a user card from chat or online users to
+                add them here.
               </p>
             </div>
           </div>
@@ -11640,16 +13777,24 @@ export const SettingsModal = () => {
       return (
         <div className="space-y-4">
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
-            <p className="text-sm font-medium text-white">Data & Privacy Controls</p>
+            <p className="text-sm font-medium text-white">
+              Data & Privacy Controls
+            </p>
             <p className="mt-1 text-xs text-[#949ba4]">
-              Manage account discoverability, presence visibility, diagnostics, and data retention behavior.
+              Manage account discoverability, presence visibility, diagnostics,
+              and data retention behavior.
             </p>
 
             <div className="mt-4 space-y-2">
               <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-white">Profile discoverable</p>
-                  <p className="text-xs text-[#949ba4]">Allow your profile to appear in discovery-style user searches.</p>
+                  <p className="text-sm font-semibold text-white">
+                    Profile discoverable
+                  </p>
+                  <p className="text-xs text-[#949ba4]">
+                    Allow your profile to appear in discovery-style user
+                    searches.
+                  </p>
                 </div>
 
                 <button
@@ -11671,7 +13816,9 @@ export const SettingsModal = () => {
                 >
                   <span
                     className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
-                      dataPrivacyPreferences.profileDiscoverable ? "translate-x-6" : "translate-x-1"
+                      dataPrivacyPreferences.profileDiscoverable
+                        ? "translate-x-6"
+                        : "translate-x-1"
                     }`}
                   />
                 </button>
@@ -11679,8 +13826,13 @@ export const SettingsModal = () => {
 
               <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-white">Show presence to non-friends</p>
-                  <p className="text-xs text-[#949ba4]">If off, only friends can see your active/idle presence status.</p>
+                  <p className="text-sm font-semibold text-white">
+                    Show presence to non-friends
+                  </p>
+                  <p className="text-xs text-[#949ba4]">
+                    If off, only friends can see your active/idle presence
+                    status.
+                  </p>
                 </div>
 
                 <button
@@ -11688,7 +13840,8 @@ export const SettingsModal = () => {
                   onClick={() => {
                     setDataPrivacyPreferences((current) => ({
                       ...current,
-                      showPresenceToNonFriends: !current.showPresenceToNonFriends,
+                      showPresenceToNonFriends:
+                        !current.showPresenceToNonFriends,
                     }));
                     setDataPrivacyStatus(null);
                   }}
@@ -11702,7 +13855,9 @@ export const SettingsModal = () => {
                 >
                   <span
                     className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
-                      dataPrivacyPreferences.showPresenceToNonFriends ? "translate-x-6" : "translate-x-1"
+                      dataPrivacyPreferences.showPresenceToNonFriends
+                        ? "translate-x-6"
+                        : "translate-x-1"
                     }`}
                   />
                 </button>
@@ -11710,8 +13865,13 @@ export const SettingsModal = () => {
 
               <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-white">Allow usage diagnostics</p>
-                  <p className="text-xs text-[#949ba4]">Share anonymous diagnostics to help improve stability and performance.</p>
+                  <p className="text-sm font-semibold text-white">
+                    Allow usage diagnostics
+                  </p>
+                  <p className="text-xs text-[#949ba4]">
+                    Share anonymous diagnostics to help improve stability and
+                    performance.
+                  </p>
                 </div>
 
                 <button
@@ -11733,7 +13893,9 @@ export const SettingsModal = () => {
                 >
                   <span
                     className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
-                      dataPrivacyPreferences.allowUsageDiagnostics ? "translate-x-6" : "translate-x-1"
+                      dataPrivacyPreferences.allowUsageDiagnostics
+                        ? "translate-x-6"
+                        : "translate-x-1"
                     }`}
                   />
                 </button>
@@ -11744,7 +13906,8 @@ export const SettingsModal = () => {
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
             <p className="text-sm font-medium text-white">Data Retention</p>
             <p className="mt-1 text-xs text-[#949ba4]">
-              Choose how aggressively non-essential preference telemetry should be retained.
+              Choose how aggressively non-essential preference telemetry should
+              be retained.
             </p>
 
             <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
@@ -11757,7 +13920,8 @@ export const SettingsModal = () => {
                 onChange={(event) => {
                   setDataPrivacyPreferences((current) => ({
                     ...current,
-                    retentionMode: event.target.value as DataPrivacyPreferences["retentionMode"],
+                    retentionMode: event.target
+                      .value as DataPrivacyPreferences["retentionMode"],
                   }));
                   setDataPrivacyStatus(null);
                 }}
@@ -11768,7 +13932,8 @@ export const SettingsModal = () => {
               </select>
 
               <p className="mt-2 text-[11px] text-[#949ba4]">
-                Minimal mode limits retention of non-essential preference-level diagnostics where possible.
+                Minimal mode limits retention of non-essential preference-level
+                diagnostics where possible.
               </p>
 
               {dataPrivacyStatus ? (
@@ -11800,15 +13965,22 @@ export const SettingsModal = () => {
       );
     }
 
-    if (displaySection === "familyCenter" || displaySection === "businessCenter" || displaySection === "schoolCenter") {
+    if (
+      displaySection === "familyCenter" ||
+      displaySection === "businessCenter" ||
+      displaySection === "schoolCenter"
+    ) {
       return (
         <div className="space-y-4">
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-medium text-white">{centerLabel} Center Controls</p>
+                <p className="text-sm font-medium text-white">
+                  {centerLabel} Center Controls
+                </p>
                 <p className="mt-1 text-xs text-[#949ba4]">
-                  Select a {centerLabel.toLowerCase()} account to configure {centerLabel.toLowerCase()} oversight controls.
+                  Select a {centerLabel.toLowerCase()} account to configure{" "}
+                  {centerLabel.toLowerCase()} oversight controls.
                 </p>
               </div>
 
@@ -11822,7 +13994,9 @@ export const SettingsModal = () => {
                 <Button
                   type="button"
                   onClick={() => setIsFamilyAccountApplyPanelOpen(true)}
-                  disabled={isFamilyApplicationApproved || isRemovingFamilyAccount}
+                  disabled={
+                    isFamilyApplicationApproved || isRemovingFamilyAccount
+                  }
                   className={`h-8 px-3 text-xs text-white disabled:cursor-not-allowed disabled:opacity-70 ${
                     isFamilyApplicationApproved
                       ? "bg-zinc-500 hover:bg-zinc-500"
@@ -11839,7 +14013,9 @@ export const SettingsModal = () => {
                     disabled={isRemovingFamilyAccount}
                     className="h-8 border border-rose-500/35 bg-rose-500/15 px-3 text-xs text-rose-200 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {isRemovingFamilyAccount ? "Removing..." : `Remove ${centerLabel} Account`}
+                    {isRemovingFamilyAccount
+                      ? "Removing..."
+                      : `Remove ${centerLabel} Account`}
                   </Button>
                 ) : null}
               </div>
@@ -11847,33 +14023,47 @@ export const SettingsModal = () => {
 
             {!isFamilyCenterEditable ? (
               <p className="mt-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
-                {centerLabel} Center fields are view-only. Only {centerLabel} or Administrator roles can edit settings.
+                {centerLabel} Center fields are view-only. Only {centerLabel} or
+                Administrator roles can edit settings.
               </p>
             ) : null}
 
-            <Dialog open={isFamilyAccountApplyPanelOpen} onOpenChange={setIsFamilyAccountApplyPanelOpen}>
+            <Dialog
+              open={isFamilyAccountApplyPanelOpen}
+              onOpenChange={setIsFamilyAccountApplyPanelOpen}
+            >
               <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-2xl">
                 <DialogHeader>
                   <DialogTitle>Apply for {centerLabel} Account</DialogTitle>
                   <DialogDescription className="text-[#949ba4]">
-                    Start a {centerLabel} Account request for your profile setup.
+                    Start a {centerLabel} Account request for your profile
+                    setup.
                   </DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-3">
                   <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">What happens next</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                      What happens next
+                    </p>
                     <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-[#b5bac1]">
                       <li>Submit your Business account details for review.</li>
                       <li>Upload your ID and A.O.I. for verification.</li>
                       <li>In-Accord staff validates account eligibility.</li>
-                      <li>{centerLabel} Center permissions are enabled after approval.</li>
+                      <li>
+                        {centerLabel} Center permissions are enabled after
+                        approval.
+                      </li>
                     </ul>
                   </div>
                 </div>
 
                 <DialogFooter className="gap-2 sm:justify-end">
-                  <Button type="button" variant="outline" onClick={() => setIsFamilyAccountApplyPanelOpen(false)}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsFamilyAccountApplyPanelOpen(false)}
+                  >
                     Close
                   </Button>
                   <Button
@@ -11898,7 +14088,8 @@ export const SettingsModal = () => {
                 <DialogHeader>
                   <DialogTitle>ID Verification Upload</DialogTitle>
                   <DialogDescription className="text-[#949ba4]">
-                    Upload a valid government-issued ID to continue your {centerLabel} Account application.
+                    Upload a valid government-issued ID to continue your{" "}
+                    {centerLabel} Account application.
                   </DialogDescription>
                 </DialogHeader>
 
@@ -11909,11 +14100,15 @@ export const SettingsModal = () => {
                     type="file"
                     accept=".jpg,.jpeg,.png,.pdf"
                     multiple
-                    onChange={(event) => onFamilyVerificationFilesChange(event.target.files)}
+                    onChange={(event) =>
+                      onFamilyVerificationFilesChange(event.target.files)
+                    }
                   />
 
                   <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">Verification checklist</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                      Verification checklist
+                    </p>
                     <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-[#b5bac1]">
                       <li>Upload front and back images when required.</li>
                       <li>
@@ -11926,8 +14121,13 @@ export const SettingsModal = () => {
                   </div>
 
                   <div className="rounded-lg border border-dashed border-white/20 bg-[#15161a] p-4 text-center">
-                    <p className="text-sm font-semibold text-white">Upload Area</p>
-                    <p className="mt-1 text-xs text-[#949ba4]">Attach ID files now. Backend upload submission can be connected next.</p>
+                    <p className="text-sm font-semibold text-white">
+                      Upload Area
+                    </p>
+                    <p className="mt-1 text-xs text-[#949ba4]">
+                      Attach ID files now. Backend upload submission can be
+                      connected next.
+                    </p>
 
                     <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
                       <Button
@@ -11962,11 +14162,16 @@ export const SettingsModal = () => {
                               className="flex items-center justify-between gap-2 rounded border border-white/10 bg-[#1a1b1e] px-2 py-1.5"
                             >
                               <p className="truncate text-[11px] text-[#dbdee1]">
-                                {file.name} <span className="text-[#949ba4]">({formatFileSize(file.size)})</span>
+                                {file.name}{" "}
+                                <span className="text-[#949ba4]">
+                                  ({formatFileSize(file.size)})
+                                </span>
                               </p>
                               <Button
                                 type="button"
-                                onClick={() => onRemoveFamilyVerificationFile(index)}
+                                onClick={() =>
+                                  onRemoveFamilyVerificationFile(index)
+                                }
                                 className="h-6 border border-rose-500/35 bg-rose-500/15 px-2 text-[10px] text-rose-200 hover:bg-rose-500/25"
                               >
                                 Remove
@@ -11976,20 +14181,28 @@ export const SettingsModal = () => {
                         </div>
                       </div>
                     ) : (
-                      <p className="mt-2 text-[11px] text-[#949ba4]">No files attached yet.</p>
+                      <p className="mt-2 text-[11px] text-[#949ba4]">
+                        No files attached yet.
+                      </p>
                     )}
 
                     {familyVerificationUploadStatus ? (
-                      <p className="mt-2 text-[11px] text-[#b5bac1]">{familyVerificationUploadStatus}</p>
+                      <p className="mt-2 text-[11px] text-[#b5bac1]">
+                        {familyVerificationUploadStatus}
+                      </p>
                     ) : null}
                   </div>
 
                   <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">User Details</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                      User Details
+                    </p>
 
                     <div className="mt-2 grid gap-2 md:grid-cols-2">
                       <div>
-                        <label className="mb-1 block text-[11px] font-semibold text-[#c6cad1]">Legal Name</label>
+                        <label className="mb-1 block text-[11px] font-semibold text-[#c6cad1]">
+                          Legal Name
+                        </label>
                         <input
                           type="text"
                           value={realName || "Not set"}
@@ -11999,7 +14212,9 @@ export const SettingsModal = () => {
                       </div>
 
                       <div>
-                        <label className="mb-1 block text-[11px] font-semibold text-[#c6cad1]">Profile Name</label>
+                        <label className="mb-1 block text-[11px] font-semibold text-[#c6cad1]">
+                          Profile Name
+                        </label>
                         <input
                           type="text"
                           value={profileName || "Not set"}
@@ -12009,7 +14224,9 @@ export const SettingsModal = () => {
                       </div>
 
                       <div>
-                        <label className="mb-1 block text-[11px] font-semibold text-[#c6cad1]">Email</label>
+                        <label className="mb-1 block text-[11px] font-semibold text-[#c6cad1]">
+                          Email
+                        </label>
                         <input
                           type="text"
                           value={data.profileEmail || "Not set"}
@@ -12019,7 +14236,9 @@ export const SettingsModal = () => {
                       </div>
 
                       <div>
-                        <label className="mb-1 block text-[11px] font-semibold text-[#c6cad1]">Phone</label>
+                        <label className="mb-1 block text-[11px] font-semibold text-[#c6cad1]">
+                          Phone
+                        </label>
                         <input
                           type="text"
                           value={phoneNumber || "Not set"}
@@ -12030,17 +14249,26 @@ export const SettingsModal = () => {
 
                       <div>
                         <label className="mb-1 block text-[11px] font-semibold text-[#c6cad1]">
-                          {isBusinessCenterSection ? "Business Section" : "Date of Birth"}
+                          {isBusinessCenterSection
+                            ? "Business Section"
+                            : "Date of Birth"}
                         </label>
                         {isBusinessCenterSection ? (
                           <select
                             value={familyApplicationSectionInput}
-                            onChange={(event) => setFamilyApplicationSectionInput(event.target.value)}
+                            onChange={(event) =>
+                              setFamilyApplicationSectionInput(
+                                event.target.value,
+                              )
+                            }
                             className="h-8 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-2.5 text-xs text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
                           >
                             <option value="">Select business section</option>
                             {businessSectionOptions.map((option) => (
-                              <option key={`business-application-section-${option}`} value={option}>
+                              <option
+                                key={`business-application-section-${option}`}
+                                value={option}
+                              >
                                 {option}
                               </option>
                             ))}
@@ -12057,26 +14285,43 @@ export const SettingsModal = () => {
 
                       <div>
                         <label className="mb-1 block text-[11px] font-semibold text-[#c6cad1]">
-                          {isBusinessCenterSection ? "Business Role" : "Family Designation"}
+                          {isBusinessCenterSection
+                            ? "Business Role"
+                            : "Family Designation"}
                         </label>
                         <select
                           value={familyDesignationInput}
-                          onChange={(event) => setFamilyDesignationInput(event.target.value)}
+                          onChange={(event) =>
+                            setFamilyDesignationInput(event.target.value)
+                          }
                           className="h-8 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-2.5 text-xs text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
                         >
-                          <option value="">{isBusinessCenterSection ? "Select business role" : "Select designation"}</option>
+                          <option value="">
+                            {isBusinessCenterSection
+                              ? "Select business role"
+                              : "Select designation"}
+                          </option>
                           {isBusinessCenterSection
                             ? businessRoleGroups.map((group) => (
-                                <optgroup key={`business-verification-role-group-${group.label}`} label={group.label}>
+                                <optgroup
+                                  key={`business-verification-role-group-${group.label}`}
+                                  label={group.label}
+                                >
                                   {group.options.map((option) => (
-                                    <option key={`business-verification-role-${option}`} value={option}>
+                                    <option
+                                      key={`business-verification-role-${option}`}
+                                      value={option}
+                                    >
                                       {option}
                                     </option>
                                   ))}
                                 </optgroup>
                               ))
                             : familyDesignationOptions.map((option) => (
-                                <option key={`family-designation-${option}`} value={option}>
+                                <option
+                                  key={`family-designation-${option}`}
+                                  value={option}
+                                >
                                   {option}
                                 </option>
                               ))}
@@ -12090,7 +14335,9 @@ export const SettingsModal = () => {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setIsFamilyAccountVerificationPanelOpen(false)}
+                    onClick={() =>
+                      setIsFamilyAccountVerificationPanelOpen(false)
+                    }
                   >
                     Back
                   </Button>
@@ -12100,7 +14347,8 @@ export const SettingsModal = () => {
                     disabled={
                       !familyDesignationInput ||
                       familyVerificationFiles.length === 0 ||
-                      (isBusinessCenterSection && !familyApplicationSectionInput)
+                      (isBusinessCenterSection &&
+                        !familyApplicationSectionInput)
                     }
                     className="bg-[#5865f2] text-white hover:bg-[#4752c4]"
                   >
@@ -12120,15 +14368,24 @@ export const SettingsModal = () => {
                   setSelectedFamilyMemberId(event.target.value);
                   setFamilyCenterStatus(null);
                 }}
-                disabled={familyCenterPreferences.familyMembers.length === 0 || !isFamilyCenterEditable}
+                disabled={
+                  familyCenterPreferences.familyMembers.length === 0 ||
+                  !isFamilyCenterEditable
+                }
                 className="h-9 w-full rounded-md border border-black/25 bg-[#1a1b1e] px-3 text-sm text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {familyCenterPreferences.familyMembers.length === 0 ? (
-                  <option value="">No {centerLabel.toLowerCase()} accounts available</option>
+                  <option value="">
+                    No {centerLabel.toLowerCase()} accounts available
+                  </option>
                 ) : null}
                 {familyCenterPreferences.familyMembers.map((member) => (
-                  <option key={`family-member-select-${member.id}`} value={member.id}>
-                    {(member.childName || "Profile Name").trim()} — {member.accountIdentifier}
+                  <option
+                    key={`family-member-select-${member.id}`}
+                    value={member.id}
+                  >
+                    {(member.childName || "Profile Name").trim()} —{" "}
+                    {member.accountIdentifier}
                   </option>
                 ))}
               </select>
@@ -12136,13 +14393,18 @@ export const SettingsModal = () => {
               {selectedFamilyMember ? (
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                   <p className="text-[11px] text-[#949ba4]">
-                    Editing oversight for <span className="font-semibold text-[#dbdee1]">{selectedFamilyMember.childName || "Profile Name"}</span>
+                    Editing oversight for{" "}
+                    <span className="font-semibold text-[#dbdee1]">
+                      {selectedFamilyMember.childName || "Profile Name"}
+                    </span>
                   </p>
                   <div className="flex flex-wrap items-center gap-2">
                     <Button
                       type="button"
                       onClick={onCopyDefaultsToSelectedChild}
-                      disabled={!selectedFamilyMember || !isFamilyCenterEditable}
+                      disabled={
+                        !selectedFamilyMember || !isFamilyCenterEditable
+                      }
                       className="h-7 border border-[#5865f2]/35 bg-[#5865f2]/15 px-2 text-[11px] text-[#d7dcff] hover:bg-[#5865f2]/25 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Copy Defaults
@@ -12150,7 +14412,9 @@ export const SettingsModal = () => {
                     <Button
                       type="button"
                       onClick={onResetSelectedChildToAppDefaults}
-                      disabled={!selectedFamilyMember || !isFamilyCenterEditable}
+                      disabled={
+                        !selectedFamilyMember || !isFamilyCenterEditable
+                      }
                       className="h-7 border border-zinc-500/35 bg-zinc-500/15 px-2 text-[11px] text-zinc-200 hover:bg-zinc-500/25 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Reset to App Defaults
@@ -12158,32 +14422,50 @@ export const SettingsModal = () => {
                   </div>
                 </div>
               ) : (
-                <p className="mt-2 text-[11px] text-[#949ba4]">Add and select a {centerLabel.toLowerCase()} account to edit oversight controls.</p>
+                <p className="mt-2 text-[11px] text-[#949ba4]">
+                  Add and select a {centerLabel.toLowerCase()} account to edit
+                  oversight controls.
+                </p>
               )}
             </div>
 
             <div className="mt-3 space-y-2 rounded-xl border border-white/10 bg-black/20 p-3">
               <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-white">Require content filter for {centerLabel.toLowerCase()} members</p>
-                  <p className="text-xs text-[#949ba4]">Enforces stricter filtering for supervised household profiles.</p>
+                  <p className="text-sm font-semibold text-white">
+                    Require content filter for {centerLabel.toLowerCase()}{" "}
+                    members
+                  </p>
+                  <p className="text-xs text-[#949ba4]">
+                    Enforces stricter filtering for supervised household
+                    profiles.
+                  </p>
                 </div>
 
                 <button
                   type="button"
-                  onClick={() => updateSelectedFamilyMemberOversight("requireContentFilterForFamilyMembers")}
+                  onClick={() =>
+                    updateSelectedFamilyMemberOversight(
+                      "requireContentFilterForFamilyMembers",
+                    )
+                  }
                   disabled={!selectedFamilyMember || !isFamilyCenterEditable}
                   className={`inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition ${
                     selectedFamilyMember?.requireContentFilterForFamilyMembers
                       ? "border-emerald-400/50 bg-emerald-500/40"
                       : "border-zinc-600 bg-zinc-700"
                   } disabled:cursor-not-allowed disabled:opacity-60`}
-                  aria-pressed={selectedFamilyMember?.requireContentFilterForFamilyMembers ?? false}
+                  aria-pressed={
+                    selectedFamilyMember?.requireContentFilterForFamilyMembers ??
+                    false
+                  }
                   aria-label="Toggle family content filter requirement"
                 >
                   <span
                     className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
-                      selectedFamilyMember?.requireContentFilterForFamilyMembers ? "translate-x-6" : "translate-x-1"
+                      selectedFamilyMember?.requireContentFilterForFamilyMembers
+                        ? "translate-x-6"
+                        : "translate-x-1"
                     }`}
                   />
                 </button>
@@ -12191,25 +14473,38 @@ export const SettingsModal = () => {
 
               <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-white">Share weekly safety summary</p>
-                  <p className="text-xs text-[#949ba4]">Provides a weekly summary of moderation and safety-related activity.</p>
+                  <p className="text-sm font-semibold text-white">
+                    Share weekly safety summary
+                  </p>
+                  <p className="text-xs text-[#949ba4]">
+                    Provides a weekly summary of moderation and safety-related
+                    activity.
+                  </p>
                 </div>
 
                 <button
                   type="button"
-                  onClick={() => updateSelectedFamilyMemberOversight("shareWeeklySafetySummary")}
+                  onClick={() =>
+                    updateSelectedFamilyMemberOversight(
+                      "shareWeeklySafetySummary",
+                    )
+                  }
                   disabled={!selectedFamilyMember || !isFamilyCenterEditable}
                   className={`inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition ${
                     selectedFamilyMember?.shareWeeklySafetySummary
                       ? "border-emerald-400/50 bg-emerald-500/40"
                       : "border-zinc-600 bg-zinc-700"
                   } disabled:cursor-not-allowed disabled:opacity-60`}
-                  aria-pressed={selectedFamilyMember?.shareWeeklySafetySummary ?? false}
+                  aria-pressed={
+                    selectedFamilyMember?.shareWeeklySafetySummary ?? false
+                  }
                   aria-label="Toggle weekly safety summary"
                 >
                   <span
                     className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
-                      selectedFamilyMember?.shareWeeklySafetySummary ? "translate-x-6" : "translate-x-1"
+                      selectedFamilyMember?.shareWeeklySafetySummary
+                        ? "translate-x-6"
+                        : "translate-x-1"
                     }`}
                   />
                 </button>
@@ -12217,25 +14512,39 @@ export const SettingsModal = () => {
 
               <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-white">Allow private messages from non-friends</p>
-                  <p className="text-xs text-[#949ba4]">When off, {centerLabel.toLowerCase()}-managed accounts can only receive PMs from friends.</p>
+                  <p className="text-sm font-semibold text-white">
+                    Allow private messages from non-friends
+                  </p>
+                  <p className="text-xs text-[#949ba4]">
+                    When off, {centerLabel.toLowerCase()}-managed accounts can
+                    only receive PMs from friends.
+                  </p>
                 </div>
 
                 <button
                   type="button"
-                  onClick={() => updateSelectedFamilyMemberOversight("allowDirectMessagesFromNonFriends")}
+                  onClick={() =>
+                    updateSelectedFamilyMemberOversight(
+                      "allowDirectMessagesFromNonFriends",
+                    )
+                  }
                   disabled={!selectedFamilyMember || !isFamilyCenterEditable}
                   className={`inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition ${
                     selectedFamilyMember?.allowDirectMessagesFromNonFriends
                       ? "border-emerald-400/50 bg-emerald-500/40"
                       : "border-zinc-600 bg-zinc-700"
                   } disabled:cursor-not-allowed disabled:opacity-60`}
-                  aria-pressed={selectedFamilyMember?.allowDirectMessagesFromNonFriends ?? false}
+                  aria-pressed={
+                    selectedFamilyMember?.allowDirectMessagesFromNonFriends ??
+                    false
+                  }
                   aria-label="Toggle private messages from non-friends"
                 >
                   <span
                     className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
-                      selectedFamilyMember?.allowDirectMessagesFromNonFriends ? "translate-x-6" : "translate-x-1"
+                      selectedFamilyMember?.allowDirectMessagesFromNonFriends
+                        ? "translate-x-6"
+                        : "translate-x-1"
                     }`}
                   />
                 </button>
@@ -12243,25 +14552,39 @@ export const SettingsModal = () => {
 
               <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-white">Alert on mature content interactions</p>
-                  <p className="text-xs text-[#949ba4]">Flags interactions with mature content for review in {centerLabel.toLowerCase()} oversight workflows.</p>
+                  <p className="text-sm font-semibold text-white">
+                    Alert on mature content interactions
+                  </p>
+                  <p className="text-xs text-[#949ba4]">
+                    Flags interactions with mature content for review in{" "}
+                    {centerLabel.toLowerCase()} oversight workflows.
+                  </p>
                 </div>
 
                 <button
                   type="button"
-                  onClick={() => updateSelectedFamilyMemberOversight("alertOnMatureContentInteractions")}
+                  onClick={() =>
+                    updateSelectedFamilyMemberOversight(
+                      "alertOnMatureContentInteractions",
+                    )
+                  }
                   disabled={!selectedFamilyMember || !isFamilyCenterEditable}
                   className={`inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition ${
                     selectedFamilyMember?.alertOnMatureContentInteractions
                       ? "border-emerald-400/50 bg-emerald-500/40"
                       : "border-zinc-600 bg-zinc-700"
                   } disabled:cursor-not-allowed disabled:opacity-60`}
-                  aria-pressed={selectedFamilyMember?.alertOnMatureContentInteractions ?? false}
+                  aria-pressed={
+                    selectedFamilyMember?.alertOnMatureContentInteractions ??
+                    false
+                  }
                   aria-label="Toggle mature content interaction alerts"
                 >
                   <span
                     className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
-                      selectedFamilyMember?.alertOnMatureContentInteractions ? "translate-x-6" : "translate-x-1"
+                      selectedFamilyMember?.alertOnMatureContentInteractions
+                        ? "translate-x-6"
+                        : "translate-x-1"
                     }`}
                   />
                 </button>
@@ -12271,9 +14594,12 @@ export const SettingsModal = () => {
             <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <p className="text-sm font-semibold text-white">{centerLabel} Members</p>
+                  <p className="text-sm font-semibold text-white">
+                    {centerLabel} Members
+                  </p>
                   <p className="text-[11px] text-[#949ba4]">
-                    Add and manage linked {centerLabel.toLowerCase()} accounts for {centerLabel} Center oversight.
+                    Add and manage linked {centerLabel.toLowerCase()} accounts
+                    for {centerLabel} Center oversight.
                   </p>
                 </div>
                 <span className="inline-flex h-6 items-center rounded-md border border-white/15 bg-white/5 px-2 text-[10px] font-semibold text-[#d7dcff]">
@@ -12296,7 +14622,9 @@ export const SettingsModal = () => {
                         setFamilyCenterStatus(null);
                       }}
                       maxLength={60}
-                      placeholder={isBusinessCenterSection ? "Company Name" : "Family Name"}
+                      placeholder={
+                        isBusinessCenterSection ? "Company Name" : "Family Name"
+                      }
                       required
                       disabled={!isFamilyCenterEditable}
                       className="h-8 rounded-md border border-black/25 bg-[#131417] px-2.5 text-xs text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
@@ -12329,7 +14657,10 @@ export const SettingsModal = () => {
                       >
                         <option value="">Family Relation</option>
                         {familyMemberRelationOptions.map((option) => (
-                          <option key={`family-member-relation-${option}`} value={option}>
+                          <option
+                            key={`family-member-relation-${option}`}
+                            value={option}
+                          >
                             {option}
                           </option>
                         ))}
@@ -12363,7 +14694,10 @@ export const SettingsModal = () => {
                       >
                         <option value="">Business Section</option>
                         {businessSectionOptions.map((option) => (
-                          <option key={`business-section-option-${option}`} value={option}>
+                          <option
+                            key={`business-section-option-${option}`}
+                            value={option}
+                          >
                             {option}
                           </option>
                         ))}
@@ -12402,9 +14736,15 @@ export const SettingsModal = () => {
                       >
                         <option value="">Business Role</option>
                         {businessRoleGroups.map((group) => (
-                          <optgroup key={`business-role-group-${group.label}`} label={group.label}>
+                          <optgroup
+                            key={`business-role-group-${group.label}`}
+                            label={group.label}
+                          >
                             {group.options.map((option) => (
-                              <option key={`business-role-option-${option}`} value={option}>
+                              <option
+                                key={`business-role-option-${option}`}
+                                value={option}
+                              >
                                 {option}
                               </option>
                             ))}
@@ -12455,7 +14795,9 @@ export const SettingsModal = () => {
                         disabled={!isFamilyCenterEditable}
                         className="h-8 w-full rounded-md border border-black/25 bg-[#131417] px-2.5 text-xs text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
                       />
-                      <p className={`mt-1 text-[10px] ${familyMemberPasswordStrength.className}`}>
+                      <p
+                        className={`mt-1 text-[10px] ${familyMemberPasswordStrength.className}`}
+                      >
                         {familyMemberPasswordStrength.label}
                       </p>
                     </div>
@@ -12465,7 +14807,9 @@ export const SettingsModal = () => {
                         type="password"
                         value={familyMemberRepeatPasswordInput}
                         onChange={(event) => {
-                          setFamilyMemberRepeatPasswordInput(event.target.value);
+                          setFamilyMemberRepeatPasswordInput(
+                            event.target.value,
+                          );
                           setFamilyCenterStatus(null);
                         }}
                         maxLength={128}
@@ -12474,10 +14818,13 @@ export const SettingsModal = () => {
                         disabled={!isFamilyCenterEditable}
                         className="h-8 w-full rounded-md border border-black/25 bg-[#131417] px-2.5 text-xs text-white outline-none placeholder:text-[#7f8690] focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35"
                       />
-                      <p className={`mt-1 text-[10px] ${familyMemberRepeatPasswordStrength.className}`}>
+                      <p
+                        className={`mt-1 text-[10px] ${familyMemberRepeatPasswordStrength.className}`}
+                      >
                         {familyMemberRepeatPasswordStrength.label}
                         {familyMemberRepeatPasswordInput.trim().length > 0
-                          ? familyMemberRepeatPasswordInput.trim() === familyMemberPasswordInput.trim()
+                          ? familyMemberRepeatPasswordInput.trim() ===
+                            familyMemberPasswordInput.trim()
                             ? " • Matches"
                             : " • Does not match"
                           : ""}
@@ -12489,10 +14836,14 @@ export const SettingsModal = () => {
                     <Button
                       type="button"
                       onClick={onAddFamilyMember}
-                      disabled={!isFamilyCenterEditable || isCreatingFamilyMemberAccount}
+                      disabled={
+                        !isFamilyCenterEditable || isCreatingFamilyMemberAccount
+                      }
                       className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4]"
                     >
-                      {isCreatingFamilyMemberAccount ? "Creating account..." : "Add Account"}
+                      {isCreatingFamilyMemberAccount
+                        ? "Creating account..."
+                        : "Add Account"}
                     </Button>
                   </div>
 
@@ -12518,12 +14869,14 @@ export const SettingsModal = () => {
                     {familyCenterPreferences.familyMembers.length === 0 ? (
                       <div className="rounded-lg border border-white/10 bg-[#131417] px-3 py-2 text-xs text-[#949ba4]">
                         <p>
-                          {isBusinessCenterSection && isFamilyApplicationApproved
+                          {isBusinessCenterSection &&
+                          isFamilyApplicationApproved
                             ? "Business account approved. Add your first business member above to get started."
                             : `No ${centerLabel.toLowerCase()} accounts added yet.`}
                         </p>
 
-                        {isBusinessCenterSection && isFamilyApplicationApproved ? (
+                        {isBusinessCenterSection &&
+                        isFamilyApplicationApproved ? (
                           <div className="mt-2 flex flex-wrap items-center gap-2">
                             <Button
                               type="button"
@@ -12541,13 +14894,14 @@ export const SettingsModal = () => {
                         const lifecycle = member.linkedUserId
                           ? familyMemberLifecycleByUserId[member.linkedUserId]
                           : null;
-                        const state = lifecycle?.state ?? member.familyLinkState;
+                        const state =
+                          lifecycle?.state ?? member.familyLinkState;
                         const stateLabel =
                           state === "managed-under-16"
                             ? "Managed <16"
                             : state === "eligible-16-plus"
-                            ? "16+ eligible"
-                            : "Normal";
+                              ? "16+ eligible"
+                              : "Normal";
 
                         return (
                           <div
@@ -12562,16 +14916,21 @@ export const SettingsModal = () => {
                               <p className="truncate text-xs font-semibold text-white">
                                 {member.childName || "Profile Name"}
                               </p>
-                              {isBusinessCenterSection ? <BusinessMemberIcon /> : null}
+                              {isBusinessCenterSection ? (
+                                <BusinessMemberIcon />
+                              ) : null}
                               <span className="inline-flex h-5 items-center rounded-md border border-white/15 bg-white/5 px-1.5 text-[10px] font-semibold text-[#d7dcff]">
                                 {stateLabel}
                               </span>
                               {member.childRelation ? (
                                 <span className="inline-flex h-5 items-center rounded-md border border-white/10 bg-black/20 px-1.5 text-[10px] text-[#b5bac1]">
-                                  {isBusinessCenterSection ? `Pronouns: ${member.childRelation}` : member.childRelation}
+                                  {isBusinessCenterSection
+                                    ? `Pronouns: ${member.childRelation}`
+                                    : member.childRelation}
                                 </span>
                               ) : null}
-                              {isBusinessCenterSection && member.childSection ? (
+                              {isBusinessCenterSection &&
+                              member.childSection ? (
                                 <span className="inline-flex h-5 items-center rounded-md border border-indigo-400/30 bg-indigo-500/10 px-1.5 text-[10px] text-indigo-200">
                                   Section: {member.childSection}
                                 </span>
@@ -12580,22 +14939,33 @@ export const SettingsModal = () => {
 
                             <p className="mt-0.5 truncate text-[11px] text-[#949ba4]">
                               {member.accountIdentifier}
-                              {member.childDateOfBirth ? ` • DOB ${member.childDateOfBirth}` : ""}
+                              {member.childDateOfBirth
+                                ? ` • DOB ${member.childDateOfBirth}`
+                                : ""}
                             </p>
                             <p className="truncate text-[11px] text-[#949ba4]">
                               {member.childEmail || "No email"}
-                              {member.childPhone ? ` • ${member.childPhone}` : ""}
+                              {member.childPhone
+                                ? ` • ${member.childPhone}`
+                                : ""}
                             </p>
                             {member.linkedUserId ? (
-                              <p className="truncate text-[11px] text-[#949ba4]">Linked: {member.linkedUserId}</p>
+                              <p className="truncate text-[11px] text-[#949ba4]">
+                                Linked: {member.linkedUserId}
+                              </p>
                             ) : (
-                              <p className="truncate text-[11px] text-amber-300">Linked {centerLabel.toLowerCase()} account: not created</p>
+                              <p className="truncate text-[11px] text-amber-300">
+                                Linked {centerLabel.toLowerCase()} account: not
+                                created
+                              </p>
                             )}
 
                             <div className="mt-2 flex flex-wrap gap-1.5">
                               <Button
                                 type="button"
-                                onClick={() => setSelectedFamilyMemberId(member.id)}
+                                onClick={() =>
+                                  setSelectedFamilyMemberId(member.id)
+                                }
                                 disabled={!isFamilyCenterEditable}
                                 className="h-7 border border-[#5865f2]/35 bg-[#5865f2]/15 px-2 text-[11px] text-[#d7dcff] hover:bg-[#5865f2]/25"
                               >
@@ -12604,16 +14974,24 @@ export const SettingsModal = () => {
 
                               <Button
                                 type="button"
-                                onClick={() => void onConvertFamilyMemberToNormal(member)}
+                                onClick={() =>
+                                  void onConvertFamilyMemberToNormal(member)
+                                }
                                 disabled={
                                   !member.linkedUserId ||
-                                  !familyMemberLifecycleByUserId[member.linkedUserId]?.canConvertToNormal ||
-                                  isConvertingFamilyMemberUserId === member.linkedUserId ||
+                                  !familyMemberLifecycleByUserId[
+                                    member.linkedUserId
+                                  ]?.canConvertToNormal ||
+                                  isConvertingFamilyMemberUserId ===
+                                    member.linkedUserId ||
                                   !isFamilyCenterEditable
                                 }
                                 className="h-7 border border-emerald-500/35 bg-emerald-500/15 px-2 text-[11px] text-emerald-200 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-60"
                               >
-                                {isConvertingFamilyMemberUserId === member.linkedUserId ? "Converting..." : "Convert"}
+                                {isConvertingFamilyMemberUserId ===
+                                member.linkedUserId
+                                  ? "Converting..."
+                                  : "Convert"}
                               </Button>
 
                               <Button
@@ -12644,7 +15022,9 @@ export const SettingsModal = () => {
               <Button
                 type="button"
                 onClick={onSaveFamilyCenterPreferences}
-                disabled={isSavingFamilyCenterPreferences || !isFamilyCenterEditable}
+                disabled={
+                  isSavingFamilyCenterPreferences || !isFamilyCenterEditable
+                }
                 className="bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSavingFamilyCenterPreferences ? (
@@ -12664,19 +15044,28 @@ export const SettingsModal = () => {
 
     if (displaySection === "voiceVideo") {
       const canControlVoiceCamera = isVoiceSessionActive && isVoiceVideoSession;
-      const canControlAnyCamera = canControlVoiceCamera || isPmVideoSessionActive;
+      const canControlAnyCamera =
+        canControlVoiceCamera || isPmVideoSessionActive;
       const isCameraOn = canControlVoiceCamera ? isVoiceCameraOn : isPmCameraOn;
 
       const onToggleMute = () => {
         const next = !isVoiceMuted;
         setIsVoiceMuted(next);
-        window.dispatchEvent(new CustomEvent(VOICE_TOGGLE_MUTE_EVENT, { detail: { isMuted: next } }));
+        window.dispatchEvent(
+          new CustomEvent(VOICE_TOGGLE_MUTE_EVENT, {
+            detail: { isMuted: next },
+          }),
+        );
       };
 
       const onToggleDeafen = () => {
         const next = !isVoiceDeafened;
         setIsVoiceDeafened(next);
-        window.dispatchEvent(new CustomEvent(VOICE_TOGGLE_DEAFEN_EVENT, { detail: { isDeafened: next } }));
+        window.dispatchEvent(
+          new CustomEvent(VOICE_TOGGLE_DEAFEN_EVENT, {
+            detail: { isDeafened: next },
+          }),
+        );
       };
 
       const onToggleCamera = () => {
@@ -12688,35 +15077,56 @@ export const SettingsModal = () => {
 
         if (canControlVoiceCamera) {
           setIsVoiceCameraOn(next);
-          window.dispatchEvent(new CustomEvent(VOICE_TOGGLE_CAMERA_EVENT, { detail: { isCameraOn: next } }));
+          window.dispatchEvent(
+            new CustomEvent(VOICE_TOGGLE_CAMERA_EVENT, {
+              detail: { isCameraOn: next },
+            }),
+          );
         }
 
         if (isPmVideoSessionActive) {
           setIsPmCameraOn(next);
-          window.dispatchEvent(new CustomEvent(PM_TOGGLE_CAMERA_EVENT, { detail: { isCameraOn: next } }));
+          window.dispatchEvent(
+            new CustomEvent(PM_TOGGLE_CAMERA_EVENT, {
+              detail: { isCameraOn: next },
+            }),
+          );
         }
       };
 
       return (
         <div className="space-y-4">
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
-            <p className="text-sm font-medium text-white">Voice &amp; Video Controls</p>
+            <p className="text-sm font-medium text-white">
+              Voice &amp; Video Controls
+            </p>
             <p className="mt-1 text-xs text-[#949ba4]">
-              Live controls are wired to your active voice channel and PM video sessions.
+              Live controls are wired to your active voice channel and PM video
+              sessions.
             </p>
 
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">Voice Session</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                  Voice Session
+                </p>
                 <p className="mt-1 text-xs text-[#dbdee1]">
                   {isVoiceSessionActive ? "Connected" : "Not connected"}
-                  {isVoiceSessionActive ? (isVoiceVideoSession ? " • Video channel" : " • Audio channel") : ""}
+                  {isVoiceSessionActive
+                    ? isVoiceVideoSession
+                      ? " • Video channel"
+                      : " • Audio channel"
+                    : ""}
                 </p>
               </div>
 
               <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">PM Video</p>
-                <p className="mt-1 text-xs text-[#dbdee1]">{isPmVideoSessionActive ? "Active" : "Not active"}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                  PM Video
+                </p>
+                <p className="mt-1 text-xs text-[#dbdee1]">
+                  {isPmVideoSessionActive ? "Active" : "Not active"}
+                </p>
               </div>
             </div>
 
@@ -12730,7 +15140,11 @@ export const SettingsModal = () => {
                     : "border-emerald-500/35 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
                 }`}
               >
-                {isVoiceMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                {isVoiceMuted ? (
+                  <MicOff className="h-4 w-4" />
+                ) : (
+                  <Mic className="h-4 w-4" />
+                )}
                 {isVoiceMuted ? "Unmute" : "Mute"}
               </Button>
 
@@ -12743,7 +15157,11 @@ export const SettingsModal = () => {
                     : "border-emerald-500/35 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
                 }`}
               >
-                {isVoiceDeafened ? <VolumeX className="h-4 w-4" /> : <Headphones className="h-4 w-4" />}
+                {isVoiceDeafened ? (
+                  <VolumeX className="h-4 w-4" />
+                ) : (
+                  <Headphones className="h-4 w-4" />
+                )}
                 {isVoiceDeafened ? "Undeafen" : "Deafen"}
               </Button>
 
@@ -12755,11 +15173,15 @@ export const SettingsModal = () => {
                   !canControlAnyCamera
                     ? "border-white/15 bg-black/20 text-[#949ba4] hover:bg-black/20 disabled:cursor-not-allowed disabled:opacity-70"
                     : isCameraOn
-                    ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
-                    : "border-amber-400/35 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25"
+                      ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
+                      : "border-amber-400/35 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25"
                 }`}
               >
-                {isCameraOn ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
+                {isCameraOn ? (
+                  <Video className="h-4 w-4" />
+                ) : (
+                  <VideoOff className="h-4 w-4" />
+                )}
                 {isCameraOn ? "Turn Camera Off" : "Turn Camera On"}
               </Button>
             </div>
@@ -12769,8 +15191,8 @@ export const SettingsModal = () => {
                 ? isPmVideoSessionActive && canControlVoiceCamera
                   ? "Camera control is currently wired to both voice video and PM video sessions."
                   : canControlVoiceCamera
-                  ? "Camera control is currently wired to your active voice video channel."
-                  : "Camera control is currently wired to your active PM video session."
+                    ? "Camera control is currently wired to your active voice video channel."
+                    : "Camera control is currently wired to your active PM video session."
                 : "Join a voice video channel or start a PM video call to enable camera controls."}
             </p>
           </div>
@@ -12787,12 +15209,14 @@ export const SettingsModal = () => {
         {
           key: "preferReducedMotion",
           title: "Reduced Motion",
-          description: "Limit animations and motion-heavy UI transitions where possible.",
+          description:
+            "Limit animations and motion-heavy UI transitions where possible.",
         },
         {
           key: "highContrastMode",
           title: "High Contrast Mode",
-          description: "Increase contrast for text and controls to improve readability.",
+          description:
+            "Increase contrast for text and controls to improve readability.",
         },
         {
           key: "largerChatFont",
@@ -12809,7 +15233,9 @@ export const SettingsModal = () => {
       return (
         <div className="space-y-4">
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
-            <p className="text-sm font-medium text-white">Accessibility Preferences</p>
+            <p className="text-sm font-medium text-white">
+              Accessibility Preferences
+            </p>
             <p className="mt-1 text-xs text-[#949ba4]">
               Tune readability and interaction comfort for your chat experience.
             </p>
@@ -12818,10 +15244,17 @@ export const SettingsModal = () => {
           <div className="rounded-lg border border-black/20 bg-[#1e1f22] p-4">
             <div className="space-y-2">
               {accessibilityRows.map((item) => (
-                <div key={`accessibility-setting-${item.key}`} className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                <div
+                  key={`accessibility-setting-${item.key}`}
+                  className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-3 py-2"
+                >
                   <div>
-                    <p className="text-sm font-medium text-white">{item.title}</p>
-                    <p className="mt-1 text-xs text-[#949ba4]">{item.description}</p>
+                    <p className="text-sm font-medium text-white">
+                      {item.title}
+                    </p>
+                    <p className="mt-1 text-xs text-[#949ba4]">
+                      {item.description}
+                    </p>
                   </div>
 
                   <button
@@ -12843,7 +15276,9 @@ export const SettingsModal = () => {
                   >
                     <span
                       className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
-                        accessibilityPreferences[item.key] ? "translate-x-6" : "translate-x-1"
+                        accessibilityPreferences[item.key]
+                          ? "translate-x-6"
+                          : "translate-x-1"
                       }`}
                     />
                   </button>
@@ -12857,11 +15292,14 @@ export const SettingsModal = () => {
               </p>
 
               <div className="mt-2 inline-flex rounded-md border border-white/10 bg-[#1a1b1e] p-1">
-                {([
-                  { value: "compact", label: "Compact" },
-                  { value: "comfortable", label: "Comfortable" },
-                ] as const).map((option) => {
-                  const selected = accessibilityPreferences.messageSpacing === option.value;
+                {(
+                  [
+                    { value: "compact", label: "Compact" },
+                    { value: "comfortable", label: "Comfortable" },
+                  ] as const
+                ).map((option) => {
+                  const selected =
+                    accessibilityPreferences.messageSpacing === option.value;
 
                   return (
                     <button
@@ -12890,7 +15328,12 @@ export const SettingsModal = () => {
 
             <div className="mt-3 flex items-center justify-between gap-2">
               <p className="rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
-                Contrast: <span className="font-semibold text-white">{accessibilityPreferences.highContrastMode ? "High" : "Default"}</span>
+                Contrast:{" "}
+                <span className="font-semibold text-white">
+                  {accessibilityPreferences.highContrastMode
+                    ? "High"
+                    : "Default"}
+                </span>
               </p>
 
               <Button
@@ -12899,7 +15342,9 @@ export const SettingsModal = () => {
                 disabled={isSavingAccessibilityPreferences}
                 className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isSavingAccessibilityPreferences ? "Saving..." : "Save Accessibility"}
+                {isSavingAccessibilityPreferences
+                  ? "Saving..."
+                  : "Save Accessibility"}
               </Button>
             </div>
 
@@ -12913,9 +15358,10 @@ export const SettingsModal = () => {
       );
     }
 
-
-
-    return renderComingSoonSection(sectionLabelMap[displaySection], sectionDescriptionMap[displaySection]);
+    return renderComingSoonSection(
+      sectionLabelMap[displaySection],
+      sectionDescriptionMap[displaySection],
+    );
   };
 
   return (
@@ -12932,7 +15378,9 @@ export const SettingsModal = () => {
               {visibleSectionGroups.map((group) => (
                 <div key={group.label} className="space-y-1">
                   {(() => {
-                    const isCollapsed = Boolean(collapsedSectionGroups[group.label]);
+                    const isCollapsed = Boolean(
+                      collapsedSectionGroups[group.label],
+                    );
 
                     return (
                       <button
@@ -12957,26 +15405,27 @@ export const SettingsModal = () => {
                     );
                   })()}
 
-                  {!collapsedSectionGroups[group.label] && group.sections.map((section) => {
-                    const isActive = activeSection === section;
-                    const SectionIcon = sectionIconMap[section];
+                  {!collapsedSectionGroups[group.label] &&
+                    group.sections.map((section) => {
+                      const isActive = activeSection === section;
+                      const SectionIcon = sectionIconMap[section];
 
-                    return (
-                      <button
-                        key={section}
-                        type="button"
-                        onClick={() => setActiveSection(section)}
-                        className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${
-                          isActive
-                            ? "bg-[#404249] font-semibold text-white"
-                            : "text-[#b5bac1] hover:bg-[#35373c] hover:text-[#f2f3f5]"
-                        }`}
-                      >
-                        <SectionIcon className="h-4 w-4 shrink-0" />
-                        {sectionLabelMap[section]}
-                      </button>
-                    );
-                  })}
+                      return (
+                        <button
+                          key={section}
+                          type="button"
+                          onClick={() => setActiveSection(section)}
+                          className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                            isActive
+                              ? "bg-[#404249] font-semibold text-white"
+                              : "text-[#b5bac1] hover:bg-[#35373c] hover:text-[#f2f3f5]"
+                          }`}
+                        >
+                          <SectionIcon className="h-4 w-4 shrink-0" />
+                          {sectionLabelMap[section]}
+                        </button>
+                      );
+                    })}
                 </div>
               ))}
             </nav>
@@ -13005,14 +15454,20 @@ export const SettingsModal = () => {
           <section className="theme-settings-content order-1 min-h-0 overflow-hidden">
             <div
               className={`transition-all duration-200 ${
-                isSectionVisible ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0"
+                isSectionVisible
+                  ? "translate-y-0 opacity-100"
+                  : "translate-y-1 opacity-0"
               }`}
             >
               <div className="theme-settings-content-header sticky top-0 z-10 border-b border-black/20 bg-[#2b2d31]/95 px-6 py-4 backdrop-blur">
-                <h3 className={`text-xl font-bold text-white ${displaySection === "myAccount" ? "text-center" : ""}`}>
+                <h3
+                  className={`text-xl font-bold text-white ${displaySection === "myAccount" ? "text-center" : ""}`}
+                >
                   {sectionLabelMap[displaySection]}
                 </h3>
-                <p className={`mt-1 text-sm text-[#949ba4] ${displaySection === "myAccount" ? "text-center" : ""}`}>
+                <p
+                  className={`mt-1 text-sm text-[#949ba4] ${displaySection === "myAccount" ? "text-center" : ""}`}
+                >
                   {sectionDescriptionMap[displaySection]}
                 </p>
               </div>
@@ -13026,7 +15481,9 @@ export const SettingsModal = () => {
                         className="hidden"
                         type="file"
                         accept="image/*"
-                        onChange={(event) => onBannerChange(event.target.files?.[0])}
+                        onChange={(event) =>
+                          onBannerChange(event.target.files?.[0])
+                        }
                       />
 
                       <input
@@ -13034,7 +15491,9 @@ export const SettingsModal = () => {
                         className="hidden"
                         type="file"
                         accept="image/*"
-                        onChange={(event) => onAvatarChange(event.target.files?.[0])}
+                        onChange={(event) =>
+                          onAvatarChange(event.target.files?.[0])
+                        }
                       />
 
                       <p className="text-center text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
@@ -13046,11 +15505,17 @@ export const SettingsModal = () => {
                           <p>
                             <span className="text-[#949ba4]">Name:</span>{" "}
                             <span className="text-white">
-                              {realName || profileName || data.profileEmail?.split("@")[0] || resolvedProfileId || "Deleted User"}
+                              {realName ||
+                                profileName ||
+                                data.profileEmail?.split("@")[0] ||
+                                resolvedProfileId ||
+                                "Deleted User"}
                             </span>
                           </p>
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-[#949ba4]">Date Of Birth:</span>
+                            <span className="text-[#949ba4]">
+                              Date Of Birth:
+                            </span>
                             <input
                               type="date"
                               value={dateOfBirthDraft}
@@ -13058,10 +15523,13 @@ export const SettingsModal = () => {
                                 setDateOfBirthDraft(event.target.value);
                                 setDateOfBirthStatus(null);
                               }}
-                              disabled={isSavingDateOfBirth || !canEditDateOfBirth}
+                              disabled={
+                                isSavingDateOfBirth || !canEditDateOfBirth
+                              }
                               className="h-6 rounded-md border border-black/25 bg-[#111214] px-2.5 text-[11px] text-white outline-none focus:border-[#5865f2]/70 focus:ring-2 focus:ring-[#5865f2]/35 disabled:cursor-not-allowed disabled:opacity-60"
                             />
-                            {canEditDateOfBirth && (hasDateOfBirthChanges || isSavingDateOfBirth) ? (
+                            {canEditDateOfBirth &&
+                            (hasDateOfBirthChanges || isSavingDateOfBirth) ? (
                               <>
                                 <Button
                                   type="button"
@@ -13089,20 +15557,29 @@ export const SettingsModal = () => {
                           </div>
                           {!canEditDateOfBirth ? (
                             <p className="text-[10px] text-[#b5bac1]">
-                              Date Of Birth is locked after first save. Only an Administrator can edit it.
+                              Date Of Birth is locked after first save. Only an
+                              Administrator can edit it.
                             </p>
                           ) : null}
                           {dateOfBirthStatus ? (
-                            <p className="text-[10px] text-[#b5bac1]">{dateOfBirthStatus}</p>
+                            <p className="text-[10px] text-[#b5bac1]">
+                              {dateOfBirthStatus}
+                            </p>
                           ) : null}
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-[#949ba4]">Phone Number:</span>
+                            <span className="text-[#949ba4]">
+                              Phone Number:
+                            </span>
                             {isEditingPhoneNumberInline ? (
                               <>
                                 <input
                                   type="text"
                                   value={phoneNumberDraft}
-                                  style={{ width: "6rem", minWidth: "6rem", maxWidth: "6rem" }}
+                                  style={{
+                                    width: "6rem",
+                                    minWidth: "6rem",
+                                    maxWidth: "6rem",
+                                  }}
                                   onChange={(event) => {
                                     setPhoneNumberDraft(event.target.value);
                                     setPhoneNumberStatus(null);
@@ -13118,7 +15595,10 @@ export const SettingsModal = () => {
                                     if (event.key === "Enter") {
                                       event.preventDefault();
                                       void (async () => {
-                                        const isSaved = await onSavePhoneNumber(phoneNumberDraft);
+                                        const isSaved =
+                                          await onSavePhoneNumber(
+                                            phoneNumberDraft,
+                                          );
                                         if (isSaved) {
                                           setIsEditingPhoneNumberInline(false);
                                         }
@@ -13134,7 +15614,10 @@ export const SettingsModal = () => {
                                   type="button"
                                   onClick={() => {
                                     void (async () => {
-                                      const isSaved = await onSavePhoneNumber(phoneNumberDraft);
+                                      const isSaved =
+                                        await onSavePhoneNumber(
+                                          phoneNumberDraft,
+                                        );
                                       if (isSaved) {
                                         setIsEditingPhoneNumberInline(false);
                                       }
@@ -13165,7 +15648,11 @@ export const SettingsModal = () => {
                                   setPhoneNumberStatus(null);
                                   setIsEditingPhoneNumberInline(true);
                                 }}
-                                style={{ width: "6rem", minWidth: "6rem", maxWidth: "6rem" }}
+                                style={{
+                                  width: "6rem",
+                                  minWidth: "6rem",
+                                  maxWidth: "6rem",
+                                }}
                                 className="h-6 rounded-md border border-black/25 bg-[#111214] px-2.5 text-left text-[11px] text-white transition hover:border-[#5865f2]/70 hover:bg-[#17181b]"
                                 title="Click to edit phone number"
                               >
@@ -13174,23 +15661,40 @@ export const SettingsModal = () => {
                             )}
                           </div>
                           {phoneNumberStatus ? (
-                            <p className="text-[10px] text-[#b5bac1]">{phoneNumberStatus}</p>
+                            <p className="text-[10px] text-[#b5bac1]">
+                              {phoneNumberStatus}
+                            </p>
                           ) : null}
                           <p>
                             <span className="text-[#949ba4]">Email:</span>{" "}
-                            <span className="text-white">{data.profileEmail || "No email"}</span>
+                            <span className="text-white">
+                              {data.profileEmail || "No email"}
+                            </span>
                           </p>
                           <p>
                             <span className="text-[#949ba4]">Status:</span>{" "}
-                            <span className="text-white">{formatPresenceStatusLabel(profilePresenceStatus, { showGameIcon: Boolean(profileCurrentGame?.trim()) })}</span>
+                            <span className="text-white">
+                              {formatPresenceStatusLabel(
+                                profilePresenceStatus,
+                                {
+                                  showGameIcon: Boolean(
+                                    profileCurrentGame?.trim(),
+                                  ),
+                                },
+                              )}
+                            </span>
                           </p>
                           <p>
                             <span className="text-[#949ba4]">Role:</span>{" "}
-                            <span className="text-white">{inAccordStaffRoleLabel ?? "Member"}</span>
+                            <span className="text-white">
+                              {inAccordStaffRoleLabel ?? "Member"}
+                            </span>
                           </p>
                           <p>
                             <span className="text-[#949ba4]">Last logon:</span>{" "}
-                            <span className="text-white">{lastLogonDisplay}</span>
+                            <span className="text-white">
+                              {lastLogonDisplay}
+                            </span>
                           </p>
                           <p>
                             <span className="text-[#949ba4]">Created:</span>{" "}
@@ -13198,16 +15702,18 @@ export const SettingsModal = () => {
                           </p>
                         </div>
                       </div>
-
                     </div>
                   </div>
                 ) : null}
 
                 {displaySection === "myAccount" ? (
                   <div className="mx-auto mb-6 w-full max-w-5xl rounded-xl border border-white/10 bg-black/20 p-3">
-                    <p className="text-sm font-medium text-white">Default Profile</p>
+                    <p className="text-sm font-medium text-white">
+                      Default Profile
+                    </p>
                     <p className="mt-1 text-xs text-[#949ba4]">
-                      Edit your global profile using the same layout as server profile edits.
+                      Edit your global profile using the same layout as server
+                      profile edits.
                     </p>
 
                     <div className="mt-3 grid gap-3 lg:grid-cols-2">
@@ -13217,7 +15723,9 @@ export const SettingsModal = () => {
                         </p>
 
                         <div className="relative mt-2 overflow-hidden rounded-xl border border-white/10 bg-[#111214] text-[#dbdee1] shadow-lg shadow-black/40">
-                          <ProfileEffectLayer src={profileEffectInput.trim() || profileEffectUrl} />
+                          <ProfileEffectLayer
+                            src={profileEffectInput.trim() || profileEffectUrl}
+                          />
                           <div className="relative h-24 bg-linear-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
                             {resolveBannerUrl(bannerUrl) ? (
                               <BannerImage
@@ -13232,28 +15740,43 @@ export const SettingsModal = () => {
                             <div className="absolute -top-10 left-3 rounded-full border-4 border-[#111214]">
                               <UserAvatar
                                 src={avatarUrl ?? undefined}
-                                decorationSrc={avatarDecorationInput.trim() || avatarDecorationUrl}
+                                decorationSrc={
+                                  avatarDecorationInput.trim() ||
+                                  avatarDecorationUrl
+                                }
                                 className="h-20 w-20"
                               />
                             </div>
 
                             <div className="min-w-0">
-                              <ProfileIconRow icons={profileIcons} className="mb-1" />
+                              <ProfileIconRow
+                                icons={profileIcons}
+                                className="mb-1"
+                              />
                               <NameplatePill
-                                label={nameplateLabelInput.trim() || nameplateLabel}
+                                label={
+                                  nameplateLabelInput.trim() || nameplateLabel
+                                }
                                 color={nameplateColorInput || nameplateColor}
-                                imageUrl={nameplateImageUrlInput || nameplateImageUrl}
+                                imageUrl={
+                                  nameplateImageUrlInput || nameplateImageUrl
+                                }
                                 className="mb-1"
                               />
                               <ProfileNameWithServerTag
-                                name={defaultProfileNameDraft.trim() || profileName || realName || "User"}
+                                name={
+                                  defaultProfileNameDraft.trim() ||
+                                  profileName ||
+                                  realName ||
+                                  "User"
+                                }
                                 profileId={resolvedProfileId}
                                 nameClassName={`text-base font-bold text-white ${getProfileNameStyleClass(
                                   composeProfileNameStyleValue({
                                     font: defaultProfileNameFont,
                                     effect: defaultProfileNameEffect,
                                     color: defaultProfileNameColor,
-                                  })
+                                  }),
                                 )}`}
                               />
                               <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">
@@ -13263,15 +15786,26 @@ export const SettingsModal = () => {
 
                             <div className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] p-3 text-xs">
                               <div className="space-y-1 text-[#dbdee1]">
-                                <p>Pronouns: {pronounsDraft.trim() || pronouns.trim() || "Not set"}</p>
-                                <p>Comment: {commentDraft.trim() || comment.trim() || "Not set"}</p>
+                                <p>
+                                  Pronouns:{" "}
+                                  {pronounsDraft.trim() ||
+                                    pronouns.trim() ||
+                                    "Not set"}
+                                </p>
+                                <p>
+                                  Comment:{" "}
+                                  {commentDraft.trim() ||
+                                    comment.trim() ||
+                                    "Not set"}
+                                </p>
                               </div>
                             </div>
                           </div>
                         </div>
 
                         <p className="mt-2 text-[11px] text-[#949ba4]">
-                          Preview updates as you edit your default profile values.
+                          Preview updates as you edit your default profile
+                          values.
                         </p>
                       </div>
 
@@ -13298,7 +15832,9 @@ export const SettingsModal = () => {
                             </Button>
                             <Button
                               type="button"
-                              onClick={() => setIsDefaultProfileNameStylesPanelOpen(true)}
+                              onClick={() =>
+                                setIsDefaultProfileNameStylesPanelOpen(true)
+                              }
                               className="h-8 border border-white/15 bg-[#1a1b1e] px-3 text-xs text-[#dbdee1] hover:bg-[#2a2b30]"
                             >
                               Profile Name Styles
@@ -13312,7 +15848,9 @@ export const SettingsModal = () => {
                             </Button>
                             <Button
                               type="button"
-                              onClick={() => setIsAvatarDecorationPanelOpen(true)}
+                              onClick={() =>
+                                setIsAvatarDecorationPanelOpen(true)
+                              }
                               className="h-8 border border-white/15 bg-[#1a1b1e] px-3 text-xs text-[#dbdee1] hover:bg-[#2a2b30]"
                             >
                               Avatar Decoration
@@ -13326,13 +15864,19 @@ export const SettingsModal = () => {
                             </Button>
                           </div>
                           {nameplateLabelInput.trim() || nameplateLabel ? (
-                            <p className="mt-1 text-[11px] text-[#949ba4]">Nameplate set.</p>
+                            <p className="mt-1 text-[11px] text-[#949ba4]">
+                              Nameplate set.
+                            </p>
                           ) : null}
                           {profileEffectInput.trim() || profileEffectUrl ? (
-                            <p className="mt-1 text-[11px] text-[#949ba4]">Profile effect set.</p>
+                            <p className="mt-1 text-[11px] text-[#949ba4]">
+                              Profile effect set.
+                            </p>
                           ) : null}
                           {nameplateStatus ? (
-                            <p className="mt-1 text-[11px] text-[#949ba4]">{nameplateStatus}</p>
+                            <p className="mt-1 text-[11px] text-[#949ba4]">
+                              {nameplateStatus}
+                            </p>
                           ) : null}
                         </div>
 
@@ -13356,7 +15900,9 @@ export const SettingsModal = () => {
                           <div className="mt-2 flex justify-end">
                             <Button
                               type="button"
-                              onClick={() => void onSaveProfileName(defaultProfileNameDraft)}
+                              onClick={() =>
+                                void onSaveProfileName(defaultProfileNameDraft)
+                              }
                               disabled={isSavingProfileName}
                               className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
                             >
@@ -13441,12 +15987,16 @@ export const SettingsModal = () => {
                           ) : null}
                         </div>
 
-                        <Dialog open={isNameplatePanelOpen} onOpenChange={setIsNameplatePanelOpen}>
+                        <Dialog
+                          open={isNameplatePanelOpen}
+                          onOpenChange={setIsNameplatePanelOpen}
+                        >
                           <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
                             <DialogHeader>
                               <DialogTitle>Edit Nameplate</DialogTitle>
                               <DialogDescription className="text-[#949ba4]">
-                                Create a banner nameplate behind your profile name.
+                                Create a banner nameplate behind your profile
+                                name.
                               </DialogDescription>
                             </DialogHeader>
 
@@ -13456,7 +16006,11 @@ export const SettingsModal = () => {
                                 className="hidden"
                                 type="file"
                                 accept="image/*"
-                                onChange={(event) => onNameplateImageChange(event.target.files?.[0])}
+                                onChange={(event) =>
+                                  onNameplateImageChange(
+                                    event.target.files?.[0],
+                                  )
+                                }
                               />
 
                               <div>
@@ -13465,7 +16019,11 @@ export const SettingsModal = () => {
                                 </label>
                                 <div className="grid grid-cols-3 gap-2">
                                   {NAMEPLATE_COLOR_PRESETS.map((preset) => {
-                                    const isActive = (nameplateColorInput || "#5865f2").toLowerCase() === preset.color.toLowerCase();
+                                    const isActive =
+                                      (
+                                        nameplateColorInput || "#5865f2"
+                                      ).toLowerCase() ===
+                                      preset.color.toLowerCase();
 
                                     return (
                                       <button
@@ -13482,8 +16040,15 @@ export const SettingsModal = () => {
                                             : "border-white/15 hover:border-white/35"
                                         } disabled:cursor-not-allowed disabled:opacity-60`}
                                       >
-                                        <span className="block h-6" style={{ backgroundColor: preset.color }} />
-                                        <span className="block bg-[#1a1b1e] px-2 py-1 text-[10px] text-[#dbdee1]">{preset.label}</span>
+                                        <span
+                                          className="block h-6"
+                                          style={{
+                                            backgroundColor: preset.color,
+                                          }}
+                                        />
+                                        <span className="block bg-[#1a1b1e] px-2 py-1 text-[10px] text-[#dbdee1]">
+                                          {preset.label}
+                                        </span>
                                       </button>
                                     );
                                   })}
@@ -13501,7 +16066,9 @@ export const SettingsModal = () => {
                                     disabled={isUploadingNameplateImage}
                                     className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
                                   >
-                                    {isUploadingNameplateImage ? "Uploading..." : "Upload Image"}
+                                    {isUploadingNameplateImage
+                                      ? "Uploading..."
+                                      : "Upload Image"}
                                   </Button>
                                   <Button
                                     type="button"
@@ -13518,28 +16085,32 @@ export const SettingsModal = () => {
 
                                 {uploadedBannerThumbnails.length > 0 ? (
                                   <div className="mt-2 grid grid-cols-4 gap-2">
-                                    {uploadedBannerThumbnails.map((thumbnailUrl) => (
-                                      <button
-                                        key={`default-nameplate-thumb-${thumbnailUrl}`}
-                                        type="button"
-                                        onClick={() => {
-                                          setNameplateImageUrlInput(thumbnailUrl);
-                                          setNameplateStatus(null);
-                                        }}
-                                        className="overflow-hidden rounded-md border border-white/15 bg-[#111214] transition hover:border-[#5865f2]/60"
-                                        title="Use this uploaded image"
-                                      >
-                                        <div className="relative h-10 w-full">
-                                          <Image
-                                            src={thumbnailUrl}
-                                            alt="Uploaded nameplate thumbnail"
-                                            fill
-                                            className="object-cover"
-                                            unoptimized
-                                          />
-                                        </div>
-                                      </button>
-                                    ))}
+                                    {uploadedBannerThumbnails.map(
+                                      (thumbnailUrl) => (
+                                        <button
+                                          key={`default-nameplate-thumb-${thumbnailUrl}`}
+                                          type="button"
+                                          onClick={() => {
+                                            setNameplateImageUrlInput(
+                                              thumbnailUrl,
+                                            );
+                                            setNameplateStatus(null);
+                                          }}
+                                          className="overflow-hidden rounded-md border border-white/15 bg-[#111214] transition hover:border-[#5865f2]/60"
+                                          title="Use this uploaded image"
+                                        >
+                                          <div className="relative h-10 w-full">
+                                            <Image
+                                              src={thumbnailUrl}
+                                              alt="Uploaded nameplate thumbnail"
+                                              fill
+                                              className="object-cover"
+                                              unoptimized
+                                            />
+                                          </div>
+                                        </button>
+                                      ),
+                                    )}
                                   </div>
                                 ) : null}
                               </div>
@@ -13569,11 +16140,16 @@ export const SettingsModal = () => {
                                   <span
                                     className="absolute inset-y-0 left-0 w-1.5"
                                     style={{
-                                      backgroundColor: (nameplateColorInput || "#5865f2").trim(),
+                                      backgroundColor: (
+                                        nameplateColorInput || "#5865f2"
+                                      ).trim(),
                                     }}
                                   />
                                   <p className="relative truncate pl-1 text-sm font-semibold text-white">
-                                    {defaultProfileNameDraft.trim() || profileName || realName || "User"}
+                                    {defaultProfileNameDraft.trim() ||
+                                      profileName ||
+                                      realName ||
+                                      "User"}
                                   </p>
                                 </div>
                               </div>
@@ -13604,11 +16180,17 @@ export const SettingsModal = () => {
                                   type="button"
                                   onClick={() =>
                                     void onSaveNameplate(
-                                      nameplateColorInput.trim() || nameplateImageUrlInput.trim()
-                                        ? (defaultProfileNameDraft.trim() || profileName || realName || "User").slice(0, 40)
+                                      nameplateColorInput.trim() ||
+                                        nameplateImageUrlInput.trim()
+                                        ? (
+                                            defaultProfileNameDraft.trim() ||
+                                            profileName ||
+                                            realName ||
+                                            "User"
+                                          ).slice(0, 40)
                                         : "",
                                       nameplateColorInput,
-                                      nameplateImageUrlInput
+                                      nameplateImageUrlInput,
                                     )
                                   }
                                   disabled={isSavingNameplate}
@@ -13628,12 +16210,16 @@ export const SettingsModal = () => {
                           </DialogContent>
                         </Dialog>
 
-                        <Dialog open={isDefaultBannerPanelOpen} onOpenChange={setIsDefaultBannerPanelOpen}>
+                        <Dialog
+                          open={isDefaultBannerPanelOpen}
+                          onOpenChange={setIsDefaultBannerPanelOpen}
+                        >
                           <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
                             <DialogHeader>
                               <DialogTitle>Edit Banner</DialogTitle>
                               <DialogDescription className="text-[#949ba4]">
-                                Manage your global profile banner from this panel.
+                                Manage your global profile banner from this
+                                panel.
                               </DialogDescription>
                             </DialogHeader>
 
@@ -13642,7 +16228,9 @@ export const SettingsModal = () => {
                                 <div className="relative h-28 bg-linear-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
                                   {resolveBannerUrl(bannerUrl) ? (
                                     <BannerImage
-                                      src={resolveBannerUrl(bannerUrl) as string}
+                                      src={
+                                        resolveBannerUrl(bannerUrl) as string
+                                      }
                                       alt="Default profile banner preview"
                                       className="object-cover"
                                     />
@@ -13656,34 +16244,47 @@ export const SettingsModal = () => {
                                     Uploaded Banners
                                   </p>
                                   <div className="grid grid-cols-4 gap-2">
-                                    {uploadedBannerThumbnails.map((thumbnailUrl) => (
-                                      <button
-                                        key={`default-banner-thumb-${thumbnailUrl}`}
-                                        type="button"
-                                        onClick={() => {
-                                          setBannerUrl(thumbnailUrl);
-                                          void axios.patch("/api/profile/banner", { bannerUrl: thumbnailUrl });
-                                          window.dispatchEvent(
-                                            new CustomEvent("inaccord:profile-updated", {
-                                              detail: {
-                                                profileId: resolvedProfileId,
-                                                bannerUrl: thumbnailUrl,
-                                              },
-                                            })
-                                          );
-                                        }}
-                                        className="overflow-hidden rounded-md border border-white/15 bg-[#111214] transition hover:border-[#5865f2]/60"
-                                        title="Use this uploaded banner"
-                                      >
-                                        <div className="relative h-10 w-full">
-                                          <BannerImage
-                                            src={resolveBannerUrl(thumbnailUrl) ?? thumbnailUrl}
-                                            alt="Uploaded banner thumbnail"
-                                            className="object-cover"
-                                          />
-                                        </div>
-                                      </button>
-                                    ))}
+                                    {uploadedBannerThumbnails.map(
+                                      (thumbnailUrl) => (
+                                        <button
+                                          key={`default-banner-thumb-${thumbnailUrl}`}
+                                          type="button"
+                                          onClick={() => {
+                                            setBannerUrl(thumbnailUrl);
+                                            void axios.patch(
+                                              "/api/profile/banner",
+                                              { bannerUrl: thumbnailUrl },
+                                            );
+                                            window.dispatchEvent(
+                                              new CustomEvent(
+                                                "inaccord:profile-updated",
+                                                {
+                                                  detail: {
+                                                    profileId:
+                                                      resolvedProfileId,
+                                                    bannerUrl: thumbnailUrl,
+                                                  },
+                                                },
+                                              ),
+                                            );
+                                          }}
+                                          className="overflow-hidden rounded-md border border-white/15 bg-[#111214] transition hover:border-[#5865f2]/60"
+                                          title="Use this uploaded banner"
+                                        >
+                                          <div className="relative h-10 w-full">
+                                            <BannerImage
+                                              src={
+                                                resolveBannerUrl(
+                                                  thumbnailUrl,
+                                                ) ?? thumbnailUrl
+                                              }
+                                              alt="Uploaded banner thumbnail"
+                                              className="object-cover"
+                                            />
+                                          </div>
+                                        </button>
+                                      ),
+                                    )}
                                   </div>
                                 </div>
                               ) : null}
@@ -13719,7 +16320,9 @@ export const SettingsModal = () => {
                                 <Button
                                   type="button"
                                   variant="outline"
-                                  onClick={() => setIsDefaultBannerPanelOpen(false)}
+                                  onClick={() =>
+                                    setIsDefaultBannerPanelOpen(false)
+                                  }
                                 >
                                   Close
                                 </Button>
@@ -13734,9 +16337,12 @@ export const SettingsModal = () => {
                         >
                           <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-2xl">
                             <DialogHeader>
-                              <DialogTitle>Profile Name Styles (Default)</DialogTitle>
+                              <DialogTitle>
+                                Profile Name Styles (Default)
+                              </DialogTitle>
                               <DialogDescription className="text-[#949ba4]">
-                                Make your default profile name look fancy. Server profile styles are configured separately.
+                                Make your default profile name look fancy.
+                                Server profile styles are configured separately.
                               </DialogDescription>
                             </DialogHeader>
 
@@ -13752,48 +16358,65 @@ export const SettingsModal = () => {
                                       Font
                                     </label>
                                     <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
-                                      {PROFILE_NAME_FONT_OPTIONS.map((option) => {
-                                        const isActive = defaultProfileNameFont === option.key;
-                                        const iconClass =
-                                          option.key === "bold"
-                                            ? "font-black"
-                                            : option.key === "italic"
-                                            ? "italic font-semibold"
-                                            : option.key === "mono"
-                                            ? "font-mono"
-                                            : option.key === "serif"
-                                            ? "font-serif"
-                                            : "";
+                                      {PROFILE_NAME_FONT_OPTIONS.map(
+                                        (option) => {
+                                          const isActive =
+                                            defaultProfileNameFont ===
+                                            option.key;
+                                          const iconClass =
+                                            option.key === "bold"
+                                              ? "font-black"
+                                              : option.key === "italic"
+                                                ? "italic font-semibold"
+                                                : option.key === "mono"
+                                                  ? "font-mono"
+                                                  : option.key === "serif"
+                                                    ? "font-serif"
+                                                    : "";
 
-                                        return (
-                                          <button
-                                            key={`default-font-${option.key}`}
-                                            type="button"
-                                            disabled={isSavingDefaultProfileNameStyle}
-                                            onClick={() => {
-                                              const next = option.key as ProfileNameFontKey;
-                                              setDefaultProfileNameFont(next);
-                                              setDefaultProfileNameStyle(
-                                                composeProfileNameStyleValue({
-                                                  font: next,
-                                                  effect: defaultProfileNameEffect,
-                                                  color: defaultProfileNameColor,
-                                                })
-                                              );
-                                              setDefaultProfileNameStyleStatus(null);
-                                            }}
-                                            title={option.description}
-                                            className={`aspect-square rounded-md border p-1 text-[10px] leading-tight transition flex flex-col items-center justify-center text-center ${
-                                              isActive
-                                                ? "border-[#5865f2]/70 bg-[#5865f2]/20 text-white"
-                                                : "border-white/15 bg-[#1a1b1e] text-[#c8ccd1] hover:bg-[#2a2b30]"
-                                            } disabled:cursor-not-allowed disabled:opacity-60`}
-                                          >
-                                            <span className={`block text-4xl leading-none ${iconClass}`}>Aa</span>
-                                            <span className="mt-0.5 block truncate">{option.label}</span>
-                                          </button>
-                                        );
-                                      })}
+                                          return (
+                                            <button
+                                              key={`default-font-${option.key}`}
+                                              type="button"
+                                              disabled={
+                                                isSavingDefaultProfileNameStyle
+                                              }
+                                              onClick={() => {
+                                                const next =
+                                                  option.key as ProfileNameFontKey;
+                                                setDefaultProfileNameFont(next);
+                                                setDefaultProfileNameStyle(
+                                                  composeProfileNameStyleValue({
+                                                    font: next,
+                                                    effect:
+                                                      defaultProfileNameEffect,
+                                                    color:
+                                                      defaultProfileNameColor,
+                                                  }),
+                                                );
+                                                setDefaultProfileNameStyleStatus(
+                                                  null,
+                                                );
+                                              }}
+                                              title={option.description}
+                                              className={`aspect-square rounded-md border p-1 text-[10px] leading-tight transition flex flex-col items-center justify-center text-center ${
+                                                isActive
+                                                  ? "border-[#5865f2]/70 bg-[#5865f2]/20 text-white"
+                                                  : "border-white/15 bg-[#1a1b1e] text-[#c8ccd1] hover:bg-[#2a2b30]"
+                                              } disabled:cursor-not-allowed disabled:opacity-60`}
+                                            >
+                                              <span
+                                                className={`block text-4xl leading-none ${iconClass}`}
+                                              >
+                                                Aa
+                                              </span>
+                                              <span className="mt-0.5 block truncate">
+                                                {option.label}
+                                              </span>
+                                            </button>
+                                          );
+                                        },
+                                      )}
                                     </div>
                                   </div>
 
@@ -13802,48 +16425,64 @@ export const SettingsModal = () => {
                                       Effect
                                     </label>
                                     <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
-                                      {PROFILE_NAME_EFFECT_OPTIONS.map((option) => {
-                                        const isActive = defaultProfileNameEffect === option.key;
-                                        const icon =
-                                          option.key === "solid"
-                                            ? "⬤"
-                                            : option.key === "gradient"
-                                            ? "🌈"
-                                            : option.key === "neon"
-                                            ? "✨"
-                                            : option.key === "toon"
-                                            ? "🎭"
-                                            : "💥";
+                                      {PROFILE_NAME_EFFECT_OPTIONS.map(
+                                        (option) => {
+                                          const isActive =
+                                            defaultProfileNameEffect ===
+                                            option.key;
+                                          const icon =
+                                            option.key === "solid"
+                                              ? "⬤"
+                                              : option.key === "gradient"
+                                                ? "🌈"
+                                                : option.key === "neon"
+                                                  ? "✨"
+                                                  : option.key === "toon"
+                                                    ? "🎭"
+                                                    : "💥";
 
-                                        return (
-                                          <button
-                                            key={`default-effect-${option.key}`}
-                                            type="button"
-                                            disabled={isSavingDefaultProfileNameStyle}
-                                            onClick={() => {
-                                              const next = option.key as ProfileNameEffectKey;
-                                              setDefaultProfileNameEffect(next);
-                                              setDefaultProfileNameStyle(
-                                                composeProfileNameStyleValue({
-                                                  font: defaultProfileNameFont,
-                                                  effect: next,
-                                                  color: defaultProfileNameColor,
-                                                })
-                                              );
-                                              setDefaultProfileNameStyleStatus(null);
-                                            }}
-                                            title={option.description}
-                                            className={`aspect-square rounded-md border p-1 text-[10px] leading-tight transition flex flex-col items-center justify-center text-center ${
-                                              isActive
-                                                ? "border-[#5865f2]/70 bg-[#5865f2]/20 text-white"
-                                                : "border-white/15 bg-[#1a1b1e] text-[#c8ccd1] hover:bg-[#2a2b30]"
-                                            } disabled:cursor-not-allowed disabled:opacity-60`}
-                                          >
-                                            <span className="block text-4xl leading-none">{icon}</span>
-                                            <span className="mt-0.5 block truncate">{option.label}</span>
-                                          </button>
-                                        );
-                                      })}
+                                          return (
+                                            <button
+                                              key={`default-effect-${option.key}`}
+                                              type="button"
+                                              disabled={
+                                                isSavingDefaultProfileNameStyle
+                                              }
+                                              onClick={() => {
+                                                const next =
+                                                  option.key as ProfileNameEffectKey;
+                                                setDefaultProfileNameEffect(
+                                                  next,
+                                                );
+                                                setDefaultProfileNameStyle(
+                                                  composeProfileNameStyleValue({
+                                                    font: defaultProfileNameFont,
+                                                    effect: next,
+                                                    color:
+                                                      defaultProfileNameColor,
+                                                  }),
+                                                );
+                                                setDefaultProfileNameStyleStatus(
+                                                  null,
+                                                );
+                                              }}
+                                              title={option.description}
+                                              className={`aspect-square rounded-md border p-1 text-[10px] leading-tight transition flex flex-col items-center justify-center text-center ${
+                                                isActive
+                                                  ? "border-[#5865f2]/70 bg-[#5865f2]/20 text-white"
+                                                  : "border-white/15 bg-[#1a1b1e] text-[#c8ccd1] hover:bg-[#2a2b30]"
+                                              } disabled:cursor-not-allowed disabled:opacity-60`}
+                                            >
+                                              <span className="block text-4xl leading-none">
+                                                {icon}
+                                              </span>
+                                              <span className="mt-0.5 block truncate">
+                                                {option.label}
+                                              </span>
+                                            </button>
+                                          );
+                                        },
+                                      )}
                                     </div>
                                   </div>
 
@@ -13852,48 +16491,64 @@ export const SettingsModal = () => {
                                       Color
                                     </label>
                                     <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
-                                      {PROFILE_NAME_COLOR_OPTIONS.map((option) => {
-                                        const isActive = defaultProfileNameColor === option.key;
-                                        const dotClass =
-                                          option.key === "blurb"
-                                            ? "bg-[#7b88ff]"
-                                            : option.key === "sunset"
-                                            ? "bg-[#ff8a5b]"
-                                            : option.key === "frost"
-                                            ? "bg-[#66d9ff]"
-                                            : option.key === "ruby"
-                                            ? "bg-[#ff6b81]"
-                                            : "bg-white/70";
+                                      {PROFILE_NAME_COLOR_OPTIONS.map(
+                                        (option) => {
+                                          const isActive =
+                                            defaultProfileNameColor ===
+                                            option.key;
+                                          const dotClass =
+                                            option.key === "blurb"
+                                              ? "bg-[#7b88ff]"
+                                              : option.key === "sunset"
+                                                ? "bg-[#ff8a5b]"
+                                                : option.key === "frost"
+                                                  ? "bg-[#66d9ff]"
+                                                  : option.key === "ruby"
+                                                    ? "bg-[#ff6b81]"
+                                                    : "bg-white/70";
 
-                                        return (
-                                          <button
-                                            key={`default-color-${option.key}`}
-                                            type="button"
-                                            disabled={isSavingDefaultProfileNameStyle}
-                                            onClick={() => {
-                                              const next = option.key as ProfileNameColorKey;
-                                              setDefaultProfileNameColor(next);
-                                              setDefaultProfileNameStyle(
-                                                composeProfileNameStyleValue({
-                                                  font: defaultProfileNameFont,
-                                                  effect: defaultProfileNameEffect,
-                                                  color: next,
-                                                })
-                                              );
-                                              setDefaultProfileNameStyleStatus(null);
-                                            }}
-                                            title={option.description}
-                                            className={`aspect-square rounded-md border p-1 text-[10px] leading-tight transition flex flex-col items-center justify-center text-center ${
-                                              isActive
-                                                ? "border-[#5865f2]/70 bg-[#5865f2]/20 text-white"
-                                                : "border-white/15 bg-[#1a1b1e] text-[#c8ccd1] hover:bg-[#2a2b30]"
-                                            } disabled:cursor-not-allowed disabled:opacity-60`}
-                                          >
-                                            <span className={`mx-auto block h-7 w-7 rounded-full ${dotClass}`} />
-                                            <span className="mt-0.5 block truncate">{option.label}</span>
-                                          </button>
-                                        );
-                                      })}
+                                          return (
+                                            <button
+                                              key={`default-color-${option.key}`}
+                                              type="button"
+                                              disabled={
+                                                isSavingDefaultProfileNameStyle
+                                              }
+                                              onClick={() => {
+                                                const next =
+                                                  option.key as ProfileNameColorKey;
+                                                setDefaultProfileNameColor(
+                                                  next,
+                                                );
+                                                setDefaultProfileNameStyle(
+                                                  composeProfileNameStyleValue({
+                                                    font: defaultProfileNameFont,
+                                                    effect:
+                                                      defaultProfileNameEffect,
+                                                    color: next,
+                                                  }),
+                                                );
+                                                setDefaultProfileNameStyleStatus(
+                                                  null,
+                                                );
+                                              }}
+                                              title={option.description}
+                                              className={`aspect-square rounded-md border p-1 text-[10px] leading-tight transition flex flex-col items-center justify-center text-center ${
+                                                isActive
+                                                  ? "border-[#5865f2]/70 bg-[#5865f2]/20 text-white"
+                                                  : "border-white/15 bg-[#1a1b1e] text-[#c8ccd1] hover:bg-[#2a2b30]"
+                                              } disabled:cursor-not-allowed disabled:opacity-60`}
+                                            >
+                                              <span
+                                                className={`mx-auto block h-7 w-7 rounded-full ${dotClass}`}
+                                              />
+                                              <span className="mt-0.5 block truncate">
+                                                {option.label}
+                                              </span>
+                                            </button>
+                                          );
+                                        },
+                                      )}
                                     </div>
                                   </div>
                                 </div>
@@ -13906,10 +16561,13 @@ export const SettingsModal = () => {
                                         font: defaultProfileNameFont,
                                         effect: defaultProfileNameEffect,
                                         color: defaultProfileNameColor,
-                                      })
+                                      }),
                                     )}`}
                                   >
-                                    {defaultProfileNameDraft.trim() || profileName || realName || "User"}
+                                    {defaultProfileNameDraft.trim() ||
+                                      profileName ||
+                                      realName ||
+                                      "User"}
                                   </span>
                                 </div>
                                 <div className="mt-2 rounded-lg border border-white/10 bg-[#15161a] px-3 py-2">
@@ -13922,7 +16580,7 @@ export const SettingsModal = () => {
                                         font: defaultProfileNameFont,
                                         effect: defaultProfileNameEffect,
                                         color: defaultProfileNameColor,
-                                      })
+                                      }),
                                     )}`}
                                   >
                                     The quick brown fox jumps over the lazy dog.
@@ -13941,11 +16599,19 @@ export const SettingsModal = () => {
                                   type="button"
                                   variant="outline"
                                   onClick={() => {
-                                    const resetParts = getProfileNameStyleParts(DEFAULT_PROFILE_NAME_STYLE);
-                                    setDefaultProfileNameStyle(DEFAULT_PROFILE_NAME_STYLE);
+                                    const resetParts = getProfileNameStyleParts(
+                                      DEFAULT_PROFILE_NAME_STYLE,
+                                    );
+                                    setDefaultProfileNameStyle(
+                                      DEFAULT_PROFILE_NAME_STYLE,
+                                    );
                                     setDefaultProfileNameFont(resetParts.font);
-                                    setDefaultProfileNameEffect(resetParts.effect);
-                                    setDefaultProfileNameColor(resetParts.color);
+                                    setDefaultProfileNameEffect(
+                                      resetParts.effect,
+                                    );
+                                    setDefaultProfileNameColor(
+                                      resetParts.color,
+                                    );
                                     setDefaultProfileNameStyleStatus(null);
                                   }}
                                   disabled={isSavingDefaultProfileNameStyle}
@@ -13954,7 +16620,9 @@ export const SettingsModal = () => {
                                 </Button>
                                 <Button
                                   type="button"
-                                  onClick={() => void onSaveDefaultProfileNameStyle()}
+                                  onClick={() =>
+                                    void onSaveDefaultProfileNameStyle()
+                                  }
                                   disabled={isSavingDefaultProfileNameStyle}
                                   className="bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
                                 >
@@ -13967,7 +16635,15 @@ export const SettingsModal = () => {
                                     "Save Default Style"
                                   )}
                                 </Button>
-                                <Button type="button" variant="outline" onClick={() => setIsDefaultProfileNameStylesPanelOpen(false)}>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() =>
+                                    setIsDefaultProfileNameStylesPanelOpen(
+                                      false,
+                                    )
+                                  }
+                                >
                                   Close
                                 </Button>
                               </div>
@@ -13975,12 +16651,16 @@ export const SettingsModal = () => {
                           </DialogContent>
                         </Dialog>
 
-                        <Dialog open={isAvatarPanelOpen} onOpenChange={setIsAvatarPanelOpen}>
+                        <Dialog
+                          open={isAvatarPanelOpen}
+                          onOpenChange={setIsAvatarPanelOpen}
+                        >
                           <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
                             <DialogHeader>
                               <DialogTitle>Avatar</DialogTitle>
                               <DialogDescription className="text-[#949ba4]">
-                                Upload a global avatar used when a server profile avatar is not set.
+                                Upload a global avatar used when a server
+                                profile avatar is not set.
                               </DialogDescription>
                             </DialogHeader>
 
@@ -13988,16 +16668,29 @@ export const SettingsModal = () => {
                               <div className="rounded-xl border border-white/10 bg-[#1a1b1e] p-4">
                                 <div className="flex items-center gap-3">
                                   <div className="relative overflow-hidden rounded-full">
-                                    <ProfileEffectLayer src={profileEffectInput.trim() || profileEffectUrl} className="rounded-full" />
+                                    <ProfileEffectLayer
+                                      src={
+                                        profileEffectInput.trim() ||
+                                        profileEffectUrl
+                                      }
+                                      className="rounded-full"
+                                    />
                                     <UserAvatar
                                       src={avatarUrl ?? undefined}
-                                      decorationSrc={avatarDecorationInput.trim() || avatarDecorationUrl}
+                                      decorationSrc={
+                                        avatarDecorationInput.trim() ||
+                                        avatarDecorationUrl
+                                      }
                                       className="h-14 w-14"
                                     />
                                   </div>
                                   <div>
-                                    <p className="text-sm font-semibold text-white">Current Avatar</p>
-                                    <p className="text-xs text-[#949ba4]">Global profile avatar</p>
+                                    <p className="text-sm font-semibold text-white">
+                                      Current Avatar
+                                    </p>
+                                    <p className="text-xs text-[#949ba4]">
+                                      Global profile avatar
+                                    </p>
                                   </div>
                                 </div>
                               </div>
@@ -14009,41 +16702,52 @@ export const SettingsModal = () => {
                                       Uploaded Avatars
                                     </p>
                                     <div className="grid grid-cols-6 gap-2">
-                                      {uploadedAvatarThumbnails.map((thumbnailUrl) => (
-                                        <button
-                                          key={`avatar-thumb-${thumbnailUrl}`}
-                                          type="button"
-                                          onClick={() => {
-                                            setAvatarUrl(thumbnailUrl);
-                                            rememberUploadedAvatar(thumbnailUrl);
-                                            void axios.patch("/api/profile/avatar", {
-                                              imageUrl: thumbnailUrl,
-                                            }).then(() => {
-                                              window.dispatchEvent(
-                                                new CustomEvent("inaccord:profile-updated", {
-                                                  detail: {
-                                                    profileId: resolvedProfileId,
-                                                    imageUrl: thumbnailUrl,
-                                                  },
-                                                })
+                                      {uploadedAvatarThumbnails.map(
+                                        (thumbnailUrl) => (
+                                          <button
+                                            key={`avatar-thumb-${thumbnailUrl}`}
+                                            type="button"
+                                            onClick={() => {
+                                              setAvatarUrl(thumbnailUrl);
+                                              rememberUploadedAvatar(
+                                                thumbnailUrl,
                                               );
-                                              router.refresh();
-                                            });
-                                          }}
-                                          className="overflow-hidden rounded-full border border-white/15 bg-[#111214] transition hover:border-[#5865f2]/60"
-                                          title="Use this uploaded avatar"
-                                        >
-                                          <div className="relative h-10 w-10">
-                                            <Image
-                                              src={thumbnailUrl}
-                                              alt="Uploaded avatar thumbnail"
-                                              fill
-                                              className="object-cover"
-                                              unoptimized
-                                            />
-                                          </div>
-                                        </button>
-                                      ))}
+                                              void axios
+                                                .patch("/api/profile/avatar", {
+                                                  imageUrl: thumbnailUrl,
+                                                })
+                                                .then(() => {
+                                                  window.dispatchEvent(
+                                                    new CustomEvent(
+                                                      "inaccord:profile-updated",
+                                                      {
+                                                        detail: {
+                                                          profileId:
+                                                            resolvedProfileId,
+                                                          imageUrl:
+                                                            thumbnailUrl,
+                                                        },
+                                                      },
+                                                    ),
+                                                  );
+                                                  router.refresh();
+                                                });
+                                            }}
+                                            className="overflow-hidden rounded-full border border-white/15 bg-[#111214] transition hover:border-[#5865f2]/60"
+                                            title="Use this uploaded avatar"
+                                          >
+                                            <div className="relative h-10 w-10">
+                                              <Image
+                                                src={thumbnailUrl}
+                                                alt="Uploaded avatar thumbnail"
+                                                fill
+                                                className="object-cover"
+                                                unoptimized
+                                              />
+                                            </div>
+                                          </button>
+                                        ),
+                                      )}
                                     </div>
                                   </div>
                                 ) : null}
@@ -14051,7 +16755,9 @@ export const SettingsModal = () => {
                                 {avatarUrl ? (
                                   <Button
                                     type="button"
-                                    onClick={() => void onRemoveAvatarFromPanel()}
+                                    onClick={() =>
+                                      void onRemoveAvatarFromPanel()
+                                    }
                                     disabled={isUploadingAvatar}
                                     className="border border-rose-500/35 bg-rose-500/15 text-rose-200 hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60"
                                   >
@@ -14089,18 +16795,24 @@ export const SettingsModal = () => {
                                 className="hidden"
                                 type="file"
                                 accept="image/*"
-                                onChange={(event) => onAvatarPanelChange(event.target.files?.[0])}
+                                onChange={(event) =>
+                                  onAvatarPanelChange(event.target.files?.[0])
+                                }
                               />
                             </div>
                           </DialogContent>
                         </Dialog>
 
-                        <Dialog open={isAvatarDecorationPanelOpen} onOpenChange={setIsAvatarDecorationPanelOpen}>
+                        <Dialog
+                          open={isAvatarDecorationPanelOpen}
+                          onOpenChange={setIsAvatarDecorationPanelOpen}
+                        >
                           <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
                             <DialogHeader>
                               <DialogTitle>Avatar Decoration</DialogTitle>
                               <DialogDescription className="text-[#949ba4]">
-                                Set the decoration overlay for your global avatar.
+                                Set the decoration overlay for your global
+                                avatar.
                               </DialogDescription>
                             </DialogHeader>
 
@@ -14108,16 +16820,29 @@ export const SettingsModal = () => {
                               <div className="rounded-xl border border-white/10 bg-[#1a1b1e] p-4">
                                 <div className="flex items-center gap-3">
                                   <div className="relative overflow-hidden rounded-full">
-                                    <ProfileEffectLayer src={profileEffectInput.trim() || profileEffectUrl} className="rounded-full" />
+                                    <ProfileEffectLayer
+                                      src={
+                                        profileEffectInput.trim() ||
+                                        profileEffectUrl
+                                      }
+                                      className="rounded-full"
+                                    />
                                     <UserAvatar
                                       src={avatarUrl ?? undefined}
-                                      decorationSrc={avatarDecorationInput.trim() || avatarDecorationUrl}
+                                      decorationSrc={
+                                        avatarDecorationInput.trim() ||
+                                        avatarDecorationUrl
+                                      }
                                       className="h-14 w-14"
                                     />
                                   </div>
                                   <div>
-                                    <p className="text-sm font-semibold text-white">Current Decoration</p>
-                                    <p className="text-xs text-[#949ba4]">Global avatar decoration preview</p>
+                                    <p className="text-sm font-semibold text-white">
+                                      Current Decoration
+                                    </p>
+                                    <p className="text-xs text-[#949ba4]">
+                                      Global avatar decoration preview
+                                    </p>
                                   </div>
                                 </div>
                               </div>
@@ -14130,7 +16855,9 @@ export const SettingsModal = () => {
                                   type="text"
                                   value={avatarDecorationInput}
                                   onChange={(event) => {
-                                    setAvatarDecorationInput(event.target.value);
+                                    setAvatarDecorationInput(
+                                      event.target.value,
+                                    );
                                     setAvatarDecorationStatus(null);
                                   }}
                                   placeholder="https://..."
@@ -14158,7 +16885,9 @@ export const SettingsModal = () => {
                                   </Button>
                                   <Button
                                     type="button"
-                                    onClick={() => void onSaveAvatarDecoration()}
+                                    onClick={() =>
+                                      void onSaveAvatarDecoration()
+                                    }
                                     disabled={isSavingAvatarDecoration}
                                     className="bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
                                   >
@@ -14171,7 +16900,13 @@ export const SettingsModal = () => {
                                       "Save Decoration"
                                     )}
                                   </Button>
-                                  <Button type="button" variant="outline" onClick={() => setIsAvatarDecorationPanelOpen(false)}>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() =>
+                                      setIsAvatarDecorationPanelOpen(false)
+                                    }
+                                  >
                                     Close
                                   </Button>
                                 </div>
@@ -14180,22 +16915,33 @@ export const SettingsModal = () => {
                           </DialogContent>
                         </Dialog>
 
-                        <Dialog open={isProfileEffectPanelOpen} onOpenChange={setIsProfileEffectPanelOpen}>
+                        <Dialog
+                          open={isProfileEffectPanelOpen}
+                          onOpenChange={setIsProfileEffectPanelOpen}
+                        >
                           <DialogContent className="settings-theme-scope border-black/30 bg-[#1e1f22] text-[#dbdee1] sm:max-w-md">
                             <DialogHeader>
                               <DialogTitle>Profile Effect</DialogTitle>
                               <DialogDescription className="text-[#949ba4]">
-                                Set the animated effect layer for your global profile.
+                                Set the animated effect layer for your global
+                                profile.
                               </DialogDescription>
                             </DialogHeader>
 
                             <div className="space-y-4">
                               <div className="relative overflow-hidden rounded-xl border border-white/10 bg-[#111214] text-[#dbdee1]">
-                                <ProfileEffectLayer src={profileEffectInput.trim() || profileEffectUrl} />
+                                <ProfileEffectLayer
+                                  src={
+                                    profileEffectInput.trim() ||
+                                    profileEffectUrl
+                                  }
+                                />
                                 <div className="relative h-24 bg-linear-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
                                   {resolveBannerUrl(bannerUrl) ? (
                                     <BannerImage
-                                      src={resolveBannerUrl(bannerUrl) as string}
+                                      src={
+                                        resolveBannerUrl(bannerUrl) as string
+                                      }
                                       alt="Profile effect preview banner"
                                       className="object-cover"
                                     />
@@ -14206,14 +16952,20 @@ export const SettingsModal = () => {
                                   <div className="absolute -top-10 left-3 rounded-full border-4 border-[#111214]">
                                     <UserAvatar
                                       src={avatarUrl ?? undefined}
-                                      decorationSrc={avatarDecorationInput.trim() || avatarDecorationUrl}
+                                      decorationSrc={
+                                        avatarDecorationInput.trim() ||
+                                        avatarDecorationUrl
+                                      }
                                       className="h-20 w-20"
                                     />
                                   </div>
 
                                   <div className="min-w-0">
                                     <p className="text-base font-bold text-white">
-                                      {defaultProfileNameDraft.trim() || profileName || realName || "User"}
+                                      {defaultProfileNameDraft.trim() ||
+                                        profileName ||
+                                        realName ||
+                                        "User"}
                                     </p>
                                     <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#949ba4]">
                                       Global profile effect preview
@@ -14271,7 +17023,13 @@ export const SettingsModal = () => {
                                       "Save Effect"
                                     )}
                                   </Button>
-                                  <Button type="button" variant="outline" onClick={() => setIsProfileEffectPanelOpen(false)}>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() =>
+                                      setIsProfileEffectPanelOpen(false)
+                                    }
+                                  >
                                     Close
                                   </Button>
                                 </div>
@@ -14285,7 +17043,6 @@ export const SettingsModal = () => {
                 ) : null}
 
                 {renderSectionContent()}
-
               </div>
             </div>
           </section>

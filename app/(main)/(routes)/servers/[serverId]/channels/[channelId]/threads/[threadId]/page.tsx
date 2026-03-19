@@ -353,7 +353,13 @@ const ThreadPage = async ({ params }: ThreadPageProps) => {
         />
       </div>
 
-      <div className="theme-server-chat-bar w-[calc(100vw-584px)] max-w-full rounded-2xl border border-border bg-card shadow-lg shadow-black/25">
+      <div
+        className="theme-server-chat-bar self-start rounded-2xl border border-border bg-card shadow-lg shadow-black/25"
+        style={{
+          width: "calc(100% - var(--inaccord-right-footer-safe-width, 0px))",
+          maxWidth: "100%",
+        }}
+      >
         <ChatInput
           name={threadRow.title}
           type="channel"

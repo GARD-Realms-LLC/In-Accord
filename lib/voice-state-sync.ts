@@ -1,3 +1,5 @@
+import { CLIENT_PERSISTENCE_DISABLED } from "@/lib/client-persistence-policy";
+
 export const VOICE_STATE_SYNC_EVENT = "inaccord:voice-state-sync";
 
 const INACCORD_VOICE_STATE_KEY = "__INACCORD_VOICE_STATE__";
@@ -19,7 +21,7 @@ declare global {
 }
 
 export const getCachedVoiceState = (): VoiceStateSyncDetail | null => {
-  if (typeof window === "undefined") {
+  if (CLIENT_PERSISTENCE_DISABLED || typeof window === "undefined") {
     return null;
   }
 
@@ -31,6 +33,9 @@ export const publishVoiceState = (detail: VoiceStateSyncDetail) => {
     return;
   }
 
-  window[INACCORD_VOICE_STATE_KEY] = detail;
+  if (!CLIENT_PERSISTENCE_DISABLED) {
+    window[INACCORD_VOICE_STATE_KEY] = detail;
+  }
+
   window.dispatchEvent(new CustomEvent(VOICE_STATE_SYNC_EVENT, { detail }));
 };

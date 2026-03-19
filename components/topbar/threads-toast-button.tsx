@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { MessagesSquare } from "lucide-react";
 import { toast } from "sonner";
 import { buildThreadPath } from "@/lib/route-slugs";
+import { CLIENT_PERSISTENCE_DISABLED } from "@/lib/client-persistence-policy";
 
 type ThreadToastItem = {
   id: string;
@@ -151,7 +152,7 @@ const ThreadsToastContent = ({
 export const ThreadsToastButton = ({ initialThreads = [], className }: ThreadsToastButtonProps) => {
   const router = useRouter();
   const cachedThreads =
-    cachedThreadsState && cachedThreadsState.expiresAt > Date.now()
+    !CLIENT_PERSISTENCE_DISABLED && cachedThreadsState && cachedThreadsState.expiresAt > Date.now()
       ? cachedThreadsState.threads
       : null;
 
@@ -162,7 +163,7 @@ export const ThreadsToastButton = ({ initialThreads = [], className }: ThreadsTo
   const unreadBadge = unreadTotal > 99 ? "99+" : String(unreadTotal);
 
   const fetchThreads = async ({ silent }: { silent: boolean }) => {
-    if (cachedThreadsState && cachedThreadsState.expiresAt > Date.now()) {
+    if (!CLIENT_PERSISTENCE_DISABLED && cachedThreadsState && cachedThreadsState.expiresAt > Date.now()) {
       setThreads(cachedThreadsState.threads);
       setHasLoaded(true);
       return cachedThreadsState.threads;
@@ -189,10 +190,12 @@ export const ThreadsToastButton = ({ initialThreads = [], className }: ThreadsTo
     const payload = (await response.json()) as { threads?: ThreadToastItem[] };
     const nextThreads = payload.threads ?? [];
 
-    cachedThreadsState = {
-      threads: nextThreads,
-      expiresAt: Date.now() + THREADS_CACHE_TTL_MS,
-    };
+    if (!CLIENT_PERSISTENCE_DISABLED) {
+      cachedThreadsState = {
+        threads: nextThreads,
+        expiresAt: Date.now() + THREADS_CACHE_TTL_MS,
+      };
+    }
 
     setThreads(nextThreads);
     setHasLoaded(true);
@@ -205,7 +208,7 @@ export const ThreadsToastButton = ({ initialThreads = [], className }: ThreadsTo
   };
 
   useEffect(() => {
-    if (cachedThreadsState && cachedThreadsState.expiresAt > Date.now()) {
+    if (!CLIENT_PERSISTENCE_DISABLED && cachedThreadsState && cachedThreadsState.expiresAt > Date.now()) {
       return;
     }
 

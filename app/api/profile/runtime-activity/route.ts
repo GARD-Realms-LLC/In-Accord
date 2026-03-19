@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { execFile } from "child_process";
+import { promisify } from "util";
 
 import { currentProfile } from "@/lib/current-profile";
 import { getUserPreferences } from "@/lib/user-preferences";

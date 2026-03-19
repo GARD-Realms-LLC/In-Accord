@@ -16,6 +16,7 @@ const defaultEmotes = [
 ];
 
 type ServerEmoteRow = {
+  content: string | null;
   fileUrl: string | null;
 };
 
@@ -44,18 +45,17 @@ export async function GET(_req: Request, { params }: Params) {
 
     const rowsResult = await db.execute(sql`
       select
+        m."content" as "content",
         m."fileUrl" as "fileUrl"
       from "Message" m
-      inner join "Channel" c on c."id" = m."channelId"
-      where c."serverId" = ${serverId}
+      where m."channelId" in (
+        select c."id"
+        from "Channel" c
+        where c."serverId" = ${serverId}
+      )
         and m."fileUrl" is not null
-        and (
-          lower(coalesce(m."content", '')) = '[emote]'
-          or lower(m."fileUrl") like '%/emotes/%'
-          or lower(m."fileUrl") like '%emoji%'
-        )
       order by m."updatedAt" desc
-      limit 250
+      limit 500
     `);
 
     const rows = (rowsResult as unknown as { rows?: ServerEmoteRow[] }).rows ?? [];
@@ -65,7 +65,15 @@ export async function GET(_req: Request, { params }: Params) {
 
     for (const row of rows) {
       const normalized = String(row.fileUrl ?? "").trim();
-      if (!normalized || seen.has(normalized)) {
+      const normalizedContent = String(row.content ?? "").trim().toLowerCase();
+      const normalizedUrl = normalized.toLowerCase();
+      const isEmoteLike =
+        normalizedContent === "[emote]" ||
+        normalizedContent.endsWith(" [emote]") ||
+        normalizedUrl.includes("/emotes/") ||
+        normalizedUrl.includes("emoji");
+
+      if (!normalized || !isEmoteLike || seen.has(normalized)) {
         continue;
       }
 

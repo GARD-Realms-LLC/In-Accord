@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { CLIENT_PERSISTENCE_DISABLED } from "@/lib/client-persistence-policy";
 
 type ActivityPrivacyPreferences = {
   shareActivityStatus: boolean;
@@ -74,10 +75,12 @@ const applyActivityPrivacyToDocument = (preferences: ActivityPrivacyPreferences)
   root.setAttribute("data-inaccord-activity-visibility", preferences.activityVisibility);
   root.setAttribute("data-inaccord-activity-status", preferences.shareActivityStatus ? "on" : "off");
 
-  try {
-    window.localStorage.setItem("inaccord:activity-privacy", JSON.stringify(preferences));
-  } catch {
-    // ignore storage failures
+  if (!CLIENT_PERSISTENCE_DISABLED) {
+    try {
+      window.localStorage.setItem("inaccord:activity-privacy", JSON.stringify(preferences));
+    } catch {
+      // ignore storage failures
+    }
   }
 };
 

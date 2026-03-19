@@ -1,27 +1,75 @@
 "use client";
 
-import { Copy, Crown, Headphones, LogOut, Mic, MicOff, RefreshCw, ScreenShare, ScreenShareOff, Settings, ShieldAlert, Video, VideoOff, VolumeX, Wrench } from "lucide-react";
+import {
+  Copy,
+  Crown,
+  Headphones,
+  LogOut,
+  Mic,
+  MicOff,
+  RefreshCw,
+  ScreenShare,
+  ScreenShareOff,
+  Settings,
+  ShieldAlert,
+  Video,
+  VideoOff,
+  VolumeX,
+  Wrench,
+} from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { useRouter } from "next/navigation";
 
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { BannerImage } from "@/components/ui/banner-image";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ModeratorLineIcon } from "@/components/moderator-line-icon";
 import { ProfileEffectLayer } from "@/components/profile-effect-layer";
 import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
 import { ProfileIconRow } from "@/components/profile-icon-row";
 import { UserAvatar } from "@/components/user-avatar";
 import { useModal } from "@/hooks/use-modal-store";
-import { hasInAccordAdministrativeAccess, isInAccordAdministrator, isInAccordDeveloper, isInAccordModerator } from "@/lib/in-accord-admin";
+import {
+  hasInAccordAdministrativeAccess,
+  isInAccordAdministrator,
+  isInAccordDeveloper,
+  isInAccordModerator,
+} from "@/lib/in-accord-admin";
 import { resolveBannerUrl } from "@/lib/asset-url";
 import { resolveProfileIcons, type ProfileIcon } from "@/lib/profile-icons";
-import { PresenceStatus, formatPresenceStatusLabel, normalizePresenceStatus, presenceStatusLabelMap, presenceStatusValues } from "@/lib/presence-status";
+import {
+  PresenceStatus,
+  formatPresenceStatusLabel,
+  normalizePresenceStatus,
+  presenceStatusLabelMap,
+  presenceStatusValues,
+} from "@/lib/presence-status";
 import { getStreamSummaryText } from "@/lib/streaming-display";
-import { getCachedVoiceState, VOICE_STATE_SYNC_EVENT, type VoiceStateSyncDetail } from "@/lib/voice-state-sync";
+import {
+  getCachedVoiceState,
+  VOICE_STATE_SYNC_EVENT,
+  type VoiceStateSyncDetail,
+} from "@/lib/voice-state-sync";
+import {
+  INACCORD_BUILD_NUMBER,
+  INACCORD_VERSION_LABEL,
+} from "@/lib/build-version";
+import {
+  getDirectFriendStatusFromRequestResponse,
+  type FriendRequestPostResponse,
+} from "@/lib/direct-friend-status";
 
 const VOICE_TOGGLE_MUTE_EVENT = "inaccord:voice-toggle-mute";
 const VOICE_TOGGLE_DEAFEN_EVENT = "inaccord:voice-toggle-deafen";
@@ -73,7 +121,8 @@ export const UserStatusMenu = ({
   const router = useRouter();
   const [copied, setCopied] = useState(false);
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
-  const [isSwitchAccountsConfirmOpen, setIsSwitchAccountsConfirmOpen] = useState(false);
+  const [isSwitchAccountsConfirmOpen, setIsSwitchAccountsConfirmOpen] =
+    useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isSwitchingAccounts, setIsSwitchingAccounts] = useState(false);
   const [isSavingStatus, setIsSavingStatus] = useState(false);
@@ -86,29 +135,53 @@ export const UserStatusMenu = ({
   const [streamLabel, setStreamLabel] = useState<string | null>(null);
   const [isPmVideoSessionActive, setIsPmVideoSessionActive] = useState(false);
   const [isPmCameraOn, setIsPmCameraOn] = useState(false);
-  const [menuRealName, setMenuRealName] = useState<string | null>(profileRealName ?? null);
-  const [menuProfileName, setMenuProfileName] = useState<string | null>(profileName ?? null);
-  const [menuPronouns, setMenuPronouns] = useState<string | null>(profilePronouns ?? null);
-  const [menuAvatarDecorationUrl, setMenuAvatarDecorationUrl] = useState<string | null>(profileAvatarDecorationUrl ?? null);
-  const [menuProfileEffectUrl, setMenuProfileEffectUrl] = useState<string | null>(profileEffectUrl ?? null);
-  const [menuNameplateLabel, setMenuNameplateLabel] = useState<string | null>(profileNameplateLabel ?? null);
-  const [menuNameplateColor, setMenuNameplateColor] = useState<string | null>(profileNameplateColor ?? null);
-  const [menuNameplateImageUrl, setMenuNameplateImageUrl] = useState<string | null>(profileNameplateImageUrl ?? null);
+  const [menuRealName, setMenuRealName] = useState<string | null>(
+    profileRealName ?? null,
+  );
+  const [menuProfileName, setMenuProfileName] = useState<string | null>(
+    profileName ?? null,
+  );
+  const [menuPronouns, setMenuPronouns] = useState<string | null>(
+    profilePronouns ?? null,
+  );
+  const [menuAvatarDecorationUrl, setMenuAvatarDecorationUrl] = useState<
+    string | null
+  >(profileAvatarDecorationUrl ?? null);
+  const [menuProfileEffectUrl, setMenuProfileEffectUrl] = useState<
+    string | null
+  >(profileEffectUrl ?? null);
+  const [menuNameplateLabel, setMenuNameplateLabel] = useState<string | null>(
+    profileNameplateLabel ?? null,
+  );
+  const [menuNameplateColor, setMenuNameplateColor] = useState<string | null>(
+    profileNameplateColor ?? null,
+  );
+  const [menuNameplateImageUrl, setMenuNameplateImageUrl] = useState<
+    string | null
+  >(profileNameplateImageUrl ?? null);
   const [menuProfileIcons, setMenuProfileIcons] = useState<ProfileIcon[]>(
     resolveProfileIcons({
       userId: profileId,
       role: profileRole,
       email: profileEmail,
       createdAt: profileJoinedAt,
-    })
+    }),
   );
-  const [menuBannerUrl, setMenuBannerUrl] = useState<string | null>(profileBannerUrl ?? null);
-  const [menuProfileRole, setMenuProfileRole] = useState<string | null>(profileRole ?? null);
+  const [menuBannerUrl, setMenuBannerUrl] = useState<string | null>(
+    profileBannerUrl ?? null,
+  );
+  const [menuProfileRole, setMenuProfileRole] = useState<string | null>(
+    profileRole ?? null,
+  );
   const [menuPresenceStatus, setMenuPresenceStatus] = useState<PresenceStatus>(
-    normalizePresenceStatus(profilePresenceStatus)
+    normalizePresenceStatus(profilePresenceStatus),
   );
-  const [menuCurrentGame, setMenuCurrentGame] = useState<string | null>(profileCurrentGame?.trim() || null);
-  const [runtimeCurrentGame, setRuntimeCurrentGame] = useState<string | null>(null);
+  const [menuCurrentGame, setMenuCurrentGame] = useState<string | null>(
+    profileCurrentGame?.trim() || null,
+  );
+  const [runtimeCurrentGame, setRuntimeCurrentGame] = useState<string | null>(
+    null,
+  );
 
   const buildMenuProfileIcons = (
     incomingIcons?: ProfileIcon[] | null,
@@ -127,7 +200,9 @@ export const UserStatusMenu = ({
 
     const seen = new Set<string>();
     const merged = [...incomingIcons, ...resolvedIcons].filter((icon) => {
-      const key = String(icon?.key ?? "").trim().toLowerCase();
+      const key = String(icon?.key ?? "")
+        .trim()
+        .toLowerCase();
       if (!key || seen.has(key)) {
         return false;
       }
@@ -154,13 +229,29 @@ export const UserStatusMenu = ({
         role: profileRole,
         email: profileEmail,
         createdAt: profileJoinedAt,
-      })
+      }),
     );
     setMenuBannerUrl(profileBannerUrl ?? null);
     setMenuProfileRole(profileRole ?? null);
     setMenuPresenceStatus(normalizePresenceStatus(profilePresenceStatus));
     setMenuCurrentGame(profileCurrentGame?.trim() || null);
-  }, [profileAvatarDecorationUrl, profileBannerUrl, profileCurrentGame, profileEffectUrl, profileEmail, profileId, profileJoinedAt, profileName, profileNameplateColor, profileNameplateImageUrl, profileNameplateLabel, profilePresenceStatus, profilePronouns, profileRealName, profileRole]);
+  }, [
+    profileAvatarDecorationUrl,
+    profileBannerUrl,
+    profileCurrentGame,
+    profileEffectUrl,
+    profileEmail,
+    profileId,
+    profileJoinedAt,
+    profileName,
+    profileNameplateColor,
+    profileNameplateImageUrl,
+    profileNameplateLabel,
+    profilePresenceStatus,
+    profilePronouns,
+    profileRealName,
+    profileRole,
+  ]);
 
   useEffect(() => {
     if (!isPopoverOpen) {
@@ -204,12 +295,19 @@ export const UserStatusMenu = ({
           setMenuNameplateLabel(payload.nameplateLabel ?? null);
           setMenuNameplateColor(payload.nameplateColor ?? null);
           setMenuNameplateImageUrl(payload.nameplateImageUrl ?? null);
-          setMenuProfileIcons(buildMenuProfileIcons(payload.profileIcons, payload.role ?? profileRole));
+          setMenuProfileIcons(
+            buildMenuProfileIcons(
+              payload.profileIcons,
+              payload.role ?? profileRole,
+            ),
+          );
           setMenuAvatarDecorationUrl(payload.avatarDecorationUrl ?? null);
           setMenuProfileEffectUrl(payload.profileEffectUrl ?? null);
           setMenuBannerUrl(payload.bannerUrl ?? null);
           setMenuProfileRole(payload.role ?? profileRole ?? null);
-          setMenuPresenceStatus(normalizePresenceStatus(payload.presenceStatus));
+          setMenuPresenceStatus(
+            normalizePresenceStatus(payload.presenceStatus),
+          );
           setMenuCurrentGame(payload.currentGame?.trim() || null);
         }
       } catch (error) {
@@ -248,40 +346,73 @@ export const UserStatusMenu = ({
         setMenuProfileName(customEvent.detail.profileName || null);
       }
 
-      if (customEvent.detail?.bannerUrl === null || typeof customEvent.detail?.bannerUrl === "string") {
+      if (
+        customEvent.detail?.bannerUrl === null ||
+        typeof customEvent.detail?.bannerUrl === "string"
+      ) {
         setMenuBannerUrl(customEvent.detail.bannerUrl ?? null);
       }
 
-      if (customEvent.detail?.avatarDecorationUrl === null || typeof customEvent.detail?.avatarDecorationUrl === "string") {
-        setMenuAvatarDecorationUrl(customEvent.detail.avatarDecorationUrl ?? null);
+      if (
+        customEvent.detail?.avatarDecorationUrl === null ||
+        typeof customEvent.detail?.avatarDecorationUrl === "string"
+      ) {
+        setMenuAvatarDecorationUrl(
+          customEvent.detail.avatarDecorationUrl ?? null,
+        );
       }
 
-      if (customEvent.detail?.profileEffectUrl === null || typeof customEvent.detail?.profileEffectUrl === "string") {
+      if (
+        customEvent.detail?.profileEffectUrl === null ||
+        typeof customEvent.detail?.profileEffectUrl === "string"
+      ) {
         setMenuProfileEffectUrl(customEvent.detail.profileEffectUrl ?? null);
       }
 
-      if (customEvent.detail?.nameplateLabel === null || typeof customEvent.detail?.nameplateLabel === "string") {
+      if (
+        customEvent.detail?.nameplateLabel === null ||
+        typeof customEvent.detail?.nameplateLabel === "string"
+      ) {
         setMenuNameplateLabel(customEvent.detail.nameplateLabel ?? null);
       }
 
-      if (customEvent.detail?.nameplateColor === null || typeof customEvent.detail?.nameplateColor === "string") {
+      if (
+        customEvent.detail?.nameplateColor === null ||
+        typeof customEvent.detail?.nameplateColor === "string"
+      ) {
         setMenuNameplateColor(customEvent.detail.nameplateColor ?? null);
       }
 
-      if (customEvent.detail?.nameplateImageUrl === null || typeof customEvent.detail?.nameplateImageUrl === "string") {
+      if (
+        customEvent.detail?.nameplateImageUrl === null ||
+        typeof customEvent.detail?.nameplateImageUrl === "string"
+      ) {
         setMenuNameplateImageUrl(customEvent.detail.nameplateImageUrl ?? null);
       }
 
-      if (customEvent.detail?.profileRole === null || typeof customEvent.detail?.profileRole === "string") {
+      if (
+        customEvent.detail?.profileRole === null ||
+        typeof customEvent.detail?.profileRole === "string"
+      ) {
         setMenuProfileRole(customEvent.detail.profileRole ?? null);
-        setMenuProfileIcons(buildMenuProfileIcons(undefined, customEvent.detail.profileRole ?? null));
+        setMenuProfileIcons(
+          buildMenuProfileIcons(
+            undefined,
+            customEvent.detail.profileRole ?? null,
+          ),
+        );
       }
 
       if (typeof customEvent.detail?.presenceStatus === "string") {
-        setMenuPresenceStatus(normalizePresenceStatus(customEvent.detail.presenceStatus));
+        setMenuPresenceStatus(
+          normalizePresenceStatus(customEvent.detail.presenceStatus),
+        );
       }
 
-      if (customEvent.detail?.currentGame === null || typeof customEvent.detail?.currentGame === "string") {
+      if (
+        customEvent.detail?.currentGame === null ||
+        typeof customEvent.detail?.currentGame === "string"
+      ) {
         setMenuCurrentGame(customEvent.detail.currentGame?.trim() || null);
       }
     };
@@ -289,7 +420,10 @@ export const UserStatusMenu = ({
     window.addEventListener("inaccord:profile-updated", handleProfileUpdated);
 
     return () => {
-      window.removeEventListener("inaccord:profile-updated", handleProfileUpdated);
+      window.removeEventListener(
+        "inaccord:profile-updated",
+        handleProfileUpdated,
+      );
     };
   }, []);
 
@@ -298,15 +432,20 @@ export const UserStatusMenu = ({
 
     const loadRuntimeActivity = async () => {
       try {
-        const payload = (await fetch("/api/profile/runtime-activity", { cache: "no-store" }).then((response) =>
-          response.ok ? response.json() : null
-        )) as { type?: string; title?: string } | null;
+        const payload = (await fetch("/api/profile/runtime-activity", {
+          cache: "no-store",
+        }).then((response) => (response.ok ? response.json() : null))) as {
+          type?: string;
+          title?: string;
+        } | null;
 
         if (isCancelled) {
           return;
         }
 
-        const runtimeType = String(payload?.type ?? "").trim().toLowerCase();
+        const runtimeType = String(payload?.type ?? "")
+          .trim()
+          .toLowerCase();
         const runtimeTitle = String(payload?.title ?? "").trim();
         if (runtimeType === "game" && runtimeTitle) {
           setRuntimeCurrentGame(runtimeTitle);
@@ -417,16 +556,38 @@ export const UserStatusMenu = ({
     }
 
     void axios
-      .post("/api/friends/requests", {
+      .post<FriendRequestPostResponse>("/api/friends/requests", {
         profileId: targetProfileId,
       })
-      .then(() => {
+      .then((response) => {
         router.refresh();
+        const nextRelationshipStatus = getDirectFriendStatusFromRequestResponse(
+          response.data,
+        );
+
+        if (nextRelationshipStatus === "friends") {
+          window.alert("You are already direct friends.");
+          return;
+        }
+
+        if (nextRelationshipStatus === "incoming_pending") {
+          window.alert(
+            "This user already sent you a friend request. Accept it from Pending.",
+          );
+          return;
+        }
+
+        if (response.data.created === false) {
+          window.alert("Friend request already pending.");
+          return;
+        }
+
         window.alert("Friend request sent.");
       })
       .catch((error) => {
         const message = axios.isAxiosError(error)
-          ? (error.response?.data as { error?: string } | undefined)?.error ?? "Failed to send friend request."
+          ? ((error.response?.data as { error?: string } | undefined)?.error ??
+            "Failed to send friend request.")
           : "Failed to send friend request.";
         window.alert(message);
       });
@@ -487,10 +648,16 @@ export const UserStatusMenu = ({
       applyVoiceState((event as CustomEvent<VoiceStateSyncDetail>).detail);
     };
 
-    window.addEventListener(VOICE_STATE_SYNC_EVENT, onVoiceStateSync as EventListener);
+    window.addEventListener(
+      VOICE_STATE_SYNC_EVENT,
+      onVoiceStateSync as EventListener,
+    );
 
     return () => {
-      window.removeEventListener(VOICE_STATE_SYNC_EVENT, onVoiceStateSync as EventListener);
+      window.removeEventListener(
+        VOICE_STATE_SYNC_EVENT,
+        onVoiceStateSync as EventListener,
+      );
     };
   }, []);
 
@@ -510,10 +677,16 @@ export const UserStatusMenu = ({
       }
     };
 
-    window.addEventListener(PM_CAMERA_STATE_SYNC_EVENT, onPmCameraStateSync as EventListener);
+    window.addEventListener(
+      PM_CAMERA_STATE_SYNC_EVENT,
+      onPmCameraStateSync as EventListener,
+    );
 
     return () => {
-      window.removeEventListener(PM_CAMERA_STATE_SYNC_EVENT, onPmCameraStateSync as EventListener);
+      window.removeEventListener(
+        PM_CAMERA_STATE_SYNC_EVENT,
+        onPmCameraStateSync as EventListener,
+      );
     };
   }, []);
 
@@ -522,7 +695,9 @@ export const UserStatusMenu = ({
     const canControlPmCamera = isPmVideoSessionActive;
 
     if (!canControlVoiceCamera && !canControlPmCamera) {
-      window.alert("Join a live video channel or start a PM video call to use camera controls.");
+      window.alert(
+        "Join a live video channel or start a PM video call to use camera controls.",
+      );
       return;
     }
 
@@ -539,15 +714,23 @@ export const UserStatusMenu = ({
               isStreaming: false,
               streamLabel: null,
             },
-          })
+          }),
         );
       }
-      window.dispatchEvent(new CustomEvent(VOICE_TOGGLE_CAMERA_EVENT, { detail: { isCameraOn: next } }));
+      window.dispatchEvent(
+        new CustomEvent(VOICE_TOGGLE_CAMERA_EVENT, {
+          detail: { isCameraOn: next },
+        }),
+      );
     }
 
     if (canControlPmCamera) {
       setIsPmCameraOn(next);
-      window.dispatchEvent(new CustomEvent(PM_TOGGLE_CAMERA_EVENT, { detail: { isCameraOn: next } }));
+      window.dispatchEvent(
+        new CustomEvent(PM_TOGGLE_CAMERA_EVENT, {
+          detail: { isCameraOn: next },
+        }),
+      );
     }
   };
 
@@ -566,7 +749,11 @@ export const UserStatusMenu = ({
     }
     if (next) {
       setIsCameraOn(false);
-      window.dispatchEvent(new CustomEvent(VOICE_TOGGLE_CAMERA_EVENT, { detail: { isCameraOn: false } }));
+      window.dispatchEvent(
+        new CustomEvent(VOICE_TOGGLE_CAMERA_EVENT, {
+          detail: { isCameraOn: false },
+        }),
+      );
     }
 
     window.dispatchEvent(
@@ -575,7 +762,7 @@ export const UserStatusMenu = ({
           isStreaming: next,
           streamLabel: next ? streamLabel : null,
         },
-      })
+      }),
     );
   };
 
@@ -587,7 +774,9 @@ export const UserStatusMenu = ({
 
     const next = !isVoiceMuted;
     setIsVoiceMuted(next);
-    window.dispatchEvent(new CustomEvent(VOICE_TOGGLE_MUTE_EVENT, { detail: { isMuted: next } }));
+    window.dispatchEvent(
+      new CustomEvent(VOICE_TOGGLE_MUTE_EVENT, { detail: { isMuted: next } }),
+    );
   };
 
   const onToggleDeafen = () => {
@@ -598,7 +787,11 @@ export const UserStatusMenu = ({
 
     const next = !isVoiceDeafened;
     setIsVoiceDeafened(next);
-    window.dispatchEvent(new CustomEvent(VOICE_TOGGLE_DEAFEN_EVENT, { detail: { isDeafened: next } }));
+    window.dispatchEvent(
+      new CustomEvent(VOICE_TOGGLE_DEAFEN_EVENT, {
+        detail: { isDeafened: next },
+      }),
+    );
   };
 
   const statusDotClassMap: Record<PresenceStatus, string> = {
@@ -625,7 +818,7 @@ export const UserStatusMenu = ({
           detail: {
             presenceStatus: nextStatus,
           },
-        })
+        }),
       );
     } catch (error) {
       setMenuPresenceStatus(previousStatus);
@@ -653,7 +846,10 @@ export const UserStatusMenu = ({
           (error.response?.data as { error?: string })?.error ||
           error.message ||
           "Logoff failed";
-        console.error("[USER_STATUS_LOGOFF]", error.response?.data ?? error.message);
+        console.error(
+          "[USER_STATUS_LOGOFF]",
+          error.response?.data ?? error.message,
+        );
         window.alert(message);
       } else {
         console.error("[USER_STATUS_LOGOFF]", error);
@@ -699,18 +895,33 @@ export const UserStatusMenu = ({
   const lastLogon = formatDate(profileLastLogonAt);
   const created = formatDate(profileJoinedAt);
   const effectiveGlobalRole = menuProfileRole ?? profileRole;
-  const hasAdministrativeAccess = hasInAccordAdministrativeAccess(effectiveGlobalRole);
+  const hasAdministrativeAccess =
+    hasInAccordAdministrativeAccess(effectiveGlobalRole);
   const isGlobalDeveloper = isInAccordDeveloper(effectiveGlobalRole);
   const isGlobalAdministrator = isInAccordAdministrator(effectiveGlobalRole);
   const isGlobalModerator = isInAccordModerator(effectiveGlobalRole);
-  const highestRoleIcon = isGlobalDeveloper
-    ? <Wrench className="h-4 w-4 shrink-0 text-cyan-400" aria-label="Developer" suppressHydrationWarning />
-    : isGlobalAdministrator
-      ? <Crown className="h-4 w-4 shrink-0 text-rose-500" aria-label="Administrator" suppressHydrationWarning />
-      : isGlobalModerator
-        ? <ModeratorLineIcon className="h-4 w-4 shrink-0 text-indigo-500" aria-label="Moderator" suppressHydrationWarning />
-        : null;
-  const roleMetaOnPlate = highestRoleIcon ? <span className="inline-flex items-center">{highestRoleIcon}</span> : null;
+  const highestRoleIcon = isGlobalDeveloper ? (
+    <Wrench
+      className="h-4 w-4 shrink-0 text-cyan-400"
+      aria-label="Developer"
+      suppressHydrationWarning
+    />
+  ) : isGlobalAdministrator ? (
+    <Crown
+      className="h-4 w-4 shrink-0 text-rose-500"
+      aria-label="Administrator"
+      suppressHydrationWarning
+    />
+  ) : isGlobalModerator ? (
+    <ModeratorLineIcon
+      className="h-4 w-4 shrink-0 text-indigo-500"
+      aria-label="Moderator"
+      suppressHydrationWarning
+    />
+  ) : null;
+  const roleMetaOnPlate = highestRoleIcon ? (
+    <span className="inline-flex items-center">{highestRoleIcon}</span>
+  ) : null;
   const fallbackNameFromEmail = profileEmail?.split("@")[0]?.trim() || "";
   const displayStatusName =
     menuProfileName?.trim() ||
@@ -728,7 +939,8 @@ export const UserStatusMenu = ({
   const canUseCameraControls = canControlVoiceCamera || isPmVideoSessionActive;
   const canUseStreamingControls = canControlVoiceCamera;
   const effectiveCameraOn = canControlVoiceCamera ? isCameraOn : isPmCameraOn;
-  const effectiveCurrentGame = runtimeCurrentGame?.trim() || menuCurrentGame?.trim() || null;
+  const effectiveCurrentGame =
+    runtimeCurrentGame?.trim() || menuCurrentGame?.trim() || null;
   const showCurrentGameIcon = Boolean(effectiveCurrentGame);
   const resolvedMenuBannerUrl = resolveBannerUrl(menuBannerUrl);
 
@@ -754,7 +966,11 @@ export const UserStatusMenu = ({
               />
               {highestRoleIcon}
             </div>
-            <p className="truncate text-[10px] text-[#b5bac1]">{formatPresenceStatusLabel(menuPresenceStatus, { showGameIcon: showCurrentGameIcon })}</p>
+            <p className="truncate text-[10px] text-[#b5bac1]">
+              {formatPresenceStatusLabel(menuPresenceStatus, {
+                showGameIcon: showCurrentGameIcon,
+              })}
+            </p>
           </div>
         </button>
       </PopoverTrigger>
@@ -803,7 +1019,12 @@ export const UserStatusMenu = ({
               <p>Name: {displayNameForProfileCard}</p>
               <p>Profile Name: {menuProfileName || "Not set"}</p>
               <p>Email: {profileEmail || ""}</p>
-              <p>Status: {formatPresenceStatusLabel(menuPresenceStatus, { showGameIcon: showCurrentGameIcon })}</p>
+              <p>
+                Status:{" "}
+                {formatPresenceStatusLabel(menuPresenceStatus, {
+                  showGameIcon: showCurrentGameIcon,
+                })}
+              </p>
               <p>Current Game: {effectiveCurrentGame || "Not in game"}</p>
               <p>Last logon: {lastLogon}</p>
               <p>Created: {created}</p>
@@ -811,7 +1032,9 @@ export const UserStatusMenu = ({
 
             <div className="mt-3 rounded-md border border-white/10 bg-[#15161a] p-2">
               <div className="mb-1 flex items-center justify-between gap-2">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">User Status</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                  User Status
+                </p>
               </div>
               <p className="mb-2 text-[10px] text-[#949ba4]">
                 {!canUseCameraControls && !canUseStreamingControls
@@ -832,10 +1055,20 @@ export const UserStatusMenu = ({
                       ? "border-rose-400/45 bg-rose-500/20 text-rose-200 hover:bg-rose-500/30"
                       : "border-emerald-400/45 bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30"
                   }`}
-                  title={!isVoiceSessionActive ? "Join a voice channel to use mute" : isVoiceMuted ? "Unmute" : "Mute"}
+                  title={
+                    !isVoiceSessionActive
+                      ? "Join a voice channel to use mute"
+                      : isVoiceMuted
+                        ? "Unmute"
+                        : "Mute"
+                  }
                   aria-label={isVoiceMuted ? "Unmute" : "Mute"}
                 >
-                  {isVoiceMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                  {isVoiceMuted ? (
+                    <MicOff className="h-4 w-4" />
+                  ) : (
+                    <Mic className="h-4 w-4" />
+                  )}
                 </button>
 
                 <button
@@ -847,10 +1080,20 @@ export const UserStatusMenu = ({
                       ? "border-rose-400/45 bg-rose-500/20 text-rose-200 hover:bg-rose-500/30"
                       : "border-emerald-400/45 bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30"
                   }`}
-                  title={!isVoiceSessionActive ? "Join a voice channel to use deafen" : isVoiceDeafened ? "Undeafen" : "Deafen"}
+                  title={
+                    !isVoiceSessionActive
+                      ? "Join a voice channel to use deafen"
+                      : isVoiceDeafened
+                        ? "Undeafen"
+                        : "Deafen"
+                  }
                   aria-label={isVoiceDeafened ? "Undeafen" : "Deafen"}
                 >
-                  {isVoiceDeafened ? <VolumeX className="h-4 w-4" /> : <Headphones className="h-4 w-4" />}
+                  {isVoiceDeafened ? (
+                    <VolumeX className="h-4 w-4" />
+                  ) : (
+                    <Headphones className="h-4 w-4" />
+                  )}
                 </button>
 
                 <button
@@ -862,7 +1105,9 @@ export const UserStatusMenu = ({
                       ? "border-emerald-400/45 bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30"
                       : "border-zinc-600 bg-zinc-700/70 text-zinc-300 hover:bg-zinc-600"
                   }`}
-                  aria-label={effectiveCameraOn ? "Turn camera off" : "Turn camera on"}
+                  aria-label={
+                    effectiveCameraOn ? "Turn camera off" : "Turn camera on"
+                  }
                   title={
                     !canUseCameraControls
                       ? "Join a live video channel or start a PM video call to enable camera"
@@ -871,7 +1116,11 @@ export const UserStatusMenu = ({
                         : "Turn camera on"
                   }
                 >
-                  {effectiveCameraOn ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
+                  {effectiveCameraOn ? (
+                    <Video className="h-4 w-4" />
+                  ) : (
+                    <VideoOff className="h-4 w-4" />
+                  )}
                 </button>
 
                 <button
@@ -892,9 +1141,12 @@ export const UserStatusMenu = ({
                         : "Start stream"
                   }
                 >
-                  {isStreaming ? <ScreenShare className="h-4 w-4" /> : <ScreenShareOff className="h-4 w-4" />}
+                  {isStreaming ? (
+                    <ScreenShare className="h-4 w-4" />
+                  ) : (
+                    <ScreenShareOff className="h-4 w-4" />
+                  )}
                 </button>
-
               </div>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -904,20 +1156,31 @@ export const UserStatusMenu = ({
                     className="flex w-full items-center justify-between rounded-md border border-white/10 bg-[#1e1f22] px-2 py-2 text-xs text-white transition hover:bg-[#2a2b30] disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <span className="inline-flex items-center gap-2">
-                      <span className={`h-2.5 w-2.5 rounded-full ${statusDotClassMap[menuPresenceStatus]}`} />
-                      {formatPresenceStatusLabel(menuPresenceStatus, { showGameIcon: showCurrentGameIcon })}
+                      <span
+                        className={`h-2.5 w-2.5 rounded-full ${statusDotClassMap[menuPresenceStatus]}`}
+                      />
+                      {formatPresenceStatusLabel(menuPresenceStatus, {
+                        showGameIcon: showCurrentGameIcon,
+                      })}
                     </span>
-                    <span className="text-[10px] text-[#949ba4]">{isSavingStatus ? "Saving..." : "Change"}</span>
+                    <span className="text-[10px] text-[#949ba4]">
+                      {isSavingStatus ? "Saving..." : "Change"}
+                    </span>
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-44 border border-black/40 bg-[#1e1f22] p-1 text-white">
+                <DropdownMenuContent
+                  align="start"
+                  className="w-44 border border-black/40 bg-[#1e1f22] p-1 text-white"
+                >
                   {presenceStatusValues.map((status) => (
                     <DropdownMenuItem
                       key={status}
                       onClick={() => onChangeStatus(status)}
                       className="flex items-center gap-2 rounded px-2 py-1.5 text-xs text-white focus:bg-[#2f3136]"
                     >
-                      <span className={`h-2.5 w-2.5 rounded-full ${statusDotClassMap[status]}`} />
+                      <span
+                        className={`h-2.5 w-2.5 rounded-full ${statusDotClassMap[status]}`}
+                      />
                       <span>{presenceStatusLabelMap[status]}</span>
                     </DropdownMenuItem>
                   ))}
@@ -972,7 +1235,9 @@ export const UserStatusMenu = ({
             disabled={isSwitchingAccounts || isLoggingOut}
             className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-amber-200 transition hover:bg-[#3a3520] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <RefreshCw className={`h-4 w-4 ${isSwitchingAccounts ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`h-4 w-4 ${isSwitchingAccounts ? "animate-spin" : ""}`}
+            />
             {isSwitchingAccounts ? "Switching accounts..." : "Switch Accounts"}
           </button>
 
@@ -985,16 +1250,29 @@ export const UserStatusMenu = ({
             <LogOut className="h-4 w-4" />
             {isLoggingOut ? "Logging off..." : "Logoff"}
           </button>
+
+          <p className="px-2 pt-1 text-[11px] text-[#949ba4]">
+            {INACCORD_VERSION_LABEL
+              ? `Version ${INACCORD_VERSION_LABEL}`
+              : "Version Live"}
+            {INACCORD_BUILD_NUMBER ? ` • Build #${INACCORD_BUILD_NUMBER}` : ""}
+          </p>
         </div>
       </PopoverContent>
 
-      <Dialog open={isSwitchAccountsConfirmOpen} onOpenChange={setIsSwitchAccountsConfirmOpen}>
+      <Dialog
+        open={isSwitchAccountsConfirmOpen}
+        onOpenChange={setIsSwitchAccountsConfirmOpen}
+      >
         <DialogContent className="w-105 border-black/30 bg-[#111214] text-[#dbdee1]">
-          <DialogTitle className="text-base font-semibold text-white">Switch Accounts?</DialogTitle>
+          <DialogTitle className="text-base font-semibold text-white">
+            Switch Accounts?
+          </DialogTitle>
 
           <div className="mt-2 space-y-2 text-sm text-[#b5bac1]">
             <p>
-              This will clear your current session and send you to the sign-in page.
+              This will clear your current session and send you to the sign-in
+              page.
             </p>
             <p className="text-xs text-[#949ba4]">
               Your local settings remain saved. You can sign back in anytime.
@@ -1016,7 +1294,9 @@ export const UserStatusMenu = ({
               disabled={isSwitchingAccounts}
               className="inline-flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/15 px-3 py-2 text-sm font-medium text-amber-200 transition hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <RefreshCw className={`h-4 w-4 ${isSwitchingAccounts ? "animate-spin" : ""}`} />
+              <RefreshCw
+                className={`h-4 w-4 ${isSwitchingAccounts ? "animate-spin" : ""}`}
+              />
               {isSwitchingAccounts ? "Switching..." : "Switch Accounts"}
             </button>
           </div>

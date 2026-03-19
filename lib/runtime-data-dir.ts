@@ -1,6 +1,9 @@
-import { access, copyFile, mkdir } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
+import { access, copyFile, mkdir } from "fs/promises";
+import os from "os";
+import path from "path";
+
+const FILE_DATA_DISABLED = String(process.env.INACCORD_DISABLE_FILE_DATA ?? "").trim() === "1";
+const STANDALONE_BUILD_ACTIVE = String(process.env.NEXT_OUTPUT_MODE ?? "").trim() === "standalone";
 
 const normalizeConfiguredPath = (value: string) => {
   const trimmed = value.trim();
@@ -34,6 +37,10 @@ const resolveOsRuntimeBaseDir = () => {
 };
 
 export const RUNTIME_DATA_DIR = (() => {
+  if (FILE_DATA_DISABLED || STANDALONE_BUILD_ACTIVE) {
+    return path.join(process.cwd(), ".runtime-data-disabled");
+  }
+
   const configured = normalizeConfiguredPath(String(process.env.INACCORD_RUNTIME_DATA_DIR ?? ""));
   return configured || resolveOsRuntimeBaseDir();
 })();

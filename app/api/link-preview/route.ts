@@ -1,5 +1,5 @@
-import dns from "node:dns/promises";
-import net from "node:net";
+import dns from "dns/promises";
+import net from "net";
 
 import { NextResponse } from "next/server";
 

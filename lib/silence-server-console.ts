@@ -1,6 +1,54 @@
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
+import "server-only";
+
+type FsModule = typeof import("fs");
+type OsModule = typeof import("os");
+type PathModule = typeof import("path");
+
+let cachedFsModule: FsModule | null = null;
+let cachedOsModule: OsModule | null = null;
+let cachedPathModule: PathModule | null = null;
+
+const getBuiltinModule = <T,>(id: string): T => {
+  const builtinLoader = (process as typeof process & {
+    getBuiltinModule?: (moduleName: string) => T | undefined;
+  }).getBuiltinModule;
+
+  if (typeof builtinLoader === "function") {
+    const loaded = builtinLoader(id);
+    if (loaded) {
+      return loaded;
+    }
+  }
+
+  throw new Error(`Builtin module '${id}' is unavailable in this runtime.`);
+};
+
+const getFsModule = (): FsModule => {
+  if (cachedFsModule) {
+    return cachedFsModule;
+  }
+
+  cachedFsModule = getBuiltinModule<FsModule>("fs");
+  return cachedFsModule;
+};
+
+const getOsModule = (): OsModule => {
+  if (cachedOsModule) {
+    return cachedOsModule;
+  }
+
+  cachedOsModule = getBuiltinModule<OsModule>("os");
+  return cachedOsModule;
+};
+
+const getPathModule = (): PathModule => {
+  if (cachedPathModule) {
+    return cachedPathModule;
+  }
+
+  cachedPathModule = getBuiltinModule<PathModule>("path");
+  return cachedPathModule;
+};
 
 declare global {
   // eslint-disable-next-line no-var
@@ -11,6 +59,9 @@ declare global {
 
 const shouldSilence = (process.env.ENABLE_SERVER_LOGS ?? "false").toLowerCase() !== "true";
 const maxLogSizeBytes = 10 * 1024 * 1024;
+const path = getPathModule();
+const fs = getFsModule();
+const os = getOsModule();
 const workspaceRoot = path.resolve(process.cwd());
 const defaultServerLogDir = path.join(os.tmpdir(), "in-accord", "logs");
 const configuredServerLogFile = String(process.env.SERVER_LOG_FILE ?? "").trim();

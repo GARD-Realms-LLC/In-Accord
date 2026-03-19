@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { CLIENT_PERSISTENCE_DISABLED } from "@/lib/client-persistence-policy";
 
 type StreamerModePreferences = {
   enabled: boolean;
@@ -62,10 +63,12 @@ const applyStreamerModeToDocument = (preferences: StreamerModePreferences) => {
 
   root.setAttribute("data-inaccord-streamer-mode", enabled ? "on" : "off");
 
-  try {
-    window.localStorage.setItem("inaccord:streamer-mode", JSON.stringify(preferences));
-  } catch {
-    // ignore storage failures
+  if (!CLIENT_PERSISTENCE_DISABLED) {
+    try {
+      window.localStorage.setItem("inaccord:streamer-mode", JSON.stringify(preferences));
+    } catch {
+      // ignore storage failures
+    }
   }
 };
 

@@ -2,8 +2,8 @@ import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { NextResponse } from "next/server";
 import { currentProfile } from "@/lib/current-profile";
 import { getEffectiveSiteUrl } from "@/lib/runtime-site-url-config";
-import { Readable } from "node:stream";
-import type { ReadableStream as NodeReadableStream } from "node:stream/web";
+import { Readable } from "stream";
+import type { ReadableStream as NodeReadableStream } from "stream/web";
 
 const accountId = process.env.CLOUDFLARE_R2_ACCOUNT_ID;
 const accessKeyId = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID;

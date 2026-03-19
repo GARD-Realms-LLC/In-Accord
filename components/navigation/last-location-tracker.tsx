@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
+import { CLIENT_PERSISTENCE_DISABLED } from "@/lib/client-persistence-policy";
 
 const LAST_LOCATION_STORAGE_KEY = "inaccord:last-non-aboard-location";
 const MAX_STORED_LOCATION_LENGTH = 2048;
@@ -35,7 +36,7 @@ const isQuotaExceededError = (error: unknown) => {
 };
 
 export const readLastInAccordLocation = () => {
-  if (typeof window === "undefined") {
+  if (CLIENT_PERSISTENCE_DISABLED || typeof window === "undefined") {
     return "";
   }
 
@@ -48,7 +49,7 @@ export const readLastInAccordLocation = () => {
 };
 
 export const writeLastInAccordLocation = (value: unknown) => {
-  if (typeof window === "undefined") {
+  if (CLIENT_PERSISTENCE_DISABLED || typeof window === "undefined") {
     return false;
   }
 

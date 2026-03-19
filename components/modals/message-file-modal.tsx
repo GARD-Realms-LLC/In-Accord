@@ -17,9 +17,12 @@ import { FileUpload } from "@/components/file-upload";
 import { useModal } from "@/hooks/use-modal-store";
 import {
   emitLocalChatConfirmedMessageForRoute,
+  emitLocalChatFailedMessageForRoute,
+  emitLocalChatOptimisticMessageForRoute,
   type LocalChatMutationMessage,
 } from "@/lib/chat-live-events";
 import { buildQuotedContent } from "@/lib/message-quotes";
+import { toast } from "sonner";
 
 export const MessageFileModal = () => {
   const { isOpen, onClose, type, data } = useModal();
@@ -40,6 +43,7 @@ export const MessageFileModal = () => {
     const apiUrl = String(data.apiUrl ?? "").trim();
     const query = data.query ?? {};
     const normalizedFileUrl = String(fileUrl ?? "").trim();
+    const clientMutationId = crypto.randomUUID();
 
     if (!apiUrl) {
       setSubmitError("Message route is missing.");
@@ -60,12 +64,21 @@ export const MessageFileModal = () => {
         query,
       });
 
-      const clientMutationId = crypto.randomUUID();
+      const messageContent = buildQuotedContent("[attachment]", null);
+
+      emitLocalChatOptimisticMessageForRoute(apiUrl, query, {
+        clientMutationId,
+        content: messageContent,
+        fileUrl: normalizedFileUrl,
+      });
+      handleClose();
 
       const response = await axios.post<LocalChatMutationMessage>(url, {
-        content: buildQuotedContent("[attachment]", null),
+        content: messageContent,
         fileUrl: normalizedFileUrl,
         clientMutationId,
+      }, {
+        withCredentials: true,
       });
 
       if (response.data?.id) {
@@ -75,8 +88,9 @@ export const MessageFileModal = () => {
         });
       }
 
-      handleClose();
     } catch (error) {
+      emitLocalChatFailedMessageForRoute(apiUrl, query, clientMutationId);
+
       if (axios.isAxiosError(error)) {
         const message =
           (typeof error.response?.data === "string" ? error.response.data : "") ||
@@ -85,8 +99,10 @@ export const MessageFileModal = () => {
           "Failed to send file.";
 
         setSubmitError(message);
+        toast.error(message);
       } else {
         setSubmitError("Failed to send file.");
+        toast.error("Failed to send file.");
       }
     } finally {
       setIsSubmitting(false);

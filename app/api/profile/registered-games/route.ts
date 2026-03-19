@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import path from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { existsSync, readdirSync, readFileSync } from "fs";
+import path from "path";
+import { execFile } from "child_process";
+import { promisify } from "util";
 
 import { currentProfile } from "@/lib/current-profile";
 import { getUserPreferences } from "@/lib/user-preferences";
@@ -102,7 +102,7 @@ const findExecutableCandidates = (rootDir: string, depth = 0): Array<{ normalize
     return [];
   }
 
-  let dirEntries: Array<import("node:fs").Dirent> = [];
+  let dirEntries: Array<import("fs").Dirent> = [];
   try {
     dirEntries = readdirSync(rootDir, { withFileTypes: true });
   } catch {

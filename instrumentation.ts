@@ -3,6 +3,12 @@ export async function register() {
     return;
   }
 
-  const { ensureTemplateMeBotAutoStartOnBoot } = await import("@/lib/template-me-bot-autostart");
-  await ensureTemplateMeBotAutoStartOnBoot();
+  void (async () => {
+    try {
+      const { ensureTemplateMeBotAutoStartOnBoot } = await import("@/lib/template-me-bot-autostart");
+      await ensureTemplateMeBotAutoStartOnBoot();
+    } catch (error) {
+      console.error("[TEMPLATE_ME_AUTOSTART_REGISTER] Template Me auto-start failed without taking down site startup.", error);
+    }
+  })();
 }

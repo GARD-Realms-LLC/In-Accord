@@ -1,7 +1,7 @@
 {
   "name": "In-Accord",
-  "version": "1.0.224",
-  "inaccordDisplayVersion": "1.0.49",
+  "version": "1.0.255",
+  "inaccordDisplayVersion": "1.0.80",
   "private": true,
   "repository": {
     "type": "git",
@@ -11,7 +11,10 @@
   "bugs": {
     "url": "https://github.com/GARD-Realms-LLC/In-Accord/issues"
   },
+  "main": "dev/app/main.cjs",
   "scripts": {
+    "app:dev": "node dev/app/run-dev.cjs",
+    "app:dist:win": "node dev/app/package-win.cjs",
     "clean:next": "node -e \"const fs=require('fs');for(const p of [process.env.NEXT_DIST_DIR||'.next','.next/dev/types','.next-dev/dev/types'])fs.rmSync(p,{recursive:true,force:true})\"",
     "clean:next:all": "node -e \"const fs=require('fs');for(const p of ['.next-dev','.next'])fs.rmSync(p,{recursive:true,force:true})\"",
     "cleanup:caches": "node scripts/cleanup-caches.cjs",
@@ -101,9 +104,12 @@
     "zustand": "5.0.0-rc.1"
   },
   "devDependencies": {
+    "@electron/packager": "^19.1.0",
     "@types/socket.io": "^3.0.1",
     "@types/uuid": "10.0.0",
     "drizzle-kit": "^0.31.5",
+    "electron": "^41.0.3",
+    "electron-winstaller": "^5.4.0",
     "eslint": "^9.39.0"
   }
 }

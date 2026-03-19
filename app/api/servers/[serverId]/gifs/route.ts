@@ -16,6 +16,7 @@ const defaultGifs = [
 ];
 
 type ServerGifRow = {
+  content: string | null;
   fileUrl: string | null;
   updatedAt: Date | string | null;
 };
@@ -45,23 +46,22 @@ export async function GET(_req: Request, { params }: Params) {
 
     const rowsResult = await db.execute(sql`
       select
+        m."content" as "content",
         m."fileUrl" as "fileUrl",
         m."updatedAt" as "updatedAt"
       from "Message" m
-      inner join "Channel" c on c."id" = m."channelId"
-      where c."serverId" = ${serverId}
+      where m."channelId" in (
+        select c."id"
+        from "Channel" c
+        where c."serverId" = ${serverId}
+      )
         and m."fileUrl" is not null
-        and (
-          lower(coalesce(m."content", '')) = '[gif]'
-          or lower(m."fileUrl") like '%.gif%'
-          or lower(m."fileUrl") like '%giphy%'
-          or lower(m."fileUrl") like '%tenor%'
-        )
       order by m."updatedAt" desc
-      limit 250
+      limit 500
     `);
 
     const rows = ((rowsResult as unknown as { rows?: ServerGifRow[] }).rows ?? []).map((row) => ({
+      content: typeof row.content === "string" ? row.content.trim() : "",
       fileUrl: typeof row.fileUrl === "string" ? row.fileUrl.trim() : "",
       updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : null,
     }));
@@ -70,7 +70,16 @@ export async function GET(_req: Request, { params }: Params) {
     const serverGifs: Array<{ url: string; label: string }> = [];
 
     for (const row of rows) {
-      if (!row.fileUrl || seen.has(row.fileUrl)) {
+      const normalizedContent = row.content.toLowerCase();
+      const normalizedUrl = row.fileUrl.toLowerCase();
+      const isGifLike =
+        normalizedContent === "[gif]" ||
+        normalizedContent.endsWith(" [gif]") ||
+        normalizedUrl.includes(".gif") ||
+        normalizedUrl.includes("giphy") ||
+        normalizedUrl.includes("tenor");
+
+      if (!row.fileUrl || !isGifLike || seen.has(row.fileUrl)) {
         continue;
       }
 

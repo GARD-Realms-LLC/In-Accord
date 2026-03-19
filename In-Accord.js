@@ -3,7 +3,7 @@
  * Lightweight JavaScript SDK for In-Accord APIs.
  */
 
-const { EventEmitter } = require("node:events");
+const { EventEmitter } = require("events");
 
 const decodeCharCodes = (codes) => codes.map((value) => String.fromCharCode(value)).join("");
 

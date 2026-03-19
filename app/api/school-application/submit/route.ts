@@ -1,8 +1,8 @@
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { NextResponse } from "next/server";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { mkdir, writeFile } from "fs/promises";
+import path from "path";
 
 import { currentProfile } from "@/lib/current-profile";
 import { getEffectiveSiteUrl } from "@/lib/runtime-site-url-config";

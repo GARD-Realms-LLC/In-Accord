@@ -1,8 +1,8 @@
 import "server-only";
 
-import { mkdir, readFile, stat, writeFile, appendFile } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
+import { mkdir, readFile, stat, writeFile, appendFile } from "fs/promises";
+import os from "os";
+import path from "path";
 
 type BannerDebugEvent = {
   source: string;

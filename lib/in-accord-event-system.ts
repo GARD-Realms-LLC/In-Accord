@@ -1,4 +1,4 @@
-import { randomUUID, createHmac } from "node:crypto";
+import { randomUUID, createHmac } from "crypto";
 import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";

@@ -1,7 +1,34 @@
+import "server-only";
+
 import { sql } from "drizzle-orm";
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
 
 import { db } from "@/lib/db";
+
+type CryptoModule = typeof import("crypto");
+
+let cachedCryptoModule: CryptoModule | null = null;
+
+const getCryptoModule = (): CryptoModule => {
+  if (cachedCryptoModule) {
+    return cachedCryptoModule;
+  }
+
+  const builtinLoader = (process as typeof process & {
+    getBuiltinModule?: (moduleName: string) => CryptoModule | undefined;
+  }).getBuiltinModule;
+
+  if (typeof builtinLoader !== "function") {
+    throw new Error("Builtin module 'crypto' is unavailable in this runtime.");
+  }
+
+  const loaded = builtinLoader("crypto");
+  if (!loaded) {
+    throw new Error("Builtin module 'crypto' is unavailable in this runtime.");
+  }
+
+  cachedCryptoModule = loaded;
+  return cachedCryptoModule;
+};
 
 export type CustomThemeColors = {
   background: string;
@@ -1442,6 +1469,7 @@ const getBotTokenEncryptionKey = () => {
     return null;
   }
 
+  const { createHash } = getCryptoModule();
   return createHash("sha256").update(configured).digest();
 };
 
@@ -1451,6 +1479,7 @@ const encryptBotToken = (token: string) => {
     throw new Error("Missing BOT_TOKEN_ENCRYPTION_KEY or SESSION_SECRET for bot token encryption.");
   }
 
+  const { createCipheriv, randomBytes } = getCryptoModule();
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
   const encrypted = Buffer.concat([cipher.update(token, "utf8"), cipher.final()]);
@@ -1474,6 +1503,7 @@ const decryptBotToken = (cipherText: string) => {
   const tag = Buffer.from(tagRaw, "base64");
   const encrypted = Buffer.from(encryptedRaw, "base64");
 
+  const { createDecipheriv } = getCryptoModule();
   const decipher = createDecipheriv("aes-256-gcm", key, iv);
   decipher.setAuthTag(tag);
 

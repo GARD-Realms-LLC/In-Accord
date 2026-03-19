@@ -1,7 +1,7 @@
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { NextResponse } from "next/server";
-import { Readable, Transform } from "node:stream";
-import type { ReadableStream as NodeReadableStream } from "node:stream/web";
+import { Readable, Transform } from "stream";
+import type { ReadableStream as NodeReadableStream } from "stream/web";
 
 import { appendBannerDebugEvent } from "@/lib/banner-debug";
 

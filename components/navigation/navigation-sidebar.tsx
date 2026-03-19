@@ -3,7 +3,11 @@ import { sql } from "drizzle-orm";
 import { currentProfile } from "@/lib/current-profile";
 import { db } from "@/lib/db";
 import { isInAccordAdministrator, isInAccordDeveloper } from "@/lib/in-accord-admin";
+import { ensureAnnouncementChannelSchema } from "@/lib/announcement-channels";
 import { ensureFriendRelationsSchema } from "@/lib/friend-relations";
+import { ChannelType } from "@/lib/db/types";
+import { listUnreadChannelIds } from "@/lib/channel-read-state";
+import { resolveMemberContext, visibleChannelIdsForMember } from "@/lib/channel-permissions";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { NavigationAction } from "@/components/navigation/navigation-action";
@@ -56,6 +60,83 @@ export const NavigationSidebar = async () => {
   const myServers = servers.filter((item) => item.profileId === profile.id);
   const joinedServers = servers.filter((item) => item.profileId !== profile.id);
   const fallbackServerId = myServers[0]?.id ?? joinedServers[0]?.id;
+  const serverIds = servers.map((item) => item.id);
+
+  const announcementChannelsByServerId = new Map<string, string[]>();
+
+  if (serverIds.length > 0) {
+    await ensureAnnouncementChannelSchema();
+    const announcementChannelsResult = await db.execute(sql`
+      select
+        c."id" as "id",
+        c."serverId" as "serverId"
+      from "Channel" c
+      where c."serverId" in (${sql.join(serverIds.map((id) => sql`${id}`), sql`, `)})
+        and c."type" = ${ChannelType.ANNOUNCEMENT}
+    `);
+
+    const announcementChannelRows = (announcementChannelsResult as unknown as {
+      rows: Array<{
+        id: string;
+        serverId: string;
+      }>;
+    }).rows;
+
+    for (const row of announcementChannelRows) {
+      const bucket = announcementChannelsByServerId.get(row.serverId) ?? [];
+      bucket.push(row.id);
+      announcementChannelsByServerId.set(row.serverId, bucket);
+    }
+  }
+
+  const visibleAnnouncementChannelIdsByServerId = new Map<string, string[]>();
+
+  await Promise.all(
+    serverIds.map(async (serverId) => {
+      const announcementChannelIds = announcementChannelsByServerId.get(serverId) ?? [];
+      if (announcementChannelIds.length === 0) {
+        visibleAnnouncementChannelIdsByServerId.set(serverId, []);
+        return;
+      }
+
+      const memberContext = await resolveMemberContext({
+        profileId: profile.id,
+        serverId,
+      });
+
+      if (!memberContext) {
+        visibleAnnouncementChannelIdsByServerId.set(serverId, []);
+        return;
+      }
+
+      const visibleIds = await visibleChannelIdsForMember({
+        serverId,
+        memberContext,
+        channelIds: announcementChannelIds,
+      });
+
+      visibleAnnouncementChannelIdsByServerId.set(
+        serverId,
+        announcementChannelIds.filter((channelId) => visibleIds.has(channelId))
+      );
+    })
+  );
+
+  const unreadAnnouncementChannelIds = await listUnreadChannelIds({
+    profileId: profile.id,
+    channelIds: Array.from(visibleAnnouncementChannelIdsByServerId.values()).flat(),
+  });
+
+  const addUnreadState = <T extends { id: string }>(items: T[]) =>
+    items.map((item) => ({
+      ...item,
+      hasUnreadAnnouncement: (visibleAnnouncementChannelIdsByServerId.get(item.id) ?? []).some((channelId) =>
+        unreadAnnouncementChannelIds.has(channelId)
+      ),
+    }));
+
+  const myServersWithUnread = addUnreadState(myServers);
+  const joinedServersWithUnread = addUnreadState(joinedServers);
 
   const canSeeAdminTotalsButtons =
     isInAccordAdministrator(profile.role) || isInAccordDeveloper(profile.role);
@@ -188,23 +269,23 @@ export const NavigationSidebar = async () => {
         </>
       ) : null}
 
-      <div className="h-[2px] w-[85%] rounded bg-zinc-700 dark:bg-zinc-200" />
+      <div className="h-0.5 w-[85%] rounded bg-zinc-700 dark:bg-zinc-200" />
 
       <NavigationUsersHomeButton />
       <NavigationInAboardButton />
       <NavigationAction />
       <NavigationJoinAction />
-      <Separator className="h-[2px] bg-zinc-300 dark:bg-zinc-700 rounded-md w-10 mx-auto" />
+      <Separator className="mx-auto h-0.5 w-10 rounded-md bg-zinc-300 dark:bg-zinc-700" />
       <ScrollArea className="settings-scrollbar min-h-0 flex-1 w-full">
         <NavigationServersCollection
-          myServers={myServers}
-          joinedServers={joinedServers}
+          myServers={myServersWithUnread}
+          joinedServers={joinedServersWithUnread}
           fallbackServerId={fallbackServerId}
         />
       </ScrollArea>
 
       <div className="w-full px-3 pb-1">
-        <div className="mx-auto w-full max-w-[120px] text-center text-[8px] font-semibold uppercase tracking-[0.04em] text-zinc-700 dark:text-zinc-300">
+        <div className="mx-auto w-full max-w-30 text-center text-[8px] font-semibold uppercase tracking-[0.04em] text-zinc-700 dark:text-zinc-300">
           <div className="flex flex-col items-center gap-1">
             <div className="mb-1 h-0.5 w-full rounded-none bg-blue-900 dark:bg-blue-200" />
             <div className="w-full rounded-md border border-zinc-700/70 bg-zinc-700 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.04em] text-zinc-100 dark:border-zinc-600 dark:bg-zinc-700 dark:text-zinc-100">
@@ -229,3 +310,4 @@ export const NavigationSidebar = async () => {
     </div>
   );
 };
+

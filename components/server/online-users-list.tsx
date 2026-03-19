@@ -1,13 +1,34 @@
 "use client";
 
-import { Ban, Crown, Flag, MessageCircle, Network, UserPlus, Users as UsersIcon, Wrench } from "lucide-react";
+import {
+  Ban,
+  Check,
+  Clock3,
+  Crown,
+  Flag,
+  MessageCircle,
+  Network,
+  UserPlus,
+  Users as UsersIcon,
+  Wrench,
+} from "lucide-react";
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import axios from "axios";
 
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ActionTooltip } from "@/components/action-tooltip";
 import { BannerImage } from "@/components/ui/banner-image";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -20,11 +41,27 @@ import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-
 import { UserAvatar } from "@/components/user-avatar";
 import { BotCommandsDialog } from "@/components/bot-commands-dialog";
 import { MemberRole } from "@/lib/db/types";
-import { isInAccordAdministrator, isInAccordDeveloper, isInAccordModerator } from "@/lib/in-accord-admin";
+import {
+  isInAccordAdministrator,
+  isInAccordDeveloper,
+  isInAccordModerator,
+} from "@/lib/in-accord-admin";
 import { isBotUser } from "@/lib/is-bot-user";
 import { resolveBannerUrl } from "@/lib/asset-url";
 import { resolveProfileIcons, type ProfileIcon } from "@/lib/profile-icons";
-import { formatPresenceStatusLabel, normalizePresenceStatus, presenceStatusDotClassMap } from "@/lib/presence-status";
+import {
+  formatPresenceStatusLabel,
+  normalizePresenceStatus,
+  presenceStatusDotClassMap,
+} from "@/lib/presence-status";
+import {
+  getDirectFriendRelationshipLabel,
+  getDirectFriendStatusFromRequestResponse,
+  normalizeDirectFriendStatus,
+  type DirectFriendStatus,
+  type FriendRequestPostResponse,
+} from "@/lib/direct-friend-status";
+import { cn } from "@/lib/utils";
 
 type OnlineRailUser = {
   id: string;
@@ -47,7 +84,7 @@ type OnlineRailUser = {
 
 type OnlineMutualProfileData = {
   isDirectFriend?: boolean;
-  directFriendStatus?: "self" | "friends" | "not_friends";
+  directFriendStatus?: DirectFriendStatus;
   mutualServersPercent?: number;
   mutualServersCount?: number;
   mutualFriendsCount?: number;
@@ -130,8 +167,12 @@ export const OnlineUsersList = ({
   const profileCardRequestSequenceRef = useRef(0);
   const params = useParams();
   const router = useRouter();
-  const [activeProfileCardProfileId, setActiveProfileCardProfileId] = useState<string | null>(null);
-  const [activeProfileCardLoadError, setActiveProfileCardLoadError] = useState<string | null>(null);
+  const [activeProfileCardProfileId, setActiveProfileCardProfileId] = useState<
+    string | null
+  >(null);
+  const [activeProfileCardLoadError, setActiveProfileCardLoadError] = useState<
+    string | null
+  >(null);
   const [activeProfileCard, setActiveProfileCard] = useState<{
     pronouns: string | null;
     comment: string | null;
@@ -148,7 +189,7 @@ export const OnlineUsersList = ({
     effectiveProfileEffectUrl?: string | null;
     effectiveBannerUrl?: string | null;
     isDirectFriend?: boolean;
-    directFriendStatus?: "self" | "friends" | "not_friends";
+    directFriendStatus?: DirectFriendStatus;
     mutualServersPercent?: number;
     selectedServerTag: {
       serverId: string;
@@ -169,14 +210,23 @@ export const OnlineUsersList = ({
       imageUrl: string;
     }>;
   } | null>(null);
-  const [loadingProfileCardId, setLoadingProfileCardId] = useState<string | null>(null);
+  const [loadingProfileCardId, setLoadingProfileCardId] = useState<
+    string | null
+  >(null);
   const [botCommandsByProfileId, setBotCommandsByProfileId] = useState<
     Record<string, { botName: string; commands: string[] }>
   >({});
-  const [loadingBotCommandsProfileId, setLoadingBotCommandsProfileId] = useState<string | null>(null);
-  const [commandsDialogProfileId, setCommandsDialogProfileId] = useState<string | null>(null);
-  const [collapsedByGroup, setCollapsedByGroup] = useState<Record<string, boolean>>({});
-  const [orderedRoleGroups, setOrderedRoleGroups] = useState<Array<{ id: string; name: string; position?: number }>>([]);
+  const [loadingBotCommandsProfileId, setLoadingBotCommandsProfileId] =
+    useState<string | null>(null);
+  const [commandsDialogProfileId, setCommandsDialogProfileId] = useState<
+    string | null
+  >(null);
+  const [collapsedByGroup, setCollapsedByGroup] = useState<
+    Record<string, boolean>
+  >({});
+  const [orderedRoleGroups, setOrderedRoleGroups] = useState<
+    Array<{ id: string; name: string; position?: number }>
+  >([]);
   const [draggedGroupId, setDraggedGroupId] = useState<string | null>(null);
   const [dragOverGroupId, setDragOverGroupId] = useState<string | null>(null);
   const [isSavingGroupOrder, setIsSavingGroupOrder] = useState(false);
@@ -200,7 +250,7 @@ export const OnlineUsersList = ({
     current: Record<string, TValue>,
     key: string,
     value: TValue,
-    limit: number
+    limit: number,
   ) => {
     const keys = Object.keys(current);
     const keyExists = Object.prototype.hasOwnProperty.call(current, key);
@@ -254,90 +304,106 @@ export const OnlineUsersList = ({
 
       const [cardResult, mutualsResult] = await Promise.allSettled([
         axios.get<{
-        pronouns?: string | null;
-        comment?: string | null;
+          pronouns?: string | null;
+          comment?: string | null;
           effectiveImageUrl?: string | null;
           isDirectFriend?: boolean;
-          directFriendStatus?: "self" | "friends" | "not_friends";
+          directFriendStatus?: DirectFriendStatus;
           nameplateLabel?: string | null;
           nameplateColor?: string | null;
           nameplateImageUrl?: string | null;
           effectiveNameplateLabel?: string | null;
           effectiveNameplateColor?: string | null;
           effectiveNameplateImageUrl?: string | null;
-        profileIcons?: ProfileIcon[];
-        profileEffectUrl?: string | null;
-        effectiveAvatarDecorationUrl?: string | null;
-        effectiveProfileEffectUrl?: string | null;
-        effectiveBannerUrl?: string | null;
-        mutualServersPercent?: number;
-        mutualServersCount?: number;
-        mutualFriendsCount?: number;
-        mutualServers?: Array<{ id: string; name: string; imageUrl: string }>;
-        mutualFriends?: Array<{
-          profileId: string;
-          memberId: string | null;
-          serverId: string | null;
-          displayName: string;
-          email: string | null;
-          imageUrl: string;
-        }>;
-        selectedServerTag?: {
-          serverId: string;
-          serverName: string;
-          tagCode: string;
-          iconKey: string;
-          iconEmoji: string;
-        } | null;
-      }>(`/api/profile/${encodeURIComponent(profileId)}/card`, requestConfig),
-        axios.get<OnlineMutualProfileData>(`/api/profile/${encodeURIComponent(profileId)}/mutuals`, requestConfig),
+          profileIcons?: ProfileIcon[];
+          profileEffectUrl?: string | null;
+          effectiveAvatarDecorationUrl?: string | null;
+          effectiveProfileEffectUrl?: string | null;
+          effectiveBannerUrl?: string | null;
+          mutualServersPercent?: number;
+          mutualServersCount?: number;
+          mutualFriendsCount?: number;
+          mutualServers?: Array<{ id: string; name: string; imageUrl: string }>;
+          mutualFriends?: Array<{
+            profileId: string;
+            memberId: string | null;
+            serverId: string | null;
+            displayName: string;
+            email: string | null;
+            imageUrl: string;
+          }>;
+          selectedServerTag?: {
+            serverId: string;
+            serverName: string;
+            tagCode: string;
+            iconKey: string;
+            iconEmoji: string;
+          } | null;
+        }>(`/api/profile/${encodeURIComponent(profileId)}/card`, requestConfig),
+        axios.get<OnlineMutualProfileData>(
+          `/api/profile/${encodeURIComponent(profileId)}/mutuals`,
+          requestConfig,
+        ),
       ]);
 
-      const response = cardResult.status === "fulfilled"
-        ? cardResult.value
-        : { data: {} as {
-            pronouns?: string | null;
-            comment?: string | null;
-            effectiveImageUrl?: string | null;
-            isDirectFriend?: boolean;
-            directFriendStatus?: "self" | "friends" | "not_friends";
-            nameplateLabel?: string | null;
-            nameplateColor?: string | null;
-            nameplateImageUrl?: string | null;
-            effectiveNameplateLabel?: string | null;
-            effectiveNameplateColor?: string | null;
-            effectiveNameplateImageUrl?: string | null;
-            profileIcons?: ProfileIcon[];
-            profileEffectUrl?: string | null;
-            effectiveAvatarDecorationUrl?: string | null;
-            effectiveProfileEffectUrl?: string | null;
-            effectiveBannerUrl?: string | null;
-            mutualServersPercent?: number;
-            mutualServersCount?: number;
-            mutualFriendsCount?: number;
-            mutualServers?: Array<{ id: string; name: string; imageUrl: string }>;
-            mutualFriends?: Array<{
-              profileId: string;
-              memberId: string | null;
-              serverId: string | null;
-              displayName: string;
-              email: string | null;
-              imageUrl: string;
-            }>;
-            selectedServerTag?: {
-              serverId: string;
-              serverName: string;
-              tagCode: string;
-              iconKey: string;
-              iconEmoji: string;
-            } | null;
-          } };
-      const mutualData = mutualsResult.status === "fulfilled"
-        ? mutualsResult.value.data
-        : null;
+      const response =
+        cardResult.status === "fulfilled"
+          ? cardResult.value
+          : {
+              data: {} as {
+                pronouns?: string | null;
+                comment?: string | null;
+                effectiveImageUrl?: string | null;
+                isDirectFriend?: boolean;
+                directFriendStatus?: DirectFriendStatus;
+                nameplateLabel?: string | null;
+                nameplateColor?: string | null;
+                nameplateImageUrl?: string | null;
+                effectiveNameplateLabel?: string | null;
+                effectiveNameplateColor?: string | null;
+                effectiveNameplateImageUrl?: string | null;
+                profileIcons?: ProfileIcon[];
+                profileEffectUrl?: string | null;
+                effectiveAvatarDecorationUrl?: string | null;
+                effectiveProfileEffectUrl?: string | null;
+                effectiveBannerUrl?: string | null;
+                mutualServersPercent?: number;
+                mutualServersCount?: number;
+                mutualFriendsCount?: number;
+                mutualServers?: Array<{
+                  id: string;
+                  name: string;
+                  imageUrl: string;
+                }>;
+                mutualFriends?: Array<{
+                  profileId: string;
+                  memberId: string | null;
+                  serverId: string | null;
+                  displayName: string;
+                  email: string | null;
+                  imageUrl: string;
+                }>;
+                selectedServerTag?: {
+                  serverId: string;
+                  serverName: string;
+                  tagCode: string;
+                  iconKey: string;
+                  iconEmoji: string;
+                } | null;
+              },
+            };
+      const mutualData =
+        mutualsResult.status === "fulfilled" ? mutualsResult.value.data : null;
 
-      if (cardResult.status === "rejected" && mutualsResult.status === "rejected") {
-        throw mutualsResult.reason ?? cardResult.reason ?? new Error("Live profile data is unavailable.");
+      if (
+        cardResult.status === "rejected" &&
+        mutualsResult.status === "rejected"
+      ) {
+        throw (
+          mutualsResult.reason ??
+          cardResult.reason ??
+          new Error("Live profile data is unavailable.")
+        );
       }
 
       const selectedServerTag =
@@ -347,11 +413,13 @@ export const OnlineUsersList = ({
           ? response.data.selectedServerTag
           : null;
       const pronouns =
-        typeof response.data?.pronouns === "string" && response.data.pronouns.trim().length > 0
+        typeof response.data?.pronouns === "string" &&
+        response.data.pronouns.trim().length > 0
           ? response.data.pronouns.trim()
           : null;
       const comment =
-        typeof response.data?.comment === "string" && response.data.comment.trim().length > 0
+        typeof response.data?.comment === "string" &&
+        response.data.comment.trim().length > 0
           ? response.data.comment.trim()
           : null;
 
@@ -360,34 +428,43 @@ export const OnlineUsersList = ({
           pronouns,
           comment,
           effectiveImageUrl:
-            typeof response.data?.effectiveImageUrl === "string" && response.data.effectiveImageUrl.trim().length > 0
+            typeof response.data?.effectiveImageUrl === "string" &&
+            response.data.effectiveImageUrl.trim().length > 0
               ? response.data.effectiveImageUrl.trim()
               : null,
           nameplateLabel:
-            typeof response.data?.nameplateLabel === "string" && response.data.nameplateLabel.trim().length > 0
+            typeof response.data?.nameplateLabel === "string" &&
+            response.data.nameplateLabel.trim().length > 0
               ? response.data.nameplateLabel.trim()
               : null,
           nameplateColor:
-            typeof response.data?.nameplateColor === "string" && response.data.nameplateColor.trim().length > 0
+            typeof response.data?.nameplateColor === "string" &&
+            response.data.nameplateColor.trim().length > 0
               ? response.data.nameplateColor.trim()
               : null,
           nameplateImageUrl:
-            typeof response.data?.nameplateImageUrl === "string" && response.data.nameplateImageUrl.trim().length > 0
+            typeof response.data?.nameplateImageUrl === "string" &&
+            response.data.nameplateImageUrl.trim().length > 0
               ? response.data.nameplateImageUrl.trim()
               : null,
           effectiveNameplateLabel:
-            typeof response.data?.effectiveNameplateLabel === "string" && response.data.effectiveNameplateLabel.trim().length > 0
+            typeof response.data?.effectiveNameplateLabel === "string" &&
+            response.data.effectiveNameplateLabel.trim().length > 0
               ? response.data.effectiveNameplateLabel.trim()
               : null,
           effectiveNameplateColor:
-            typeof response.data?.effectiveNameplateColor === "string" && response.data.effectiveNameplateColor.trim().length > 0
+            typeof response.data?.effectiveNameplateColor === "string" &&
+            response.data.effectiveNameplateColor.trim().length > 0
               ? response.data.effectiveNameplateColor.trim()
               : null,
           effectiveNameplateImageUrl:
-            typeof response.data?.effectiveNameplateImageUrl === "string" && response.data.effectiveNameplateImageUrl.trim().length > 0
+            typeof response.data?.effectiveNameplateImageUrl === "string" &&
+            response.data.effectiveNameplateImageUrl.trim().length > 0
               ? response.data.effectiveNameplateImageUrl.trim()
               : null,
-          profileIcons: Array.isArray(response.data?.profileIcons) ? response.data.profileIcons : [],
+          profileIcons: Array.isArray(response.data?.profileIcons)
+            ? response.data.profileIcons
+            : [],
           profileEffectUrl:
             typeof response.data?.profileEffectUrl === "string" &&
             response.data.profileEffectUrl.trim().length > 0
@@ -411,12 +488,10 @@ export const OnlineUsersList = ({
           isDirectFriend: mutualData
             ? Boolean(mutualData.isDirectFriend)
             : Boolean(response.data?.isDirectFriend),
-          directFriendStatus:
-            mutualData?.directFriendStatus === "friends" || mutualData?.directFriendStatus === "self"
-              ? mutualData.directFriendStatus
-              : response.data?.directFriendStatus === "friends" || response.data?.directFriendStatus === "self"
-                ? response.data.directFriendStatus
-                : "not_friends",
+          directFriendStatus: normalizeDirectFriendStatus(
+            mutualData?.directFriendStatus,
+            normalizeDirectFriendStatus(response.data?.directFriendStatus),
+          ),
           mutualServersPercent:
             typeof mutualData?.mutualServersPercent === "number"
               ? mutualData.mutualServersPercent
@@ -436,12 +511,12 @@ export const OnlineUsersList = ({
                 ? response.data.mutualFriendsCount
                 : 0,
           mutualServers: Array.isArray(mutualData?.mutualServers)
-            ? mutualData?.mutualServers ?? []
+            ? (mutualData?.mutualServers ?? [])
             : Array.isArray(response.data?.mutualServers)
               ? response.data.mutualServers
               : [],
           mutualFriends: Array.isArray(mutualData?.mutualFriends)
-            ? mutualData?.mutualFriends ?? []
+            ? (mutualData?.mutualFriends ?? [])
             : Array.isArray(response.data?.mutualFriends)
               ? response.data.mutualFriends
               : [],
@@ -463,7 +538,11 @@ export const OnlineUsersList = ({
   };
 
   const loadBotCommands = async (memberId: string, profileId: string) => {
-    if (!profileId || botCommandsByProfileId[profileId] || loadingBotCommandIdsRef.current.has(profileId)) {
+    if (
+      !profileId ||
+      botCommandsByProfileId[profileId] ||
+      loadingBotCommandIdsRef.current.has(profileId)
+    ) {
       return;
     }
 
@@ -471,14 +550,14 @@ export const OnlineUsersList = ({
       loadingBotCommandIdsRef.current.add(profileId);
       setLoadingBotCommandsProfileId(profileId);
 
-      const response = await axios.get<{ botName?: string; commands?: string[] }>(
-        `/api/profile/${encodeURIComponent(profileId)}/bot-commands`,
-        {
-          params: {
-            memberId,
-          },
-        }
-      );
+      const response = await axios.get<{
+        botName?: string;
+        commands?: string[];
+      }>(`/api/profile/${encodeURIComponent(profileId)}/bot-commands`, {
+        params: {
+          memberId,
+        },
+      });
 
       const commands = Array.isArray(response.data?.commands)
         ? response.data.commands
@@ -495,21 +574,37 @@ export const OnlineUsersList = ({
             botName: String(response.data?.botName ?? "").trim() || "Bot",
             commands,
           },
-          BOT_COMMANDS_CACHE_LIMIT
-        )
+          BOT_COMMANDS_CACHE_LIMIT,
+        ),
       );
     } catch {
       // not a configured bot profile or unavailable
     } finally {
       loadingBotCommandIdsRef.current.delete(profileId);
-      setLoadingBotCommandsProfileId((prev) => (prev === profileId ? null : prev));
+      setLoadingBotCommandsProfileId((prev) =>
+        prev === profileId ? null : prev,
+      );
     }
   };
 
   const sortedUsers = useMemo(() => {
     return [...users].sort((a, b) => {
-      const aName = (a.profileName || a.realName || a.displayName || a.email || a.profileId || "").toLowerCase();
-      const bName = (b.profileName || b.realName || b.displayName || b.email || b.profileId || "").toLowerCase();
+      const aName = (
+        a.profileName ||
+        a.realName ||
+        a.displayName ||
+        a.email ||
+        a.profileId ||
+        ""
+      ).toLowerCase();
+      const bName = (
+        b.profileName ||
+        b.realName ||
+        b.displayName ||
+        b.email ||
+        b.profileId ||
+        ""
+      ).toLowerCase();
       return aName.localeCompare(bName);
     });
   }, [users]);
@@ -521,7 +616,7 @@ export const OnlineUsersList = ({
   const reorderRoleGroups = (
     groups: Array<{ id: string; name: string; position?: number }>,
     sourceId: string,
-    targetId: string
+    targetId: string,
   ) => {
     if (!sourceId || !targetId || sourceId === targetId) {
       return groups;
@@ -540,13 +635,19 @@ export const OnlineUsersList = ({
     return next;
   };
 
-  const persistRoleGroupOrder = async (nextGroups: Array<{ id: string; name: string; position?: number }>) => {
+  const persistRoleGroupOrder = async (
+    nextGroups: Array<{ id: string; name: string; position?: number }>,
+  ) => {
     if (!serverId || !canReorderRoleGroups) {
       return;
     }
 
     const rolesResponse = await axios.get<{
-      roles?: Array<{ id: string; position: number; showInOnlineMembers: boolean }>;
+      roles?: Array<{
+        id: string;
+        position: number;
+        showInOnlineMembers: boolean;
+      }>;
     }>(`/api/servers/${serverId}/roles`, {
       params: { _t: Date.now() },
       headers: {
@@ -556,7 +657,7 @@ export const OnlineUsersList = ({
     });
 
     const allRoles = [...(rolesResponse.data.roles ?? [])].sort(
-      (a, b) => Number(a.position ?? 0) - Number(b.position ?? 0)
+      (a, b) => Number(a.position ?? 0) - Number(b.position ?? 0),
     );
     if (allRoles.length === 0) {
       return;
@@ -580,7 +681,10 @@ export const OnlineUsersList = ({
     });
   };
 
-  const onGroupDragStart = (event: React.DragEvent<HTMLElement>, groupId: string) => {
+  const onGroupDragStart = (
+    event: React.DragEvent<HTMLElement>,
+    groupId: string,
+  ) => {
     if (!canReorderRoleGroups || isSavingGroupOrder) {
       return;
     }
@@ -600,7 +704,10 @@ export const OnlineUsersList = ({
     }, 0);
   };
 
-  const onGroupDragOver = (event: React.DragEvent<HTMLElement>, targetGroupId: string) => {
+  const onGroupDragOver = (
+    event: React.DragEvent<HTMLElement>,
+    targetGroupId: string,
+  ) => {
     if (!canReorderRoleGroups || isSavingGroupOrder) {
       return;
     }
@@ -612,7 +719,10 @@ export const OnlineUsersList = ({
     }
   };
 
-  const onGroupDrop = async (event: React.DragEvent<HTMLElement>, targetGroupId: string) => {
+  const onGroupDrop = async (
+    event: React.DragEvent<HTMLElement>,
+    targetGroupId: string,
+  ) => {
     event.preventDefault();
 
     if (!canReorderRoleGroups || isSavingGroupOrder) {
@@ -655,71 +765,138 @@ export const OnlineUsersList = ({
 
   const renderMemberRoleIcon = (role: unknown) => {
     if (isInAccordAdministrator(String(role ?? ""))) {
-      return <Crown className="h-4 w-4 mr-2 text-rose-500" aria-label="Administrator" />;
+      return (
+        <Crown
+          className="h-4 w-4 mr-2 text-rose-500"
+          aria-label="Administrator"
+        />
+      );
     }
 
     if (isInAccordModerator(String(role ?? ""))) {
-      return <ModeratorLineIcon className="h-4 w-4 mr-2 text-indigo-500" aria-label="Moderator" />;
+      return (
+        <ModeratorLineIcon
+          className="h-4 w-4 mr-2 text-indigo-500"
+          aria-label="Moderator"
+        />
+      );
     }
 
     return null;
   };
 
   const renderMember = (member: OnlineRailUser) => {
-    const profileCard = activeProfileCardProfileId === member.profileId ? activeProfileCard : null;
-    const profileCardLoadError = activeProfileCardProfileId === member.profileId ? activeProfileCardLoadError : null;
-    const mutualServersCount = profileCard?.mutualServers?.length || (typeof profileCard?.mutualServersCount === "number" ? profileCard.mutualServersCount : 0);
-    const mutualFriendsCount = profileCard?.mutualFriends?.length || (typeof profileCard?.mutualFriendsCount === "number" ? profileCard.mutualFriendsCount : 0);
-    const mutualServersPercent = typeof profileCard?.mutualServersPercent === "number" ? profileCard.mutualServersPercent : 0;
+    const profileCard =
+      activeProfileCardProfileId === member.profileId
+        ? activeProfileCard
+        : null;
+    const profileCardLoadError =
+      activeProfileCardProfileId === member.profileId
+        ? activeProfileCardLoadError
+        : null;
+    const mutualServersCount =
+      profileCard?.mutualServers?.length ||
+      (typeof profileCard?.mutualServersCount === "number"
+        ? profileCard.mutualServersCount
+        : 0);
+    const mutualFriendsCount =
+      profileCard?.mutualFriends?.length ||
+      (typeof profileCard?.mutualFriendsCount === "number"
+        ? profileCard.mutualFriendsCount
+        : 0);
+    const mutualServersPercent =
+      typeof profileCard?.mutualServersPercent === "number"
+        ? profileCard.mutualServersPercent
+        : 0;
     const hasProfileCardLoadError = Boolean(profileCardLoadError);
     const isSelfProfileCard = profileCard?.directFriendStatus === "self";
-    const mutualServersLabel = mutualServersCount > 0
-      ? `${mutualServersPercent}% in common · ${mutualServersCount}`
-      : "NOT WORKING";
-    const mutualFriendsLabel = mutualFriendsCount > 0
-      ? `${mutualFriendsCount} in common`
-      : "NOT WORKING";
-    const directFriendRelationshipLabel = profileCard?.directFriendStatus === "self"
-      ? "This is you"
-      : profileCard?.isDirectFriend
-        ? "Direct friends"
-        : "Not direct friends";
-    const normalizedPresenceStatus = normalizePresenceStatus(member.presenceStatus);
+    const mutualServersLabel =
+      mutualServersCount > 0
+        ? `${mutualServersPercent}% in common · ${mutualServersCount}`
+        : "NOT WORKING";
+    const mutualFriendsLabel =
+      mutualFriendsCount > 0
+        ? `${mutualFriendsCount} in common`
+        : "NOT WORKING";
+    const resolvedDirectFriendStatus = normalizeDirectFriendStatus(
+      profileCard?.directFriendStatus,
+      profileCard?.isDirectFriend ? "friends" : "not_friends",
+    );
+    const directFriendRelationshipLabel = getDirectFriendRelationshipLabel(
+      resolvedDirectFriendStatus,
+    );
+    const friendActionTooltipLabel =
+      resolvedDirectFriendStatus === "friends"
+        ? "Already direct friends"
+        : resolvedDirectFriendStatus === "incoming_pending"
+          ? "Incoming friend request pending"
+          : resolvedDirectFriendStatus === "outgoing_pending"
+            ? "Friend request sent"
+            : "Add Friend";
+    const friendActionDisabled =
+      loadingProfileCardId === member.profileId ||
+      hasProfileCardLoadError ||
+      resolvedDirectFriendStatus !== "not_friends";
+    const friendActionIcon =
+      resolvedDirectFriendStatus === "friends" ? (
+        <Check className="h-4 w-4" />
+      ) : resolvedDirectFriendStatus === "incoming_pending" ||
+        resolvedDirectFriendStatus === "outgoing_pending" ? (
+        <Clock3 className="h-4 w-4" />
+      ) : (
+        <UserPlus className="h-4 w-4" />
+      );
+    const normalizedPresenceStatus = normalizePresenceStatus(
+      member.presenceStatus,
+    );
     const memberCurrentGame = member.currentGame?.trim() || null;
     const isGlobalAdmin = isInAccordAdministrator(member.globalRole);
     const isGlobalDeveloper = isInAccordDeveloper(member.globalRole);
     const isGlobalModerator = isInAccordModerator(member.globalRole);
-    const highestRoleIcon = isGlobalDeveloper
-      ? <Wrench className="h-4 w-4 shrink-0 text-cyan-400" aria-label="Developer" />
-      : isGlobalAdmin
-        ? <Crown className="h-4 w-4 shrink-0 text-rose-500" aria-label="Administrator" />
-      : isGlobalModerator
-        ? <ModeratorLineIcon className="h-4 w-4 shrink-0 text-indigo-500" aria-label="Moderator" />
-      : isInAccordAdministrator(member.role)
-        ? <Crown className="h-4 w-4 shrink-0 text-rose-500" />
-        : isInAccordModerator(member.role)
-          ? <ModeratorLineIcon className="h-4 w-4 shrink-0 text-indigo-500" />
-          : null;
+    const highestRoleIcon = isGlobalDeveloper ? (
+      <Wrench
+        className="h-4 w-4 shrink-0 text-cyan-400"
+        aria-label="Developer"
+      />
+    ) : isGlobalAdmin ? (
+      <Crown
+        className="h-4 w-4 shrink-0 text-rose-500"
+        aria-label="Administrator"
+      />
+    ) : isGlobalModerator ? (
+      <ModeratorLineIcon
+        className="h-4 w-4 shrink-0 text-indigo-500"
+        aria-label="Moderator"
+      />
+    ) : isInAccordAdministrator(member.role) ? (
+      <Crown className="h-4 w-4 shrink-0 text-rose-500" />
+    ) : isInAccordModerator(member.role) ? (
+      <ModeratorLineIcon className="h-4 w-4 shrink-0 text-indigo-500" />
+    ) : null;
     const highestRoleLabel = isGlobalDeveloper
       ? "Developer"
       : isGlobalAdmin
         ? "Administrator"
-      : isGlobalModerator
-        ? "Moderator"
-      : isInAccordAdministrator(member.role)
-          ? "Administrator"
-        : isInAccordModerator(member.role)
+        : isGlobalModerator
           ? "Moderator"
-          : null;
+          : isInAccordAdministrator(member.role)
+            ? "Administrator"
+            : isInAccordModerator(member.role)
+              ? "Moderator"
+              : null;
     const showBotBadge = isBotUser({
       role: member.globalRole,
       name: member.profileName || member.realName || member.displayName,
       email: member.email,
     });
-    const canShowBotCommands = showBotBadge || member.profileId.startsWith("botcfg_");
+    const canShowBotCommands =
+      showBotBadge || member.profileId.startsWith("botcfg_");
     const roleAndMetaIcons = (
       <>
-        <NewUserCloverBadge createdAt={member.joinedAt} className="text-[11px]" />
+        <NewUserCloverBadge
+          createdAt={member.joinedAt}
+          className="text-[11px]"
+        />
         {showBotBadge ? <BotAppBadge className="h-4 px-1 text-[9px]" /> : null}
         {highestRoleIcon && highestRoleLabel ? (
           <ActionTooltip label={highestRoleLabel} align="center">
@@ -750,19 +927,63 @@ export const OnlineUsersList = ({
         return;
       }
 
-      router.push(`/users?serverId=${encodeURIComponent(serverIdFromRoute)}&memberId=${encodeURIComponent(member.id)}`);
+      router.push(
+        `/users?serverId=${encodeURIComponent(serverIdFromRoute)}&memberId=${encodeURIComponent(member.id)}`,
+      );
     };
 
     const onAddFriend = async () => {
       try {
-        await axios.post("/api/friends/requests", {
-          profileId: member.profileId,
-        });
+        const response = await axios.post<FriendRequestPostResponse>(
+          "/api/friends/requests",
+          {
+            profileId: member.profileId,
+          },
+        );
+
+        const nextRelationshipStatus = getDirectFriendStatusFromRequestResponse(
+          response.data,
+        );
+
+        if (
+          nextRelationshipStatus &&
+          activeProfileCardProfileId === member.profileId
+        ) {
+          setActiveProfileCard((current) =>
+            current
+              ? {
+                  ...current,
+                  isDirectFriend: nextRelationshipStatus === "friends",
+                  directFriendStatus: nextRelationshipStatus,
+                }
+              : current,
+          );
+        }
+
         router.refresh();
+
+        if (nextRelationshipStatus === "friends") {
+          window.alert("You are already direct friends.");
+          return;
+        }
+
+        if (nextRelationshipStatus === "incoming_pending") {
+          window.alert(
+            "This user already sent you a friend request. Accept it from Pending.",
+          );
+          return;
+        }
+
+        if (response.data.created === false) {
+          window.alert("Friend request already pending.");
+          return;
+        }
+
         window.alert("Friend request sent.");
       } catch (error) {
         const message = axios.isAxiosError(error)
-          ? (error.response?.data as { error?: string } | undefined)?.error ?? "Failed to send friend request."
+          ? ((error.response?.data as { error?: string } | undefined)?.error ??
+            "Failed to send friend request.")
           : "Failed to send friend request.";
         window.alert(message);
       }
@@ -777,7 +998,8 @@ export const OnlineUsersList = ({
         window.alert("User blocked.");
       } catch (error) {
         const message = axios.isAxiosError(error)
-          ? (error.response?.data as { error?: string } | undefined)?.error ?? "Failed to block user."
+          ? ((error.response?.data as { error?: string } | undefined)?.error ??
+            "Failed to block user.")
           : "Failed to block user.";
         window.alert(message);
       }
@@ -793,7 +1015,8 @@ export const OnlineUsersList = ({
         window.alert("User report submitted.");
       } catch (error) {
         const message = axios.isAxiosError(error)
-          ? (error.response?.data as { error?: string } | undefined)?.error ?? "Failed to submit report."
+          ? ((error.response?.data as { error?: string } | undefined)?.error ??
+            "Failed to submit report.")
           : "Failed to submit report.";
         window.alert(message);
       }
@@ -802,7 +1025,11 @@ export const OnlineUsersList = ({
     const onOpenMutualDetailsForMember = (type: "servers" | "friends") => {
       setOpenMutualDetails({
         type,
-        displayName: member.profileName || member.realName || member.displayName || "Unknown User",
+        displayName:
+          member.profileName ||
+          member.realName ||
+          member.displayName ||
+          "Unknown User",
         mutualServers: profileCard?.mutualServers ?? [],
         mutualFriends: profileCard?.mutualFriends ?? [],
       });
@@ -819,7 +1046,9 @@ export const OnlineUsersList = ({
             setActiveProfileCardProfileId(null);
             setActiveProfileCard(null);
             setActiveProfileCardLoadError(null);
-            setLoadingProfileCardId((prev) => (prev === member.profileId ? null : prev));
+            setLoadingProfileCardId((prev) =>
+              prev === member.profileId ? null : prev,
+            );
           }
         }}
       >
@@ -831,7 +1060,9 @@ export const OnlineUsersList = ({
           >
             <span className="relative inline-flex h-6 w-6 shrink-0">
               <UserAvatar
-                src={profileCard?.effectiveImageUrl ?? member.imageUrl ?? undefined}
+                src={
+                  profileCard?.effectiveImageUrl ?? member.imageUrl ?? undefined
+                }
                 decorationSrc={profileCard?.effectiveAvatarDecorationUrl}
                 className="h-6 w-6"
               />
@@ -842,7 +1073,12 @@ export const OnlineUsersList = ({
             </span>
             <div className="flex w-full min-w-0 items-center gap-1">
               <ProfileNameWithServerTag
-                name={member.profileName || member.realName || member.displayName || "No profile name"}
+                name={
+                  member.profileName ||
+                  member.realName ||
+                  member.displayName ||
+                  "No profile name"
+                }
                 profileId={member.profileId}
                 memberId={member.id}
                 containerClassName="w-full min-w-0"
@@ -861,13 +1097,25 @@ export const OnlineUsersList = ({
           align="start"
           className="relative w-[320px] overflow-hidden rounded-xl border border-black/30 bg-[#111214] p-0 text-[#dbdee1] shadow-2xl shadow-black/50"
         >
-          <ProfileEffectLayer src={profileCard?.effectiveProfileEffectUrl ?? profileCard?.profileEffectUrl ?? null} />
+          <ProfileEffectLayer
+            src={
+              profileCard?.effectiveProfileEffectUrl ??
+              profileCard?.profileEffectUrl ??
+              null
+            }
+          />
           <div className="relative h-24 bg-linear-to-r from-[#5865f2] via-[#4752c4] to-[#313338]">
             {(() => {
-              const resolvedBannerUrl = resolveBannerUrl(profileCard?.effectiveBannerUrl || member.bannerUrl || null);
+              const resolvedBannerUrl = resolveBannerUrl(
+                profileCard?.effectiveBannerUrl || member.bannerUrl || null,
+              );
 
               return resolvedBannerUrl ? (
-              <BannerImage src={resolvedBannerUrl} alt="User banner" className="object-cover" />
+                <BannerImage
+                  src={resolvedBannerUrl}
+                  alt="User banner"
+                  className="object-cover"
+                />
               ) : null;
             })()}
           </div>
@@ -875,7 +1123,9 @@ export const OnlineUsersList = ({
           <div className="relative p-3 pt-9">
             <div className="absolute -top-10 left-3 rounded-full border-4 border-[#111214]">
               <UserAvatar
-                src={profileCard?.effectiveImageUrl ?? member.imageUrl ?? undefined}
+                src={
+                  profileCard?.effectiveImageUrl ?? member.imageUrl ?? undefined
+                }
                 decorationSrc={profileCard?.effectiveAvatarDecorationUrl}
                 className="h-20 w-20"
               />
@@ -885,7 +1135,12 @@ export const OnlineUsersList = ({
               <ProfileIconRow icons={effectiveProfileIcons} className="mb-1" />
               <div className="flex w-full min-w-0 items-start gap-1.5">
                 <ProfileNameWithServerTag
-                  name={member.profileName || member.realName || member.displayName || "Unknown User"}
+                  name={
+                    member.profileName ||
+                    member.realName ||
+                    member.displayName ||
+                    "Unknown User"
+                  }
                   profileId={member.profileId}
                   memberId={member.id}
                   pronouns={profileCard?.pronouns || null}
@@ -910,7 +1165,13 @@ export const OnlineUsersList = ({
 
             <div className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] p-3 text-xs">
               <div className="space-y-1 text-[#dbdee1]">
-                <p>Name: {member.realName || member.profileName || member.displayName || "Unknown User"}</p>
+                <p>
+                  Name:{" "}
+                  {member.realName ||
+                    member.profileName ||
+                    member.displayName ||
+                    "Unknown User"}
+                </p>
                 <p>Email: {member.email || "N/A"}</p>
                 <p>Current Game: {memberCurrentGame || "Not in game"}</p>
                 <p>Role: {member.role}</p>
@@ -920,12 +1181,16 @@ export const OnlineUsersList = ({
             </div>
 
             {loadingProfileCardId === member.profileId ? (
-              <p className="mt-2 text-[11px] text-[#949ba4]">Loading server tag...</p>
+              <p className="mt-2 text-[11px] text-[#949ba4]">
+                Loading server tag...
+              </p>
             ) : null}
 
             {profileCard?.selectedServerTag ? (
               <div className="mt-2 rounded-lg border border-white/10 bg-[#1a1b1e] p-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">Server Tag</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                  Server Tag
+                </p>
                 <div className="mt-2">
                   <span
                     className="inline-flex items-center gap-1.5 rounded-full border border-[#5865f2]/35 bg-[#5865f2]/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#d7dcff]"
@@ -938,7 +1203,9 @@ export const OnlineUsersList = ({
               </div>
             ) : null}
 
-            <div className={`mt-3 grid gap-2 ${isSelfProfileCard ? "grid-cols-1" : "grid-cols-2"}`}>
+            <div
+              className={`mt-3 grid gap-2 ${isSelfProfileCard ? "grid-cols-1" : "grid-cols-2"}`}
+            >
               <div className="col-span-2 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-xs text-[#dbdee1]">
                 <span className="font-medium">Relationship: </span>
                 <span className="text-[#949ba4]">
@@ -954,7 +1221,10 @@ export const OnlineUsersList = ({
                   <button
                     type="button"
                     onClick={() => onOpenMutualDetailsForMember("servers")}
-                    disabled={loadingProfileCardId === member.profileId || hasProfileCardLoadError}
+                    disabled={
+                      loadingProfileCardId === member.profileId ||
+                      hasProfileCardLoadError
+                    }
                     className="flex items-center gap-2 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-left text-xs text-[#dbdee1] transition hover:bg-[#232428] disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Network className="h-4 w-4 shrink-0 text-[#949ba4]" />
@@ -972,7 +1242,10 @@ export const OnlineUsersList = ({
                   <button
                     type="button"
                     onClick={() => onOpenMutualDetailsForMember("friends")}
-                    disabled={loadingProfileCardId === member.profileId || hasProfileCardLoadError}
+                    disabled={
+                      loadingProfileCardId === member.profileId ||
+                      hasProfileCardLoadError
+                    }
                     className="flex items-center gap-2 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-left text-xs text-[#dbdee1] transition hover:bg-[#232428] disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <UsersIcon className="h-4 w-4 shrink-0 text-[#949ba4]" />
@@ -1004,22 +1277,35 @@ export const OnlineUsersList = ({
                     aria-label="Show bot commands"
                     title="Commands"
                   >
-                    {loadingBotCommandsProfileId === member.profileId ? "..." : "COMMANDS"}
+                    {loadingBotCommandsProfileId === member.profileId
+                      ? "..."
+                      : "COMMANDS"}
                   </button>
                 </ActionTooltip>
               ) : null}
 
-              <ActionTooltip label="Add Friend" align="center">
-                <button
-                  type="button"
-                  onClick={onAddFriend}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/15 bg-[#1e1f22] text-[#dbdee1] transition hover:bg-[#2a2b30]"
-                  aria-label="Add friend"
-                  title="Add Friend"
-                >
-                  <UserPlus className="h-4 w-4" />
-                </button>
-              </ActionTooltip>
+              {!isSelfProfileCard ? (
+                <ActionTooltip label={friendActionTooltipLabel} align="center">
+                  <button
+                    type="button"
+                    onClick={onAddFriend}
+                    disabled={friendActionDisabled}
+                    className={cn(
+                      "inline-flex h-8 w-8 items-center justify-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-70",
+                      resolvedDirectFriendStatus === "friends"
+                        ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-200"
+                        : resolvedDirectFriendStatus === "incoming_pending" ||
+                            resolvedDirectFriendStatus === "outgoing_pending"
+                          ? "border-amber-500/35 bg-amber-500/15 text-amber-200"
+                          : "border-white/15 bg-[#1e1f22] text-[#dbdee1] hover:bg-[#2a2b30]",
+                    )}
+                    aria-label={friendActionTooltipLabel}
+                    title={friendActionTooltipLabel}
+                  >
+                    {friendActionIcon}
+                  </button>
+                </ActionTooltip>
+              ) : null}
 
               <ActionTooltip label="Block" align="center">
                 <button
@@ -1061,7 +1347,10 @@ export const OnlineUsersList = ({
 
           <div className="flex items-center border-t border-white/10 p-3 pt-2 text-xs text-[#b5bac1]">
             {renderMemberRoleIcon(member.role)}
-            {formatPresenceStatusLabel(normalizedPresenceStatus, { showGameIcon: Boolean(memberCurrentGame) })} member
+            {formatPresenceStatusLabel(normalizedPresenceStatus, {
+              showGameIcon: Boolean(memberCurrentGame),
+            })}{" "}
+            member
           </div>
         </PopoverContent>
 
@@ -1070,7 +1359,7 @@ export const OnlineUsersList = ({
           onOpenChange={(open) => {
             if (!open) {
               setCommandsDialogProfileId((current) =>
-                current === member.profileId ? null : current
+                current === member.profileId ? null : current,
               );
             }
           }}
@@ -1122,7 +1411,9 @@ export const OnlineUsersList = ({
     }
 
     setOpenMutualDetails(null);
-    router.push(`/users?serverId=${encodeURIComponent(normalizedServerId)}&memberId=${encodeURIComponent(normalizedMemberId)}`);
+    router.push(
+      `/users?serverId=${encodeURIComponent(normalizedServerId)}&memberId=${encodeURIComponent(normalizedMemberId)}`,
+    );
   };
 
   const { usersByRoleGroup, unassignedUsers } = useMemo(() => {
@@ -1150,7 +1441,9 @@ export const OnlineUsersList = ({
         continue;
       }
 
-      const assignedRoleName = String(member.assignedRoleName ?? "").trim().toLowerCase();
+      const assignedRoleName = String(member.assignedRoleName ?? "")
+        .trim()
+        .toLowerCase();
       if (!assignedRoleName) {
         usersWithoutGroup.push(member);
         continue;
@@ -1173,14 +1466,21 @@ export const OnlineUsersList = ({
 
   return (
     <>
-      <Dialog open={Boolean(openMutualDetails)} onOpenChange={(open) => {
-        if (!open) {
-          setOpenMutualDetails(null);
-        }
-      }}>
+      <Dialog
+        open={Boolean(openMutualDetails)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setOpenMutualDetails(null);
+          }
+        }}
+      >
         <DialogContent className="max-w-lg overflow-hidden border-black/30 bg-[#111214] p-0 text-[#dbdee1]">
           <DialogHeader className="px-6 pt-6">
-            <DialogTitle>{openMutualDetails?.type === "servers" ? "Mutual Servers" : "Mutual Friends"}</DialogTitle>
+            <DialogTitle>
+              {openMutualDetails?.type === "servers"
+                ? "Mutual Servers"
+                : "Mutual Friends"}
+            </DialogTitle>
             <DialogDescription className="text-[#949ba4]">
               Shared with {openMutualDetails?.displayName || "this user"}
             </DialogDescription>
@@ -1188,43 +1488,60 @@ export const OnlineUsersList = ({
           <ScrollArea className="max-h-[min(60vh,28rem)] px-6 pb-6">
             <div className="space-y-2">
               {openMutualDetails?.type === "servers" ? (
-                openMutualDetails.mutualServers.length ? openMutualDetails.mutualServers.map((serverItem) => (
-                  <button
-                    key={serverItem.id}
-                    type="button"
-                    onClick={() => onOpenMutualServer(serverItem.id)}
-                    className="flex w-full items-center gap-3 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-left transition hover:bg-[#232428]"
-                  >
-                    <img src={serverItem.imageUrl} alt={serverItem.name} className="h-10 w-10 rounded-full object-cover" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-[#dbdee1]">{serverItem.name}</p>
-                    </div>
-                  </button>
-                )) : (
+                openMutualDetails.mutualServers.length ? (
+                  openMutualDetails.mutualServers.map((serverItem) => (
+                    <button
+                      key={serverItem.id}
+                      type="button"
+                      onClick={() => onOpenMutualServer(serverItem.id)}
+                      className="flex w-full items-center gap-3 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-left transition hover:bg-[#232428]"
+                    >
+                      <img
+                        src={serverItem.imageUrl}
+                        alt={serverItem.name}
+                        className="h-10 w-10 rounded-full object-cover"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-[#dbdee1]">
+                          {serverItem.name}
+                        </p>
+                      </div>
+                    </button>
+                  ))
+                ) : (
                   <div className="rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-4 text-sm text-[#949ba4]">
                     No mutual servers found.
                   </div>
                 )
-              ) : (
-                openMutualDetails?.mutualFriends.length ? openMutualDetails.mutualFriends.map((friendItem) => (
+              ) : openMutualDetails?.mutualFriends.length ? (
+                openMutualDetails.mutualFriends.map((friendItem) => (
                   <button
                     key={friendItem.profileId}
                     type="button"
-                    onClick={() => onOpenPrivateMessageByRoute({ serverId: friendItem.serverId, memberId: friendItem.memberId })}
+                    onClick={() =>
+                      onOpenPrivateMessageByRoute({
+                        serverId: friendItem.serverId,
+                        memberId: friendItem.memberId,
+                      })
+                    }
                     disabled={!friendItem.serverId || !friendItem.memberId}
                     className="flex w-full items-center gap-3 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-left transition hover:bg-[#232428] disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <UserAvatar src={friendItem.imageUrl} />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-[#dbdee1]">{friendItem.displayName}</p>
-                      <p className="truncate text-xs text-[#949ba4]">{friendItem.email || friendItem.profileId}</p>
+                      <p className="truncate text-sm font-medium text-[#dbdee1]">
+                        {friendItem.displayName}
+                      </p>
+                      <p className="truncate text-xs text-[#949ba4]">
+                        {friendItem.email || friendItem.profileId}
+                      </p>
                     </div>
                   </button>
-                )) : (
-                  <div className="rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-4 text-sm text-[#949ba4]">
-                    No mutual friends found.
-                  </div>
-                )
+                ))
+              ) : (
+                <div className="rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-4 text-sm text-[#949ba4]">
+                  No mutual friends found.
+                </div>
               )}
             </div>
           </ScrollArea>
@@ -1232,63 +1549,70 @@ export const OnlineUsersList = ({
       </Dialog>
       <div className="space-y-3">
         {orderedGroups.map((group) => {
-        const groupUsers = usersByRoleGroup.get(group.id) ?? [];
-        const isCollapsed = Boolean(collapsedByGroup[group.id]);
+          const groupUsers = usersByRoleGroup.get(group.id) ?? [];
+          const isCollapsed = Boolean(collapsedByGroup[group.id]);
 
-        return (
-          <div
-            key={group.id}
-            className={`space-y-1.5 ${draggedGroupId && dragOverGroupId === group.id ? "rounded ring-1 ring-indigo-500/50" : ""}`}
-            onDragOver={(event) => onGroupDragOver(event, group.id)}
-            onDrop={(event) => void onGroupDrop(event, group.id)}
-          >
-            <button
-              type="button"
-              draggable={canReorderRoleGroups && !isSavingGroupOrder}
-              onDragStart={(event) => onGroupDragStart(event, group.id)}
-              onDragEnd={onGroupDragEnd}
-              onClick={() =>
-                isDraggingGroupRef.current
-                  ? undefined
-                  :
-                setCollapsedByGroup((prev) => ({
-                  ...prev,
-                  [group.id]: !prev[group.id],
-                }))
-              }
-              className={`flex w-full items-center justify-between rounded px-1 py-1 text-left hover:bg-[#2a2b2f] ${canReorderRoleGroups ? "cursor-grab active:cursor-grabbing" : ""}`}
-              aria-expanded={!isCollapsed}
+          return (
+            <div
+              key={group.id}
+              className={`space-y-1.5 ${draggedGroupId && dragOverGroupId === group.id ? "rounded ring-1 ring-indigo-500/50" : ""}`}
+              onDragOver={(event) => onGroupDragOver(event, group.id)}
+              onDrop={(event) => void onGroupDrop(event, group.id)}
             >
-              <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
-                {group.name} — {groupUsers.length}
-              </span>
-              <span className="text-xs text-[#949ba4]">{isCollapsed ? "▸" : "▾"}</span>
-            </button>
+              <button
+                type="button"
+                draggable={canReorderRoleGroups && !isSavingGroupOrder}
+                onDragStart={(event) => onGroupDragStart(event, group.id)}
+                onDragEnd={onGroupDragEnd}
+                onClick={() =>
+                  isDraggingGroupRef.current
+                    ? undefined
+                    : setCollapsedByGroup((prev) => ({
+                        ...prev,
+                        [group.id]: !prev[group.id],
+                      }))
+                }
+                className={`flex w-full items-center justify-between rounded px-1 py-1 text-left hover:bg-[#2a2b2f] ${canReorderRoleGroups ? "cursor-grab active:cursor-grabbing" : ""}`}
+                aria-expanded={!isCollapsed}
+              >
+                <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                  {group.name} — {groupUsers.length}
+                </span>
+                <span className="text-xs text-[#949ba4]">
+                  {isCollapsed ? "▸" : "▾"}
+                </span>
+              </button>
 
-            {isCollapsed ? null : groupUsers.map((member) => renderMember(member))}
-          </div>
-        );
-      })}
+              {isCollapsed
+                ? null
+                : groupUsers.map((member) => renderMember(member))}
+            </div>
+          );
+        })}
 
         <div className="space-y-1.5">
-        <button
-          type="button"
-          onClick={() =>
-            setCollapsedByGroup((prev) => ({
-              ...prev,
-              __unassigned: !prev.__unassigned,
-            }))
-          }
-          className="flex w-full items-center justify-between rounded px-1 py-1 text-left hover:bg-[#2a2b2f]"
-          aria-expanded={!collapsedByGroup.__unassigned}
-        >
-          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
-            Online — {unassignedUsers.length}
-          </span>
-          <span className="text-xs text-[#949ba4]">{collapsedByGroup.__unassigned ? "▸" : "▾"}</span>
-        </button>
+          <button
+            type="button"
+            onClick={() =>
+              setCollapsedByGroup((prev) => ({
+                ...prev,
+                __unassigned: !prev.__unassigned,
+              }))
+            }
+            className="flex w-full items-center justify-between rounded px-1 py-1 text-left hover:bg-[#2a2b2f]"
+            aria-expanded={!collapsedByGroup.__unassigned}
+          >
+            <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+              Online — {unassignedUsers.length}
+            </span>
+            <span className="text-xs text-[#949ba4]">
+              {collapsedByGroup.__unassigned ? "▸" : "▾"}
+            </span>
+          </button>
 
-          {collapsedByGroup.__unassigned ? null : unassignedUsers.map((member) => renderMember(member))}
+          {collapsedByGroup.__unassigned
+            ? null
+            : unassignedUsers.map((member) => renderMember(member))}
         </div>
       </div>
     </>

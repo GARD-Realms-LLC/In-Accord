@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID } from "crypto";
 import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";

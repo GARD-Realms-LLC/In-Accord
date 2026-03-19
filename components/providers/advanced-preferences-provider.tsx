@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { CLIENT_PERSISTENCE_DISABLED } from "@/lib/client-persistence-policy";
 
 type AdvancedPreferences = {
   enableHardwareAcceleration: boolean;
@@ -77,12 +78,22 @@ const applyAdvancedPreferencesToDocument = (preferences: AdvancedPreferences) =>
     preferences.enableSpellCheck ? "on" : "off"
   );
 
-  try {
-    window.localStorage.setItem("inaccord:advanced:hardwareAcceleration", preferences.enableHardwareAcceleration ? "on" : "off");
-    window.localStorage.setItem(ADVANCED_PREFERENCES_STORAGE_KEY, JSON.stringify(preferences));
-  } catch {
-    // ignore storage failures
+  if (!CLIENT_PERSISTENCE_DISABLED) {
+    try {
+      window.localStorage.setItem("inaccord:advanced:hardwareAcceleration", preferences.enableHardwareAcceleration ? "on" : "off");
+      window.localStorage.setItem(ADVANCED_PREFERENCES_STORAGE_KEY, JSON.stringify(preferences));
+    } catch {
+      // ignore storage failures
+    }
   }
+};
+
+const isDesktopShell = () => {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return typeof (window as Window & { electronAPI?: unknown }).electronAPI === "object";
 };
 
 export const AdvancedPreferencesProvider = () => {
@@ -91,15 +102,17 @@ export const AdvancedPreferencesProvider = () => {
   });
 
   useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(ADVANCED_PREFERENCES_STORAGE_KEY);
-      if (!raw) {
-        return;
-      }
+    if (!CLIENT_PERSISTENCE_DISABLED) {
+      try {
+        const raw = window.localStorage.getItem(ADVANCED_PREFERENCES_STORAGE_KEY);
+        if (!raw) {
+          return;
+        }
 
-      setAdvancedPreferences(normalizeAdvancedPreferences(JSON.parse(raw) as unknown));
-    } catch {
-      // ignore local storage failures
+        setAdvancedPreferences(normalizeAdvancedPreferences(JSON.parse(raw) as unknown));
+      } catch {
+        // ignore local storage failures
+      }
     }
   }, []);
 
@@ -161,7 +174,7 @@ export const AdvancedPreferencesProvider = () => {
   }, []);
 
   useEffect(() => {
-    if (!confirmBeforeQuitEnabled) {
+    if (!confirmBeforeQuitEnabled || isDesktopShell()) {
       return;
     }
 

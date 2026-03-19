@@ -11,6 +11,7 @@ import { resolveMemberContext, visibleChannelIdsForMember } from "@/lib/channel-
 import { getServerBannerConfig } from "@/lib/server-banner-store";
 import { getServerProfileSettings } from "@/lib/server-profile-settings-store";
 import { listActiveVoiceCountsForServer } from "@/lib/voice-states";
+import { listUnreadChannelIds } from "@/lib/channel-read-state";
 
 import { ServerHeader } from "./server-header";
 import { ServerSection } from "./server-section";
@@ -205,6 +206,12 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
     (item) => visibleChannelIds.has(item.id) && !hiddenChannelIdSet.has(item.id)
   );
   const unfilteredVisibleChannels = channels.filter((item) => visibleChannelIds.has(item.id));
+  const unreadAnnouncementChannelIds = await listUnreadChannelIds({
+    profileId: profile?.id ?? "",
+    channelIds: visibleChannels
+      .filter((item) => item.type === ChannelType.ANNOUNCEMENT)
+      .map((item) => item.id),
+  });
 
   const stageChannel =
     visibleChannels.find((item) => String(item.name ?? "").trim().toLowerCase() === "stage") ?? null;
@@ -327,6 +334,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
                   server={serverWithMembers}
                   draggable
                   connectedCount={connectedVoiceCountsByChannelId.get(channel.id) ?? 0}
+                  hasUnreadMarker={unreadAnnouncementChannelIds.has(channel.id)}
                 />
               ))}
             </div>

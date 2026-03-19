@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { promises as fs } from "node:fs";
-import path from "node:path";
+import { promises as fs } from "fs";
+import path from "path";
 
 import { currentProfile } from "@/lib/current-profile";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";

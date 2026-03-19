@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
+import { CLIENT_PERSISTENCE_DISABLED } from "@/lib/client-persistence-policy";
 
 const SIGN_IN_LANGUAGE_STORAGE_KEY = "inaccord:sign-in-language";
 
@@ -240,13 +241,15 @@ export function SignInForm({
   useEffect(() => {
     setIsMounted(true);
 
-    try {
-      const storedLanguage = window.localStorage.getItem(SIGN_IN_LANGUAGE_STORAGE_KEY);
-      if (storedLanguage && languageOptions.some((option) => option.value === storedLanguage)) {
-        setLanguagePreference(storedLanguage);
+    if (!CLIENT_PERSISTENCE_DISABLED) {
+      try {
+        const storedLanguage = window.localStorage.getItem(SIGN_IN_LANGUAGE_STORAGE_KEY);
+        if (storedLanguage && languageOptions.some((option) => option.value === storedLanguage)) {
+          setLanguagePreference(storedLanguage);
+        }
+      } catch {
+        // ignore local storage failures
       }
-    } catch {
-      // ignore local storage failures
     }
 
     let cancelled = false;
@@ -289,6 +292,10 @@ export function SignInForm({
   }, []);
 
   useEffect(() => {
+    if (CLIENT_PERSISTENCE_DISABLED) {
+      return;
+    }
+
     try {
       window.localStorage.setItem(SIGN_IN_LANGUAGE_STORAGE_KEY, languagePreference);
     } catch {

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn, type ChildProcessWithoutNullStreams } from "child_process";
 
 import { currentProfile } from "@/lib/current-profile";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";

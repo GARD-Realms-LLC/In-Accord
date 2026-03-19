@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "crypto";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db } from "@/lib/db";
