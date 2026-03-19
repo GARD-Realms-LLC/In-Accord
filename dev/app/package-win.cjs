@@ -150,6 +150,59 @@ const normalizeHttpOrigin = (value) => {
   }
 };
 
+const isLoopbackOrigin = (value) => {
+  const normalizedOrigin = normalizeHttpOrigin(value);
+  if (!normalizedOrigin) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(normalizedOrigin);
+    const hostname = parsed.hostname.trim().toLowerCase();
+    return (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "::1"
+    );
+  } catch {
+    return false;
+  }
+};
+
+const readCloudflareRouteOrigin = async () => {
+  const wranglerConfigPath = path.join(ROOT_DIR, "wrangler.jsonc");
+  let rawConfig;
+
+  try {
+    rawConfig = await fs.readFile(wranglerConfigPath, "utf8");
+  } catch {
+    return null;
+  }
+
+  try {
+    const parsedConfig = JSON.parse(rawConfig);
+    const routes = Array.isArray(parsedConfig?.routes) ? parsedConfig.routes : [];
+    const customDomainRoute = routes.find(
+      (entry) =>
+        entry &&
+        typeof entry === "object" &&
+        entry.custom_domain === true &&
+        typeof entry.pattern === "string",
+    );
+    const pattern = String(customDomainRoute?.pattern || "")
+      .trim()
+      .replace(/\/+$/, "");
+
+    if (!pattern || pattern.includes("*") || pattern.includes("/") || pattern.includes(":")) {
+      return null;
+    }
+
+    return normalizeHttpOrigin(`https://${pattern}`);
+  } catch {
+    return null;
+  }
+};
+
 const normalizeUpdateFeed = (value) => {
   const trimmedValue = stripWrappingQuotes(value);
   if (!trimmedValue) {
@@ -212,6 +265,15 @@ const readRequiredDesktopAppOrigin = async () => {
     envEntries.get("INACCORD_DESKTOP_APP_ORIGIN") ??
     envEntries.get("NEXT_PUBLIC_SITE_URL");
   const normalizedOrigin = normalizeHttpOrigin(configuredOrigin);
+  const cloudflareRouteOrigin = await readCloudflareRouteOrigin();
+
+  if (normalizedOrigin && !isLoopbackOrigin(normalizedOrigin)) {
+    return normalizedOrigin;
+  }
+
+  if (cloudflareRouteOrigin) {
+    return cloudflareRouteOrigin;
+  }
 
   if (!normalizedOrigin) {
     throw new Error(
@@ -219,7 +281,9 @@ const readRequiredDesktopAppOrigin = async () => {
     );
   }
 
-  return normalizedOrigin;
+  throw new Error(
+    "Desktop app origin is still set to localhost. Set INACCORD_DESKTOP_APP_ORIGIN to your real site origin, or keep a Cloudflare custom-domain route in wrangler.jsonc.",
+  );
 };
 
 const prepareStandaloneAssets = async () => {
