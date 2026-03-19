@@ -37,7 +37,9 @@ try {
   runNode(path.join(rootDir, "scripts", "sanitize-cloudflare-traces.cjs"));
 
   if (shouldCompileOpenNext) {
+    runNode(path.join(rootDir, "scripts", "patch-opennext-prefetch-hints.cjs"));
     runNode(openNextCliPath, ["build", "--skipBuild", "--config", "wrangler.jsonc", "--skipWranglerConfigCheck"]);
+    runNode(path.join(rootDir, "scripts", "patch-opennext-prefetch-hints.cjs"));
   }
 } catch (error) {
   process.exit(typeof error?.status === "number" ? error.status : 1);
