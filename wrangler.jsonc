@@ -2,12 +2,13 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "main": ".open-next/worker.js",
   "name": "in-accord",
-  "account_id": "e6170abf1613b7f0d6f016cda0f7fcf4",
   "compatibility_date": "2026-03-19",
   "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
   "routes": [
     {
       "pattern": "in-accord.net",
+      "zone_name": "in-accord.net",
       "custom_domain": true
     }
   ],
