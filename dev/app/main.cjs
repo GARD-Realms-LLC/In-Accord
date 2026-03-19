@@ -761,17 +761,32 @@ const loadDesktopStatusPage = async (targetWindow, options) => {
 };
 
 const clearWindowConnectRetry = (targetWindow) => {
-  if (!targetWindow || targetWindow.isDestroyed()) {
+  const targetContentsId =
+    typeof targetWindow === "number"
+      ? targetWindow
+      : (() => {
+          if (!targetWindow || targetWindow.isDestroyed()) {
+            return null;
+          }
+
+          try {
+            return targetWindow.webContents.id;
+          } catch {
+            return null;
+          }
+        })();
+
+  if (!targetContentsId) {
     return;
   }
 
-  const retryHandle = windowConnectRetryHandles.get(targetWindow.webContents.id);
+  const retryHandle = windowConnectRetryHandles.get(targetContentsId);
   if (!retryHandle) {
     return;
   }
 
   clearTimeout(retryHandle);
-  windowConnectRetryHandles.delete(targetWindow.webContents.id);
+  windowConnectRetryHandles.delete(targetContentsId);
 };
 
 const setWindowTargetPath = (targetWindow, targetPath) => {
@@ -947,6 +962,7 @@ const createMainWindow = async () => {
   attachRetryNavigationPolicy(mainWindow);
   attachCloseProtectionBypass(mainWindow);
   setWindowTargetPath(mainWindow, "/");
+  const mainWindowContentsId = mainWindow.webContents.id;
 
   await loadDesktopStatusPage(mainWindow, {
     title: "Opening In-Accord",
@@ -964,8 +980,8 @@ const createMainWindow = async () => {
   });
 
   mainWindow.on("closed", () => {
-    clearWindowConnectRetry(mainWindow);
-    windowTargetPaths.delete(mainWindow?.webContents.id);
+    clearWindowConnectRetry(mainWindowContentsId);
+    windowTargetPaths.delete(mainWindowContentsId);
     mainWindow = null;
   });
 
@@ -993,6 +1009,7 @@ const createMeetingPopoutWindow = async (meetingPath) => {
   attachRetryNavigationPolicy(popoutWindow);
   attachCloseProtectionBypass(popoutWindow);
   setWindowTargetPath(popoutWindow, meetingPath);
+  const popoutWindowContentsId = popoutWindow.webContents.id;
 
   meetingWindows.add(popoutWindow);
   await loadDesktopStatusPage(popoutWindow, {
@@ -1008,8 +1025,8 @@ const createMeetingPopoutWindow = async (meetingPath) => {
     broadcastDesktopUpdaterState();
   });
   popoutWindow.on("closed", () => {
-    clearWindowConnectRetry(popoutWindow);
-    windowTargetPaths.delete(popoutWindow.webContents.id);
+    clearWindowConnectRetry(popoutWindowContentsId);
+    windowTargetPaths.delete(popoutWindowContentsId);
     meetingWindows.delete(popoutWindow);
   });
 
