@@ -12,30 +12,71 @@ declare global {
   var pgPool: Pool | undefined;
 }
 
-const liveDatabaseUrl = process.env.LIVE_DATABASE_URL?.trim();
+const createDb = (pool: Pool) => drizzle(pool, { schema });
 
-const connectionString =
-  liveDatabaseUrl && !/^replace_/i.test(liveDatabaseUrl)
-    ? liveDatabaseUrl
-    : "";
+type DbInstance = ReturnType<typeof createDb>;
 
-if (!connectionString) {
-  throw new Error("No database URL configured. Set LIVE_DATABASE_URL for the shared live PostgreSQL database.");
-}
+let cachedPool: Pool | null = null;
+let cachedDb: DbInstance | null = null;
 
-const pool =
-  globalThis.pgPool ||
-  new Pool({
-    connectionString,
-    max: 10,
-  });
+const getConnectionString = () => {
+  const liveDatabaseUrl = process.env.LIVE_DATABASE_URL?.trim();
+  const connectionString =
+    liveDatabaseUrl && !/^replace_/i.test(liveDatabaseUrl)
+      ? liveDatabaseUrl
+      : "";
 
-if (process.env.NODE_ENV !== "production") {
-  globalThis.pgPool = pool;
-}
+  if (!connectionString) {
+    throw new Error("No database URL configured. Set LIVE_DATABASE_URL for the shared live PostgreSQL database.");
+  }
 
-export const db = drizzle(pool, { schema });
-export { pool };
+  return connectionString;
+};
+
+const getPool = () => {
+  if (cachedPool) {
+    return cachedPool;
+  }
+
+  const pooled =
+    globalThis.pgPool ||
+    new Pool({
+      connectionString: getConnectionString(),
+      max: 10,
+    });
+
+  if (process.env.NODE_ENV !== "production") {
+    globalThis.pgPool = pooled;
+  }
+
+  cachedPool = pooled;
+  return cachedPool;
+};
+
+const getDb = () => {
+  if (cachedDb) {
+    return cachedDb;
+  }
+
+  cachedDb = createDb(getPool());
+  return cachedDb;
+};
+
+export const pool = new Proxy({} as Pool, {
+  get(_target, property, receiver) {
+    const target = getPool() as unknown as Record<PropertyKey, unknown>;
+    const value = Reflect.get(target, property, receiver);
+    return typeof value === "function" ? value.bind(target) : value;
+  },
+}) as Pool;
+
+export const db = new Proxy({} as DbInstance, {
+  get(_target, property, receiver) {
+    const target = getDb() as unknown as Record<PropertyKey, unknown>;
+    const value = Reflect.get(target, property, receiver);
+    return typeof value === "function" ? value.bind(target) : value;
+  },
+}) as DbInstance;
 
 export {
   channel,

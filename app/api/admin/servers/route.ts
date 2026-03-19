@@ -7,6 +7,9 @@ import { db } from "@/lib/db";
 import { getServerBannerConfig } from "@/lib/server-banner-store";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type ServerRow = {
   id: string;
   name: string;

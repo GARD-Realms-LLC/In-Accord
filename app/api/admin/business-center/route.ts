@@ -12,6 +12,10 @@ import {
   updateUserPreferences,
 } from "@/lib/user-preferences";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type BusinessCenterRow = {
   userId: string | null;
   email: string | null;

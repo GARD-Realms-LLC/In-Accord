@@ -10,6 +10,9 @@ import {
 } from "@/lib/integration-provider-config";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const normalizeProvider = (value: unknown): IntegrationProviderKey | null => {
   const normalized = String(value ?? "").trim().toLowerCase();
   return integrationProviderKeys.includes(normalized as IntegrationProviderKey)

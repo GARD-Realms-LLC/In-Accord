@@ -6,6 +6,9 @@ import { currentProfile } from "@/lib/current-profile";
 import { db } from "@/lib/db";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type WebhookRow = {
   id: string;
   name: string;

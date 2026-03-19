@@ -20,6 +20,9 @@ import { removeServerFromAllProfileServerTabs } from "@/lib/profile-server-tabs"
 import { removeServerFromServerRailFolders } from "@/lib/server-rail-layout";
 import { hardDeleteServerScopedData } from "@/lib/server-hard-delete";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type UserRow = {
   userId: string;
   realName: string | null;

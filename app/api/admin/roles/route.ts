@@ -13,6 +13,9 @@ import {
 } from "@/lib/in-accord-roles";
 import { ADMINISTRATOR_ROLE_KEY } from "@/lib/account-security-constants";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type RoleCountRow = {
   roleKey: string;
   memberCount: number | string;

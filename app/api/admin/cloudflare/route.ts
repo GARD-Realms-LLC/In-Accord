@@ -7,6 +7,9 @@ import {
   updateCloudflareRuntimeConfig,
 } from "@/lib/cloudflare-config";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type CloudflareApiResponse<T> = {
   success: boolean;
   errors?: Array<{ code?: number; message?: string }>;

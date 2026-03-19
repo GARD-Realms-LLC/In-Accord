@@ -7,6 +7,9 @@ import {
   updatePatronagePaymentConfig,
 } from "@/lib/patronage-payment-config";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const maskSecret = (value: string | null | undefined) => {
   const normalized = String(value ?? "").trim();
   if (!normalized) {

@@ -9,6 +9,9 @@ import {
   updateRuntimeSiteUrlConfig,
 } from "@/lib/runtime-site-url-config";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const normalizeSiteUrl = (value: unknown): string | null => {
   const normalized = String(value ?? "").trim();
   if (!normalized) {

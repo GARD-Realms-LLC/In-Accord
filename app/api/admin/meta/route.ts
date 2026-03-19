@@ -8,6 +8,9 @@ import { createHash } from "crypto";
 import { currentProfile } from "@/lib/current-profile";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type PackageJsonShape = {
   name?: string;
   version?: string;

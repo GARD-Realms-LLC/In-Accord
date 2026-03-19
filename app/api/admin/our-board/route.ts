@@ -4,6 +4,9 @@ import { currentProfile } from "@/lib/current-profile";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 import { listOurBoardEntries } from "@/lib/our-board-store";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET() {
   try {
     const profile = await currentProfile();

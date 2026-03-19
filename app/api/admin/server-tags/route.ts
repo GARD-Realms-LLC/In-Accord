@@ -7,6 +7,9 @@ import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 import { allowedServerTagIconKeys, ensureServerTagSchema, serverTagIconOptions } from "@/lib/server-tags";
 import { ensureUserPreferencesSchema } from "@/lib/user-preferences";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type ServerTagRow = {
   serverId: string;
   serverName: string;

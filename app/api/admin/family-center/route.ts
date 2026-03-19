@@ -12,6 +12,9 @@ import {
   updateUserPreferences,
 } from "@/lib/user-preferences";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type FamilyCenterRow = {
   userId: string | null;
   email: string | null;

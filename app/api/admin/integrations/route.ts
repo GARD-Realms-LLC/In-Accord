@@ -14,6 +14,9 @@ import {
   type OtherBotConfig,
 } from "@/lib/user-preferences";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const providerOrder = ["github", "google", "steam", "twitch", "xbox", "youtube"];
 
 type PreferencesRow = {

@@ -6,6 +6,9 @@ import { db } from "@/lib/db";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 import { ensureUserProfileSchema } from "@/lib/user-profile";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type RecentLoginRow = {
   userId: string;
   name: string | null;
