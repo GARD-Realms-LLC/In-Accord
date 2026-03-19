@@ -3475,7 +3475,11 @@ export const InAccordAdminModal = () => {
   }, [activeSection, isModalOpen, loadDatabaseManager]);
 
   useEffect(() => {
-    if (!isModalOpen || activeSection !== "cloudflareManagement") {
+    if (
+      !isModalOpen ||
+      (activeSection !== "cloudflareManagement" &&
+        activeSection !== "iaServerMenu")
+    ) {
       return;
     }
 
@@ -7495,7 +7499,7 @@ export const InAccordAdminModal = () => {
               <div className="rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                    In-Accord URL Runtime Editor
+                    In-Accord Server Control Panel
                   </p>
                   <button
                     type="button"
@@ -7503,6 +7507,7 @@ export const InAccordAdminModal = () => {
                       void loadSiteUrlSetup();
                       void loadServerPerformance();
                       void loadManagedFiles();
+                      void loadCloudflare();
                     }}
                     className="h-8 rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
                   >
@@ -7589,6 +7594,116 @@ export const InAccordAdminModal = () => {
                       Runtime: {serverPerformance.nodeVersion}
                     </p>
                   ) : null}
+                </div>
+
+                <div className="mb-3 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Cloud className="h-4 w-4 text-sky-500" />
+                      <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
+                        Cloudflare Control Panel
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void loadCloudflare()}
+                        className="h-7 rounded-md border border-zinc-300 bg-white px-2 text-[11px] font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                      >
+                        Refresh
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveSection("cloudflareManagement")}
+                        className="h-7 rounded-md bg-indigo-600 px-2.5 text-[11px] font-semibold text-white transition hover:bg-indigo-500"
+                      >
+                        Open Panel
+                      </button>
+                    </div>
+                  </div>
+
+                  {isLoadingCloudflare ? (
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                      Loading Cloudflare status...
+                    </p>
+                  ) : (
+                    <>
+                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                        <div className="rounded-md border border-zinc-300 bg-zinc-50/80 p-2 dark:border-zinc-700 dark:bg-zinc-800/45">
+                          <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
+                            API Token
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                            {cloudflareSetup?.hasApiToken ? "Configured" : "Missing"}
+                          </p>
+                        </div>
+                        <div className="rounded-md border border-zinc-300 bg-zinc-50/80 p-2 dark:border-zinc-700 dark:bg-zinc-800/45">
+                          <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
+                            Zone
+                          </p>
+                          <p
+                            className="mt-1 truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100"
+                            title={cloudflareSetup?.zoneName ?? cloudflareSelectedZoneName ?? "Not selected"}
+                          >
+                            {cloudflareSetup?.zoneName ??
+                              cloudflareSelectedZoneName ??
+                              "Not selected"}
+                          </p>
+                        </div>
+                        <div className="rounded-md border border-zinc-300 bg-zinc-50/80 p-2 dark:border-zinc-700 dark:bg-zinc-800/45">
+                          <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
+                            DNS Records
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                            {cloudflareDnsRecords.length}
+                          </p>
+                        </div>
+                        <div className="rounded-md border border-zinc-300 bg-zinc-50/80 p-2 dark:border-zinc-700 dark:bg-zinc-800/45">
+                          <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
+                            Updated
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                            {formatDateTime(cloudflareSetup?.updatedAt ?? null)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void onPurgeCloudflareCache()}
+                          disabled={
+                            isCloudflareActionPending ||
+                            !(
+                              cloudflareSelectedZoneId ||
+                              cloudflareSetup?.zoneId
+                            )
+                          }
+                          className="h-8 rounded-md border border-amber-500/35 bg-amber-500/15 px-3 text-xs font-semibold text-amber-700 transition hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-60 dark:text-amber-200"
+                        >
+                          {isCloudflareActionPending ? "Working..." : "Purge Cache"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActiveSection("cloudflareManagement")}
+                          className="h-8 rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                        >
+                          Manage DNS
+                        </button>
+                      </div>
+
+                      {cloudflareError ? (
+                        <p className="mt-2 text-xs text-rose-500">
+                          {cloudflareError}
+                        </p>
+                      ) : null}
+                      {cloudflareSuccess ? (
+                        <p className="mt-2 text-xs text-emerald-500">
+                          {cloudflareSuccess}
+                        </p>
+                      ) : null}
+                    </>
+                  )}
                 </div>
 
                 <div className="mb-3 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">

@@ -16,6 +16,45 @@ const normalizeBaseUrl = (value: unknown): string => {
   }
 };
 
+const isLocalHostname = (hostname: string): boolean => {
+  const normalized = String(hostname ?? "").trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+
+  if (
+    normalized === "localhost" ||
+    normalized === "127.0.0.1" ||
+    normalized === "::1" ||
+    normalized === "[::1]" ||
+    normalized.startsWith("10.") ||
+    normalized.startsWith("192.168.") ||
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(normalized)
+  ) {
+    return true;
+  }
+
+  return normalized.endsWith(".local");
+};
+
+const getCloudflareImageBaseUrl = (): string => {
+  const siteBaseUrl = normalizeBaseUrl(process.env.NEXT_PUBLIC_SITE_URL);
+  if (!siteBaseUrl) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(siteBaseUrl);
+    if (isLocalHostname(parsed.hostname)) {
+      return "";
+    }
+
+    return parsed.origin.replace(/\/$/, "");
+  } catch {
+    return "";
+  }
+};
+
 const isAppObjectPath = (pathname: string): boolean => {
   const normalizedPath = String(pathname ?? "").trim();
   return normalizedPath === "/api/r2/object" || normalizedPath.startsWith("/api/r2/object/");
@@ -54,7 +93,7 @@ const toAbsoluteUrl = (raw: string): string | null => {
 };
 
 const buildCloudflareImageUrl = (absoluteUrl: string, width: number, fit: "cover" | "contain", quality: number) => {
-  const cloudflareBaseUrl = normalizeBaseUrl(process.env.NEXT_PUBLIC_CLOUDFLARE_IMAGE_BASE_URL);
+  const cloudflareBaseUrl = getCloudflareImageBaseUrl();
   if (!cloudflareBaseUrl) {
     return absoluteUrl;
   }
