@@ -15,9 +15,98 @@ const opennextPluginPath = path.join(
   "load-manifest.js"
 );
 const serverFunctionsDir = path.join(rootDir, ".open-next", "server-functions");
+const nextBuildDir = path.join(rootDir, ".next");
 
 const manifestGlobNeedle = '**/{*-manifest,required-server-files}.json';
-const manifestGlobReplacement = '**/{*-manifest,required-server-files,prefetch-hints}.json';
+const manifestGlobReplacement =
+  '**/{*-manifest,required-server-files,prefetch-hints,subresource-integrity-manifest,fallback-build-manifest}.json';
+
+const optionalManifestFallbacks = [
+  ["/server/prefetch-hints.json", "{}"],
+  ["/server/subresource-integrity-manifest.json", "{}"],
+  ["/fallback-build-manifest.json", "{}"],
+];
+
+const normalizeRelativeManifestPath = (baseDir, filePath) =>
+  `/${path.relative(baseDir, filePath).split(path.sep).join("/")}`;
+
+const shouldIncludeManifestFile = (relativeManifestPath) =>
+  /(?:^|\/)(?:[^/]*manifest[^/]*|required-server-files|prefetch-hints)\.json$/i.test(
+    relativeManifestPath
+  );
+
+const shouldAliasManifestWithoutJson = (relativeManifestPath) =>
+  /(?:^|\/)(?:[^/]*manifest[^/]*|prefetch-hints)\.json$/i.test(relativeManifestPath);
+
+const collectManifestFiles = (baseDir, currentDir = baseDir, collected = []) => {
+  if (!fs.existsSync(currentDir)) {
+    return collected;
+  }
+
+  for (const entry of fs.readdirSync(currentDir, { withFileTypes: true })) {
+    const absolutePath = path.join(currentDir, entry.name);
+
+    if (entry.isDirectory()) {
+      collectManifestFiles(baseDir, absolutePath, collected);
+      continue;
+    }
+
+    if (!entry.isFile()) {
+      continue;
+    }
+
+    const relativeManifestPath = normalizeRelativeManifestPath(baseDir, absolutePath);
+    if (!shouldIncludeManifestFile(relativeManifestPath)) {
+      continue;
+    }
+
+    const raw = fs.readFileSync(absolutePath, "utf8").trim();
+    if (!raw) {
+      continue;
+    }
+
+    collected.push({
+      endsWith: relativeManifestPath,
+      literal: raw,
+    });
+
+    if (shouldAliasManifestWithoutJson(relativeManifestPath)) {
+      collected.push({
+        endsWith: relativeManifestPath.replace(/\.json$/i, ""),
+        literal: raw,
+      });
+    }
+  }
+
+  return collected;
+};
+
+const getBuiltHandlerManifestPatches = (functionDir) => {
+  const manifestPatches = new Map();
+  const addManifestPatch = (endsWith, literal) => {
+    if (!manifestPatches.has(endsWith)) {
+      manifestPatches.set(endsWith, literal);
+    }
+  };
+
+  collectManifestFiles(path.join(functionDir, ".next")).forEach((entry) => {
+    addManifestPatch(entry.endsWith, entry.literal);
+  });
+  collectManifestFiles(nextBuildDir).forEach((entry) => {
+    addManifestPatch(entry.endsWith, entry.literal);
+  });
+  optionalManifestFallbacks.forEach(([endsWith, literal]) => {
+    addManifestPatch(endsWith, literal);
+    if (endsWith.endsWith(".json")) {
+      addManifestPatch(endsWith.replace(/\.json$/i, ""), literal);
+    }
+  });
+
+  return Array.from(manifestPatches, ([endsWith, literal]) => ({
+    endsWith,
+    literal,
+  }));
+};
 
 const patchOpenNextSourcePlugin = () => {
   if (!fs.existsSync(opennextPluginPath)) {
@@ -59,15 +148,18 @@ const patchBuiltHandlers = () => {
 
     const functionDir = path.join(serverFunctionsDir, entry.name);
     const handlerPath = path.join(functionDir, "handler.mjs");
-    const prefetchHintsPath = path.join(functionDir, ".next", "server", "prefetch-hints.json");
-
-    if (!fs.existsSync(handlerPath) || !fs.existsSync(prefetchHintsPath)) {
+    const manifestPatches = getBuiltHandlerManifestPatches(functionDir);
+    if (!fs.existsSync(handlerPath)) {
       continue;
     }
 
     const originalHandler = fs.readFileSync(handlerPath, "utf8");
 
-    if (originalHandler.includes('.endsWith("/server/prefetch-hints.json")')) {
+    if (
+      manifestPatches.every((manifestPatch) =>
+        originalHandler.includes(`.endsWith("${manifestPatch.endsWith}")`)
+      )
+    ) {
       continue;
     }
 
@@ -75,8 +167,6 @@ const patchBuiltHandlers = () => {
       continue;
     }
 
-    const prefetchHints = JSON.parse(fs.readFileSync(prefetchHintsPath, "utf8") || "{}");
-    const serializedPrefetchHints = JSON.stringify(prefetchHints);
     const throwPattern = /throw new Error\(`Unexpected loadManifest\(\$\{([^}]+)\}\) call!`\)/;
     const match = originalHandler.match(throwPattern);
 
@@ -86,7 +176,11 @@ const patchBuiltHandlers = () => {
 
     const pathVariable = match[1];
     const injectedCase =
-      `if(${pathVariable}.endsWith("/server/prefetch-hints.json"))return${serializedPrefetchHints};` +
+      manifestPatches
+        .map((manifestPatch) => {
+          return `if(${pathVariable}.endsWith("${manifestPatch.endsWith}"))return${manifestPatch.literal};`;
+        })
+        .join("") +
       `throw new Error(\`Unexpected loadManifest(\${${pathVariable}}) call!\`)`;
     const updatedHandler = originalHandler.replace(throwPattern, injectedCase);
 

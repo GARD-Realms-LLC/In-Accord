@@ -58,21 +58,17 @@ type PathModule = typeof import("path");
 let cachedFsModule: FsModule | null = null;
 let cachedPathModule: PathModule | null = null;
 
-const getBuiltinModule = <TModule,>(moduleName: string): TModule => {
+const getBuiltinModule = <TModule,>(moduleName: string): TModule | null => {
   const builtinLoader = (process as typeof process & {
     getBuiltinModule?: (targetName: string) => TModule | undefined;
   }).getBuiltinModule;
 
   if (typeof builtinLoader !== "function") {
-    throw new Error(`Builtin module '${moduleName}' is unavailable in this runtime.`);
+    return null;
   }
 
   const loaded = builtinLoader(moduleName);
-  if (!loaded) {
-    throw new Error(`Builtin module '${moduleName}' is unavailable in this runtime.`);
-  }
-
-  return loaded;
+  return loaded ?? null;
 };
 
 const getFsModule = () => {
@@ -93,8 +89,14 @@ const getPathModule = () => {
   return cachedPathModule;
 };
 
-const getDatabaseRuntimeControlPath = () =>
-  getPathModule().join(process.cwd(), ".data", DATABASE_RUNTIME_CONTROL_FILE);
+const getDatabaseRuntimeControlPath = () => {
+  const path = getPathModule();
+  if (!path) {
+    return null;
+  }
+
+  return path.join(process.cwd(), ".data", DATABASE_RUNTIME_CONTROL_FILE);
+};
 
 const normalizeText = (value: unknown, max = 4096) => {
   const normalized = String(value ?? "").trim();
@@ -141,7 +143,7 @@ const isPlaceholderValue = (value: string | null | undefined) =>
 const readStoredDatabaseRuntimeControl = (): StoredDatabaseRuntimeControl => {
   const fs = getFsModule();
   const targetPath = getDatabaseRuntimeControlPath();
-  if (!fs.existsSync(targetPath)) {
+  if (!fs || !targetPath || !fs.existsSync(targetPath)) {
     return {};
   }
 
@@ -160,6 +162,12 @@ const writeStoredDatabaseRuntimeControl = (
   const fs = getFsModule();
   const path = getPathModule();
   const targetPath = getDatabaseRuntimeControlPath();
+  if (!fs || !path || !targetPath) {
+    throw new Error(
+      "File-backed database runtime control is unavailable in this runtime.",
+    );
+  }
+
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
   fs.writeFileSync(
     targetPath,

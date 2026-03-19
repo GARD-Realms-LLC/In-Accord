@@ -1,4 +1,8 @@
 /** @type {import('next').NextConfig} */
+const { initOpenNextCloudflareForDev } = require("@opennextjs/cloudflare");
+
+initOpenNextCloudflareForDev();
+
 const serverOnlyExternalPackages = new Set([
   "pg",
   "pg-pool",
