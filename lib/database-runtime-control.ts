@@ -1,10 +1,5 @@
 import "server-only";
 
-import fs from "fs";
-import path from "path";
-
-import { getLegacyWorkspaceDataDir } from "@/lib/runtime-data-dir";
-
 export type DatabaseRuntimeTarget = "live" | "local";
 
 type StoredDatabaseRuntimeControl = {
@@ -57,8 +52,49 @@ export type DatabaseRuntimeSetup = {
 
 const DATABASE_RUNTIME_CONTROL_FILE = "database-runtime-control.json";
 
+type FsModule = typeof import("fs");
+type PathModule = typeof import("path");
+
+let cachedFsModule: FsModule | null = null;
+let cachedPathModule: PathModule | null = null;
+
+const getBuiltinModule = <TModule,>(moduleName: string): TModule => {
+  const builtinLoader = (process as typeof process & {
+    getBuiltinModule?: (targetName: string) => TModule | undefined;
+  }).getBuiltinModule;
+
+  if (typeof builtinLoader !== "function") {
+    throw new Error(`Builtin module '${moduleName}' is unavailable in this runtime.`);
+  }
+
+  const loaded = builtinLoader(moduleName);
+  if (!loaded) {
+    throw new Error(`Builtin module '${moduleName}' is unavailable in this runtime.`);
+  }
+
+  return loaded;
+};
+
+const getFsModule = () => {
+  if (cachedFsModule) {
+    return cachedFsModule;
+  }
+
+  cachedFsModule = getBuiltinModule<FsModule>("fs");
+  return cachedFsModule;
+};
+
+const getPathModule = () => {
+  if (cachedPathModule) {
+    return cachedPathModule;
+  }
+
+  cachedPathModule = getBuiltinModule<PathModule>("path");
+  return cachedPathModule;
+};
+
 const getDatabaseRuntimeControlPath = () =>
-  path.join(getLegacyWorkspaceDataDir(), DATABASE_RUNTIME_CONTROL_FILE);
+  getPathModule().join(process.cwd(), ".data", DATABASE_RUNTIME_CONTROL_FILE);
 
 const normalizeText = (value: unknown, max = 4096) => {
   const normalized = String(value ?? "").trim();
@@ -103,6 +139,7 @@ const isPlaceholderValue = (value: string | null | undefined) =>
   !value || /^replace_/i.test(value.trim());
 
 const readStoredDatabaseRuntimeControl = (): StoredDatabaseRuntimeControl => {
+  const fs = getFsModule();
   const targetPath = getDatabaseRuntimeControlPath();
   if (!fs.existsSync(targetPath)) {
     return {};
@@ -120,6 +157,8 @@ const readStoredDatabaseRuntimeControl = (): StoredDatabaseRuntimeControl => {
 const writeStoredDatabaseRuntimeControl = (
   nextValue: StoredDatabaseRuntimeControl,
 ) => {
+  const fs = getFsModule();
+  const path = getPathModule();
   const targetPath = getDatabaseRuntimeControlPath();
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
   fs.writeFileSync(
