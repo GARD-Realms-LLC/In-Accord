@@ -24,7 +24,7 @@
     "dev": "set NEXT_DIST_DIR=.next-dev&& next dev --webpack -p 3000",
     "dev:3000": "set NEXT_DIST_DIR=.next&& npm run clean:next && next dev --webpack -p 3000",
     "version:bump:patch": "node scripts/bump-version.cjs",
-    "build": "npm run repair:next-install && next build --webpack",
+    "build": "node scripts/build-app.cjs",
     "start": "next start",
     "preview:cloudflare": "opennextjs-cloudflare build && opennextjs-cloudflare preview --config wrangler.jsonc",
     "deploy:cloudflare": "opennextjs-cloudflare build && opennextjs-cloudflare deploy --config wrangler.jsonc",
