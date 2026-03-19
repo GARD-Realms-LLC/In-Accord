@@ -603,6 +603,38 @@ type AdminSiteUrlSetup = {
   updatedAt: string | null;
 };
 
+type AdminDatabaseRuntimeEndpoint = {
+  target: "live" | "local";
+  label: string;
+  envName: "LIVE_DATABASE_URL" | "DATABASE_URL";
+  configured: boolean;
+  host: string | null;
+  port: string | null;
+  database: string | null;
+  ssl: boolean | null;
+};
+
+type AdminDatabaseRuntimeSetup = {
+  activeTarget: "live" | "local";
+  effectiveTarget: "live" | "local";
+  effectiveSource: "runtime" | "fallback";
+  updatedAt: string | null;
+  local: AdminDatabaseRuntimeEndpoint;
+  live: AdminDatabaseRuntimeEndpoint;
+  d1: {
+    configured: boolean;
+    accountId: string | null;
+    databaseId: string | null;
+    databaseName: string | null;
+    managementUrl: string | null;
+    lastImportedAt: string | null;
+    lastImportSource: string | null;
+    lastImportTables: number | null;
+    lastImportRowsWritten: number | null;
+    lastImportNote: string | null;
+  };
+};
+
 type AdminServerPerformance = {
   uptimeSeconds: number;
   nodeVersion: string;
@@ -1213,6 +1245,29 @@ export const InAccordAdminModal = () => {
   const [isSavingSiteUrlSetup, setIsSavingSiteUrlSetup] = useState(false);
   const [siteUrlError, setSiteUrlError] = useState<string | null>(null);
   const [siteUrlSuccess, setSiteUrlSuccess] = useState<string | null>(null);
+  const [databaseRuntimeSetup, setDatabaseRuntimeSetup] =
+    useState<AdminDatabaseRuntimeSetup | null>(null);
+  const [databaseD1AccountIdDraft, setDatabaseD1AccountIdDraft] =
+    useState("");
+  const [databaseD1DatabaseIdDraft, setDatabaseD1DatabaseIdDraft] =
+    useState("");
+  const [databaseD1DatabaseNameDraft, setDatabaseD1DatabaseNameDraft] =
+    useState("");
+  const [databaseD1ManagementUrlDraft, setDatabaseD1ManagementUrlDraft] =
+    useState("");
+  const [isLoadingDatabaseRuntime, setIsLoadingDatabaseRuntime] =
+    useState(false);
+  const [isSavingDatabaseRuntime, setIsSavingDatabaseRuntime] =
+    useState(false);
+  const [isSwitchingDatabaseRuntime, setIsSwitchingDatabaseRuntime] =
+    useState(false);
+  const [isSyncingDatabaseD1, setIsSyncingDatabaseD1] = useState(false);
+  const [databaseRuntimeError, setDatabaseRuntimeError] = useState<
+    string | null
+  >(null);
+  const [databaseRuntimeSuccess, setDatabaseRuntimeSuccess] = useState<
+    string | null
+  >(null);
   const [serverPerformance, setServerPerformance] =
     useState<AdminServerPerformance | null>(null);
   const [isLoadingServerPerformance, setIsLoadingServerPerformance] =
@@ -2376,6 +2431,205 @@ export const InAccordAdminModal = () => {
     }
   };
 
+  const applyDatabaseRuntimeSetup = useCallback(
+    (setup: AdminDatabaseRuntimeSetup | null) => {
+      setDatabaseRuntimeSetup(setup);
+      setDatabaseD1AccountIdDraft(setup?.d1.accountId ?? "");
+      setDatabaseD1DatabaseIdDraft(setup?.d1.databaseId ?? "");
+      setDatabaseD1DatabaseNameDraft(setup?.d1.databaseName ?? "");
+      setDatabaseD1ManagementUrlDraft(setup?.d1.managementUrl ?? "");
+    },
+    [],
+  );
+
+  const loadDatabaseRuntime = useCallback(async () => {
+    try {
+      setIsLoadingDatabaseRuntime(true);
+      setDatabaseRuntimeError(null);
+
+      const response = await fetch("/api/admin/database-runtime", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to load database runtime (${response.status})`,
+        );
+      }
+
+      const payload = (await response.json()) as {
+        setup?: AdminDatabaseRuntimeSetup;
+      };
+      applyDatabaseRuntimeSetup(payload.setup ?? null);
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_DATABASE_RUNTIME_LOAD]", error);
+      applyDatabaseRuntimeSetup(null);
+      setDatabaseRuntimeError(
+        "Unable to load database runtime controls right now.",
+      );
+    } finally {
+      setIsLoadingDatabaseRuntime(false);
+    }
+  }, [applyDatabaseRuntimeSetup]);
+
+  const onSaveDatabaseRuntimeSetup = useCallback(async () => {
+    try {
+      setIsSavingDatabaseRuntime(true);
+      setDatabaseRuntimeError(null);
+      setDatabaseRuntimeSuccess(null);
+
+      const response = await fetch("/api/admin/database-runtime", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          d1AccountId: databaseD1AccountIdDraft.trim(),
+          d1DatabaseId: databaseD1DatabaseIdDraft.trim(),
+          d1DatabaseName: databaseD1DatabaseNameDraft.trim(),
+          d1ManagementUrl: databaseD1ManagementUrlDraft.trim(),
+        }),
+      });
+
+      const payload = await readAdminJsonOrText<{
+        ok?: boolean;
+        message?: string;
+        setup?: AdminDatabaseRuntimeSetup;
+      }>(response);
+
+      if (!response.ok || !payload.ok) {
+        throw new Error(
+          payload.message ||
+            `Failed to save database runtime (${response.status})`,
+        );
+      }
+
+      applyDatabaseRuntimeSetup(payload.setup ?? null);
+      setDatabaseRuntimeSuccess(
+        payload.message || "Database runtime settings saved.",
+      );
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_DATABASE_RUNTIME_SAVE]", error);
+      setDatabaseRuntimeError(
+        error instanceof Error
+          ? error.message
+          : "Unable to save database runtime settings.",
+      );
+    } finally {
+      setIsSavingDatabaseRuntime(false);
+    }
+  }, [
+    applyDatabaseRuntimeSetup,
+    databaseD1AccountIdDraft,
+    databaseD1DatabaseIdDraft,
+    databaseD1DatabaseNameDraft,
+    databaseD1ManagementUrlDraft,
+  ]);
+
+  const onSwitchDatabaseRuntime = useCallback(
+    async (target: "live" | "local") => {
+      try {
+        setIsSwitchingDatabaseRuntime(true);
+        setDatabaseRuntimeError(null);
+        setDatabaseRuntimeSuccess(null);
+
+        const response = await fetch("/api/admin/database-runtime", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "SET_TARGET",
+            target,
+          }),
+        });
+
+        const payload = await readAdminJsonOrText<{
+          ok?: boolean;
+          message?: string;
+          setup?: AdminDatabaseRuntimeSetup;
+        }>(response);
+
+        if (!response.ok || !payload.ok) {
+          throw new Error(
+            payload.message ||
+              `Failed to switch database runtime (${response.status})`,
+          );
+        }
+
+        applyDatabaseRuntimeSetup(payload.setup ?? null);
+        setDatabaseRuntimeSuccess(
+          payload.message ||
+            `Database runtime switched to ${target === "local" ? "Local PostgreSQL" : "Live PostgreSQL"}.`,
+        );
+      } catch (error) {
+        console.error("[IN_ACCORD_ADMIN_DATABASE_RUNTIME_SWITCH]", error);
+        setDatabaseRuntimeError(
+          error instanceof Error
+            ? error.message
+            : "Unable to switch database runtime.",
+        );
+      } finally {
+        setIsSwitchingDatabaseRuntime(false);
+      }
+    },
+    [applyDatabaseRuntimeSetup],
+  );
+
+  const onSyncDatabaseD1 = useCallback(async () => {
+    try {
+      setIsSyncingDatabaseD1(true);
+      setDatabaseRuntimeError(null);
+      setDatabaseRuntimeSuccess(null);
+
+      const response = await fetch("/api/admin/database-runtime", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "SYNC_TO_D1",
+        }),
+      });
+
+      const payload = await readAdminJsonOrText<{
+        ok?: boolean;
+        message?: string;
+        setup?: AdminDatabaseRuntimeSetup;
+        sync?: {
+          databaseName?: string | null;
+          tableCount?: number | null;
+          queryCount?: number | null;
+          rowsWritten?: number | null;
+          databaseSizeMb?: string | null;
+        };
+      }>(response);
+
+      if (!response.ok || !payload.ok) {
+        throw new Error(
+          payload.message || `Failed to sync D1 snapshot (${response.status})`,
+        );
+      }
+
+      applyDatabaseRuntimeSetup(payload.setup ?? null);
+      setDatabaseRuntimeSuccess(
+        payload.message ||
+          `D1 snapshot synced to ${payload.sync?.databaseName ?? "configured database"}.`,
+      );
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_DATABASE_RUNTIME_SYNC_D1]", error);
+      setDatabaseRuntimeError(
+        error instanceof Error ? error.message : "Unable to sync D1 snapshot.",
+      );
+    } finally {
+      setIsSyncingDatabaseD1(false);
+    }
+  }, [applyDatabaseRuntimeSetup]);
+
   const loadServerPerformance = useCallback(async () => {
     try {
       setIsLoadingServerPerformance(true);
@@ -3471,8 +3725,9 @@ export const InAccordAdminModal = () => {
       return;
     }
 
+    void loadDatabaseRuntime();
     void loadDatabaseManager();
-  }, [activeSection, isModalOpen, loadDatabaseManager]);
+  }, [activeSection, isModalOpen, loadDatabaseManager, loadDatabaseRuntime]);
 
   useEffect(() => {
     if (
@@ -3668,6 +3923,17 @@ export const InAccordAdminModal = () => {
       setIsSavingSiteUrlSetup(false);
       setSiteUrlError(null);
       setSiteUrlSuccess(null);
+      setDatabaseRuntimeSetup(null);
+      setDatabaseD1AccountIdDraft("");
+      setDatabaseD1DatabaseIdDraft("");
+      setDatabaseD1DatabaseNameDraft("");
+      setDatabaseD1ManagementUrlDraft("");
+      setIsLoadingDatabaseRuntime(false);
+      setIsSavingDatabaseRuntime(false);
+      setIsSwitchingDatabaseRuntime(false);
+      setIsSyncingDatabaseD1(false);
+      setDatabaseRuntimeError(null);
+      setDatabaseRuntimeSuccess(null);
       setServerPerformance(null);
       setIsLoadingServerPerformance(false);
       setServerPerformanceError(null);
@@ -8036,6 +8302,7 @@ export const InAccordAdminModal = () => {
                   <button
                     type="button"
                     onClick={() => {
+                      void loadDatabaseRuntime();
                       void loadSiteUrlSetup();
                       void loadDatabaseManager(selectedDatabaseManagerTable);
                     }}
@@ -8043,6 +8310,313 @@ export const InAccordAdminModal = () => {
                   >
                     Refresh
                   </button>
+                </div>
+
+                <div className="mb-4 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
+                        Runtime Control
+                      </p>
+                      <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                        Switch this machine between local and live PostgreSQL.
+                        Cloudflare D1 stays a snapshot target.
+                      </p>
+                    </div>
+                    {databaseRuntimeSetup?.d1.managementUrl ? (
+                      <a
+                        href={databaseRuntimeSetup.d1.managementUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex h-8 items-center rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                      >
+                        Open D1
+                      </a>
+                    ) : null}
+                  </div>
+
+                  <div className="grid gap-2 md:grid-cols-4">
+                    <div className="rounded-lg border border-zinc-300 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-800/45">
+                      <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
+                        Active Target
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                        {databaseRuntimeSetup?.effectiveTarget === "local"
+                          ? "Local PostgreSQL"
+                          : databaseRuntimeSetup?.effectiveTarget === "live"
+                            ? "Live PostgreSQL"
+                            : "Unknown"}
+                      </p>
+                      <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                        Requested:{" "}
+                        {databaseRuntimeSetup?.activeTarget === "local"
+                          ? "Local"
+                          : databaseRuntimeSetup?.activeTarget === "live"
+                            ? "Live"
+                            : "Unknown"}
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg border border-zinc-300 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-800/45">
+                      <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
+                        Effective Source
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                        {databaseRuntimeSetup?.effectiveSource === "fallback"
+                          ? "Fallback"
+                          : databaseRuntimeSetup?.effectiveSource === "runtime"
+                            ? "Runtime override"
+                            : "Unknown"}
+                      </p>
+                      <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                        Updated:{" "}
+                        {formatDateTime(databaseRuntimeSetup?.updatedAt ?? null)}
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg border border-zinc-300 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-800/45">
+                      <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
+                        Local PostgreSQL
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                        {databaseRuntimeSetup?.local.configured
+                          ? "Configured"
+                          : "Missing"}
+                      </p>
+                      <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                        {databaseRuntimeSetup?.local.host ?? "No host"}
+                        {databaseRuntimeSetup?.local.database
+                          ? ` / ${databaseRuntimeSetup.local.database}`
+                          : ""}
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg border border-zinc-300 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-800/45">
+                      <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
+                        Live PostgreSQL
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                        {databaseRuntimeSetup?.live.configured
+                          ? "Configured"
+                          : "Missing"}
+                      </p>
+                      <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                        {databaseRuntimeSetup?.live.host ?? "No host"}
+                        {databaseRuntimeSetup?.live.database
+                          ? ` / ${databaseRuntimeSetup.live.database}`
+                          : ""}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid gap-2 lg:grid-cols-2">
+                    {([databaseRuntimeSetup?.local, databaseRuntimeSetup?.live]
+                      .filter(Boolean) as AdminDatabaseRuntimeEndpoint[]).map(
+                      (entry) => (
+                        <div
+                          key={`database-runtime-endpoint-${entry.target}`}
+                          className="rounded-lg border border-zinc-300 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-800/45"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
+                              {entry.label}
+                            </p>
+                            <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                              {entry.envName}
+                            </span>
+                          </div>
+                          <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-300">
+                            Host: {entry.host ?? "Not configured"}
+                          </p>
+                          <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">
+                            Database: {entry.database ?? "Not configured"}
+                          </p>
+                          <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">
+                            Port: {entry.port ?? "Default"}
+                            {entry.ssl === null
+                              ? ""
+                              : ` · SSL ${entry.ssl ? "on" : "off"}`}
+                          </p>
+                        </div>
+                      ),
+                    )}
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void onSwitchDatabaseRuntime("live")}
+                      disabled={
+                        isSwitchingDatabaseRuntime ||
+                        !databaseRuntimeSetup?.live.configured
+                      }
+                      className="h-8 rounded-md bg-indigo-600 px-3 text-xs font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isSwitchingDatabaseRuntime &&
+                      databaseRuntimeSetup?.effectiveTarget === "live"
+                        ? "Switching..."
+                        : "Use Live DB"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void onSwitchDatabaseRuntime("local")}
+                      disabled={
+                        isSwitchingDatabaseRuntime ||
+                        !databaseRuntimeSetup?.local.configured
+                      }
+                      className="h-8 rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                    >
+                      {isSwitchingDatabaseRuntime &&
+                      databaseRuntimeSetup?.effectiveTarget === "local"
+                        ? "Switching..."
+                        : "Use Local DB"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void onSyncDatabaseD1()}
+                      disabled={
+                        isSyncingDatabaseD1 ||
+                        !databaseRuntimeSetup?.d1.databaseName
+                      }
+                      className="h-8 rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                    >
+                      {isSyncingDatabaseD1 ? "Syncing D1..." : "Sync Current DB to D1"}
+                    </button>
+                  </div>
+
+                  {isLoadingDatabaseRuntime ? (
+                    <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
+                      Loading database runtime controls...
+                    </p>
+                  ) : null}
+                  {databaseRuntimeError ? (
+                    <p className="mt-3 text-xs text-rose-500">
+                      {databaseRuntimeError}
+                    </p>
+                  ) : null}
+                  {databaseRuntimeSuccess ? (
+                    <p className="mt-3 text-xs text-emerald-500">
+                      {databaseRuntimeSuccess}
+                    </p>
+                  ) : null}
+                  <p className="mt-3 text-[11px] text-zinc-500 dark:text-zinc-400">
+                    The local/live switch only changes this machine. The app
+                    still runs on PostgreSQL. D1 is managed as a snapshot target.
+                  </p>
+                </div>
+
+                <div className="mb-4 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
+                        Cloudflare D1 Snapshot
+                      </p>
+                      <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                        Save the D1 target used by the sync button.
+                      </p>
+                    </div>
+                    <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                      Last import:{" "}
+                      {formatDateTime(
+                        databaseRuntimeSetup?.d1.lastImportedAt ?? null,
+                      )}
+                    </span>
+                  </div>
+
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <input
+                      type="text"
+                      value={databaseD1AccountIdDraft}
+                      onChange={(event) =>
+                        setDatabaseD1AccountIdDraft(event.target.value)
+                      }
+                      placeholder="Cloudflare Account ID"
+                      className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
+                    />
+                    <input
+                      type="text"
+                      value={databaseD1DatabaseIdDraft}
+                      onChange={(event) =>
+                        setDatabaseD1DatabaseIdDraft(event.target.value)
+                      }
+                      placeholder="D1 Database ID"
+                      className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
+                    />
+                    <input
+                      type="text"
+                      value={databaseD1DatabaseNameDraft}
+                      onChange={(event) =>
+                        setDatabaseD1DatabaseNameDraft(event.target.value)
+                      }
+                      placeholder="D1 Database Name"
+                      className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
+                    />
+                    <input
+                      type="url"
+                      value={databaseD1ManagementUrlDraft}
+                      onChange={(event) =>
+                        setDatabaseD1ManagementUrlDraft(event.target.value)
+                      }
+                      placeholder="D1 Dashboard URL"
+                      className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
+                    />
+                  </div>
+
+                  <div className="mt-3 grid gap-2 md:grid-cols-4">
+                    <div className="rounded-lg border border-zinc-300 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-800/45">
+                      <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
+                        Configured
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                        {databaseRuntimeSetup?.d1.configured ? "Yes" : "No"}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-zinc-300 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-800/45">
+                      <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
+                        Last Source
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                        {databaseRuntimeSetup?.d1.lastImportSource
+                          ? databaseRuntimeSetup.d1.lastImportSource === "local"
+                            ? "Local PostgreSQL"
+                            : "Live PostgreSQL"
+                          : "Never"}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-zinc-300 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-800/45">
+                      <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
+                        Tables
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                        {databaseRuntimeSetup?.d1.lastImportTables ?? 0}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-zinc-300 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-800/45">
+                      <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
+                        Rows Written
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                        {databaseRuntimeSetup?.d1.lastImportRowsWritten ?? 0}
+                      </p>
+                    </div>
+                  </div>
+
+                  {databaseRuntimeSetup?.d1.lastImportNote ? (
+                    <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
+                      {databaseRuntimeSetup.d1.lastImportNote}
+                    </p>
+                  ) : null}
+
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => void onSaveDatabaseRuntimeSetup()}
+                      disabled={isSavingDatabaseRuntime}
+                      className="h-9 rounded-md bg-indigo-600 px-3 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isSavingDatabaseRuntime ? "Saving..." : "Save D1 Target"}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">

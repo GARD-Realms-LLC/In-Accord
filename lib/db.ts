@@ -5,11 +5,16 @@ import { Pool } from "pg";
 
 import "@/lib/silence-server-console";
 
+import {
+  getEffectiveDatabaseConnectionString,
+} from "@/lib/database-runtime-control";
 import * as schema from "@/lib/db/schema";
 
 declare global {
   // eslint-disable-next-line no-var
   var pgPool: Pool | undefined;
+  // eslint-disable-next-line no-var
+  var pgPoolConnectionString: string | undefined;
 }
 
 const createDb = (pool: Pool) => drizzle(pool, { schema });
@@ -18,38 +23,57 @@ type DbInstance = ReturnType<typeof createDb>;
 
 let cachedPool: Pool | null = null;
 let cachedDb: DbInstance | null = null;
+let cachedConnectionString: string | null = null;
 
 const getConnectionString = () => {
-  const liveDatabaseUrl = process.env.LIVE_DATABASE_URL?.trim();
-  const connectionString =
-    liveDatabaseUrl && !/^replace_/i.test(liveDatabaseUrl)
-      ? liveDatabaseUrl
-      : "";
-
-  if (!connectionString) {
-    throw new Error("No database URL configured. Set LIVE_DATABASE_URL for the shared live PostgreSQL database.");
-  }
-
-  return connectionString;
+  return getEffectiveDatabaseConnectionString();
 };
 
 const getPool = () => {
-  if (cachedPool) {
+  const connectionString = getConnectionString();
+
+  if (cachedPool && cachedConnectionString === connectionString) {
     return cachedPool;
   }
 
-  const pooled =
-    globalThis.pgPool ||
-    new Pool({
-      connectionString: getConnectionString(),
-      max: 10,
-    });
+  if (
+    globalThis.pgPool &&
+    globalThis.pgPoolConnectionString === connectionString
+  ) {
+    cachedPool = globalThis.pgPool;
+    cachedConnectionString = connectionString;
+    return cachedPool;
+  }
+
+  const previousPool =
+    cachedPool ??
+    (globalThis.pgPoolConnectionString !== connectionString
+      ? globalThis.pgPool
+      : null);
+  const pooled = new Pool({
+    connectionString,
+    max: 10,
+  });
 
   if (process.env.NODE_ENV !== "production") {
     globalThis.pgPool = pooled;
+    globalThis.pgPoolConnectionString = connectionString;
   }
 
   cachedPool = pooled;
+  cachedDb = null;
+  cachedConnectionString = connectionString;
+
+  if (previousPool && previousPool !== pooled) {
+    const closablePool = previousPool as unknown as {
+      end?: () => Promise<void> | void;
+    };
+    const endResult = closablePool.end?.();
+    if (endResult && typeof (endResult as Promise<void>).catch === "function") {
+      void (endResult as Promise<void>).catch(() => undefined);
+    }
+  }
+
   return cachedPool;
 };
 
