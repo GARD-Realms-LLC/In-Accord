@@ -49,7 +49,8 @@ export async function POST(request: Request) {
         ? await db.execute(sql`
             select
               u."userId",
-              coalesce(lc."passwordHash", u."password_hash") as "passwordHash",
+              lc."passwordHash" as "localPasswordHash",
+              u."password_hash" as "legacyPasswordHash",
               case
                 when lc."passwordHash" is not null then 0
                 when coalesce(u."password_hash", '') <> '' then 1
@@ -64,7 +65,8 @@ export async function POST(request: Request) {
         : await db.execute(sql`
             select
               u."userId",
-              lc."passwordHash" as "passwordHash",
+              lc."passwordHash" as "localPasswordHash",
+              null::text as "legacyPasswordHash",
               case
                 when lc."passwordHash" is not null then 0
                 else 2
@@ -79,7 +81,8 @@ export async function POST(request: Request) {
         ? await db.execute(sql`
             select
               u."userId",
-              u."password_hash" as "passwordHash",
+              null::text as "localPasswordHash",
+              u."password_hash" as "legacyPasswordHash",
               case
                 when coalesce(u."password_hash", '') <> '' then 1
                 else 2
@@ -91,7 +94,11 @@ export async function POST(request: Request) {
         : { rows: [] };
 
     const candidates = (userRowsResult as unknown as {
-      rows: Array<{ userId: string; passwordHash: string | null }>;
+      rows: Array<{
+        userId: string;
+        localPasswordHash: string | null;
+        legacyPasswordHash: string | null;
+      }>;
     }).rows;
 
     if (!candidates?.length) {
@@ -100,13 +107,20 @@ export async function POST(request: Request) {
 
     let authenticatedUserId: string | null = null;
     for (const candidate of candidates) {
-      if (!candidate.passwordHash) {
-        continue;
+      const hashes = [candidate.localPasswordHash, candidate.legacyPasswordHash].filter(
+        (hash, index, values): hash is string =>
+          Boolean(hash) && values.findIndex((value) => value === hash) === index
+      );
+
+      for (const hash of hashes) {
+        const ok = await verifyPassword(password, hash);
+        if (ok) {
+          authenticatedUserId = candidate.userId;
+          break;
+        }
       }
 
-      const ok = await verifyPassword(password, candidate.passwordHash);
-      if (ok) {
-        authenticatedUserId = candidate.userId;
+      if (authenticatedUserId) {
         break;
       }
     }
