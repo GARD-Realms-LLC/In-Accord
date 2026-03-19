@@ -1,5 +1,7 @@
 import "server-only";
 
+import { getCloudflareContext } from "@opennextjs/cloudflare";
+
 export type DatabaseRuntimeTarget = "live" | "local";
 
 type StoredDatabaseRuntimeControl = {
@@ -140,6 +142,31 @@ const normalizeCount = (value: unknown) => {
 const isPlaceholderValue = (value: string | null | undefined) =>
   !value || /^replace_/i.test(value.trim());
 
+const readCloudflareEnvText = (
+  envName: "LIVE_DATABASE_URL" | "DATABASE_URL",
+) => {
+  try {
+    const context = getCloudflareContext();
+    const env = context?.env as Record<string, unknown> | undefined;
+    const value = env?.[envName];
+    return typeof value === "string" ? value.trim() : null;
+  } catch {
+    return null;
+  }
+};
+
+const readRuntimeDatabaseUrl = (
+  envName: "LIVE_DATABASE_URL" | "DATABASE_URL",
+) => {
+  const processValue = String(process.env[envName] ?? "").trim();
+  if (!isPlaceholderValue(processValue)) {
+    return processValue;
+  }
+
+  const cloudflareValue = readCloudflareEnvText(envName);
+  return !isPlaceholderValue(cloudflareValue) ? cloudflareValue : "";
+};
+
 const readStoredDatabaseRuntimeControl = (): StoredDatabaseRuntimeControl => {
   const fs = getFsModule();
   const targetPath = getDatabaseRuntimeControlPath();
@@ -237,12 +264,12 @@ const buildDatabaseRuntimeSetup = (
   stored: StoredDatabaseRuntimeControl,
 ): DatabaseRuntimeSetup => {
   const local = parseDatabaseUrl(
-    process.env.DATABASE_URL,
+    readRuntimeDatabaseUrl("DATABASE_URL"),
     "local",
     "DATABASE_URL",
   );
   const live = parseDatabaseUrl(
-    process.env.LIVE_DATABASE_URL,
+    readRuntimeDatabaseUrl("LIVE_DATABASE_URL"),
     "live",
     "LIVE_DATABASE_URL",
   );
@@ -296,14 +323,14 @@ export const getOptionalEffectiveDatabaseConnectionString = () => {
   const setup = getDatabaseRuntimeSetup();
   const connectionString =
     setup.effectiveTarget === "local"
-      ? String(process.env.DATABASE_URL ?? "").trim()
-      : String(process.env.LIVE_DATABASE_URL ?? "").trim();
+      ? readRuntimeDatabaseUrl("DATABASE_URL")
+      : readRuntimeDatabaseUrl("LIVE_DATABASE_URL");
 
   if (isPlaceholderValue(connectionString)) {
     return null;
   }
 
-  if (!/^postgres(ql)?:\/\//i.test(connectionString)) {
+  if (!connectionString || !/^postgres(ql)?:\/\//i.test(connectionString)) {
     return null;
   }
 
