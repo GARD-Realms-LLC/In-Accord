@@ -146,6 +146,20 @@ const readCloudflareEnvText = (
   envName: "LIVE_DATABASE_URL" | "DATABASE_URL",
 ) => {
   try {
+    const symbol = Symbol.for("__cloudflare-context__");
+    const globalContext = (globalThis as Record<PropertyKey, unknown>)[symbol] as
+      | { env?: Record<string, unknown> }
+      | undefined;
+    const directValue = globalContext?.env?.[envName];
+
+    if (typeof directValue === "string") {
+      return directValue.trim();
+    }
+  } catch {
+    // Fall through to the adapter helper below.
+  }
+
+  try {
     const context = getCloudflareContext();
     const env = context?.env as Record<string, unknown> | undefined;
     const value = env?.[envName];
@@ -155,7 +169,7 @@ const readCloudflareEnvText = (
   }
 };
 
-const readRuntimeDatabaseUrl = (
+const readRawRuntimeDatabaseUrl = (
   envName: "LIVE_DATABASE_URL" | "DATABASE_URL",
 ) => {
   const cloudflareValue = readCloudflareEnvText(envName);
@@ -165,6 +179,21 @@ const readRuntimeDatabaseUrl = (
 
   const processValue = String(process.env[envName] ?? "").trim();
   return !isPlaceholderValue(processValue) ? processValue : "";
+};
+
+const readRuntimeDatabaseUrl = (
+  envName: "LIVE_DATABASE_URL" | "DATABASE_URL",
+) => {
+  const directValue = readRawRuntimeDatabaseUrl(envName);
+  if (!isPlaceholderValue(directValue)) {
+    return directValue;
+  }
+
+  const fallbackEnvName =
+    envName === "LIVE_DATABASE_URL" ? "DATABASE_URL" : "LIVE_DATABASE_URL";
+  const fallbackValue = readRawRuntimeDatabaseUrl(fallbackEnvName);
+
+  return !isPlaceholderValue(fallbackValue) ? fallbackValue : "";
 };
 
 const readStoredDatabaseRuntimeControl = (): StoredDatabaseRuntimeControl => {
