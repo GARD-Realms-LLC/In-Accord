@@ -59,14 +59,21 @@ export async function getServerInviteHistory(serverId: string): Promise<ServerIn
       h."source" as "source",
       h."createdByProfileId" as "createdByProfileId",
       h."createdAt" as "createdAt",
-      coalesce(count(u."profileId"), 0) as "usedCount",
-      coalesce(json_agg(u."profileId") filter (where u."profileId" is not null), '[]'::json) as "usedByProfileIds"
+      coalesce((
+        select count(*)
+        from "ServerInviteHistoryUse" u
+        where u."serverId" = h."serverId"
+          and u."code" = h."code"
+      ), 0) as "usedCount",
+      coalesce((
+        select json_group_array(u."profileId")
+        from "ServerInviteHistoryUse" u
+        where u."serverId" = h."serverId"
+          and u."code" = h."code"
+          and u."profileId" is not null
+      ), '[]') as "usedByProfileIds"
     from "ServerInviteHistory" h
-    left join "ServerInviteHistoryUse" u
-      on u."serverId" = h."serverId"
-     and u."code" = h."code"
     where h."serverId" = ${normalizedServerId}
-    group by h."serverId", h."code", h."source", h."createdByProfileId", h."createdAt"
     order by h."createdAt" desc
   `);
 

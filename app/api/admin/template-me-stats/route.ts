@@ -287,8 +287,8 @@ export async function GET(req: Request) {
       inner join "Users" u on u."userId" = m."profileId"
       inner join "Server" s on s."id" = m."serverId"
       where
-        regexp_replace(lower(coalesce(u."name", '')), '\\s+', ' ', 'g') like '%template%'
-        and regexp_replace(lower(coalesce(u."name", '')), '\\s+', ' ', 'g') like '%bot%'
+        lower(coalesce(u."name", '')) like '%template%'
+        and lower(coalesce(u."name", '')) like '%bot%'
     `);
 
     const globalRows = (globalTemplateBotMembershipRows as unknown as {

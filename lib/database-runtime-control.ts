@@ -1,11 +1,10 @@
 import "server-only";
 
-import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { sql } from "drizzle-orm";
 
-export type DatabaseRuntimeTarget = "live" | "local";
+import { db } from "@/lib/db";
 
 type StoredDatabaseRuntimeControl = {
-  activeTarget?: DatabaseRuntimeTarget;
   d1AccountId?: string | null;
   d1DatabaseId?: string | null;
   d1DatabaseName?: string | null;
@@ -17,6 +16,8 @@ type StoredDatabaseRuntimeControl = {
   d1LastImportNote?: string | null;
   updatedAt?: string | null;
 };
+
+export type DatabaseRuntimeTarget = "live" | "local";
 
 export type DatabaseRuntimeEndpointInfo = {
   target: DatabaseRuntimeTarget;
@@ -43,9 +44,10 @@ export type DatabaseRuntimeD1Info = {
 };
 
 export type DatabaseRuntimeSetup = {
+  runtime: "d1";
   activeTarget: DatabaseRuntimeTarget;
   effectiveTarget: DatabaseRuntimeTarget;
-  effectiveSource: "runtime" | "fallback";
+  effectiveSource: "runtime";
   updatedAt: string | null;
   local: DatabaseRuntimeEndpointInfo;
   live: DatabaseRuntimeEndpointInfo;
@@ -53,12 +55,20 @@ export type DatabaseRuntimeSetup = {
 };
 
 const DATABASE_RUNTIME_CONTROL_FILE = "database-runtime-control.json";
+const DATABASE_RUNTIME_CONTROL_TABLE = "InAccordDatabaseRuntimeConfig";
+const DATABASE_RUNTIME_CONTROL_ROW_ID = 1;
+const DEFAULT_D1_ACCOUNT_ID = "e6170abf1613b7f0d6f016cda0f7fcf4";
+const DEFAULT_D1_DATABASE_ID = "34b0c741-8247-45bd-811f-12855ad69a90";
+const DEFAULT_D1_DATABASE_NAME = "inaccordweb";
+const DEFAULT_D1_MANAGEMENT_URL =
+  "https://dash.cloudflare.com/e6170abf1613b7f0d6f016cda0f7fcf4/workers/d1/databases/34b0c741-8247-45bd-811f-12855ad69a90";
 
 type FsModule = typeof import("fs");
 type PathModule = typeof import("path");
 
 let cachedFsModule: FsModule | null = null;
 let cachedPathModule: PathModule | null = null;
+let databaseRuntimeControlSchemaReady = false;
 
 const getBuiltinModule = <TModule,>(moduleName: string): TModule | null => {
   const builtinLoader = (process as typeof process & {
@@ -127,9 +137,6 @@ const normalizeUrl = (value: unknown) => {
   }
 };
 
-const normalizeTarget = (value: unknown): DatabaseRuntimeTarget =>
-  String(value ?? "").trim().toLowerCase() === "local" ? "local" : "live";
-
 const normalizeCount = (value: unknown) => {
   const numeric = Number(value);
   if (!Number.isFinite(numeric) || numeric < 0) {
@@ -139,80 +146,43 @@ const normalizeCount = (value: unknown) => {
   return Math.floor(numeric);
 };
 
-const isPlaceholderValue = (value: string | null | undefined) =>
-  !value || /^replace_/i.test(value.trim());
-
-const readCloudflareEnvText = (
-  envName: "LIVE_DATABASE_URL" | "DATABASE_URL",
-) => {
-  try {
-    const symbol = Symbol.for("__cloudflare-context__");
-    const globalContext = (globalThis as Record<PropertyKey, unknown>)[symbol] as
-      | { env?: Record<string, unknown> }
-      | undefined;
-    const directValue = globalContext?.env?.[envName];
-
-    if (typeof directValue === "string") {
-      return directValue.trim();
-    }
-  } catch {
-    // Fall through to the adapter helper below.
+const normalizeStoredD1DatabaseName = (value: unknown) => {
+  const normalized = normalizeText(value, 191);
+  if (!normalized || normalized.toLowerCase() === "inaccord") {
+    return DEFAULT_D1_DATABASE_NAME;
   }
 
-  try {
-    const context = getCloudflareContext();
-    const env = context?.env as Record<string, unknown> | undefined;
-    const value = env?.[envName];
-    return typeof value === "string" ? value.trim() : null;
-  } catch {
-    return null;
-  }
+  return normalized;
 };
 
-const readRawRuntimeDatabaseUrl = (
-  envName: "LIVE_DATABASE_URL" | "DATABASE_URL",
-) => {
-  const cloudflareValue = readCloudflareEnvText(envName);
-  if (!isPlaceholderValue(cloudflareValue)) {
-    return cloudflareValue;
-  }
+const createDefaultStoredDatabaseRuntimeControl =
+  (): StoredDatabaseRuntimeControl => ({
+    d1AccountId: DEFAULT_D1_ACCOUNT_ID,
+    d1DatabaseId: DEFAULT_D1_DATABASE_ID,
+    d1DatabaseName: DEFAULT_D1_DATABASE_NAME,
+    d1ManagementUrl: DEFAULT_D1_MANAGEMENT_URL,
+    updatedAt: null,
+  });
 
-  const processValue = String(process.env[envName] ?? "").trim();
-  return !isPlaceholderValue(processValue) ? processValue : "";
-};
-
-const readRuntimeDatabaseUrl = (
-  envName: "LIVE_DATABASE_URL" | "DATABASE_URL",
-) => {
-  const directValue = readRawRuntimeDatabaseUrl(envName);
-  if (!isPlaceholderValue(directValue)) {
-    return directValue;
-  }
-
-  const fallbackEnvName =
-    envName === "LIVE_DATABASE_URL" ? "DATABASE_URL" : "LIVE_DATABASE_URL";
-  const fallbackValue = readRawRuntimeDatabaseUrl(fallbackEnvName);
-
-  return !isPlaceholderValue(fallbackValue) ? fallbackValue : "";
-};
-
-const readStoredDatabaseRuntimeControl = (): StoredDatabaseRuntimeControl => {
+const readStoredDatabaseRuntimeControlFromFile = (): StoredDatabaseRuntimeControl => {
   const fs = getFsModule();
   const targetPath = getDatabaseRuntimeControlPath();
   if (!fs || !targetPath || !fs.existsSync(targetPath)) {
-    return {};
+    return createDefaultStoredDatabaseRuntimeControl();
   }
 
   try {
     const raw = fs.readFileSync(targetPath, "utf8");
     const parsed = JSON.parse(raw) as StoredDatabaseRuntimeControl;
-    return parsed && typeof parsed === "object" ? parsed : {};
+    return parsed && typeof parsed === "object"
+      ? parsed
+      : createDefaultStoredDatabaseRuntimeControl();
   } catch {
-    return {};
+    return createDefaultStoredDatabaseRuntimeControl();
   }
 };
 
-const writeStoredDatabaseRuntimeControl = (
+const writeStoredDatabaseRuntimeControlToFile = (
   nextValue: StoredDatabaseRuntimeControl,
 ) => {
   const fs = getFsModule();
@@ -232,107 +202,188 @@ const writeStoredDatabaseRuntimeControl = (
   );
 };
 
-const parseDatabaseUrl = (
-  value: string | null | undefined,
-  target: DatabaseRuntimeTarget,
-  envName: "LIVE_DATABASE_URL" | "DATABASE_URL",
-): DatabaseRuntimeEndpointInfo => {
-  const normalized = String(value ?? "").trim();
-  const label = target === "live" ? "Live PostgreSQL" : "Local PostgreSQL";
-
-  if (isPlaceholderValue(normalized)) {
-    return {
-      target,
-      label,
-      envName,
-      configured: false,
-      host: null,
-      port: null,
-      database: null,
-      ssl: null,
-    };
+const ensureDatabaseRuntimeControlSchema = async () => {
+  if (databaseRuntimeControlSchemaReady) {
+    return;
   }
 
+  await db.execute(sql.raw(`
+    create table if not exists "${DATABASE_RUNTIME_CONTROL_TABLE}" (
+      "id" integer primary key,
+      "accountId" text,
+      "databaseId" text,
+      "databaseName" text,
+      "managementUrl" text,
+      "lastImportedAt" text,
+      "lastImportSource" text,
+      "lastImportTables" integer,
+      "lastImportRowsWritten" integer,
+      "lastImportNote" text,
+      "updatedAt" text
+    )
+  `));
+
+  await db.execute(sql`
+    insert into "InAccordDatabaseRuntimeConfig" (
+      "id",
+      "accountId",
+      "databaseId",
+      "databaseName",
+      "managementUrl",
+      "updatedAt"
+    )
+    values (
+      ${DATABASE_RUNTIME_CONTROL_ROW_ID},
+      ${DEFAULT_D1_ACCOUNT_ID},
+      ${DEFAULT_D1_DATABASE_ID},
+      ${DEFAULT_D1_DATABASE_NAME},
+      ${DEFAULT_D1_MANAGEMENT_URL},
+      ${new Date().toISOString()}
+    )
+    on conflict ("id") do nothing
+  `);
+
+  databaseRuntimeControlSchemaReady = true;
+};
+
+const readStoredDatabaseRuntimeControlFromD1 =
+  async (): Promise<StoredDatabaseRuntimeControl | null> => {
+    await ensureDatabaseRuntimeControlSchema();
+
+    const result = await db.execute(sql`
+      select
+        "accountId" as "d1AccountId",
+        "databaseId" as "d1DatabaseId",
+        "databaseName" as "d1DatabaseName",
+        "managementUrl" as "d1ManagementUrl",
+        "lastImportedAt" as "d1LastImportedAt",
+        "lastImportSource" as "d1LastImportSource",
+        "lastImportTables" as "d1LastImportTables",
+        "lastImportRowsWritten" as "d1LastImportRowsWritten",
+        "lastImportNote" as "d1LastImportNote",
+        "updatedAt" as "updatedAt"
+      from "InAccordDatabaseRuntimeConfig"
+      where "id" = ${DATABASE_RUNTIME_CONTROL_ROW_ID}
+      limit 1
+    `);
+
+    const row = ((result as unknown as {
+      rows?: StoredDatabaseRuntimeControl[];
+    }).rows ?? [])[0];
+
+    return row ?? null;
+  };
+
+const readStoredDatabaseRuntimeControl =
+  async (): Promise<StoredDatabaseRuntimeControl> => {
+    try {
+      const stored = await readStoredDatabaseRuntimeControlFromD1();
+      if (stored) {
+        return stored;
+      }
+    } catch {
+      // Fall back to local state for runtimes without live D1 access.
+    }
+
+    return readStoredDatabaseRuntimeControlFromFile();
+  };
+
+const writeStoredDatabaseRuntimeControlToD1 = async (
+  nextValue: StoredDatabaseRuntimeControl,
+) => {
+  await ensureDatabaseRuntimeControlSchema();
+
+  await db.execute(sql`
+    insert into "InAccordDatabaseRuntimeConfig" (
+      "id",
+      "accountId",
+      "databaseId",
+      "databaseName",
+      "managementUrl",
+      "lastImportedAt",
+      "lastImportSource",
+      "lastImportTables",
+      "lastImportRowsWritten",
+      "lastImportNote",
+      "updatedAt"
+    )
+    values (
+      ${DATABASE_RUNTIME_CONTROL_ROW_ID},
+      ${normalizeText(nextValue.d1AccountId, 191)},
+      ${normalizeText(nextValue.d1DatabaseId, 191)},
+      ${normalizeStoredD1DatabaseName(nextValue.d1DatabaseName)},
+      ${normalizeUrl(nextValue.d1ManagementUrl)},
+      ${normalizeText(nextValue.d1LastImportedAt, 128)},
+      ${normalizeText(nextValue.d1LastImportSource, 64)},
+      ${normalizeCount(nextValue.d1LastImportTables)},
+      ${normalizeCount(nextValue.d1LastImportRowsWritten)},
+      ${normalizeText(nextValue.d1LastImportNote, 1024)},
+      ${normalizeText(nextValue.updatedAt, 128)}
+    )
+    on conflict ("id") do update set
+      "accountId" = excluded."accountId",
+      "databaseId" = excluded."databaseId",
+      "databaseName" = excluded."databaseName",
+      "managementUrl" = excluded."managementUrl",
+      "lastImportedAt" = excluded."lastImportedAt",
+      "lastImportSource" = excluded."lastImportSource",
+      "lastImportTables" = excluded."lastImportTables",
+      "lastImportRowsWritten" = excluded."lastImportRowsWritten",
+      "lastImportNote" = excluded."lastImportNote",
+      "updatedAt" = excluded."updatedAt"
+  `);
+};
+
+const writeStoredDatabaseRuntimeControl = async (
+  nextValue: StoredDatabaseRuntimeControl,
+) => {
   try {
-    const parsed = new URL(normalized);
-    const databaseName = parsed.pathname.replace(/^\/+/, "").trim() || null;
-    const sslHint =
-      parsed.searchParams.get("sslmode") ??
-      parsed.searchParams.get("ssl") ??
-      parsed.searchParams.get("tls");
-    const ssl =
-      sslHint === null
-        ? null
-        : /^(1|true|require|verify-ca|verify-full)$/i.test(sslHint);
-
-    return {
-      target,
-      label,
-      envName,
-      configured: true,
-      host: parsed.hostname || null,
-      port: parsed.port || null,
-      database: databaseName,
-      ssl,
-    };
+    await writeStoredDatabaseRuntimeControlToD1(nextValue);
+    return;
   } catch {
-    return {
-      target,
-      label,
-      envName,
-      configured: false,
-      host: null,
-      port: null,
-      database: null,
-      ssl: null,
-    };
+    // Fall back to local state for runtimes without live D1 access.
   }
+
+  writeStoredDatabaseRuntimeControlToFile(nextValue);
 };
 
 const buildDatabaseRuntimeSetup = (
   stored: StoredDatabaseRuntimeControl,
 ): DatabaseRuntimeSetup => {
-  const local = parseDatabaseUrl(
-    readRuntimeDatabaseUrl("DATABASE_URL"),
-    "local",
-    "DATABASE_URL",
-  );
-  const live = parseDatabaseUrl(
-    readRuntimeDatabaseUrl("LIVE_DATABASE_URL"),
-    "live",
-    "LIVE_DATABASE_URL",
-  );
-
-  const activeTarget = normalizeTarget(stored.activeTarget);
-  let effectiveTarget = activeTarget;
-  let effectiveSource: "runtime" | "fallback" = "runtime";
-
-  if (effectiveTarget === "local" && !local.configured) {
-    effectiveTarget = live.configured ? "live" : "local";
-    effectiveSource = "fallback";
-  }
-
-  if (effectiveTarget === "live" && !live.configured) {
-    effectiveTarget = local.configured ? "local" : "live";
-    effectiveSource = "fallback";
-  }
-
   return {
-    activeTarget,
-    effectiveTarget,
-    effectiveSource,
+    runtime: "d1",
+    activeTarget: "live",
+    effectiveTarget: "live",
+    effectiveSource: "runtime",
     updatedAt: normalizeText(stored.updatedAt, 128),
-    local,
-    live,
+    local: {
+      target: "local",
+      label: "Local PostgreSQL",
+      envName: "DATABASE_URL",
+      configured: false,
+      host: null,
+      port: null,
+      database: null,
+      ssl: null,
+    },
+    live: {
+      target: "live",
+      label: "Live PostgreSQL",
+      envName: "LIVE_DATABASE_URL",
+      configured: false,
+      host: null,
+      port: null,
+      database: null,
+      ssl: null,
+    },
     d1: {
-      configured: Boolean(
-        normalizeText(stored.d1DatabaseName, 191) ||
-          normalizeText(stored.d1DatabaseId, 191),
-      ),
-      accountId: normalizeText(stored.d1AccountId, 191),
-      databaseId: normalizeText(stored.d1DatabaseId, 191),
-      databaseName: normalizeText(stored.d1DatabaseName, 191),
-      managementUrl: normalizeUrl(stored.d1ManagementUrl),
+      configured: true,
+      accountId: normalizeText(stored.d1AccountId, 191) ?? DEFAULT_D1_ACCOUNT_ID,
+      databaseId:
+        normalizeText(stored.d1DatabaseId, 191) ?? DEFAULT_D1_DATABASE_ID,
+      databaseName: normalizeStoredD1DatabaseName(stored.d1DatabaseName),
+      managementUrl:
+        normalizeUrl(stored.d1ManagementUrl) ?? DEFAULT_D1_MANAGEMENT_URL,
       lastImportedAt: normalizeText(stored.d1LastImportedAt, 128),
       lastImportSource: normalizeText(stored.d1LastImportSource, 64),
       lastImportTables: normalizeCount(stored.d1LastImportTables),
@@ -342,72 +393,16 @@ const buildDatabaseRuntimeSetup = (
   };
 };
 
-export const getDatabaseRuntimeSetup = (): DatabaseRuntimeSetup =>
-  buildDatabaseRuntimeSetup(readStoredDatabaseRuntimeControl());
+export const getDatabaseRuntimeSetup = async (): Promise<DatabaseRuntimeSetup> =>
+  buildDatabaseRuntimeSetup(await readStoredDatabaseRuntimeControl());
 
-export const getEffectiveDatabaseTarget = (): DatabaseRuntimeTarget =>
-  getDatabaseRuntimeSetup().effectiveTarget;
-
-export const getOptionalEffectiveDatabaseConnectionString = () => {
-  const setup = getDatabaseRuntimeSetup();
-  const connectionString =
-    setup.effectiveTarget === "local"
-      ? readRuntimeDatabaseUrl("DATABASE_URL")
-      : readRuntimeDatabaseUrl("LIVE_DATABASE_URL");
-
-  if (isPlaceholderValue(connectionString)) {
-    return null;
-  }
-
-  if (!connectionString || !/^postgres(ql)?:\/\//i.test(connectionString)) {
-    return null;
-  }
-
-  return connectionString;
-};
-
-export const getEffectiveDatabaseConnectionString = () => {
-  const connectionString = getOptionalEffectiveDatabaseConnectionString();
-
-  if (!connectionString) {
-    throw new Error(
-      "No database URL configured. Set LIVE_DATABASE_URL or DATABASE_URL.",
-    );
-  }
-
-  return connectionString;
-};
-
-export const setDatabaseRuntimeTarget = (
-  nextTarget: DatabaseRuntimeTarget,
-): DatabaseRuntimeSetup => {
-  const setup = getDatabaseRuntimeSetup();
-  const targetInfo = nextTarget === "local" ? setup.local : setup.live;
-
-  if (!targetInfo.configured) {
-    throw new Error(
-      `${targetInfo.envName} is not configured for ${targetInfo.label}.`,
-    );
-  }
-
-  const current = readStoredDatabaseRuntimeControl();
-  const nextValue: StoredDatabaseRuntimeControl = {
-    ...current,
-    activeTarget: nextTarget,
-    updatedAt: new Date().toISOString(),
-  };
-
-  writeStoredDatabaseRuntimeControl(nextValue);
-  return getDatabaseRuntimeSetup();
-};
-
-export const updateDatabaseRuntimeD1Info = (updates: {
+export const updateDatabaseRuntimeD1Info = async (updates: {
   accountId?: string | null;
   databaseId?: string | null;
   databaseName?: string | null;
   managementUrl?: string | null;
 }) => {
-  const current = readStoredDatabaseRuntimeControl();
+  const current = await readStoredDatabaseRuntimeControl();
   const nextValue: StoredDatabaseRuntimeControl = {
     ...current,
     ...(Object.prototype.hasOwnProperty.call(updates, "accountId")
@@ -417,7 +412,7 @@ export const updateDatabaseRuntimeD1Info = (updates: {
       ? { d1DatabaseId: normalizeText(updates.databaseId, 191) }
       : {}),
     ...(Object.prototype.hasOwnProperty.call(updates, "databaseName")
-      ? { d1DatabaseName: normalizeText(updates.databaseName, 191) }
+      ? { d1DatabaseName: normalizeStoredD1DatabaseName(updates.databaseName) }
       : {}),
     ...(Object.prototype.hasOwnProperty.call(updates, "managementUrl")
       ? { d1ManagementUrl: normalizeUrl(updates.managementUrl) }
@@ -425,27 +420,27 @@ export const updateDatabaseRuntimeD1Info = (updates: {
     updatedAt: new Date().toISOString(),
   };
 
-  writeStoredDatabaseRuntimeControl(nextValue);
+  await writeStoredDatabaseRuntimeControl(nextValue);
   return getDatabaseRuntimeSetup();
 };
 
-export const recordDatabaseRuntimeD1Sync = (details: {
-  sourceTarget: DatabaseRuntimeTarget;
+export const recordDatabaseRuntimeD1Sync = async (details: {
+  sourceTarget?: string | null;
   tableCount?: number | null;
   rowsWritten?: number | null;
   note?: string | null;
 }) => {
-  const current = readStoredDatabaseRuntimeControl();
+  const current = await readStoredDatabaseRuntimeControl();
   const nextValue: StoredDatabaseRuntimeControl = {
     ...current,
     d1LastImportedAt: new Date().toISOString(),
-    d1LastImportSource: details.sourceTarget,
+    d1LastImportSource: normalizeText(details.sourceTarget, 64),
     d1LastImportTables: normalizeCount(details.tableCount),
     d1LastImportRowsWritten: normalizeCount(details.rowsWritten),
     d1LastImportNote: normalizeText(details.note, 1024),
     updatedAt: new Date().toISOString(),
   };
 
-  writeStoredDatabaseRuntimeControl(nextValue);
+  await writeStoredDatabaseRuntimeControl(nextValue);
   return getDatabaseRuntimeSetup();
 };

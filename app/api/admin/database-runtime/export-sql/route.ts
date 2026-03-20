@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { db } from "@/lib/db";
-import { getOptionalEffectiveDatabaseConnectionString } from "@/lib/database-runtime-control";
+import { getD1DatabaseName } from "@/lib/d1-runtime";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -69,32 +69,6 @@ const normalizeRequestedTables = (value: unknown) => {
   return tables;
 };
 
-const describeConnectionString = (connectionString: string | null) => {
-  const normalized = String(connectionString ?? "").trim();
-  if (!normalized) {
-    return null;
-  }
-
-  try {
-    const parsed = new URL(normalized);
-    return {
-      protocol: parsed.protocol || null,
-      host: parsed.hostname || null,
-      port: parsed.port || null,
-      database: parsed.pathname.replace(/^\/+/, "") || null,
-      username: parsed.username || null,
-    };
-  } catch {
-    return {
-      protocol: null,
-      host: null,
-      port: null,
-      database: null,
-      username: null,
-    };
-  }
-};
-
 const describeError = (error: unknown) => {
   const normalized =
     typeof error === "object" && error !== null
@@ -107,7 +81,6 @@ const describeError = (error: unknown) => {
             message?: unknown;
             code?: unknown;
             stack?: unknown;
-            cause?: unknown;
           };
           code?: unknown;
         })
@@ -131,7 +104,6 @@ const describeError = (error: unknown) => {
               typeof normalized.cause.stack === "string"
                 ? normalized.cause.stack.split("\n").slice(0, 12)
                 : null,
-            nestedCause: normalized.cause.cause ?? null,
           }
         : null,
     },
@@ -141,45 +113,28 @@ const describeError = (error: unknown) => {
 };
 
 const readTableColumnNames = async (table: string) => {
-  const result = await db.execute(sql`
-    select column_name
-    from information_schema.columns
-    where table_schema = 'public'
-      and table_name = ${table}
-    order by ordinal_position
-  `);
+  const result = await db.execute(
+    sql.raw(
+      `select name as "columnName" from pragma_table_info(${quoteSqlString(table)}) order by cid`,
+    ),
+  );
 
   const rows = (result as unknown as {
-    rows?: Array<{ column_name?: string | null }>;
+    rows?: Array<{ columnName?: string | null }>;
   }).rows;
 
   return (rows ?? [])
-    .map((row) => String(row.column_name ?? "").trim())
+    .map((row) => String(row.columnName ?? "").trim())
     .filter((columnName) => Boolean(columnName));
 };
 
 export async function POST(request: Request) {
-  let connectionDetails: ReturnType<typeof describeConnectionString> = null;
-
   try {
     const expectedToken = readExpectedToken();
     const providedToken = readProvidedToken(request);
 
     if (!expectedToken || !providedToken || providedToken !== expectedToken) {
       return new NextResponse("Unauthorized", { status: 401 });
-    }
-
-    const connectionString = getOptionalEffectiveDatabaseConnectionString();
-    connectionDetails = describeConnectionString(connectionString);
-    if (!connectionString || !/^postgres(ql)?:\/\//i.test(connectionString)) {
-      return NextResponse.json(
-        {
-          message:
-            "Database unavailable. Configure LIVE_DATABASE_URL or DATABASE_URL with a PostgreSQL connection string.",
-          connection: connectionDetails,
-        },
-        { status: 503 },
-      );
     }
 
     const body = (await request.json().catch(() => ({}))) as {
@@ -206,29 +161,14 @@ export async function POST(request: Request) {
         continue;
       }
 
-      const columnAliases = columnNames.map((_, index) => `c${index}`);
-      const selectList = sql.join(
-        columnNames.map((columnName, index) =>
-          sql`${sql.identifier(columnName)} as ${sql.identifier(columnAliases[index])}`,
-        ),
-        sql.raw(", "),
-      );
       const result = (await db.execute(
-        sql`select ${selectList} from ${sql.identifier(table)}`,
+        sql.raw(`select * from ${quoteIdent(table)}`),
       )) as {
         rows?: Array<Record<string, unknown>>;
       };
-      const rows = (result.rows ?? [])
-        .filter((entry): entry is Record<string, unknown> => Boolean(entry))
-        .map((entry) => {
-          const restored: Record<string, unknown> = {};
-
-          for (let index = 0; index < columnNames.length; index += 1) {
-            restored[columnNames[index]] = entry[columnAliases[index]];
-          }
-
-          return restored;
-        });
+      const rows = (result.rows ?? []).filter(
+        (entry): entry is Record<string, unknown> => Boolean(entry),
+      );
 
       for (const row of rows) {
         const values = columnNames.map((columnName) =>
@@ -252,6 +192,7 @@ export async function POST(request: Request) {
       headers: {
         "cache-control": "no-store",
         "content-type": "application/sql; charset=utf-8",
+        "x-inaccord-snapshot-database": getD1DatabaseName(),
         "x-inaccord-snapshot-table-count": String(tables.length),
         "x-inaccord-snapshot-query-count": String(queryCount),
         "x-inaccord-snapshot-row-count": String(rowCount),
@@ -262,15 +203,15 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error: JSON.parse(describeError(error)),
-        connection: connectionDetails,
+        database: getD1DatabaseName(),
       },
       {
-      status: 500,
-      headers: {
-        "cache-control": "no-store",
-        "content-type": "application/json; charset=utf-8",
+        status: 500,
+        headers: {
+          "cache-control": "no-store",
+          "content-type": "application/json; charset=utf-8",
+        },
       },
-    },
     );
   }
 }

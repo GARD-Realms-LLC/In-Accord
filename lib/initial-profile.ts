@@ -2,20 +2,12 @@ import { redirect } from "next/navigation";
 import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { getOptionalEffectiveDatabaseConnectionString } from "@/lib/database-runtime-control";
 import { clearSessionUserId, getSessionUserId } from "@/lib/session";
 
 export const initialProfile = async () => {
   const userId = await getSessionUserId();
 
   if (!userId) {
-    return redirect("/sign-in");
-  }
-
-  const connectionUrl = getOptionalEffectiveDatabaseConnectionString();
-
-  if (!connectionUrl) {
-    await clearSessionUserId();
     return redirect("/sign-in");
   }
 

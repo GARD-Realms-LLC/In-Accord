@@ -615,6 +615,7 @@ type AdminDatabaseRuntimeEndpoint = {
 };
 
 type AdminDatabaseRuntimeSetup = {
+  runtime: "d1";
   activeTarget: "live" | "local";
   effectiveTarget: "live" | "local";
   effectiveSource: "runtime" | "fallback";
@@ -8319,8 +8320,8 @@ export const InAccordAdminModal = () => {
                         Runtime Control
                       </p>
                       <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                        Switch this machine between local and live PostgreSQL.
-                        Cloudflare D1 stays a snapshot target.
+                        In-Accord runs on Cloudflare D1.
+                        This panel manages the live D1 target the app uses.
                       </p>
                     </div>
                     {databaseRuntimeSetup?.d1.managementUrl ? (
@@ -8338,35 +8339,12 @@ export const InAccordAdminModal = () => {
                   <div className="grid gap-2 md:grid-cols-4">
                     <div className="rounded-lg border border-zinc-300 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-800/45">
                       <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                        Active Target
+                        Runtime
                       </p>
                       <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                        {databaseRuntimeSetup?.effectiveTarget === "local"
-                          ? "Local PostgreSQL"
-                          : databaseRuntimeSetup?.effectiveTarget === "live"
-                            ? "Live PostgreSQL"
-                            : "Unknown"}
-                      </p>
-                      <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                        Requested:{" "}
-                        {databaseRuntimeSetup?.activeTarget === "local"
-                          ? "Local"
-                          : databaseRuntimeSetup?.activeTarget === "live"
-                            ? "Live"
-                            : "Unknown"}
-                      </p>
-                    </div>
-
-                    <div className="rounded-lg border border-zinc-300 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-800/45">
-                      <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                        Effective Source
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                        {databaseRuntimeSetup?.effectiveSource === "fallback"
-                          ? "Fallback"
-                          : databaseRuntimeSetup?.effectiveSource === "runtime"
-                            ? "Runtime override"
-                            : "Unknown"}
+                        {databaseRuntimeSetup?.runtime === "d1"
+                          ? "Cloudflare D1"
+                          : "Unknown"}
                       </p>
                       <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
                         Updated:{" "}
@@ -8376,40 +8354,53 @@ export const InAccordAdminModal = () => {
 
                     <div className="rounded-lg border border-zinc-300 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-800/45">
                       <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                        Local PostgreSQL
+                        Database Name
                       </p>
                       <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                        {databaseRuntimeSetup?.local.configured
-                          ? "Configured"
-                          : "Missing"}
+                        {databaseRuntimeSetup?.d1.databaseName ?? "Missing"}
                       </p>
                       <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                        {databaseRuntimeSetup?.local.host ?? "No host"}
-                        {databaseRuntimeSetup?.local.database
-                          ? ` / ${databaseRuntimeSetup.local.database}`
-                          : ""}
+                        ID: {databaseRuntimeSetup?.d1.databaseId ?? "Missing"}
                       </p>
                     </div>
 
                     <div className="rounded-lg border border-zinc-300 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-800/45">
                       <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                        Live PostgreSQL
+                        Account
                       </p>
                       <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                        {databaseRuntimeSetup?.live.configured
+                        {databaseRuntimeSetup?.d1.accountId
                           ? "Configured"
                           : "Missing"}
                       </p>
                       <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                        {databaseRuntimeSetup?.live.host ?? "No host"}
-                        {databaseRuntimeSetup?.live.database
-                          ? ` / ${databaseRuntimeSetup.live.database}`
-                          : ""}
+                        {databaseRuntimeSetup?.d1.accountId ?? "No account"}
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg border border-zinc-300 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-800/45">
+                      <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
+                        Last Import
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                        {formatDateTime(
+                          databaseRuntimeSetup?.d1.lastImportedAt ?? null,
+                        ) || "Never"}
+                      </p>
+                      <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                        Source:{" "}
+                        {databaseRuntimeSetup?.d1.lastImportSource
+                          ? databaseRuntimeSetup.d1.lastImportSource === "local"
+                            ? "Legacy local PostgreSQL"
+                            : databaseRuntimeSetup.d1.lastImportSource === "live"
+                              ? "Legacy live PostgreSQL"
+                              : databaseRuntimeSetup.d1.lastImportSource
+                          : "Current D1"}
                       </p>
                     </div>
                   </div>
 
-                  <div className="mt-3 grid gap-2 lg:grid-cols-2">
+                  <div className="hidden mt-3 grid gap-2 lg:grid-cols-2">
                     {([databaseRuntimeSetup?.local, databaseRuntimeSetup?.live]
                       .filter(Boolean) as AdminDatabaseRuntimeEndpoint[]).map(
                       (entry) => (
@@ -8442,7 +8433,7 @@ export const InAccordAdminModal = () => {
                     )}
                   </div>
 
-                  <div className="mt-3 flex flex-wrap gap-2">
+                  <div className="hidden mt-3 flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={() => void onSwitchDatabaseRuntime("live")}
@@ -8486,7 +8477,7 @@ export const InAccordAdminModal = () => {
 
                   {isLoadingDatabaseRuntime ? (
                     <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
-                      Loading database runtime controls...
+                      Loading D1 runtime details...
                     </p>
                   ) : null}
                   {databaseRuntimeError ? (
@@ -8500,8 +8491,8 @@ export const InAccordAdminModal = () => {
                     </p>
                   ) : null}
                   <p className="mt-3 text-[11px] text-zinc-500 dark:text-zinc-400">
-                    The local/live switch only changes this machine. The app
-                    still runs on PostgreSQL. D1 is managed as a snapshot target.
+                    The live app now uses Cloudflare D1 directly.
+                    There is no PostgreSQL runtime switch here anymore.
                   </p>
                 </div>
 
@@ -8509,10 +8500,10 @@ export const InAccordAdminModal = () => {
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                        Cloudflare D1 Snapshot
+                        Cloudflare D1 Live Database
                       </p>
                       <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                        Save the D1 target used by the sync button.
+                        Save the live D1 target used by the app and admin tools.
                       </p>
                     </div>
                     <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
@@ -8578,9 +8569,11 @@ export const InAccordAdminModal = () => {
                       <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                         {databaseRuntimeSetup?.d1.lastImportSource
                           ? databaseRuntimeSetup.d1.lastImportSource === "local"
-                            ? "Local PostgreSQL"
-                            : "Live PostgreSQL"
-                          : "Never"}
+                            ? "Legacy local PostgreSQL"
+                            : databaseRuntimeSetup.d1.lastImportSource === "live"
+                              ? "Legacy live PostgreSQL"
+                              : databaseRuntimeSetup.d1.lastImportSource
+                          : "Current D1"}
                       </p>
                     </div>
                     <div className="rounded-lg border border-zinc-300 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-800/45">

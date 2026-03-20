@@ -1,102 +1,124 @@
 import "server-only";
 
-import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
+import { drizzle } from "drizzle-orm/sqlite-proxy";
+import type { SQLWrapper } from "drizzle-orm";
+import type { AsyncRemoteCallback } from "drizzle-orm/sqlite-proxy";
 
 import "@/lib/silence-server-console";
 
-import {
-  getEffectiveDatabaseConnectionString,
-} from "@/lib/database-runtime-control";
+import { executeD1Query } from "@/lib/d1-runtime";
 import * as schema from "@/lib/db/schema";
 
-declare global {
-  // eslint-disable-next-line no-var
-  var pgPool: Pool | undefined;
-  // eslint-disable-next-line no-var
-  var pgPoolConnectionString: string | undefined;
-}
+const d1Callback = ((query, params, method) =>
+  executeD1Query(query, params, method)) as AsyncRemoteCallback;
 
-const createDb = (pool: Pool) => drizzle(pool, { schema });
-
-type DbInstance = ReturnType<typeof createDb>;
-
-let cachedPool: Pool | null = null;
-let cachedDb: DbInstance | null = null;
-let cachedConnectionString: string | null = null;
-
-const getConnectionString = () => {
-  return getEffectiveDatabaseConnectionString();
-};
-
-const getPool = () => {
-  const connectionString = getConnectionString();
-
-  if (cachedPool && cachedConnectionString === connectionString) {
-    return cachedPool;
-  }
-
-  if (
-    globalThis.pgPool &&
-    globalThis.pgPoolConnectionString === connectionString
-  ) {
-    cachedPool = globalThis.pgPool;
-    cachedConnectionString = connectionString;
-    return cachedPool;
-  }
-
-  const previousPool =
-    cachedPool ??
-    (globalThis.pgPoolConnectionString !== connectionString
-      ? globalThis.pgPool
-      : null);
-  const pooled = new Pool({
-    connectionString,
-    max: 10,
+const createDb = () =>
+  drizzle(d1Callback, {
+    schema,
   });
 
-  if (process.env.NODE_ENV !== "production") {
-    globalThis.pgPool = pooled;
-    globalThis.pgPoolConnectionString = connectionString;
-  }
-
-  cachedPool = pooled;
-  cachedDb = null;
-  cachedConnectionString = connectionString;
-
-  if (previousPool && previousPool !== pooled) {
-    const closablePool = previousPool as unknown as {
-      end?: () => Promise<void> | void;
-    };
-    const endResult = closablePool.end?.();
-    if (endResult && typeof (endResult as Promise<void>).catch === "function") {
-      void (endResult as Promise<void>).catch(() => undefined);
-    }
-  }
-
-  return cachedPool;
+type RawExecuteResult = { rows: Array<Record<string, unknown>> };
+type BaseDbInstance = ReturnType<typeof createDb>;
+type BaseTransaction = Parameters<BaseDbInstance["transaction"]>[0] extends (
+  tx: infer TTransaction,
+  ...args: never[]
+) => unknown
+  ? TTransaction
+  : never;
+type ExecuteCapableTransaction = BaseTransaction & {
+  execute: (query: SQLWrapper | string) => Promise<RawExecuteResult>;
 };
+type DbInstance = Omit<BaseDbInstance, "transaction"> & {
+  execute: (query: SQLWrapper | string) => Promise<RawExecuteResult>;
+  transaction: <TResult>(
+    callback: (
+      tx: ExecuteCapableTransaction,
+    ) => TResult | Promise<TResult>,
+    config?: Parameters<BaseDbInstance["transaction"]>[1],
+  ) => Promise<TResult>;
+};
+
+let cachedDb: DbInstance | null = null;
 
 const getDb = () => {
   if (cachedDb) {
     return cachedDb;
   }
 
-  cachedDb = createDb(getPool());
+  cachedDb = createDb() as unknown as DbInstance;
   return cachedDb;
 };
 
-export const pool = new Proxy({} as Pool, {
-  get(_target, property, receiver) {
-    const target = getPool() as unknown as Record<PropertyKey, unknown>;
-    const value = Reflect.get(target, property, receiver);
-    return typeof value === "function" ? value.bind(target) : value;
+const buildExecuteMethod = (target: {
+  all: (queryValue: SQLWrapper | string) => Promise<unknown>;
+  run: (queryValue: SQLWrapper | string) => Promise<{
+    rows?: Array<Record<string, unknown>>;
+    results?: Array<Record<string, unknown>>;
+  }>;
+}) => {
+  return async (query: SQLWrapper | string): Promise<RawExecuteResult> => {
+    try {
+      const rows = await target.all(query);
+      return {
+        rows: Array.isArray(rows)
+          ? (rows as Array<Record<string, unknown>>)
+          : [],
+      };
+    } catch {
+      const result = await target.run(query);
+      return {
+        rows: result.rows ?? result.results ?? [],
+      };
+    }
+  };
+};
+
+const wrapExecuteCompatibleTarget = <TTarget extends object>(target: TTarget) =>
+  new Proxy(target as TTarget & {
+    execute: (query: SQLWrapper | string) => Promise<RawExecuteResult>;
+    transaction?: (
+      callback: (tx: unknown) => Promise<unknown>,
+      config?: unknown,
+    ) => Promise<unknown>;
+  }, {
+    get(currentTarget, property, receiver) {
+      if (property === "execute") {
+        return buildExecuteMethod(currentTarget as never);
+      }
+
+      if (property === "transaction") {
+        const transactionMethod = Reflect.get(currentTarget, property, receiver);
+        if (typeof transactionMethod !== "function") {
+          return transactionMethod;
+        }
+
+        return async (
+          callback: (tx: unknown) => Promise<unknown>,
+          config?: unknown,
+        ) =>
+          transactionMethod.call(
+            currentTarget,
+            async (tx: unknown) => callback(wrapExecuteCompatibleTarget(tx as object)),
+            config,
+          );
+      }
+
+      const value = Reflect.get(currentTarget, property, receiver);
+      return typeof value === "function" ? value.bind(currentTarget) : value;
+    },
+  });
+
+export const pool = new Proxy({} as Record<PropertyKey, never>, {
+  get() {
+    throw new Error(
+      "PostgreSQL pool is unavailable. In-Accord now uses Cloudflare D1.",
+    );
   },
-}) as Pool;
+}) as never;
 
 export const db = new Proxy({} as DbInstance, {
   get(_target, property, receiver) {
-    const target = getDb() as unknown as Record<PropertyKey, unknown>;
+    const target = wrapExecuteCompatibleTarget(getDb());
     const value = Reflect.get(target, property, receiver);
     return typeof value === "function" ? value.bind(target) : value;
   },

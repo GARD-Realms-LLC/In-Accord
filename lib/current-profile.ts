@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { getOptionalEffectiveDatabaseConnectionString } from "@/lib/database-runtime-control";
 import {
   autoConvertFamilyAccountIfNeeded,
   ensureFamilyAccountSchema,
@@ -141,13 +140,6 @@ export const currentProfile = async () => {
   const userId = await getSessionUserId();
 
   if (!userId) {
-    return null;
-  }
-
-  const connectionUrl = getOptionalEffectiveDatabaseConnectionString();
-
-  if (!connectionUrl) {
-    await clearSessionUserId();
     return null;
   }
 

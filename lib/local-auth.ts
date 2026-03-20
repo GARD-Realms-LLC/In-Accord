@@ -4,34 +4,42 @@ import { db } from "@/lib/db";
 
 let schemaReady = false;
 
+const readExistsFlag = (value: unknown) =>
+  value === true || value === 1 || value === "1";
+
 export const hasLocalAuthSchema = async () => {
   const result = await db.execute(sql`
-    select to_regclass('"LocalCredential"') is not null as "exists"
+    select
+      exists (
+        select 1
+        from sqlite_master
+        where type = 'table'
+          and name = 'LocalCredential'
+      ) as "exists"
   `);
 
   const rows = (result as unknown as {
     rows?: Array<{ exists?: boolean | null }>;
   }).rows;
 
-  return rows?.[0]?.exists === true;
+  return readExistsFlag(rows?.[0]?.exists);
 };
 
 export const hasLegacyUserPasswordHashColumn = async () => {
   const result = await db.execute(sql`
-    select exists (
-      select 1
-      from information_schema.columns
-      where table_schema = current_schema()
-        and table_name = 'Users'
-        and column_name = 'password_hash'
-    ) as "exists"
+    select
+      exists (
+        select 1
+        from pragma_table_info('Users')
+        where name = 'password_hash'
+      ) as "exists"
   `);
 
   const rows = (result as unknown as {
     rows?: Array<{ exists?: boolean | null }>;
   }).rows;
 
-  return rows?.[0]?.exists === true;
+  return readExistsFlag(rows?.[0]?.exists);
 };
 
 export const ensureLocalAuthSchema = async () => {

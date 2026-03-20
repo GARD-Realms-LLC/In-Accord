@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { getOptionalEffectiveDatabaseConnectionString } from "@/lib/database-runtime-control";
+import { isDatabaseRuntimeReady } from "@/lib/d1-runtime";
 import {
   ensureLocalAuthSchema,
   hasLegacyUserPasswordHashColumn,
@@ -21,17 +21,21 @@ const isDatabaseUnavailableError = (error: unknown) => {
             ""
         )
       : "";
-  const serialized =
-    typeof error === "object" && error !== null ? JSON.stringify(error) : "";
+  let serialized = "";
+  if (typeof error === "object" && error !== null) {
+    try {
+      serialized = JSON.stringify(error);
+    } catch {
+      serialized = "";
+    }
+  }
 
   return (
-    /DATABASE_URL.*(postgres|postgresql)/i.test(message) ||
-    /relation .* does not exist|42P01/i.test(message) ||
-    /ETIMEDOUT|ECONNREFUSED|ENOTFOUND|57P01|08006|08001|proxy request failed|cannot connect to the specified address/i.test(
+    /No D1 database binding configured|Database unavailable|Failed to execute D1 query/i.test(
       message,
     ) ||
-    /ETIMEDOUT|ECONNREFUSED|ENOTFOUND|57P01|08006|08001/i.test(maybeCode) ||
-    /ETIMEDOUT|ECONNREFUSED|ENOTFOUND|57P01|08006|08001|proxy request failed|cannot connect to the specified address/i.test(
+    /SQLITE_|D1_/i.test(maybeCode) ||
+    /No D1 database binding configured|Database unavailable|Failed to execute D1 query|SQLITE_/i.test(
       serialized,
     )
   );
@@ -39,11 +43,9 @@ const isDatabaseUnavailableError = (error: unknown) => {
 
 export async function POST(request: Request) {
   try {
-    const connectionUrl = getOptionalEffectiveDatabaseConnectionString();
-
-    if (!connectionUrl) {
+    if (!(await isDatabaseRuntimeReady())) {
       return new NextResponse(
-        "Database unavailable. Configure LIVE_DATABASE_URL or DATABASE_URL with a PostgreSQL connection string.",
+        "Database unavailable. Configure Cloudflare D1.",
         { status: 503 }
       );
     }
@@ -94,48 +96,33 @@ export async function POST(request: Request) {
       ? legacyPasswordHashColumnAvailable
         ? await db.execute(sql`
             select
-              u."userId",
+              u."userId" as "userId",
               lc."passwordHash" as "localPasswordHash",
-              u."password_hash" as "legacyPasswordHash",
-              case
-                when lc."passwordHash" is not null then 0
-                when coalesce(u."password_hash", '') <> '' then 1
-                else 2
-              end as "priority"
-            from "Users"
-            u
+              u."password_hash" as "legacyPasswordHash"
+            from "Users" u
             left join "LocalCredential" lc on lc."userId" = u."userId"
-            where lower(coalesce("email", '')) = ${email}
-            order by "priority" asc, u."userId" asc
+            where lower(coalesce(u."email", '')) = ${email}
+            order by u."userId" asc
           `)
         : await db.execute(sql`
             select
-              u."userId",
+              u."userId" as "userId",
               lc."passwordHash" as "localPasswordHash",
-              null::text as "legacyPasswordHash",
-              case
-                when lc."passwordHash" is not null then 0
-                else 2
-              end as "priority"
-            from "Users"
-            u
+              null as "legacyPasswordHash"
+            from "Users" u
             left join "LocalCredential" lc on lc."userId" = u."userId"
-            where lower(coalesce("email", '')) = ${email}
-            order by "priority" asc, u."userId" asc
+            where lower(coalesce(u."email", '')) = ${email}
+            order by u."userId" asc
           `)
       : legacyPasswordHashColumnAvailable
         ? await db.execute(sql`
             select
-              u."userId",
-              null::text as "localPasswordHash",
-              u."password_hash" as "legacyPasswordHash",
-              case
-                when coalesce(u."password_hash", '') <> '' then 1
-                else 2
-              end as "priority"
+              u."userId" as "userId",
+              null as "localPasswordHash",
+              u."password_hash" as "legacyPasswordHash"
             from "Users" u
-            where lower(coalesce("email", '')) = ${email}
-            order by "priority" asc, u."userId" asc
+            where lower(coalesce(u."email", '')) = ${email}
+            order by u."userId" asc
           `)
         : { rows: [] };
 
@@ -182,8 +169,34 @@ export async function POST(request: Request) {
 
     if (isDatabaseUnavailableError(error)) {
       return new NextResponse(
-        "Database unavailable. Check LIVE_DATABASE_URL or DATABASE_URL and required tables.",
+        "Database unavailable. Check the Cloudflare D1 binding and required tables.",
         { status: 503 }
+      );
+    }
+
+    if (String(process.env.INACCORD_AUTH_DEBUG ?? "").trim() === "1") {
+      const nestedCause =
+        typeof error === "object" && error !== null
+          ? (error as { cause?: unknown }).cause
+          : undefined;
+
+      return NextResponse.json(
+        {
+          ok: false,
+          message: error instanceof Error ? error.message : String(error),
+          cause:
+            nestedCause instanceof Error
+              ? {
+                  message: nestedCause.message,
+                  stack: nestedCause.stack?.split("\n").slice(0, 12) ?? [],
+                }
+              : nestedCause ?? null,
+          stack:
+            error instanceof Error
+              ? error.stack?.split("\n").slice(0, 12) ?? []
+              : [],
+        },
+        { status: 500 },
       );
     }
 

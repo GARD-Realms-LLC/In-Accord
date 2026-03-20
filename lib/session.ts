@@ -3,7 +3,7 @@ import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { getOptionalEffectiveDatabaseConnectionString } from "@/lib/database-runtime-control";
+import { isDatabaseRuntimeReady } from "@/lib/d1-runtime";
 
 export const SESSION_COOKIE_NAME = "inaccord_session_user_id";
 const PERSISTENT_SESSION_TTL_SECONDS = 60 * 60 * 24 * 5;
@@ -47,6 +47,9 @@ export type UserSessionEntry = {
 };
 
 let sessionSchemaReady = false;
+
+const readExistsFlag = (value: unknown) =>
+  value === true || value === 1 || value === "1";
 
 const resolveSessionCookieSecure = async (request?: Request) => {
   const requestUrl = String(request?.url || "").trim();
@@ -142,14 +145,20 @@ const signPayload = (payload: string) => {
 
 const hasSessionSchema = async () => {
   const result = await db.execute(sql`
-    select to_regclass('"InAccordSession"') is not null as "exists"
+    select
+      exists (
+        select 1
+        from sqlite_master
+        where type = 'table'
+          and name = 'InAccordSession'
+      ) as "exists"
   `);
 
   const rows = (result as unknown as {
     rows?: Array<{ exists?: boolean | null }>;
   }).rows;
 
-  return rows?.[0]?.exists === true;
+  return readExistsFlag(rows?.[0]?.exists);
 };
 
 const ensureSessionSchema = async () => {
@@ -300,8 +309,7 @@ export const getCurrentSessionContext = async () => {
     return null;
   }
 
-  const connectionUrl = getOptionalEffectiveDatabaseConnectionString();
-  if (!connectionUrl) {
+  if (!(await isDatabaseRuntimeReady())) {
     await expireSessionCookie();
     return null;
   }
@@ -370,9 +378,9 @@ const isDatabaseUnavailableError = (error: unknown) => {
       : "";
 
   return (
-    /relation .* does not exist|42P01|ETIMEDOUT|ECONNREFUSED|ENOTFOUND|57P01|08006|08001|proxy request failed|cannot connect to the specified address/i.test(
+    /No D1 database binding configured|Database unavailable|Failed to execute D1 query|relation .* does not exist|42P01/i.test(
       message,
-    ) || /ETIMEDOUT|ECONNREFUSED|ENOTFOUND|57P01|08006|08001/i.test(maybeCode)
+    ) || /SQLITE_|D1_|ETIMEDOUT|ECONNREFUSED|ENOTFOUND|57P01|08006|08001/i.test(maybeCode)
   );
 };
 
@@ -391,13 +399,12 @@ const resolveCurrentSessionState = async () => {
     };
   }
 
-  const connectionUrl = getOptionalEffectiveDatabaseConnectionString();
-  if (!connectionUrl) {
+  if (!(await isDatabaseRuntimeReady())) {
     return {
       ok: false,
       code: "database-unavailable" as const,
       message:
-        "Database unavailable. Configure LIVE_DATABASE_URL or DATABASE_URL with a valid PostgreSQL connection string.",
+        "Database unavailable. Configure Cloudflare D1.",
       userId: null,
       sessionId: null,
       shouldExpireCookie: false,
