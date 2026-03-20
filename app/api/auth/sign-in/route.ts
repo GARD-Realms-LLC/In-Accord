@@ -11,6 +11,32 @@ import {
 import { setSessionUserId } from "@/lib/session";
 import { verifyPassword } from "@/lib/password";
 
+const isDatabaseUnavailableError = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  const maybeCode =
+    typeof error === "object" && error !== null
+      ? String(
+          (error as { code?: unknown; cause?: { code?: unknown } }).code ??
+            (error as { cause?: { code?: unknown } }).cause?.code ??
+            ""
+        )
+      : "";
+  const serialized =
+    typeof error === "object" && error !== null ? JSON.stringify(error) : "";
+
+  return (
+    /DATABASE_URL.*(postgres|postgresql)/i.test(message) ||
+    /relation .* does not exist|42P01/i.test(message) ||
+    /ETIMEDOUT|ECONNREFUSED|ENOTFOUND|57P01|08006|08001|proxy request failed|cannot connect to the specified address/i.test(
+      message,
+    ) ||
+    /ETIMEDOUT|ECONNREFUSED|ENOTFOUND|57P01|08006|08001/i.test(maybeCode) ||
+    /ETIMEDOUT|ECONNREFUSED|ENOTFOUND|57P01|08006|08001|proxy request failed|cannot connect to the specified address/i.test(
+      serialized,
+    )
+  );
+};
+
 export async function POST(request: Request) {
   try {
     const connectionUrl = getOptionalEffectiveDatabaseConnectionString();
@@ -37,12 +63,32 @@ export async function POST(request: Request) {
       await ensureLocalAuthSchema();
       localAuthSchemaAvailable = true;
     } catch (error) {
+      if (isDatabaseUnavailableError(error)) {
+        throw error;
+      }
+
       console.warn("[AUTH_SIGN_IN_LOCAL_AUTH_SCHEMA]", error);
-      localAuthSchemaAvailable = await hasLocalAuthSchema().catch(() => false);
+
+      try {
+        localAuthSchemaAvailable = await hasLocalAuthSchema();
+      } catch (probeError) {
+        if (isDatabaseUnavailableError(probeError)) {
+          throw probeError;
+        }
+
+        localAuthSchemaAvailable = false;
+      }
     }
 
-    const legacyPasswordHashColumnAvailable =
-      await hasLegacyUserPasswordHashColumn().catch(() => false);
+    let legacyPasswordHashColumnAvailable = false;
+    try {
+      legacyPasswordHashColumnAvailable =
+        await hasLegacyUserPasswordHashColumn();
+    } catch (error) {
+      if (isDatabaseUnavailableError(error)) {
+        throw error;
+      }
+    }
 
     const userRowsResult = localAuthSchemaAvailable
       ? legacyPasswordHashColumnAvailable
@@ -134,25 +180,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("[AUTH_SIGN_IN_POST]", error);
 
-    const message = error instanceof Error ? error.message : String(error);
-    const maybeCode =
-      typeof error === "object" && error !== null
-        ? String(
-            (error as { code?: unknown; cause?: { code?: unknown } }).code ??
-              (error as { cause?: { code?: unknown } }).cause?.code ??
-              ""
-          )
-        : "";
-    const serialized =
-      typeof error === "object" && error !== null ? JSON.stringify(error) : "";
-
-    if (
-      /DATABASE_URL.*(postgres|postgresql)/i.test(message) ||
-      /relation .* does not exist|42P01/i.test(message) ||
-      /ETIMEDOUT|ECONNREFUSED|ENOTFOUND|57P01|08006|08001/i.test(message) ||
-      /ETIMEDOUT|ECONNREFUSED|ENOTFOUND|57P01|08006|08001/i.test(maybeCode) ||
-      /ETIMEDOUT|ECONNREFUSED|ENOTFOUND|57P01|08006|08001/i.test(serialized)
-    ) {
+    if (isDatabaseUnavailableError(error)) {
       return new NextResponse(
         "Database unavailable. Check LIVE_DATABASE_URL or DATABASE_URL and required tables.",
         { status: 503 }

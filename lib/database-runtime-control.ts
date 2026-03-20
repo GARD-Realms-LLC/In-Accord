@@ -158,13 +158,13 @@ const readCloudflareEnvText = (
 const readRuntimeDatabaseUrl = (
   envName: "LIVE_DATABASE_URL" | "DATABASE_URL",
 ) => {
-  const processValue = String(process.env[envName] ?? "").trim();
-  if (!isPlaceholderValue(processValue)) {
-    return processValue;
+  const cloudflareValue = readCloudflareEnvText(envName);
+  if (!isPlaceholderValue(cloudflareValue)) {
+    return cloudflareValue;
   }
 
-  const cloudflareValue = readCloudflareEnvText(envName);
-  return !isPlaceholderValue(cloudflareValue) ? cloudflareValue : "";
+  const processValue = String(process.env[envName] ?? "").trim();
+  return !isPlaceholderValue(processValue) ? processValue : "";
 };
 
 const readStoredDatabaseRuntimeControl = (): StoredDatabaseRuntimeControl => {

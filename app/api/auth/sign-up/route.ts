@@ -153,9 +153,13 @@ export async function POST(request: Request) {
     if (
       /DATABASE_URL.*(postgres|postgresql)/i.test(message) ||
       /relation .* does not exist|42P01/i.test(message) ||
-      /ETIMEDOUT|ECONNREFUSED|ENOTFOUND|57P01|08006|08001/i.test(message) ||
+      /ETIMEDOUT|ECONNREFUSED|ENOTFOUND|57P01|08006|08001|proxy request failed|cannot connect to the specified address/i.test(
+        message,
+      ) ||
       /ETIMEDOUT|ECONNREFUSED|ENOTFOUND|57P01|08006|08001/i.test(maybeCode) ||
-      /ETIMEDOUT|ECONNREFUSED|ENOTFOUND|57P01|08006|08001/i.test(serialized)
+      /ETIMEDOUT|ECONNREFUSED|ENOTFOUND|57P01|08006|08001|proxy request failed|cannot connect to the specified address/i.test(
+        serialized,
+      )
     ) {
       return new NextResponse(
         "Database unavailable. Check LIVE_DATABASE_URL or DATABASE_URL and required tables.",

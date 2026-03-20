@@ -370,7 +370,7 @@ const isDatabaseUnavailableError = (error: unknown) => {
       : "";
 
   return (
-    /relation .* does not exist|42P01|ETIMEDOUT|ECONNREFUSED|ENOTFOUND|57P01|08006|08001/i.test(
+    /relation .* does not exist|42P01|ETIMEDOUT|ECONNREFUSED|ENOTFOUND|57P01|08006|08001|proxy request failed|cannot connect to the specified address/i.test(
       message,
     ) || /ETIMEDOUT|ECONNREFUSED|ENOTFOUND|57P01|08006|08001/i.test(maybeCode)
   );

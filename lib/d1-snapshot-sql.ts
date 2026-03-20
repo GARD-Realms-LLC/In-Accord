@@ -1,15 +1,13 @@
 import "server-only";
 
-import { execFile } from "child_process";
-import fs from "fs";
-import os from "os";
-import path from "path";
-import { promisify } from "util";
-
 import { Pool } from "pg";
 
-const execFileAsync = promisify(execFile);
-const NPX_EXECUTABLE = process.platform === "win32" ? "npx.cmd" : "npx";
+export type D1SnapshotSqlBuildResult = {
+  sql: string;
+  tableCount: number;
+  queryCount: number;
+  rowCount: number;
+};
 
 type ColumnRow = {
   table_name: string;
@@ -34,22 +32,6 @@ type IndexRow = {
   tablename: string;
   indexname: string;
   indexdef: string;
-};
-
-export type D1SnapshotSyncResult = {
-  databaseName: string;
-  tableCount: number;
-  queryCount: number;
-  rowCount: number;
-  rowsWritten: number | null;
-  databaseSizeMb: string | null;
-};
-
-export type D1SnapshotSqlBuildResult = {
-  sql: string;
-  tableCount: number;
-  queryCount: number;
-  rowCount: number;
 };
 
 const quoteIdent = (value: string) => `"${String(value).replace(/"/g, '""')}"`;
@@ -189,22 +171,6 @@ const normalizeIndexDef = (indexDef: string) => {
   sql = sql.replace(/TRIM\(BOTH FROM /g, "trim(");
   return `${sql};`;
 };
-
-const parseImportMeta = (stdout: string) => {
-  const rowsWrittenMatch = stdout.match(/"rows_written":\s*(\d+)/i);
-  const sizeMatch = stdout.match(/"Database size \(MB\)":\s*"([^"]+)"/i);
-
-  return {
-    rowsWritten: rowsWrittenMatch ? Number(rowsWrittenMatch[1]) : null,
-    databaseSizeMb: sizeMatch ? sizeMatch[1] : null,
-  };
-};
-
-const createTempSqlPath = () =>
-  path.join(
-    os.tmpdir(),
-    `inaccord-d1-sync-${Date.now()}-${Math.random().toString(16).slice(2)}.sql`,
-  );
 
 const buildSnapshotSqlForPool = async (
   pool: Pool,
@@ -405,61 +371,6 @@ export const buildPostgresSnapshotSql = async ({
       await closablePool.end?.();
     } catch {
       // Ignore close errors during cleanup.
-    }
-  }
-};
-
-export const syncPostgresSnapshotToD1 = async ({
-  connectionString,
-  databaseName,
-}: {
-  connectionString: string;
-  databaseName: string;
-}): Promise<D1SnapshotSyncResult> => {
-  const sqlFilePath = createTempSqlPath();
-
-  try {
-    const snapshot = await buildPostgresSnapshotSql({ connectionString });
-
-    fs.writeFileSync(sqlFilePath, snapshot.sql, "utf8");
-
-    const { stdout, stderr } = await execFileAsync(
-      NPX_EXECUTABLE,
-      [
-        "wrangler",
-        "d1",
-        "execute",
-        databaseName,
-        "--remote",
-        "--yes",
-        "--json",
-        "--file",
-        sqlFilePath,
-      ],
-      {
-        cwd: process.cwd(),
-        env: process.env,
-        windowsHide: true,
-        maxBuffer: 1024 * 1024 * 64,
-      },
-    );
-
-    const output = `${String(stdout ?? "")}\n${String(stderr ?? "")}`;
-    const meta = parseImportMeta(output);
-
-    return {
-      databaseName,
-      tableCount: snapshot.tableCount,
-      queryCount: snapshot.queryCount,
-      rowCount: snapshot.rowCount,
-      rowsWritten: meta.rowsWritten,
-      databaseSizeMb: meta.databaseSizeMb,
-    };
-  } finally {
-    try {
-      fs.unlinkSync(sqlFilePath);
-    } catch {
-      // Ignore temp cleanup errors.
     }
   }
 };
