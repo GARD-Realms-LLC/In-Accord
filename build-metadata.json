@@ -1,8 +1,15 @@
 {
-  "buildTimestamp": "2026-03-21T16:59:19.799Z",
+  "buildTimestamp": "2026-03-21T17:41:31.623Z",
   "branch": "main",
-  "commitSha": "8c5d3961b2f481fc97c6f84f49089f1be9c92737",
+  "commitSha": "b2c85bcb874897bc45d9b4c7790e7996702d1968",
   "commits": [
+    {
+      "sha": "b2c85bcb874897bc45d9b4c7790e7996702d1968",
+      "shortSha": "b2c85bcb",
+      "message": "fix: stabilize live d1 routes and admin runtime",
+      "author": "Doc Cowles",
+      "committedAt": "2026-03-21T11:40:14-06:00"
+    },
     {
       "sha": "8c5d3961b2f481fc97c6f84f49089f1be9c92737",
       "shortSha": "8c5d3961",
@@ -79,13 +86,6 @@
       "message": "Read DB URL from Cloudflare worker bindings",
       "author": "Doc Cowles",
       "committedAt": "2026-03-19T17:13:29-06:00"
-    },
-    {
-      "sha": "72e0c84a2f1f13bf24fe5b8e39dfaaefe797d4f1",
-      "shortSha": "72e0c84a",
-      "message": "Fix live auth database runtime checks",
-      "author": "Doc Cowles",
-      "committedAt": "2026-03-19T17:03:18-06:00"
     }
   ]
 }

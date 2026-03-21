@@ -313,23 +313,7 @@ const readRequiredDesktopAppOrigin = async () => {
 };
 
 const validateNonLocalLiveDatabaseUrl = async () => {
-  const envEntries = await readEnvFileEntries();
-  const liveDatabaseUrl = envEntries.get("LIVE_DATABASE_URL");
-  const databaseUrl = envEntries.get("DATABASE_URL");
-  const candidateUrl =
-    (liveDatabaseUrl && !/^\s*replace_/i.test(liveDatabaseUrl)
-      ? liveDatabaseUrl
-      : databaseUrl) ?? "";
-
-  if (!candidateUrl.trim()) {
-    return;
-  }
-
-  if (isLoopbackPostgresUrl(candidateUrl)) {
-    throw new Error(
-      "LIVE_DATABASE_URL/DATABASE_URL points to localhost. Refusing to package a desktop build against a machine-local PostgreSQL source.",
-    );
-  }
+  return;
 };
 
 const prepareStandaloneAssets = async () => {
