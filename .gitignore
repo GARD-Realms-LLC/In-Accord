@@ -11,12 +11,9 @@
 # next.js
 /.next/
 /.next-desktop/
-/.n/
 /out/
 /dist/
 /.cache/
-/.open-next/
-/.wrangler/
 /.electron-cache/
 /.next-dev/
 /.next-win64/
@@ -33,7 +30,6 @@
 
 # production
 /build
-/build-metadata.json
 
 # misc
 .DS_Store
@@ -54,4 +50,3 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-cloudflare-env.d.ts

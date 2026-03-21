@@ -315,7 +315,7 @@ export async function DELETE(
       return new NextResponse("System channels cannot be deleted", { status: 400 });
     }
 
-    await db.transaction(async (tx) => {
+    await db.transaction(async (tx: any) => {
       await ensureChannelTopicSchema();
       await ensureChannelOtherSettingsSchema();
 

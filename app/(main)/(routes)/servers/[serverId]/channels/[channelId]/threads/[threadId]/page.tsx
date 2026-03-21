@@ -13,7 +13,7 @@ import {
 } from "@/lib/channel-threads";
 import { resolveMemberContext } from "@/lib/channel-permissions";
 import { getUserProfileNameMap } from "@/lib/user-profile";
-import type { Profile } from "@/lib/db/types";
+import type { Member, Profile } from "@/lib/db/types";
 import { extractQuotedContent } from "@/lib/message-quotes";
 import { ThreadToolbar } from "@/components/chat/thread-toolbar";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
@@ -28,6 +28,26 @@ interface ThreadPageProps {
   }>;
 }
 
+type ThreadMessageRow = {
+  id: string;
+  content: string;
+  fileUrl: string | null;
+  deleted: boolean;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+  member: Member & {
+    profile: Profile;
+  };
+};
+
+type ServerMemberRow = {
+  id: string;
+  profileId: string;
+  role: string;
+  createdAt: Date;
+  profile: Profile;
+};
+
 const formatPostTimestamp = (value: Date | string) => {
   const parsed = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(parsed.getTime())) {
@@ -41,6 +61,15 @@ const formatPostTimestamp = (value: Date | string) => {
     hour: "numeric",
     minute: "2-digit",
   });
+};
+
+const normalizeDateValue = (value: Date | string | null | undefined) => {
+  if (value instanceof Date) {
+    return value;
+  }
+
+  const parsed = new Date(value ?? 0);
+  return Number.isNaN(parsed.getTime()) ? new Date(0) : parsed;
 };
 
 const ThreadPage = async ({ params }: ThreadPageProps) => {
@@ -161,7 +190,7 @@ const ThreadPage = async ({ params }: ThreadPageProps) => {
 
   const threadSummary = threadSummaryMap.get(threadRow.sourceMessageId) ?? null;
 
-  const threadMessages = await db.query.message.findMany({
+  const threadMessages: ThreadMessageRow[] = await db.query.message.findMany({
     where: eq(message.threadId, threadId),
     orderBy: [asc(message.createdAt)],
     with: {
@@ -239,12 +268,14 @@ const ThreadPage = async ({ params }: ThreadPageProps) => {
       ...item,
       member: {
         ...item.member,
+        createdAt: normalizeDateValue(item.member.createdAt),
+        updatedAt: normalizeDateValue(item.member.updatedAt),
         profile: safeProfile,
       },
     };
   });
 
-  const serverMembers = await db.query.member.findMany({
+  const serverMembers: ServerMemberRow[] = await db.query.member.findMany({
     where: eq(member.serverId, serverId),
     with: {
       profile: true,
@@ -353,13 +384,7 @@ const ThreadPage = async ({ params }: ThreadPageProps) => {
         />
       </div>
 
-      <div
-        className="theme-server-chat-bar self-start rounded-2xl border border-border bg-card shadow-lg shadow-black/25"
-        style={{
-          width: "calc(100% - var(--inaccord-right-footer-safe-width, 0px))",
-          maxWidth: "100%",
-        }}
-      >
+      <div className="theme-server-chat-bar w-[calc(100vw-584px)] max-w-full rounded-2xl border border-border bg-card shadow-lg shadow-black/25">
         <ChatInput
           name={threadRow.title}
           type="channel"

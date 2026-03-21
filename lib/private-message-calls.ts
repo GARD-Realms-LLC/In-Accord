@@ -227,6 +227,6 @@ export const expireStalePrivateMessageCallRequests = async (
     set "status" = 'CANCELLED',
         "updatedAt" = now()
     where upper(trim(coalesce("status", ''))) = 'REQUESTED'
-      and "createdAt" <= now() - (${safeTimeoutSeconds} * interval '1 second')
+      and "createdAt" <= datetime(CURRENT_TIMESTAMP, '-' || ${safeTimeoutSeconds} || ' seconds')
   `);
 };

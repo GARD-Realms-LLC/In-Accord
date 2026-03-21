@@ -3,7 +3,10 @@ import type { Metadata } from "next";
 import { Open_Sans } from "next/font/google";
 
 import { cn } from "@/lib/utils";
+import { INACCORD_BUILD_NUMBER, INACCORD_VERSION_LABEL, INACCORD_INTERNAL_VERSION } from "@/lib/build-version";
+import { getStaleBuildBootstrapScript } from "@/lib/stale-build-reload";
 import { ThemeProvider } from "@/components/providers/theme-provider";
+import { BuildStalenessProvider } from "@/components/providers/build-staleness-provider";
 import { ModalProvider } from "@/components/providers/modal-provider";
 import { SocketProvider } from "@/components/providers/socket-provider";
 import { ContextMenuProvider } from "@/components/providers/context-menu-provider";
@@ -13,12 +16,6 @@ import { StreamerModePreferencesProvider } from "@/components/providers/streamer
 import { GameOverlayPreferencesProvider } from "@/components/providers/game-overlay-preferences-provider";
 import { ActivityPrivacyPreferencesProvider } from "@/components/providers/activity-privacy-preferences-provider";
 import { CurrentGameSyncProvider } from "@/components/providers/current-game-sync-provider";
-import { BuildStalenessProvider } from "@/components/providers/build-staleness-provider";
-import {
-  INACCORD_BUILD_NUMBER,
-  INACCORD_INTERNAL_VERSION,
-  INACCORD_VERSION_LABEL,
-} from "@/lib/build-version";
 
 const font = Open_Sans({ subsets: ["latin"] });
 
@@ -38,6 +35,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          id="in-accord-stale-build-bootstrap"
+          dangerouslySetInnerHTML={{ __html: getStaleBuildBootstrapScript() }}
+        />
+      </head>
       <body className={cn(font.className)} suppressHydrationWarning>
         <ThemeProvider
           attribute="class"
@@ -63,14 +66,14 @@ export default function RootLayout({
             <ActivityPrivacyPreferencesProvider />
             <GameOverlayPreferencesProvider />
             <CurrentGameSyncProvider />
+            <ContextMenuProvider />
+            <ModalProvider />
+            <ToasterProvider />
             <BuildStalenessProvider
               currentVersion={INACCORD_INTERNAL_VERSION}
               currentDisplayVersion={INACCORD_VERSION_LABEL}
               currentBuildNumber={INACCORD_BUILD_NUMBER}
             />
-            <ContextMenuProvider />
-            <ModalProvider />
-            <ToasterProvider />
             {children}
           </SocketProvider>
         </ThemeProvider>

@@ -3,6 +3,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
+import { ensureSchemaInitialized } from "@/lib/schema-init-state";
 
 export type ServerInviteMode = "normal" | "approval";
 
@@ -16,11 +17,6 @@ export type ServerProfileSettings = {
   hideAllChannels: boolean;
   hiddenChannelIds: string[];
 };
-
-declare global {
-  // eslint-disable-next-line no-var
-  var inAccordServerProfileSettingsSchemaReady: boolean | undefined;
-}
 
 const DEFAULT_SETTINGS: ServerProfileSettings = {
   description: null,
@@ -142,27 +138,23 @@ const normalizeSettings = (value: Partial<ServerProfileSettings> | undefined): S
 });
 
 const ensureServerProfileSettingsSchema = async () => {
-  if (globalThis.inAccordServerProfileSettingsSchemaReady) {
-    return;
-  }
-
-  await db.execute(sql`
-    create table if not exists "ServerProfileSettings" (
-      "serverId" varchar(191) primary key,
-      "description" text,
-      "traits" jsonb not null default '[]'::jsonb,
-      "gamesPlayed" jsonb not null default '[]'::jsonb,
-      "bannerColor" varchar(20),
-      "inviteMode" varchar(20) not null default 'normal',
-      "showChannelGroups" boolean not null default true,
-      "hideAllChannels" boolean not null default false,
-      "hiddenChannelIds" jsonb not null default '[]'::jsonb,
-      "createdAt" timestamp not null default now(),
-      "updatedAt" timestamp not null default now()
-    )
-  `);
-
-  globalThis.inAccordServerProfileSettingsSchemaReady = true;
+  await ensureSchemaInitialized("server-profile-settings-schema", async () => {
+    await db.execute(sql`
+      create table if not exists "ServerProfileSettings" (
+        "serverId" varchar(191) primary key,
+        "description" text,
+        "traits" jsonb not null default '[]'::jsonb,
+        "gamesPlayed" jsonb not null default '[]'::jsonb,
+        "bannerColor" varchar(20),
+        "inviteMode" varchar(20) not null default 'normal',
+        "showChannelGroups" boolean not null default true,
+        "hideAllChannels" boolean not null default false,
+        "hiddenChannelIds" jsonb not null default '[]'::jsonb,
+        "createdAt" timestamp not null default now(),
+        "updatedAt" timestamp not null default now()
+      )
+    `);
+  });
 };
 
 export async function getServerProfileSettings(serverId: string): Promise<ServerProfileSettings> {

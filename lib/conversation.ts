@@ -32,7 +32,7 @@ const hydrateConversation = async (conversationId: string) => {
       coalesce(nullif(trim(up1."profileName"), ''), u1."name", u1."email", 'User') as "memberOneName",
       u1."email" as "memberOneEmail",
       coalesce(u1."avatarUrl", u1."avatar", u1."icon") as "memberOneImageUrl",
-      u1."account.created" as "memberOneAccountCreated",
+      u1.[account.created] as "memberOneAccountCreated",
       u1."lastLogin" as "memberOneLastLogin",
 
       m2."id" as "memberTwoId",
@@ -45,7 +45,7 @@ const hydrateConversation = async (conversationId: string) => {
       coalesce(nullif(trim(up2."profileName"), ''), u2."name", u2."email", 'User') as "memberTwoName",
       u2."email" as "memberTwoEmail",
       coalesce(u2."avatarUrl", u2."avatar", u2."icon") as "memberTwoImageUrl",
-      u2."account.created" as "memberTwoAccountCreated",
+      u2.[account.created] as "memberTwoAccountCreated",
       u2."lastLogin" as "memberTwoLastLogin"
     from "Conversation" c
     left join "Member" m1 on m1."id" = c."memberOneId"

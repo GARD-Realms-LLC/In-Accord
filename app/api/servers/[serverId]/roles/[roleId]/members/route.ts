@@ -65,7 +65,7 @@ export async function GET(_req: Request, { params }: Params) {
       role_counts as (
         select
           a."memberId",
-          count(*)::int as "roleCount"
+          count(*) as "roleCount"
         from "ServerRoleAssignment" a
         where a."serverId" = ${serverId}
         group by a."memberId"
@@ -92,13 +92,13 @@ export async function GET(_req: Request, { params }: Params) {
         u."email" as "email",
         coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
         m."createdAt" as "memberSince",
-        u."account.created" as "joinedInAccord",
+        u.[account.created] as "joinedInAccord",
         case
           when m."profileId" = s."profileId" then 'Owner Created Server'
           else 'Invite'
         end as "joinedMethod",
         rh."highestRoleName" as "highestRoleName",
-        coalesce(rc."roleCount", 0)::int as "roleCount",
+        coalesce(rc."roleCount", 0) as "roleCount",
         (ra."memberId" is not null) as "isAssigned"
       from "Member" m
       inner join "Server" s on s."id" = m."serverId"

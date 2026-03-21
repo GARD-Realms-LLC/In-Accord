@@ -119,13 +119,26 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
       setTargetUrl(resolvedTargetUrl);
 
       try {
-        await fetch(resolvedTargetUrl, {
+        const bootstrapResponse = await fetch(resolvedTargetUrl, {
           method: "GET",
           cache: "no-store",
           credentials: "include",
         });
+
+        if (!bootstrapResponse.ok) {
+          if (!isDisposed) {
+            setLastError(`Socket bootstrap returned ${bootstrapResponse.status}`);
+            setIsConnected(false);
+          }
+          return;
+        }
       } catch (bootstrapError) {
         console.error("[SOCKET_PROVIDER_BOOTSTRAP]", bootstrapError);
+        if (!isDisposed) {
+          setLastError("Socket bootstrap failed");
+          setIsConnected(false);
+        }
+        return;
       }
 
       const socketInstance = new (ClientIO as any)(resolvedOrigin || undefined, {

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
-import { channel, db, member, server } from "@/lib/db";
+import { db } from "@/lib/db";
 import { currentProfile } from "@/lib/current-profile";
 import { ServerSidebar } from "@/components/server/server-sidebar";
 import { ServerUserRolesRail } from "@/components/server/server-user-roles-rail";
@@ -10,7 +10,6 @@ import { ChannelType, MemberRole } from "@/lib/db/types";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 import { resolveServerRouteContext } from "@/lib/route-slug-resolver";
 import { buildRouteSegment } from "@/lib/route-slugs";
-import { getServerManagementAccess } from "@/lib/server-management-access";
 
 type ChannelRow = {
   id: string;
@@ -25,6 +24,27 @@ type MemberRow = {
   presenceStatus: string | null;
   name: string | null;
   email: string | null;
+};
+
+const normalizeMemberRole = (value: unknown): MemberRole => {
+  const normalized = String(value ?? "").trim().toUpperCase();
+  if (
+    normalized === MemberRole.ADMIN ||
+    normalized === "ADMINISTRATOR" ||
+    normalized === "ADMINS" ||
+    normalized === "ADMINISTRATORS"
+  ) {
+    return MemberRole.ADMIN;
+  }
+  if (
+    normalized === MemberRole.MODERATOR ||
+    normalized === "MOD" ||
+    normalized === "MODS" ||
+    normalized === "MODERATORS"
+  ) {
+    return MemberRole.MODERATOR;
+  }
+  return MemberRole.GUEST;
 };
 
 const ServerIdLayout = async ({
@@ -48,33 +68,40 @@ const ServerIdLayout = async ({
   });
 
   if (!resolvedServer) {
-    return redirect("/");
+    return redirect("/servers");
   }
 
   const serverId = resolvedServer.id;
+  const targetServerResult = await db.execute(sql`
+    select
+      s."id" as "id",
+      s."name" as "name",
+      s."profileId" as "profileId"
+    from "Server" s
+    where trim(s."id") = trim(${serverId})
+    limit 1
+  `);
+  const targetServer = ((targetServerResult as unknown as {
+    rows?: Array<{ id: string | null; name: string | null; profileId: string | null }>;
+  }).rows ?? [])[0];
 
-  const access = await getServerManagementAccess({
-    serverId,
-    profileId: profile.id,
-    profileRole: profile.role,
-  });
-
-  if (!access.target || !access.canView) {
-    return redirect("/");
+  if (!targetServer?.id) {
+    return redirect("/servers");
   }
 
-  const currentServerName = access.target.name;
-  const isServerOwner = access.canManage;
+  const currentServerName = String(targetServer.name ?? "").trim() || resolvedServer.name;
+  const isServerOwner =
+    String(targetServer.profileId ?? "").trim() === profile.id || hasInAccordAdministrativeAccess(profile.role);
 
-  const channelsResult = await db
-    .select({
-      id: channel.id,
-      name: channel.name,
-      type: channel.type,
-    })
-    .from(channel)
-    .where(eq(channel.serverId, serverId))
-    .orderBy(asc(channel.createdAt));
+  const channelsResult = await db.execute(sql`
+    select
+      c."id" as "id",
+      c."name" as "name",
+      c."type" as "type"
+    from "Channel" c
+    where trim(c."serverId") = trim(${serverId})
+    order by c."createdAt" asc, c."id" asc
+  `);
 
   const membersResult = await db.execute(sql`
     select
@@ -97,8 +124,26 @@ const ServerIdLayout = async ({
       coalesce(u."name", u."email", m."profileId") asc
   `);
 
-  const channelRows = channelsResult as ChannelRow[];
-  const memberRows = (membersResult as unknown as { rows: MemberRow[] }).rows;
+  const channelRows = (((channelsResult as unknown as {
+    rows?: Array<{ id: string | null; name: string | null; type: string | null }>;
+  }).rows ?? []).map((row) => ({
+    id: String(row.id ?? "").trim(),
+    name: String(row.name ?? "").trim(),
+    type: String(row.type ?? "").trim() as ChannelType,
+  }))).filter((row) => row.id) as ChannelRow[];
+  const memberRows = (((membersResult as unknown as {
+    rows?: Array<{
+      id: string;
+      role: string | null;
+      profileId: string;
+      presenceStatus: string | null;
+      name: string | null;
+      email: string | null;
+    }>;
+  }).rows ?? []).map((row) => ({
+    ...row,
+    role: normalizeMemberRole(row.role),
+  }))) as MemberRow[];
 
   const textChannels = channelRows.filter((row) => row.type === ChannelType.TEXT);
   const announcementChannels = channelRows.filter((row) => row.type === ChannelType.ANNOUNCEMENT);

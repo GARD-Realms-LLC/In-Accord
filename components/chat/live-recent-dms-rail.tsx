@@ -119,6 +119,32 @@ export const LiveRecentDmsRail = ({
   }, [requestUrl]);
 
   useEffect(() => {
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      return;
+    }
+
+    const refreshIfVisible = () => {
+      if (document.visibilityState === "hidden") {
+        return;
+      }
+
+      void refreshRail();
+    };
+
+    refreshIfVisible();
+
+    const intervalId = window.setInterval(refreshIfVisible, 2000);
+    window.addEventListener("focus", refreshIfVisible);
+    document.addEventListener("visibilitychange", refreshIfVisible);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshIfVisible);
+      document.removeEventListener("visibilitychange", refreshIfVisible);
+    };
+  }, [refreshRail]);
+
+  useEffect(() => {
     setItems(sortRecentDmItems(initialItems));
   }, [initialItems]);
 

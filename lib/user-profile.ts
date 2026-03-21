@@ -53,11 +53,6 @@ export const ensureUserProfileSchema = async () => {
 
   await db.execute(sql`
     alter table "UserProfile"
-    alter column "profileNameStyle" type varchar(128)
-  `);
-
-  await db.execute(sql`
-    alter table "UserProfile"
     add column if not exists "nameplateLabel" varchar(40)
   `);
 
@@ -83,17 +78,7 @@ export const ensureUserProfileSchema = async () => {
 
   await db.execute(sql`
     alter table "UserProfile"
-    alter column "currentGame" type varchar(120)
-  `);
-
-  await db.execute(sql`
-    alter table "UserProfile"
     add column if not exists "pronouns" varchar(80)
-  `);
-
-  await db.execute(sql`
-    alter table "UserProfile"
-    alter column "pronouns" type varchar(80)
   `);
 
   await db.execute(sql`
@@ -108,16 +93,6 @@ export const ensureUserProfileSchema = async () => {
 
   await db.execute(sql`
     alter table "UserProfile"
-    alter column "businessRole" type varchar(80)
-  `);
-
-  await db.execute(sql`
-    alter table "UserProfile"
-    alter column "businessSection" type varchar(80)
-  `);
-
-  await db.execute(sql`
-    alter table "UserProfile"
     add column if not exists "comment" varchar(280)
   `);
 
@@ -127,16 +102,14 @@ export const ensureUserProfileSchema = async () => {
     where "presenceStatus" is null or trim("presenceStatus") = ''
   `);
 
-  const now = new Date();
   await db.execute(sql`
-    insert into "UserProfile" ("userId", "profileName", "createdAt", "updatedAt")
+    insert or ignore into "UserProfile" ("userId", "profileName", "createdAt", "updatedAt")
     select
       u."userId",
-      left(coalesce(nullif(trim(u."name"), ''), 'User'), 80) as "profileName",
-      ${now},
-      ${now}
+      substr(coalesce(nullif(trim(u."name"), ''), 'User'), 1, 80) as "profileName",
+      CURRENT_TIMESTAMP,
+      CURRENT_TIMESTAMP
     from "Users" u
-    on conflict ("userId") do nothing
   `);
 
   userProfileSchemaReady = true;

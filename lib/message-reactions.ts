@@ -58,6 +58,7 @@ export const addMessageReaction = async ({
   }
 
   await ensureMessageReactionSchema();
+  const now = new Date();
 
   await executor.execute(sql`
     insert into "MessageReaction" (
@@ -75,12 +76,12 @@ export const addMessageReaction = async ({
       ${scope},
       ${normalizedEmoji},
       ${safeCount},
-      now(),
-      now()
+      ${now},
+      ${now}
     )
     on conflict ("messageId", "scope", "emoji") do update
     set
       "count" = "MessageReaction"."count" + ${safeCount},
-      "updatedAt" = now()
+      "updatedAt" = excluded."updatedAt"
   `);
 };

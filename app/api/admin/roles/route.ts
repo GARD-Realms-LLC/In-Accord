@@ -47,7 +47,7 @@ export async function GET() {
     const countsResult = await db.execute(sql`
       select
         upper(trim(coalesce(u."role", 'USER'))) as "roleKey",
-        count(*)::int as "memberCount"
+        count(*) as "memberCount"
       from "Users" u
       group by upper(trim(coalesce(u."role", 'USER')))
     `);
@@ -200,7 +200,7 @@ export async function DELETE(request: Request) {
     await ensureInAccordRoleSchema();
 
     const usageResult = await db.execute(sql`
-      select count(*)::int as count
+      select count(*) as count
       from "Users"
       where upper(trim(coalesce("role", 'USER'))) = ${roleKey}
     `);

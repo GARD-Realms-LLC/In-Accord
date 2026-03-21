@@ -1,9 +1,10 @@
 import { access, copyFile, mkdir } from "fs/promises";
-import os from "os";
 import path from "path";
 
 const isFileDataDisabled = () => String(process.env.INACCORD_DISABLE_FILE_DATA ?? "").trim() === "1";
 const isStandaloneBuildActive = () => String(process.env.NEXT_OUTPUT_MODE ?? "").trim() === "standalone";
+const DISABLED_RUNTIME_DATA_DIR_NAME = ".runtime-data-disabled";
+const DEFAULT_RUNTIME_DATA_DIR_NAME = ".runtime-data";
 
 const normalizeConfiguredPath = (value: string) => {
   const trimmed = value.trim();
@@ -14,35 +15,13 @@ const normalizeConfiguredPath = (value: string) => {
   return path.isAbsolute(trimmed) ? path.normalize(trimmed) : path.resolve(trimmed);
 };
 
-const resolveOsRuntimeBaseDir = () => {
-  if (process.platform === "win32") {
-    const windowsBase = String(process.env.LOCALAPPDATA ?? process.env.APPDATA ?? "").trim();
-    if (windowsBase) {
-      return path.join(windowsBase, "In-Accord", "runtime-data");
-    }
-
-    return path.join(os.homedir(), "AppData", "Local", "In-Accord", "runtime-data");
-  }
-
-  if (process.platform === "darwin") {
-    return path.join(os.homedir(), "Library", "Application Support", "In-Accord", "runtime-data");
-  }
-
-  const xdgStateHome = String(process.env.XDG_STATE_HOME ?? "").trim();
-  if (xdgStateHome) {
-    return path.join(xdgStateHome, "In-Accord", "runtime-data");
-  }
-
-  return path.join(os.homedir(), ".local", "state", "In-Accord", "runtime-data");
-};
-
 export const getRuntimeDataDir = () => {
   if (isFileDataDisabled() || isStandaloneBuildActive()) {
-    return path.join(process.cwd(), ".runtime-data-disabled");
+    return path.join(process.cwd(), DISABLED_RUNTIME_DATA_DIR_NAME);
   }
 
   const configured = normalizeConfiguredPath(String(process.env.INACCORD_RUNTIME_DATA_DIR ?? ""));
-  return configured || resolveOsRuntimeBaseDir();
+  return configured || path.join(process.cwd(), DEFAULT_RUNTIME_DATA_DIR_NAME);
 };
 
 export const getLegacyWorkspaceDataDir = () => path.join(process.cwd(), ".data");

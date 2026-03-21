@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { isDatabaseRuntimeReady } from "@/lib/d1-runtime";
 import { ensureLocalAuthSchema } from "@/lib/local-auth";
 import { hashPassword } from "@/lib/password";
 import { setSessionUserId } from "@/lib/session";
@@ -11,13 +10,6 @@ import { ensureUserProfileSchema } from "@/lib/user-profile";
 
 export async function POST(request: Request) {
   try {
-    if (!(await isDatabaseRuntimeReady())) {
-      return new NextResponse(
-        "Database unavailable. Configure Cloudflare D1.",
-        { status: 503 }
-      );
-    }
-
     const body = await request.json().catch(() => null);
     const name = String(body?.name || "").trim();
     const phoneNumberInput = String(body?.phoneNumber || "").trim();
@@ -145,26 +137,18 @@ export async function POST(request: Request) {
               ""
           )
         : "";
-    let serialized = "";
-    if (typeof error === "object" && error !== null) {
-      try {
-        serialized = JSON.stringify(error);
-      } catch {
-        serialized = "";
-      }
-    }
+    const serialized =
+      typeof error === "object" && error !== null ? JSON.stringify(error) : "";
 
     if (
-      /No D1 database binding configured|Database unavailable|Failed to execute D1 query/i.test(
-        message,
-      ) ||
-      /SQLITE_|D1_/i.test(maybeCode) ||
-      /No D1 database binding configured|Database unavailable|Failed to execute D1 query|SQLITE_/i.test(
-        serialized,
-      )
+      /LIVE_DATABASE_URL|DATABASE_URL|Cloudflare D1|wrangler|binding "?DB"?/i.test(message) ||
+      /no such table|no such column|SQLITE_ERROR/i.test(message) ||
+      /ETIMEDOUT|ECONNREFUSED|ENOTFOUND|SQLITE_ERROR/i.test(message) ||
+      /ETIMEDOUT|ECONNREFUSED|ENOTFOUND|SQLITE_ERROR/i.test(maybeCode) ||
+      /ETIMEDOUT|ECONNREFUSED|ENOTFOUND|SQLITE_ERROR/i.test(serialized)
     ) {
       return new NextResponse(
-        "Database unavailable. Check the Cloudflare D1 binding and required tables.",
+        "Database unavailable. Check the D1 runtime connection and required tables.",
         { status: 503 }
       );
     }

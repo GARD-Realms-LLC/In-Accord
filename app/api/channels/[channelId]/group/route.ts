@@ -126,15 +126,15 @@ export async function PATCH(
           ).rows?.[0]?.maxSortOrder ?? 0
         ) + 1;
 
-      await db.transaction(async (tx) => {
+    await db.transaction(async (tx: any) => {
         await tx.execute(sql`
-          update "Channel" c
+          update "Channel"
           set
-            "sortOrder" = c."sortOrder" - 1,
+            "sortOrder" = "Channel"."sortOrder" - 1,
             "updatedAt" = ${new Date()}
-          where c."serverId" = ${serverId}
-            and c."channelGroupId" is not distinct from ${currentGroupId}
-            and c."sortOrder" > ${currentSortOrder}
+          where "Channel"."serverId" = ${serverId}
+            and "Channel"."channelGroupId" is not distinct from ${currentGroupId}
+            and "Channel"."sortOrder" > ${currentSortOrder}
         `);
 
         await tx.execute(sql`

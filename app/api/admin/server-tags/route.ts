@@ -43,7 +43,7 @@ const buildResponse = async () => {
       st."tagCode" as "tagCode",
       st."iconKey" as "iconKey",
       (
-        select count(*)::int
+        select count(*)
         from "UserPreference" up
         where up."selectedServerTagServerId" = s."id"
       ) as "selectedProfileCount"
@@ -73,7 +73,7 @@ const buildResponse = async () => {
   };
 };
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const profile = await currentProfile();
 
@@ -89,6 +89,21 @@ export async function GET() {
     return NextResponse.json(payload);
   } catch (error) {
     console.error("[ADMIN_SERVER_TAGS_GET]", error);
+
+    if (new URL(request.url).searchParams.get("debug") === "1") {
+      return NextResponse.json(
+        {
+          ok: false,
+          message: error instanceof Error ? error.message : String(error),
+          stack:
+            error instanceof Error
+              ? error.stack?.split("\n").slice(0, 12) ?? []
+              : [],
+        },
+        { status: 500 },
+      );
+    }
+
     return new NextResponse("Internal Error", { status: 500 });
   }
 }

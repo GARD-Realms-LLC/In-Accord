@@ -283,7 +283,7 @@ export async function PATCH(req: Request, { params }: Params) {
         allowConnect: boolean | null;
       } => Boolean(item));
 
-    await db.transaction(async (tx) => {
+    await db.transaction(async (tx: any) => {
       await tx.execute(sql`
         delete from "ChannelPermission"
         where "serverId" = ${serverId}

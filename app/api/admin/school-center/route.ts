@@ -121,7 +121,7 @@ export async function GET() {
 
     const entries = rows
       .map((row) => {
-        const raw = row.schoolCenterJson ?? "{}";
+        const raw = String(row.schoolCenterJson ?? "{}");
         let parsed: Record<string, unknown> = {};
 
         try {

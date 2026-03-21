@@ -1,0 +1,91 @@
+{
+  "buildTimestamp": "2026-03-21T16:59:19.799Z",
+  "branch": "main",
+  "commitSha": "8c5d3961b2f481fc97c6f84f49089f1be9c92737",
+  "commits": [
+    {
+      "sha": "8c5d3961b2f481fc97c6f84f49089f1be9c92737",
+      "shortSha": "8c5d3961",
+      "message": "Port app runtime to Cloudflare D1",
+      "author": "Doc Cowles",
+      "committedAt": "2026-03-19T22:27:50-06:00"
+    },
+    {
+      "sha": "2637305817ba47dd368ddf201af3b76752026658",
+      "shortSha": "26373058",
+      "message": "Fix Cloudflare DB URL fallback and publish 1.0.274",
+      "author": "Doc Cowles",
+      "committedAt": "2026-03-19T19:59:56-06:00"
+    },
+    {
+      "sha": "5d846af9e0278f89d5799b3790a37e02903eda34",
+      "shortSha": "5d846af9",
+      "message": "Merge pull request #5 from GARD-Realms-LLC/update_worker_name_to_inaccord",
+      "author": "Doc Cowles",
+      "committedAt": "2026-03-19T19:47:13-06:00"
+    },
+    {
+      "sha": "0dced5223f90b0da618efbb37ab730d2bda5af31",
+      "shortSha": "0dced522",
+      "message": "Update wrangler config name to inaccord",
+      "author": "cloudflare-workers-and-pages[bot]",
+      "committedAt": "2026-03-20T01:45:50Z"
+    },
+    {
+      "sha": "44fb08b667686882a155acb3c6975f3b4174c25c",
+      "shortSha": "44fb08b6",
+      "message": "Fix live worker name and publish 1.0.273",
+      "author": "Doc Cowles",
+      "committedAt": "2026-03-19T19:41:58-06:00"
+    },
+    {
+      "sha": "fd0a128e37aabcbffecadfc66e27b0260a0d21a2",
+      "shortSha": "fd0a128e",
+      "message": "Align live worker source with repo",
+      "author": "Doc Cowles",
+      "committedAt": "2026-03-19T19:31:59-06:00"
+    },
+    {
+      "sha": "fadaa33849c1c71a93aca193d226111b78076d22",
+      "shortSha": "fadaa338",
+      "message": "Merge pull request #4 from GARD-Realms-LLC/update_worker_name_to_inaccord",
+      "author": "Doc Cowles",
+      "committedAt": "2026-03-19T17:59:22-06:00"
+    },
+    {
+      "sha": "a18540110c93789c69a2a76ca1dc99b4721af6b9",
+      "shortSha": "a1854011",
+      "message": "Update wrangler config name to inaccord",
+      "author": "cloudflare-workers-and-pages[bot]",
+      "committedAt": "2026-03-19T23:51:49Z"
+    },
+    {
+      "sha": "e0093e56af790635b7fa9282fc49cc87b009036f",
+      "shortSha": "e0093e56",
+      "message": "Point wrangler config back at the live worker",
+      "author": "Doc Cowles",
+      "committedAt": "2026-03-19T17:49:03-06:00"
+    },
+    {
+      "sha": "a58e70a95866aaefecd70eb3a8b9fce197a2bd31",
+      "shortSha": "a58e70a9",
+      "message": "Try local and legacy password hashes on sign-in",
+      "author": "Doc Cowles",
+      "committedAt": "2026-03-19T17:25:08-06:00"
+    },
+    {
+      "sha": "3ea0edf0c15486c1b044e1d5c7037525c383edc3",
+      "shortSha": "3ea0edf0",
+      "message": "Read DB URL from Cloudflare worker bindings",
+      "author": "Doc Cowles",
+      "committedAt": "2026-03-19T17:13:29-06:00"
+    },
+    {
+      "sha": "72e0c84a2f1f13bf24fe5b8e39dfaaefe797d4f1",
+      "shortSha": "72e0c84a",
+      "message": "Fix live auth database runtime checks",
+      "author": "Doc Cowles",
+      "committedAt": "2026-03-19T17:03:18-06:00"
+    }
+  ]
+}

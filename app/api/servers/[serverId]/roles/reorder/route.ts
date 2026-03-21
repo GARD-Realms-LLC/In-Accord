@@ -67,7 +67,7 @@ export async function PATCH(req: Request, { params }: Params) {
       }
     }
 
-    await db.transaction(async (tx) => {
+    await db.transaction(async (tx: any) => {
       for (let index = 0; index < orderedRoleIds.length; index += 1) {
         const roleId = orderedRoleIds[index];
         await tx.execute(sql`

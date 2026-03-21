@@ -1,15 +1,8 @@
 import { NextResponse } from "next/server";
-import { readFile } from "fs/promises";
-import path from "path";
-import { execFile } from "child_process";
-import { promisify } from "util";
-import { createHash } from "crypto";
+import packageJson from "../../../../package.json";
 
 import { currentProfile } from "@/lib/current-profile";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
-
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
 
 type PackageJsonShape = {
   name?: string;
@@ -22,18 +15,9 @@ type PackageJsonShape = {
   homepage?: string;
 };
 
-type BuildMetadataShape = {
-  buildTimestamp?: string | null;
-  branch?: string | null;
-  commitSha?: string | null;
-  commits?: CommitLogEntry[];
-};
-
 const DEFAULT_GITHUB_REPO_URL = "https://github.com/GARD-Realms-LLC/In-Accord";
-const execFileAsync = promisify(execFile);
 const SDK_SOURCE_FILE = "In-Accord.js";
 const SDK_BASE_VERSION = "1.0.0.1";
-const getSafeGitDirectory = () => process.cwd().replace(/\\/g, "/");
 
 declare global {
   // eslint-disable-next-line no-var
@@ -47,6 +31,25 @@ declare global {
 
 const isPlaceholder = (value?: string) =>
   !value || value.trim() === "" || value.includes("replace_me");
+
+const getBuiltinModule = <TModule,>(name: string): TModule | null => {
+  const processWithBuiltinLookup = process as NodeJS.Process & {
+    getBuiltinModule?: (moduleName: string) => unknown;
+  };
+
+  if (
+    typeof process === "undefined" ||
+    typeof processWithBuiltinLookup.getBuiltinModule !== "function"
+  ) {
+    return null;
+  }
+
+  try {
+    return processWithBuiltinLookup.getBuiltinModule(name) as TModule;
+  } catch {
+    return null;
+  }
+};
 
 type CommitLogEntry = {
   sha: string;
@@ -115,10 +118,7 @@ const bumpSdkVersion = (value: string) => {
   const normalized = normalizeSdkVersion(value);
   const parts = normalized.split(".").map((part) => Number.parseInt(part, 10));
 
-  if (
-    parts.length !== 4 ||
-    parts.some((part) => !Number.isFinite(part) || part < 0)
-  ) {
+  if (parts.length !== 4 || parts.some((part) => !Number.isFinite(part) || part < 0)) {
     return SDK_BASE_VERSION;
   }
 
@@ -127,23 +127,25 @@ const bumpSdkVersion = (value: string) => {
 
 const getSdkVersion = async () => {
   try {
+    const pathModule = getBuiltinModule<typeof import("path")>("path");
+    const fsModule = getBuiltinModule<typeof import("fs/promises")>("fs/promises");
+    const cryptoModule = getBuiltinModule<typeof import("crypto")>("crypto");
+
+    if (!pathModule || !fsModule || !cryptoModule) {
+      return globalThis.inAccordSdkVersionCache?.version ?? SDK_BASE_VERSION;
+    }
+
     const root = process.cwd();
-    const sdkSourcePath = path.join(root, SDK_SOURCE_FILE);
-    const sdkSourceContent = await readFile(sdkSourcePath, "utf8");
-    const sourceHash = createHash("sha256")
-      .update(sdkSourceContent)
-      .digest("hex");
+    const sdkSourcePath = pathModule.join(root, SDK_SOURCE_FILE);
+    const sdkSourceContent = await fsModule.readFile(sdkSourcePath, "utf8");
+    const sourceHash = cryptoModule.createHash("sha256").update(sdkSourceContent).digest("hex");
 
     if (globalThis.inAccordSdkVersionCache?.sourceHash === sourceHash) {
       return globalThis.inAccordSdkVersionCache.version;
     }
 
-    const previousVersion = normalizeSdkVersion(
-      globalThis.inAccordSdkVersionCache?.version,
-    );
-    const nextVersion = globalThis.inAccordSdkVersionCache
-      ? bumpSdkVersion(previousVersion)
-      : SDK_BASE_VERSION;
+    const previousVersion = normalizeSdkVersion(globalThis.inAccordSdkVersionCache?.version);
+    const nextVersion = globalThis.inAccordSdkVersionCache ? bumpSdkVersion(previousVersion) : SDK_BASE_VERSION;
 
     globalThis.inAccordSdkVersionCache = {
       sourceHash,
@@ -162,9 +164,7 @@ const parseGitHubOwnerRepo = (repositoryUrl: string | null | undefined) => {
     return null;
   }
 
-  const matched = normalized.match(
-    /^https?:\/\/github\.com\/([^/]+)\/([^/]+)$/i,
-  );
+  const matched = normalized.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+)$/i);
   if (!matched) {
     return null;
   }
@@ -181,20 +181,21 @@ const parseGitHubOwnerRepo = (repositoryUrl: string | null | undefined) => {
 
 const getRecentCommitLog = async (): Promise<CommitLogEntry[]> => {
   try {
+    const childProcessModule = getBuiltinModule<typeof import("child_process")>("child_process");
+    const utilModule = getBuiltinModule<typeof import("util")>("util");
+
+    if (!childProcessModule || !utilModule) {
+      return [];
+    }
+
+    const execFileAsync = utilModule.promisify(childProcessModule.execFile);
     const prettyFormat = "%H%x1f%h%x1f%s%x1f%an%x1f%cI";
     const { stdout } = await execFileAsync(
       "git",
-      [
-        "-c",
-        `safe.directory=${getSafeGitDirectory()}`,
-        "log",
-        "-n",
-        "12",
-        `--pretty=format:${prettyFormat}`,
-      ],
+      ["log", "-n", "12", `--pretty=format:${prettyFormat}`],
       {
         cwd: process.cwd(),
-      },
+      }
     );
 
     const rows = String(stdout ?? "")
@@ -202,8 +203,7 @@ const getRecentCommitLog = async (): Promise<CommitLogEntry[]> => {
       .map((line) => line.trim())
       .filter(Boolean)
       .map((line) => {
-        const [sha, shortSha, message, author, committedAt] =
-          line.split("\u001f");
+        const [sha, shortSha, message, author, committedAt] = line.split("\u001f");
 
         if (!sha || !shortSha || !message || !author || !committedAt) {
           return null;
@@ -225,37 +225,9 @@ const getRecentCommitLog = async (): Promise<CommitLogEntry[]> => {
   }
 };
 
-const readBuildMetadata = async (): Promise<BuildMetadataShape | null> => {
-  try {
-    const metadataPath = path.join(process.cwd(), "build-metadata.json");
-    const metadataContent = await readFile(metadataPath, "utf8");
-    const parsed = JSON.parse(metadataContent) as BuildMetadataShape;
-
-    return {
-      buildTimestamp: String(parsed.buildTimestamp ?? "").trim() || null,
-      branch: String(parsed.branch ?? "").trim() || null,
-      commitSha: String(parsed.commitSha ?? "").trim() || null,
-      commits: Array.isArray(parsed.commits)
-        ? parsed.commits.filter((entry): entry is CommitLogEntry =>
-            Boolean(
-              entry &&
-              typeof entry.sha === "string" &&
-              typeof entry.shortSha === "string" &&
-              typeof entry.message === "string" &&
-              typeof entry.author === "string" &&
-              typeof entry.committedAt === "string",
-            ),
-          )
-        : [],
-    };
-  } catch {
-    return null;
-  }
-};
-
 const getRecentGitHubCommits = async (
   repositoryUrl: string,
-  branch: string,
+  branch: string
 ): Promise<GitHubCommitEntry[]> => {
   try {
     const parsed = parseGitHubOwnerRepo(repositoryUrl);
@@ -269,11 +241,10 @@ const getRecentGitHubCommits = async (
     });
 
     const endpoint = `https://api.github.com/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(
-      parsed.repo,
+      parsed.repo
     )}/commits?${search.toString()}`;
 
-    const token =
-      process.env.GITHUB_TOKEN || process.env.INACCORD_GITHUB_TOKEN || null;
+    const token = process.env.GITHUB_TOKEN || process.env.INACCORD_GITHUB_TOKEN || null;
     const response = await fetch(endpoint, {
       method: "GET",
       headers: {
@@ -310,9 +281,7 @@ const getRecentGitHubCommits = async (
           sha,
           shortSha: sha.slice(0, 7),
           message: String(entry.commit?.message ?? "").split("\n")[0] ?? "",
-          url:
-            String(entry.html_url ?? "").trim() ||
-            `${repositoryUrl}/commit/${sha}`,
+          url: String(entry.html_url ?? "").trim() || `${repositoryUrl}/commit/${sha}`,
           committedAt: String(entry.commit?.author?.date ?? "").trim(),
         } satisfies GitHubCommitEntry;
       })
@@ -334,38 +303,25 @@ export async function GET() {
       return new NextResponse("Forbidden", { status: 403 });
     }
 
-    const packagePath = path.join(process.cwd(), "package.json");
-    const packageContent = await readFile(packagePath, "utf8");
-    const packageJson = JSON.parse(packageContent) as PackageJsonShape;
+    const rootPackageJson = packageJson as PackageJsonShape;
 
     const envRepoUrl = normalizeRepoUrl(process.env.INACCORD_GITHUB_REPO_URL);
-    const envIssuesUrl = normalizeRepoUrl(
-      process.env.INACCORD_GITHUB_ISSUES_URL,
-    );
+    const envIssuesUrl = normalizeRepoUrl(process.env.INACCORD_GITHUB_ISSUES_URL);
 
-    const repoField = packageJson.repository;
+    const repoField = rootPackageJson.repository;
     const repositoryUrl =
       envRepoUrl ||
-      normalizeRepoUrl(
-        typeof repoField === "string" ? repoField : repoField?.url,
-      ) ||
+      normalizeRepoUrl(typeof repoField === "string" ? repoField : repoField?.url) ||
       DEFAULT_GITHUB_REPO_URL;
     const bugsUrl =
       envIssuesUrl ||
-      normalizeRepoUrl(
-        typeof packageJson.bugs === "string"
-          ? packageJson.bugs
-          : packageJson.bugs?.url,
-      ) ||
+      normalizeRepoUrl(typeof rootPackageJson.bugs === "string" ? rootPackageJson.bugs : rootPackageJson.bugs?.url) ||
       `${repositoryUrl}/issues`;
-
-    const buildMetadata = await readBuildMetadata();
 
     const commitSha =
       process.env.VERCEL_GIT_COMMIT_SHA ||
       process.env.GITHUB_SHA ||
       process.env.COMMIT_SHA ||
-      buildMetadata?.commitSha ||
       null;
 
     const branch =
@@ -373,16 +329,15 @@ export async function GET() {
       process.env.GITHUB_REF_NAME ||
       process.env.BRANCH_NAME ||
       process.env.INACCORD_DEFAULT_BRANCH ||
-      buildMetadata?.branch ||
       "main";
 
-    const liveCommits = await getRecentCommitLog();
-    const commits =
-      liveCommits.length > 0 ? liveCommits : (buildMetadata?.commits ?? []);
-    const githubMainCommits = await getRecentGitHubCommits(
-      repositoryUrl,
-      "main",
-    );
+    const localGitWorkspaceAvailable =
+      Boolean(getBuiltinModule<typeof import("child_process")>("child_process")) &&
+      Boolean(getBuiltinModule<typeof import("util")>("util"));
+    const localDesktopBuildAvailable = localGitWorkspaceAvailable;
+
+    const commits = await getRecentCommitLog();
+    const githubMainCommits = await getRecentGitHubCommits(repositoryUrl, "main");
     const sdkVersion = await getSdkVersion();
 
     const storageConfigured =
@@ -393,28 +348,23 @@ export async function GET() {
 
     return NextResponse.json({
       build: {
-        appName: packageJson.name ?? "In-Accord",
-        appVersion: toAppDisplayVersion(
-          packageJson.inaccordDisplayVersion ?? packageJson.version,
-        ),
+        appName: rootPackageJson.name ?? "In-Accord",
+        appVersion: toAppDisplayVersion(rootPackageJson.inaccordDisplayVersion ?? rootPackageJson.version),
         sdkVersion: toDisplayVersion(sdkVersion),
         nextVersion: toDisplayVersion(
-          packageJson.dependencies?.next ??
-            packageJson.devDependencies?.next ??
-            null,
+          rootPackageJson.dependencies?.next ?? rootPackageJson.devDependencies?.next ?? null
         ),
         nodeEnv: process.env.NODE_ENV ?? "unknown",
         buildTimestamp:
           process.env.BUILD_TIMESTAMP ||
           process.env.VERCEL_GIT_COMMIT_DATE ||
-          buildMetadata?.buildTimestamp ||
           new Date().toISOString(),
         commitSha,
         branch,
       },
       github: {
         repositoryUrl,
-        homepageUrl: normalizeRepoUrl(packageJson.homepage) || repositoryUrl,
+        homepageUrl: normalizeRepoUrl(rootPackageJson.homepage) || repositoryUrl,
         issuesUrl: bugsUrl,
       },
       storage: {
@@ -422,6 +372,8 @@ export async function GET() {
         provider: "Cloudflare R2",
         applicationsPath: "Client/Applications/",
       },
+      localGitWorkspaceAvailable,
+      localDesktopBuildAvailable,
       commits,
       githubMainCommits,
     });

@@ -1,20 +1,56 @@
 import "server-only";
 
-import { execFile } from "child_process";
-import path from "path";
-import { promisify } from "util";
-
 import { getCloudflareContext } from "@opennextjs/cloudflare";
-
-const execFileAsync = promisify(execFile);
 
 const D1_BINDING_NAME = "DB";
 const DEFAULT_D1_DATABASE_NAME = "inaccordweb";
 const WRANGLER_CONFIG_FILE = "wrangler.jsonc";
 const REQUIRED_APP_TABLE_NAME = "Users";
 
+type ChildProcessModule = typeof import("child_process");
+type PathModule = typeof import("path");
+type UtilModule = typeof import("util");
+
+const getBuiltinModule = <TModule,>(moduleName: string): TModule | null => {
+  const builtinLoader = (process as typeof process & {
+    getBuiltinModule?: (name: string) => TModule | undefined;
+  }).getBuiltinModule;
+
+  if (typeof builtinLoader !== "function") {
+    return null;
+  }
+
+  try {
+    return builtinLoader(moduleName) ?? null;
+  } catch {
+    return null;
+  }
+};
+
+const getExecFileAsync = () => {
+  const childProcess = getBuiltinModule<ChildProcessModule>("child_process");
+  const utilModule = getBuiltinModule<UtilModule>("util");
+
+  if (!childProcess?.execFile || !utilModule?.promisify) {
+    throw new Error(
+      "Wrangler CLI execution requires Node.js child_process support.",
+    );
+  }
+
+  return utilModule.promisify(childProcess.execFile);
+};
+
+const getPathModule = () => {
+  const pathModule = getBuiltinModule<PathModule>("path");
+  if (!pathModule) {
+    throw new Error("Builtin module 'path' is unavailable in this runtime.");
+  }
+
+  return pathModule;
+};
+
 const getWranglerCliInvocation = () => {
-  const localWranglerCliPath = path.join(
+  const localWranglerCliPath = getPathModule().join(
     process.cwd(),
     "node_modules",
     "wrangler",
@@ -319,7 +355,7 @@ const executeViaWrangler = async (
   let stdout = "";
 
   try {
-    const result = await execFileAsync(
+    const result = await getExecFileAsync()(
       wranglerCli.command,
       [
         ...wranglerCli.args,
@@ -596,10 +632,11 @@ const translateSqlQuery = (query: string) => {
     `'1970-01-01T00:00:00.000Z'`,
   );
   translated = translated.replace(
-    /to_jsonb\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)\s*->>\s*'([^']+)'/gi,
+    /to_jsonb\(\s*("[^"]+"|[A-Za-z_][A-Za-z0-9_]*)\s*\)\s*->>\s*'([^']+)'/gi,
     (_match, alias, field) =>
       `${alias}."${String(field).replace(/"/g, '""')}"`,
   );
+  translated = translated.replace(/\s+nulls\s+last\b/gi, "");
   translated = translated.replace(
     /now\(\)\s*-\s*\(\s*\?\s*\*\s*interval\s*'1 second'\s*\)/gi,
     `datetime(CURRENT_TIMESTAMP, '-' || ? || ' seconds')`,

@@ -1,4 +1,4 @@
-import { after, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 
@@ -238,64 +238,84 @@ const getSerializedChannelMessageById = async (messageId: string) => {
   return serializeChannelMessage(row);
 };
 
-const serializeImmediateChannelMessage = ({
-  item,
-  currentMember,
-  currentProfile,
-}: {
-  item: {
-    id: string;
-    content: string;
-    fileUrl: string | null;
-    deleted: boolean;
-    createdAt: Date | string;
-    updatedAt: Date | string;
-  };
-  currentMember: {
-    id?: string | null;
-    profileId?: string | null;
-    role?: string | null;
-  };
-  currentProfile: {
-    id: string;
-    userId?: string | null;
-    name?: string | null;
-    email?: string | null;
-    role?: string | null;
-    imageUrl?: string | null;
-    createdAt?: Date | string | null;
-    updatedAt?: Date | string | null;
-  };
-}) => {
-  const fallbackProfileId =
-    String(currentMember.profileId ?? "").trim() ||
-    String(currentProfile.id ?? "").trim() ||
-    `missing-member-${item.id}`;
+const getSerializedChannelMessageByIdFromD1 = async (messageId: string) => {
+  const normalizedMessageId = String(messageId ?? "").trim();
+  if (!normalizedMessageId) {
+    return null;
+  }
 
-  return {
-    id: item.id,
-    content: item.content,
-    fileUrl: item.fileUrl,
-    deleted: item.deleted,
-    timestamp: formatTimestamp(item.createdAt),
-    isUpdated: new Date(item.updatedAt).getTime() !== new Date(item.createdAt).getTime(),
-    member: {
-      ...currentMember,
-      id: String(currentMember.id ?? "").trim() || `missing-member-${item.id}`,
-      profileId: fallbackProfileId,
-      role: currentMember.role ?? "GUEST",
-      profile: {
-        id: fallbackProfileId,
-        userId: String(currentProfile.userId ?? "").trim() || fallbackProfileId,
-        name: String(currentProfile.name ?? "").trim() || String(currentProfile.email ?? "").trim() || "Deleted User",
-        imageUrl: String(currentProfile.imageUrl ?? "").trim() || "/in-accord-steampunk-logo.png",
-        email: String(currentProfile.email ?? "").trim(),
-        role: currentProfile.role ?? null,
-        createdAt: normalizeIsoDate(currentProfile.createdAt),
-        updatedAt: normalizeIsoDate(currentProfile.updatedAt),
-      },
-    },
-  };
+  const result = await db.execute(sql`
+    select
+      msg."id" as "id",
+      msg."content" as "content",
+      msg."fileUrl" as "fileUrl",
+      msg."deleted" as "deleted",
+      msg."createdAt" as "createdAt",
+      msg."updatedAt" as "updatedAt",
+      m."id" as "memberId",
+      m."profileId" as "memberProfileId",
+      m."role" as "memberRole",
+      u."userId" as "profileUserId",
+      u."name" as "profileName",
+      u."email" as "profileEmail",
+      coalesce(u."avatarUrl", u."avatar", u."icon") as "profileImageUrl",
+      u."account.created" as "profileCreatedAt",
+      u."lastLogin" as "profileUpdatedAt"
+    from "Message" msg
+    left join "Member" m on m."id" = msg."memberId"
+    left join "Users" u on u."userId" = m."profileId"
+    where msg."id" = ${normalizedMessageId}
+    limit 1
+  `);
+
+  const row = ((result as unknown as {
+    rows?: Array<{
+      id: string | null;
+      content: string | null;
+      fileUrl: string | null;
+      deleted: boolean | null;
+      createdAt: Date | string;
+      updatedAt: Date | string;
+      memberId: string | null;
+      memberProfileId: string | null;
+      memberRole: string | null;
+      profileUserId: string | null;
+      profileName: string | null;
+      profileEmail: string | null;
+      profileImageUrl: string | null;
+      profileCreatedAt: Date | string | null;
+      profileUpdatedAt: Date | string | null;
+    }>;
+  }).rows ?? [])[0];
+
+  if (!row?.id) {
+    return null;
+  }
+
+  return serializeChannelMessage({
+    id: String(row.id).trim(),
+    content: String(row.content ?? ""),
+    fileUrl: typeof row.fileUrl === "string" ? row.fileUrl : null,
+    deleted: Boolean(row.deleted),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    member: row.memberId
+      ? {
+          id: String(row.memberId).trim(),
+          profileId: String(row.memberProfileId ?? "").trim(),
+          role: String(row.memberRole ?? "").trim() || MemberRole.GUEST,
+          profile: {
+            id: String(row.memberProfileId ?? row.profileUserId ?? "").trim(),
+            userId: String(row.profileUserId ?? row.memberProfileId ?? "").trim(),
+            name: String(row.profileName ?? row.profileEmail ?? "Deleted User").trim() || "Deleted User",
+            email: String(row.profileEmail ?? "").trim(),
+            imageUrl: String(row.profileImageUrl ?? "/in-accord-steampunk-logo.png").trim() || "/in-accord-steampunk-logo.png",
+            createdAt: row.profileCreatedAt,
+            updatedAt: row.profileUpdatedAt,
+          },
+        }
+      : null,
+  });
 };
 
 export async function GET(req: Request) {
@@ -304,6 +324,12 @@ export async function GET(req: Request) {
     if (!profile) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
+
+    const legacyProfile = profile as NonNullable<typeof profile>;
+    const legacyProfileId = String(legacyProfile.id ?? "").trim();
+    const legacyProfileRole = legacyProfile.role;
+    const legacyProfileEmail = String(legacyProfile.email ?? "").trim();
+    const legacyProfileName = String(legacyProfile.name ?? "").trim();
 
     const { searchParams } = new URL(req.url);
     const serverId = String(searchParams.get("serverId") ?? "").trim();
@@ -350,19 +376,80 @@ export async function GET(req: Request) {
       return new NextResponse("Forbidden", { status: 403 });
     }
 
-    const rows = await db.query.message.findMany({
-      where: threadId
-        ? and(eq(message.channelId, channelId), eq(message.threadId, threadId))
-        : and(eq(message.channelId, channelId), isNull(message.threadId)),
-      orderBy: [asc(message.createdAt)],
-      with: {
-        member: {
-          with: {
-            profile: true,
-          },
-        },
-      },
-    });
+    const messageRows = await db.execute(
+      threadId
+        ? sql`
+            select
+              msg."id" as "id",
+              msg."content" as "content",
+              msg."fileUrl" as "fileUrl",
+              msg."deleted" as "deleted",
+              msg."createdAt" as "createdAt",
+              msg."updatedAt" as "updatedAt",
+              m."id" as "memberId",
+              m."profileId" as "memberProfileId",
+              m."role" as "memberRole",
+              u."userId" as "profileUserId",
+              u."name" as "profileName",
+              u."email" as "profileEmail",
+              coalesce(u."avatarUrl", u."avatar", u."icon") as "profileImageUrl",
+              u.[account.created] as "profileCreatedAt",
+              u."lastLogin" as "profileUpdatedAt",
+              u."role" as "profileRole"
+            from "Message" msg
+            left join "Member" m on m."id" = msg."memberId"
+            left join "Users" u on u."userId" = m."profileId"
+            where msg."channelId" = ${channelId}
+              and msg."threadId" = ${threadId}
+            order by msg."createdAt" asc
+          `
+        : sql`
+            select
+              msg."id" as "id",
+              msg."content" as "content",
+              msg."fileUrl" as "fileUrl",
+              msg."deleted" as "deleted",
+              msg."createdAt" as "createdAt",
+              msg."updatedAt" as "updatedAt",
+              m."id" as "memberId",
+              m."profileId" as "memberProfileId",
+              m."role" as "memberRole",
+              u."userId" as "profileUserId",
+              u."name" as "profileName",
+              u."email" as "profileEmail",
+              coalesce(u."avatarUrl", u."avatar", u."icon") as "profileImageUrl",
+              u.[account.created] as "profileCreatedAt",
+              u."lastLogin" as "profileUpdatedAt",
+              u."role" as "profileRole"
+            from "Message" msg
+            left join "Member" m on m."id" = msg."memberId"
+            left join "Users" u on u."userId" = m."profileId"
+            where msg."channelId" = ${channelId}
+              and msg."threadId" is null
+            order by msg."createdAt" asc
+          `
+    );
+
+    const rows = ((messageRows as unknown as {
+      rows?: Array<{
+        id: string;
+        content: string | null;
+        fileUrl: string | null;
+        deleted: boolean | null;
+        createdAt: Date | string;
+        updatedAt: Date | string;
+        memberId: string | null;
+        memberProfileId: string | null;
+        memberRole: string | null;
+        profileUserId: string | null;
+        profileName: string | null;
+        profileEmail: string | null;
+        profileImageUrl: string | null;
+        profileCreatedAt: Date | string | null;
+        profileUpdatedAt: Date | string | null;
+        profileRole: string | null;
+      }>;
+    }).rows ?? []);
 
     if (threadId) {
       await markThreadRead({ threadId, profileId: profile.id });
@@ -394,51 +481,38 @@ export async function GET(req: Request) {
     }
 
     const messageProfileIds = rows
-      .map((item) => item.member?.profileId)
+      .map((item) => String(item.memberProfileId ?? "").trim())
       .filter((value): value is string => Boolean(value));
     const profileNameMap = await getUserProfileNameMap(messageProfileIds);
-    const uniqueMessageProfileIds = Array.from(new Set(messageProfileIds));
-
-    const profileRoleRows = uniqueMessageProfileIds.length
-      ? await db.execute(sql`
-          select "userId", "role"
-          from "Users"
-          where "userId" in (${sql.join(uniqueMessageProfileIds.map((id) => sql`${id}`), sql`, `)})
-        `)
-      : { rows: [] };
-
-    const profileRoleMap = new Map<string, string | null>(
-      ((profileRoleRows as unknown as {
-        rows?: Array<{ userId: string; role: string | null }>;
-      }).rows ?? []).map((row) => [row.userId, row.role ?? null])
-    );
 
     const hydratedMessages = rows.map((item) => {
-      const fallbackProfileId = item.member?.profileId ?? `missing-member-${item.id}`;
+      const fallbackProfileId = String(item.memberProfileId ?? "").trim() || `missing-member-${item.id}`;
       const profileName = profileNameMap.get(fallbackProfileId);
-      const sourceProfile = item.member?.profile;
 
       return {
         id: item.id,
-        content: item.content,
-        fileUrl: item.fileUrl,
-        deleted: item.deleted,
+        content: String(item.content ?? ""),
+        fileUrl: typeof item.fileUrl === "string" ? item.fileUrl : null,
+        deleted: Boolean(item.deleted),
         timestamp: formatTimestamp(item.createdAt),
         isUpdated: new Date(item.updatedAt).getTime() !== new Date(item.createdAt).getTime(),
         member: {
-          ...(item.member ?? {}),
-          id: item.member?.id ?? `missing-member-${item.id}`,
-          profileId: item.member?.profileId ?? fallbackProfileId,
-          role: item.member?.role ?? "GUEST",
+          id: String(item.memberId ?? "").trim() || `missing-member-${item.id}`,
+          profileId: fallbackProfileId,
+          role: String(item.memberRole ?? "").trim() || "GUEST",
           profile: {
-            id: sourceProfile?.id ?? fallbackProfileId,
-            userId: sourceProfile?.userId ?? sourceProfile?.id ?? fallbackProfileId,
-            name: profileName ?? sourceProfile?.name ?? sourceProfile?.email ?? "Deleted User",
-            imageUrl: sourceProfile?.imageUrl ?? "/in-accord-steampunk-logo.png",
-            email: sourceProfile?.email ?? "",
-            role: profileRoleMap.get(fallbackProfileId) ?? null,
-            createdAt: (sourceProfile?.createdAt ?? new Date(0)).toISOString(),
-            updatedAt: (sourceProfile?.updatedAt ?? new Date(0)).toISOString(),
+            id: fallbackProfileId,
+            userId: String(item.profileUserId ?? fallbackProfileId).trim() || fallbackProfileId,
+            name:
+              profileName ??
+              (String(item.profileName ?? item.profileEmail ?? "Deleted User").trim() || "Deleted User"),
+            imageUrl:
+              String(item.profileImageUrl ?? "/in-accord-steampunk-logo.png").trim() ||
+              "/in-accord-steampunk-logo.png",
+            email: String(item.profileEmail ?? "").trim(),
+            role: item.profileRole ?? null,
+            createdAt: normalizeIsoDate(item.profileCreatedAt),
+            updatedAt: normalizeIsoDate(item.profileUpdatedAt),
           },
         },
       };
@@ -482,17 +556,241 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const liveProfile = await currentProfile();
+    if (!liveProfile) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
+
+    const requestBody = await req.json().catch(() => ({}));
+    const liveSearchParams = new URL(req.url).searchParams;
+    const liveServerId = String(liveSearchParams.get("serverId") ?? "").trim();
+    const liveChannelId = String(liveSearchParams.get("channelId") ?? "").trim();
+    const liveThreadId = String(liveSearchParams.get("threadId") ?? "").trim() || null;
+    const liveClientMutationId =
+      typeof requestBody?.clientMutationId === "string" && requestBody.clientMutationId.trim().length > 0
+        ? requestBody.clientMutationId.trim()
+        : undefined;
+    const liveFileUrl =
+      typeof requestBody?.fileUrl === "string" && requestBody.fileUrl.trim().length > 0
+        ? requestBody.fileUrl.trim()
+        : null;
+    const liveContent =
+      typeof requestBody?.content === "string"
+        ? requestBody.content.trim()
+        : "";
+
+    if (!liveServerId) {
+      return new NextResponse("Server ID missing", { status: 400 });
+    }
+
+    if (!liveChannelId) {
+      return new NextResponse("Channel ID missing", { status: 400 });
+    }
+
+    if (!liveContent && !liveFileUrl) {
+      return new NextResponse("Content is required", { status: 400 });
+    }
+
+    const liveMemberContext = await resolveMemberContext({
+      profileId: liveProfile.id,
+      serverId: liveServerId,
+    });
+
+    if (!liveMemberContext?.memberId) {
+      return new NextResponse("Member not found", { status: 404 });
+    }
+
+    const liveChannelResult = await db.execute(sql`
+      select
+        c."id" as "id",
+        c."serverId" as "serverId",
+        c."name" as "name",
+        c."type" as "type"
+      from "Channel" c
+      where c."id" = ${liveChannelId}
+        and c."serverId" = ${liveServerId}
+      limit 1
+    `);
+
+    const liveChannel = ((liveChannelResult as unknown as {
+      rows?: Array<{
+        id: string | null;
+        serverId: string | null;
+        name: string | null;
+        type: ChannelType | null;
+      }>;
+    }).rows ?? [])[0];
+
+    if (!liveChannel?.id || !liveChannel.serverId) {
+      return new NextResponse("Channel not found", { status: 404 });
+    }
+
+    const livePermissions = await computeChannelPermissionForMember({
+      serverId: liveServerId,
+      channelId: String(liveChannel.id).trim(),
+      memberContext: liveMemberContext,
+    });
+
+    if (!livePermissions.allowView) {
+      return new NextResponse("You cannot view this channel", { status: 403 });
+    }
+
+    if (!livePermissions.allowSend) {
+      return new NextResponse("You cannot send messages in this channel", { status: 403 });
+    }
+
+    if (liveChannel.type === ChannelType.ANNOUNCEMENT && liveMemberContext.role === MemberRole.GUEST) {
+      return new NextResponse("Only moderators can publish in announcement channels.", {
+        status: 403,
+      });
+    }
+
+    if (liveThreadId) {
+      await ensureChannelThreadSchema();
+
+      const liveThreadResult = await db.execute(sql`
+        select "id", "archived"
+        from "ChannelThread"
+        where "id" = ${liveThreadId}
+          and "channelId" = ${liveChannelId}
+          and "serverId" = ${liveServerId}
+        limit 1
+      `);
+
+      const liveThreadRow = ((liveThreadResult as unknown as {
+        rows?: Array<{ id: string | null; archived: boolean | null }>;
+      }).rows ?? [])[0];
+
+      if (!liveThreadRow?.id) {
+        return new NextResponse("Thread not found", { status: 404 });
+      }
+
+      if (Boolean(liveThreadRow.archived)) {
+        return new NextResponse("Thread is archived", { status: 400 });
+      }
+    }
+
+    const liveSanitizedContent = liveContent
+      ? await sanitizeRoleMentions(liveContent, liveServerId)
+      : "";
+
+    if (!liveSanitizedContent && !liveFileUrl) {
+      return new NextResponse("Content is required", { status: 400 });
+    }
+
+    const insertedMessageId = uuidv4();
+    const liveInsertedAt = new Date();
+    const liveStoredContent = liveSanitizedContent || "[attachment]";
+
+    await db.execute(sql`
+      insert into "Message" (
+        "id",
+        "content",
+        "fileUrl",
+        "memberId",
+        "channelId",
+        "threadId",
+        "deleted",
+        "createdAt",
+        "updatedAt"
+      )
+      values (
+        ${insertedMessageId},
+        ${liveStoredContent},
+        ${liveFileUrl},
+        ${liveMemberContext.memberId},
+        ${liveChannelId},
+        ${liveThreadId},
+        ${0},
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+      )
+    `);
+
+    if (liveThreadId) {
+      await touchThreadActivity({ threadId: liveThreadId });
+      await markThreadRead({ threadId: liveThreadId, profileId: liveProfile.id });
+    } else if (liveChannel.type === ChannelType.ANNOUNCEMENT) {
+      await markChannelRead({
+        channelId: liveChannelId,
+        profileId: liveProfile.id,
+      });
+    }
+
+    const liveSerializedInserted = {
+      id: insertedMessageId,
+      content: liveStoredContent,
+      fileUrl: liveFileUrl,
+      deleted: false,
+      timestamp: formatTimestamp(liveInsertedAt),
+      isUpdated: false,
+      member: {
+        id: liveMemberContext.memberId,
+        profileId: liveProfile.id,
+        role: liveMemberContext.role,
+        profile: {
+          id: liveProfile.id,
+          userId: String((liveProfile as { userId?: string | null }).userId ?? liveProfile.id).trim() || liveProfile.id,
+          name: String(liveProfile.name ?? liveProfile.email ?? "User").trim() || "User",
+          imageUrl: String(liveProfile.imageUrl ?? "/in-accord-steampunk-logo.png").trim() || "/in-accord-steampunk-logo.png",
+          email: String(liveProfile.email ?? "").trim(),
+          role: liveProfile.role ?? null,
+          createdAt: normalizeIsoDate(liveProfile.createdAt),
+          updatedAt: normalizeIsoDate(liveProfile.updatedAt),
+        },
+      },
+    };
+
+    try {
+      await publishRealtimeEvent(
+        REALTIME_CHANNEL_MESSAGE_CREATED_EVENT,
+        {
+          serverId: liveServerId,
+          channelId: liveChannelId,
+          threadId: liveThreadId,
+        },
+        {
+          entity: "message",
+          action: "created",
+          message: {
+            ...liveSerializedInserted,
+            clientMutationId: liveClientMutationId,
+          },
+          thread: liveThreadId
+            ? {
+                id: liveThreadId,
+              }
+            : null,
+        }
+      );
+    } catch (realtimeError) {
+      console.error("[SOCKET_MESSAGES_POST_REALTIME_EMERGENCY]", realtimeError);
+    }
+
+    return NextResponse.json(
+      {
+        ...liveSerializedInserted,
+        clientMutationId: liveClientMutationId,
+      }
+    );
+
     const profile = await currentProfile();
     const { content, fileUrl, clientMutationId } = await req.json();
     const { searchParams } = new URL(req.url);
 
-    const serverId = searchParams.get("serverId");
-    const channelId = searchParams.get("channelId");
-    const threadId = searchParams.get("threadId");
+    const serverId = String(searchParams.get("serverId") ?? "").trim();
+    const channelId = String(searchParams.get("channelId") ?? "").trim();
+    const threadId = String(searchParams.get("threadId") ?? "").trim();
 
     if (!profile) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
+
+    const legacyProfile = profile as NonNullable<typeof profile>;
+    const legacyProfileId = String(legacyProfile.id ?? "").trim();
+    const legacyProfileRole = legacyProfile.role;
+    const legacyProfileEmail = String(legacyProfile.email ?? "").trim();
+    const legacyProfileName = String(legacyProfile.name ?? "").trim();
 
     if (!serverId) {
       return new NextResponse("Server ID missing", { status: 400 });
@@ -502,14 +800,12 @@ export async function POST(req: Request) {
       return new NextResponse("Channel ID missing", { status: 400 });
     }
 
-    const normalizedThreadId = typeof threadId === "string" && threadId.trim().length > 0
-      ? threadId.trim()
-      : null;
+    const normalizedThreadId = threadId || null;
 
     const currentMember = await db.query.member.findFirst({
       where: and(
         eq(member.serverId, serverId),
-        eq(member.profileId, profile.id)
+        eq(member.profileId, legacyProfileId)
       ),
     });
 
@@ -528,16 +824,18 @@ export async function POST(req: Request) {
       return new NextResponse("Channel not found", { status: 404 });
     }
 
-    const memberContextResult = await resolveMemberContext({ profileId: profile.id, serverId });
+    const memberContextResult = await resolveMemberContext({ profileId: legacyProfileId, serverId });
 
     if (!memberContextResult) {
       return new NextResponse("Member not found", { status: 404 });
     }
 
+    const legacyMemberContext = memberContextResult as NonNullable<typeof memberContextResult>;
+
     const permissions = await computeChannelPermissionForMember({
       serverId,
       channelId,
-      memberContext: memberContextResult,
+      memberContext: legacyMemberContext,
     });
 
     if (!permissions.allowView) {
@@ -550,7 +848,7 @@ export async function POST(req: Request) {
 
     const featureSettings = await getChannelFeatureSettings({ serverId, channelId: currentChannel.id });
 
-    if (featureSettings.moderation.requireVerifiedEmail && !String(profile.email ?? "").trim()) {
+    if (featureSettings.moderation.requireVerifiedEmail && !legacyProfileEmail) {
       return new NextResponse("This channel requires an account email before you can participate.", { status: 403 });
     }
 
@@ -570,11 +868,11 @@ export async function POST(req: Request) {
         rows?: Array<{ id: string; archived: boolean }>;
       }).rows?.[0];
 
-      if (!threadRow) {
+      if (!threadRow?.id) {
         return new NextResponse("Thread not found", { status: 404 });
       }
 
-      if (threadRow.archived) {
+      if (Boolean(threadRow?.archived)) {
         return new NextResponse("Thread is archived", { status: 400 });
       }
     }
@@ -606,7 +904,7 @@ export async function POST(req: Request) {
     const countingEnabled = Boolean(
       !normalizedThreadId &&
       serverCountingSnapshot?.countingSettings.enabled &&
-      serverCountingSnapshot.countingSettings.channelId === currentChannel.id
+      serverCountingSnapshot?.countingSettings.channelId === currentChannel.id
     );
 
     if (countingEnabled) {
@@ -635,7 +933,7 @@ export async function POST(req: Request) {
       }).rows?.[0]?.createdAt;
 
       if (lastMessageCreatedAt) {
-        const elapsedMs = Date.now() - new Date(lastMessageCreatedAt).getTime();
+        const elapsedMs = Date.now() - new Date(lastMessageCreatedAt as string | Date).getTime();
         const requiredMs = featureSettings.moderation.slowmodeSeconds * 1000;
 
         if (elapsedMs < requiredMs) {
@@ -705,11 +1003,11 @@ export async function POST(req: Request) {
         : null;
 
       const actorLabel =
-        String(profile.name ?? "").trim() ||
-        String(profile.email ?? "").trim() ||
+        legacyProfileName ||
+        legacyProfileEmail ||
         "That member";
 
-      const countingResult = await db.transaction(async (tx) => {
+    const countingResult = await db.transaction(async (tx: any) => {
         const snapshot = await getServerCountingSnapshot({
           serverId,
           executor: tx,
@@ -722,7 +1020,7 @@ export async function POST(req: Request) {
         const expectedNumber = snapshot.countingState.nextNumber;
         const sameUserViolation =
           snapshot.countingSettings.preventConsecutiveTurns &&
-          snapshot.countingState.lastProfileId === profile.id;
+          snapshot.countingState.lastProfileId === legacyProfileId;
         const isCorrectCount = submittedNumber === expectedNumber && !sameUserViolation;
 
         const insertedRows = await tx
@@ -756,7 +1054,7 @@ export async function POST(req: Request) {
         if (isCorrectCount) {
           nextCountingState = {
             nextNumber: expectedNumber + 1,
-            lastProfileId: profile.id,
+            lastProfileId: legacyProfileId,
             lastMessageId: insertedCountMessage.id,
             updatedAt: new Date().toISOString(),
           };
@@ -767,7 +1065,7 @@ export async function POST(req: Request) {
           };
 
           const responseContent = buildCountingFailureMessage({
-            actorProfileId: profile.id,
+            actorProfileId: legacyProfileId,
             actorLabel,
             expectedNumber,
             submittedNumber,
@@ -822,97 +1120,80 @@ export async function POST(req: Request) {
           ? clientMutationId.trim()
           : undefined;
 
-      const responsePayload = serializedInserted
-        ? {
-            ...serializedInserted,
-            clientMutationId: normalizedClientMutationId,
-          }
-        : {
-            id: countingResult.insertedMessageId,
-          };
-
-      after(async () => {
-        const sideEffectTasks: Array<Promise<unknown>> = [];
-
-        if (serializedInserted) {
-          sideEffectTasks.push(
-            publishRealtimeEvent(
-              REALTIME_CHANNEL_MESSAGE_CREATED_EVENT,
-              {
-                serverId,
-                channelId: currentChannel.id,
-                threadId: null,
-              },
-              {
-                entity: "message",
-                action: "created",
-                message: {
-                  ...serializedInserted,
-                  clientMutationId: normalizedClientMutationId,
-                },
-                reactionsByMessageId: {
-                  [countingResult.insertedMessageId]: [{ emoji: countingResult.reactionEmoji, count: 1 }],
-                },
-                thread: null,
-              }
-            )
-          );
-        }
-
-        if (serializedResponse) {
-          sideEffectTasks.push(
-            publishRealtimeEvent(
-              REALTIME_CHANNEL_MESSAGE_CREATED_EVENT,
-              {
-                serverId,
-                channelId: currentChannel.id,
-                threadId: null,
-              },
-              {
-                entity: "message",
-                action: "created",
-                message: serializedResponse,
-                thread: null,
-              }
-            )
-          );
-        }
-
-        sideEffectTasks.push(
-          emitChannelWebhookEvent({
+      if (serializedInserted) {
+        await publishRealtimeEvent(
+          REALTIME_CHANNEL_MESSAGE_CREATED_EVENT,
+          {
             serverId,
             channelId: currentChannel.id,
-            channelName: currentChannel.name,
-            eventType: "MESSAGE_CREATED",
-            actorProfileId: profile.id,
-            payload: {
-              messageId: countingResult.insertedMessageId,
-              threadId: null,
-              content: finalContent,
-              fileUrl: null,
-              memberId: currentMember.id,
-              blockedWordMatches: moderated.matchedWords,
-              counting: {
-                enabled: true,
-                expectedNumber: countingResult.expectedNumber,
-                submittedNumber: countingResult.submittedNumber,
-                accepted: countingResult.isCorrectCount,
-                sameUserViolation: countingResult.sameUserViolation,
-                nextNumber: countingResult.nextNumber,
-              },
+            threadId: null,
+          },
+          {
+            entity: "message",
+            action: "created",
+            message: {
+              ...serializedInserted,
+              clientMutationId: normalizedClientMutationId,
             },
-          })
-        );
-
-        const results = await Promise.allSettled(sideEffectTasks);
-        for (const result of results) {
-          if (result.status === "rejected") {
-            console.error("[SOCKET_MESSAGES_COUNTING_SIDE_EFFECT]", result.reason);
+            reactionsByMessageId: {
+              [countingResult.insertedMessageId]: [{ emoji: countingResult.reactionEmoji, count: 1 }],
+            },
+            thread: null,
           }
-        }
+        );
+      }
+
+      if (serializedResponse) {
+        await publishRealtimeEvent(
+          REALTIME_CHANNEL_MESSAGE_CREATED_EVENT,
+          {
+            serverId,
+            channelId: currentChannel.id,
+            threadId: null,
+          },
+          {
+            entity: "message",
+            action: "created",
+            message: serializedResponse,
+            thread: null,
+          }
+        );
+      }
+
+      await emitChannelWebhookEvent({
+        serverId,
+        channelId: currentChannel.id,
+        channelName: currentChannel.name,
+        eventType: "MESSAGE_CREATED",
+        actorProfileId: legacyProfileId,
+        payload: {
+          messageId: countingResult.insertedMessageId,
+          threadId: null,
+          content: finalContent,
+          fileUrl: null,
+          memberId: currentMember.id,
+          blockedWordMatches: moderated.matchedWords,
+          counting: {
+            enabled: true,
+            expectedNumber: countingResult.expectedNumber,
+            submittedNumber: countingResult.submittedNumber,
+            accepted: countingResult.isCorrectCount,
+            sameUserViolation: countingResult.sameUserViolation,
+            nextNumber: countingResult.nextNumber,
+          },
+        },
       });
 
-      return NextResponse.json(responsePayload);
+      return NextResponse.json(
+        serializedInserted
+          ? {
+              ...serializedInserted,
+              clientMutationId: normalizedClientMutationId,
+            }
+          : {
+              id: countingResult.insertedMessageId,
+            }
+      );
     }
 
     if (isSlashCommandInput) {
@@ -921,14 +1202,16 @@ export async function POST(req: Request) {
         rawInput: finalContent,
         channelId: currentChannel.id,
         threadId: normalizedThreadId,
-        actorProfileId: profile.id,
-        actorProfileRole: profile.role,
+        actorProfileId: legacyProfileId,
+        actorProfileRole: legacyProfileRole,
       });
 
       if (commandResult.handled) {
+        const handledCommandResult = commandResult as Extract<typeof commandResult, { handled: true }>;
+        const handledResponseMemberId = String(handledCommandResult.responseMemberId ?? "").trim();
         const responderMemberId =
-          typeof commandResult.responseMemberId === "string" && commandResult.responseMemberId.trim().length > 0
-            ? commandResult.responseMemberId.trim()
+          handledResponseMemberId.length > 0
+            ? handledResponseMemberId
             : currentMember.id;
 
         const responderMembership = await db.query.member.findFirst({
@@ -936,7 +1219,7 @@ export async function POST(req: Request) {
         });
 
         const insertedResponse = await createMessage({
-          content: commandResult.responseContent,
+          content: handledCommandResult.responseContent,
           fileUrl: null,
           memberId: responderMembership?.id ?? currentMember.id,
         });
@@ -947,65 +1230,50 @@ export async function POST(req: Request) {
             ? clientMutationId.trim()
             : undefined;
 
-        const responsePayload = serializedInsertedResponse
-          ? {
-              ...serializedInsertedResponse,
-              clientMutationId: normalizedClientMutationId,
-            }
-          : insertedResponse;
+        if (normalizedThreadId) {
+          const ensuredThreadId = normalizedThreadId as string;
+          await touchThreadActivity({
+            threadId: ensuredThreadId,
+          });
 
-        after(async () => {
-          const sideEffectTasks: Array<Promise<unknown>> = [];
+          await markThreadRead({
+            threadId: ensuredThreadId,
+            profileId: legacyProfileId,
+          });
+        }
 
-          if (normalizedThreadId) {
-            sideEffectTasks.push(
-              touchThreadActivity({
-                threadId: normalizedThreadId,
-              })
-            );
-            sideEffectTasks.push(
-              markThreadRead({
-                threadId: normalizedThreadId,
-                profileId: profile.id,
-              })
-            );
+        await publishRealtimeEvent(
+          REALTIME_CHANNEL_MESSAGE_CREATED_EVENT,
+          {
+            serverId,
+            channelId: currentChannel.id,
+            threadId: normalizedThreadId,
+          },
+          {
+            entity: "message",
+            action: "created",
+            message: serializedInsertedResponse
+              ? {
+                  ...serializedInsertedResponse,
+                  clientMutationId: normalizedClientMutationId,
+                }
+              : undefined,
+            thread: normalizedThreadId
+              ? {
+                  id: normalizedThreadId,
+                }
+              : null,
           }
+        );
 
-          sideEffectTasks.push(
-            publishRealtimeEvent(
-              REALTIME_CHANNEL_MESSAGE_CREATED_EVENT,
-              {
-                serverId,
-                channelId: currentChannel.id,
-                threadId: normalizedThreadId,
-              },
-              {
-                entity: "message",
-                action: "created",
-                message: serializedInsertedResponse
-                  ? {
-                      ...serializedInsertedResponse,
-                      clientMutationId: normalizedClientMutationId,
-                    }
-                  : undefined,
-                thread: normalizedThreadId
-                  ? {
-                      id: normalizedThreadId,
-                    }
-                  : null,
+        return NextResponse.json(
+          serializedInsertedResponse
+            ? {
+                ...serializedInsertedResponse,
+                clientMutationId: normalizedClientMutationId,
               }
-            )
-          );
-
-          const results = await Promise.allSettled(sideEffectTasks);
-          for (const result of results) {
-            if (result.status === "rejected") {
-              console.error("[SOCKET_MESSAGES_COMMAND_SIDE_EFFECT]", result.reason);
-            }
-          }
-        });
-
-        return NextResponse.json(responsePayload);
+            : insertedResponse
+        );
       }
     }
 
@@ -1021,14 +1289,16 @@ export async function POST(req: Request) {
         rawInput: finalContent,
         channelId: currentChannel.id,
         threadId: normalizedThreadId,
-        actorProfileId: profile.id,
-        actorProfileRole: profile.role,
+        actorProfileId: legacyProfileId,
+        actorProfileRole: legacyProfileRole,
       });
 
       if (commandResult.handled) {
+        const handledCommandResult = commandResult as Extract<typeof commandResult, { handled: true }>;
+        const handledResponseMemberId = String(handledCommandResult.responseMemberId ?? "").trim();
         const responderMemberId =
-          typeof commandResult.responseMemberId === "string" && commandResult.responseMemberId.trim().length > 0
-            ? commandResult.responseMemberId.trim()
+          handledResponseMemberId.length > 0
+            ? handledResponseMemberId
             : currentMember.id;
 
         const responderMembership = await db.query.member.findFirst({
@@ -1037,7 +1307,7 @@ export async function POST(req: Request) {
 
         await db.insert(message).values({
           id: uuidv4(),
-          content: commandResult.responseContent,
+          content: handledCommandResult.responseContent,
           fileUrl: null,
           memberId: responderMembership?.id ?? currentMember.id,
           channelId: currentChannel.id,
@@ -1049,90 +1319,123 @@ export async function POST(req: Request) {
       }
     }
 
-    const normalizedClientMutationId =
-      typeof clientMutationId === "string" && clientMutationId.trim().length > 0
-        ? clientMutationId.trim()
-        : undefined;
-    const serializedInserted = serializeImmediateChannelMessage({
-      item: inserted,
-      currentMember,
-      currentProfile: profile,
-    });
-    const responsePayload = {
-      ...serializedInserted,
-      clientMutationId: normalizedClientMutationId,
-    };
-    const realtimeDetail = {
-      entity: "message" as const,
-      action: "created" as const,
-      message: responsePayload,
-      thread: normalizedThreadId
-        ? {
-            id: normalizedThreadId,
-          }
-        : null,
-    };
+    if (normalizedThreadId) {
+      const ensuredThreadId = normalizedThreadId as string;
+      await touchThreadActivity({
+        threadId: ensuredThreadId,
+      });
 
-    after(async () => {
-      const sideEffectTasks: Array<Promise<unknown>> = [];
+      await markThreadRead({
+        threadId: ensuredThreadId,
+        profileId: legacyProfileId,
+      });
+    }
 
-      if (normalizedThreadId) {
-        sideEffectTasks.push(
-          touchThreadActivity({
-            threadId: normalizedThreadId,
-          })
-        );
-        sideEffectTasks.push(
-          markThreadRead({
-            threadId: normalizedThreadId,
-            profileId: profile.id,
-          })
-        );
-      }
+    try {
+      const serializedInserted = await getSerializedChannelMessageById(inserted.id);
+      const normalizedClientMutationId =
+        typeof clientMutationId === "string" && clientMutationId.trim().length > 0
+          ? clientMutationId.trim()
+          : undefined;
 
-      sideEffectTasks.push(
-        publishRealtimeEvent(
+      if (serializedInserted) {
+        await publishRealtimeEvent(
           REALTIME_CHANNEL_MESSAGE_CREATED_EVENT,
           {
             serverId,
             channelId: currentChannel.id,
             threadId: normalizedThreadId,
           },
-          realtimeDetail
-        )
-      );
-
-      sideEffectTasks.push(
-        emitChannelWebhookEvent({
+          {
+            entity: "message",
+            action: "created",
+            message: {
+              ...serializedInserted,
+              clientMutationId: normalizedClientMutationId,
+            },
+            thread: normalizedThreadId
+              ? {
+                  id: normalizedThreadId,
+                }
+              : null,
+          }
+        );
+      } else {
+        await publishRealtimeEvent(
+          REALTIME_CHANNEL_MESSAGE_CREATED_EVENT,
+          {
+            serverId,
+            channelId: currentChannel.id,
+            threadId: normalizedThreadId,
+          },
+          {
+            entity: "message",
+            action: "created",
+            thread: normalizedThreadId
+              ? {
+                  id: normalizedThreadId,
+                }
+              : null,
+          }
+        );
+      }
+    } catch (realtimeError) {
+      console.error("[SOCKET_MESSAGES_POST_REALTIME]", realtimeError);
+      await publishRealtimeEvent(
+        REALTIME_CHANNEL_MESSAGE_CREATED_EVENT,
+        {
           serverId,
           channelId: currentChannel.id,
-          channelName: currentChannel.name,
-          eventType: "MESSAGE_CREATED",
-          actorProfileId: profile.id,
-          payload: {
-            messageId: inserted.id,
-            threadId: normalizedThreadId,
-            content: finalContent || null,
-            fileUrl: fileUrl ?? null,
-            memberId: currentMember.id,
-            blockedWordMatches: moderated.matchedWords,
-          },
-        })
-      );
-
-      const results = await Promise.allSettled(sideEffectTasks);
-      for (const result of results) {
-        if (result.status === "rejected") {
-          console.error("[SOCKET_MESSAGES_POST_SIDE_EFFECT]", result.reason);
+          threadId: normalizedThreadId,
+        },
+        {
+          entity: "message",
+          action: "created",
+          thread: normalizedThreadId
+            ? {
+                id: normalizedThreadId,
+              }
+            : null,
         }
-      }
+      );
+    }
+
+    const serializedInserted = await getSerializedChannelMessageById(inserted.id);
+    const normalizedClientMutationId =
+      typeof clientMutationId === "string" && clientMutationId.trim().length > 0
+        ? clientMutationId.trim()
+        : undefined;
+
+    await emitChannelWebhookEvent({
+      serverId,
+      channelId: currentChannel.id,
+      channelName: currentChannel.name,
+      eventType: "MESSAGE_CREATED",
+      actorProfileId: legacyProfileId,
+      payload: {
+        messageId: inserted.id,
+        threadId: normalizedThreadId,
+        content: finalContent || null,
+        fileUrl: fileUrl ?? null,
+        memberId: currentMember.id,
+        blockedWordMatches: moderated.matchedWords,
+      },
     });
 
     return NextResponse.json(
-      responsePayload
+      serializedInserted
+        ? {
+            ...serializedInserted,
+            clientMutationId: normalizedClientMutationId,
+          }
+        : inserted
     );
   } catch (error) {
     console.error("[SOCKET_MESSAGES_POST]", error);
-    return new NextResponse("Internal Error", { status: 500 });
+    const message =
+      error instanceof Error
+        ? `${error.name}: ${error.message}`
+        : String(error ?? "Internal Error");
+    return new NextResponse(message, { status: 500 });
   }
 }

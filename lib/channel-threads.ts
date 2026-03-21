@@ -122,14 +122,15 @@ export const autoArchiveStaleThreadsForChannel = async ({
   await ensureChannelThreadSchema();
 
   await db.execute(sql`
-    update "ChannelThread" ct
+    update "ChannelThread"
     set
       "archived" = true,
       "updatedAt" = now()
-    where ct."serverId" = ${serverId}
-      and ct."channelId" = ${channelId}
-      and ct."archived" = false
-      and ct."lastActivityAt" < (now() - make_interval(mins => ct."autoArchiveMinutes"))
+    where "ChannelThread"."serverId" = ${serverId}
+      and "ChannelThread"."channelId" = ${channelId}
+      and "ChannelThread"."archived" = false
+      and "ChannelThread"."lastActivityAt" <
+        datetime(CURRENT_TIMESTAMP, '-' || "ChannelThread"."autoArchiveMinutes" || ' minutes')
   `);
 };
 
@@ -194,13 +195,13 @@ export const getThreadForMessage = async ({
       ct."createdAt" as "createdAt",
       ct."updatedAt" as "updatedAt",
       (
-        select count(*)::int
+        select count(*)
         from "Message" tm
         where tm."threadId" = ct."id"
           and tm."deleted" = false
       ) as "replyCount"
       ,(
-        select count(distinct participants."participantId")::int
+        select count(distinct participants."participantId")
         from (
           select source."memberId" as "participantId"
           from "Message" source
@@ -212,7 +213,7 @@ export const getThreadForMessage = async ({
         ) participants
       ) as "participantCount"
       ,(
-        select count(*)::int
+        select count(*)
         from "Message" tm
         where tm."threadId" = ct."id"
           and tm."deleted" = false
@@ -305,13 +306,13 @@ export const listThreadsForMessages = async ({
       ct."createdAt" as "createdAt",
       ct."updatedAt" as "updatedAt",
       (
-        select count(*)::int
+        select count(*)
         from "Message" tm
         where tm."threadId" = ct."id"
           and tm."deleted" = false
       ) as "replyCount"
       ,(
-        select count(distinct participants."participantId")::int
+        select count(distinct participants."participantId")
         from (
           select source."memberId" as "participantId"
           from "Message" source
@@ -323,7 +324,7 @@ export const listThreadsForMessages = async ({
         ) participants
       ) as "participantCount"
       ,(
-        select count(*)::int
+        select count(*)
         from "Message" tm
         where tm."threadId" = ct."id"
           and tm."deleted" = false

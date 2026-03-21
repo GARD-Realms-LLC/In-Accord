@@ -33,7 +33,7 @@ export async function GET(request: Request) {
         s."inviteCode" as "inviteCode",
         owner."name" as "ownerName",
         (
-          select count(*)::int
+        select count(*)
           from "Member" mcount
           where mcount."serverId" = s."id"
         ) as "memberCount",

@@ -85,11 +85,6 @@ export const ensureUserServerProfileSchema = async () => {
 
   await db.execute(sql`
     alter table "UserServerProfile"
-    alter column "profileNameStyle" type varchar(128)
-  `);
-
-  await db.execute(sql`
-    alter table "UserServerProfile"
     add column if not exists "nameplateLabel" varchar(40)
   `);
 

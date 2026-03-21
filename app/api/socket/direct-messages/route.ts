@@ -1,4 +1,4 @@
-import { after, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { and, asc, eq, or, sql } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 
@@ -117,56 +117,6 @@ const getSerializedDirectMessageById = async (directMessageId: string) => {
 
   return serializeDirectMessage(row);
 };
-
-const serializeImmediateDirectMessage = ({
-  item,
-  currentMember,
-  currentProfile,
-}: {
-  item: {
-    id: string;
-    content: string;
-    fileUrl: string | null;
-    deleted: boolean;
-    createdAt: Date | string;
-    updatedAt: Date | string;
-  };
-  currentMember: {
-    id: string;
-    profileId: string;
-    role?: string | null;
-  };
-  currentProfile: {
-    id: string;
-    userId?: string | null;
-    name?: string | null;
-    email?: string | null;
-    imageUrl?: string | null;
-    role?: string | null;
-    createdAt?: Date | string | null;
-    updatedAt?: Date | string | null;
-  };
-}) => ({
-  id: item.id,
-  content: item.content,
-  fileUrl: item.fileUrl,
-  deleted: item.deleted,
-  timestamp: formatTimestamp(item.createdAt),
-  isUpdated: new Date(item.updatedAt).getTime() !== new Date(item.createdAt).getTime(),
-  member: {
-    ...currentMember,
-    profile: {
-      id: currentProfile.id,
-      userId: String(currentProfile.userId ?? "").trim() || currentProfile.id,
-      name: String(currentProfile.name ?? "").trim() || String(currentProfile.email ?? "").trim() || "Deleted User",
-      imageUrl: String(currentProfile.imageUrl ?? "").trim() || "/in-accord-steampunk-logo.png",
-      email: String(currentProfile.email ?? "").trim(),
-      role: currentProfile.role ?? null,
-      createdAt: normalizeIsoDate(currentProfile.createdAt),
-      updatedAt: normalizeIsoDate(currentProfile.updatedAt),
-    },
-  },
-});
 
 const publishDirectMessageRailSync = async ({
   conversationId,
@@ -371,59 +321,70 @@ export async function POST(req: Request) {
       })
       .returning();
 
-    const normalizedClientMutationId =
-      typeof clientMutationId === "string" && clientMutationId.trim().length > 0
-        ? clientMutationId.trim()
-        : undefined;
-    const serializedInserted = serializeImmediateDirectMessage({
-      item: inserted[0],
-      currentMember: {
-        id: currentMember.id,
-        profileId: currentMember.profileId,
-        role: currentMember.role ?? null,
-      },
-      currentProfile: profile,
-    });
-    const responsePayload = {
-      ...serializedInserted,
-      clientMutationId: normalizedClientMutationId,
-    };
+    try {
+      const serializedInserted = await getSerializedDirectMessageById(inserted[0].id);
+      const normalizedClientMutationId =
+        typeof clientMutationId === "string" && clientMutationId.trim().length > 0
+          ? clientMutationId.trim()
+          : undefined;
 
-    after(async () => {
-      const sideEffectTasks: Array<Promise<unknown>> = [];
-
-      sideEffectTasks.push(
-        publishRealtimeEvent(
+      if (serializedInserted) {
+        await publishRealtimeEvent(
           REALTIME_DIRECT_MESSAGE_CREATED_EVENT,
           { conversationId },
           {
             entity: "direct-message",
             action: "created",
-            message: responsePayload,
+            message: {
+              ...serializedInserted,
+              clientMutationId: normalizedClientMutationId,
+            },
           }
-        )
-      );
-
-      sideEffectTasks.push(
-        (async () => {
-          const participantProfileIds = await getConversationProfileIds(conversationId);
-          await publishDirectMessageRailSync({
+        );
+      } else {
+        await publishRealtimeEvent(
+          REALTIME_DIRECT_MESSAGE_CREATED_EVENT,
+          {
             conversationId,
-            participantProfileIds,
-          });
-        })()
-      );
-
-      const results = await Promise.allSettled(sideEffectTasks);
-      for (const result of results) {
-        if (result.status === "rejected") {
-          console.error("[SOCKET_DIRECT_MESSAGES_POST_SIDE_EFFECT]", result.reason);
-        }
+          },
+          { entity: "direct-message", action: "created" }
+        );
       }
-    });
+    } catch (realtimeError) {
+      console.error("[SOCKET_DIRECT_MESSAGES_POST_REALTIME]", realtimeError);
+      await publishRealtimeEvent(
+        REALTIME_DIRECT_MESSAGE_CREATED_EVENT,
+        {
+          conversationId,
+        },
+        { entity: "direct-message", action: "created" }
+      );
+    }
+
+    try {
+      const participantProfileIds = await getConversationProfileIds(conversationId);
+
+      await publishDirectMessageRailSync({
+        conversationId,
+        participantProfileIds,
+      });
+    } catch (railRefreshError) {
+      console.error("[SOCKET_DIRECT_MESSAGES_POST_RAIL]", railRefreshError);
+    }
+
+    const serializedInserted = await getSerializedDirectMessageById(inserted[0].id);
+    const normalizedClientMutationId =
+      typeof clientMutationId === "string" && clientMutationId.trim().length > 0
+        ? clientMutationId.trim()
+        : undefined;
 
     return NextResponse.json(
-      responsePayload
+      serializedInserted
+        ? {
+            ...serializedInserted,
+            clientMutationId: normalizedClientMutationId,
+          }
+        : inserted[0]
     );
   } catch (error) {
     console.error("[SOCKET_DIRECT_MESSAGES_POST]", error);

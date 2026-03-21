@@ -13,6 +13,7 @@ import { isInAccordAdministrator, isInAccordParent } from "@/lib/in-accord-admin
 import { ensureLocalAuthSchema } from "@/lib/local-auth";
 import { hashPassword } from "@/lib/password";
 import { getNextIncrementalUserId } from "@/lib/user-id";
+import { ensureUserAccountCoreSchema } from "@/lib/user-account-core-schema";
 import { ensureUserProfileSchema } from "@/lib/user-profile";
 
 const hasSchoolCenterAccess = (role: string | null | undefined) => {
@@ -98,6 +99,7 @@ export async function GET(request: Request) {
     }
 
     await ensureFamilyAccountSchema();
+    await ensureUserAccountCoreSchema();
 
     const { searchParams } = new URL(request.url);
     const ids = normalizeIds(searchParams.get("ids"));
@@ -109,8 +111,8 @@ export async function GET(request: Request) {
     const result = await db.execute(sql`
       select
         u."userId" as "userId",
-        nullif(trim(to_jsonb(u)->>'dob'), '') as "dateOfBirth",
-        nullif(trim(to_jsonb(u)->>'familyParentUserId'), '') as "familyParentUserId"
+        nullif(trim(u."dob"), '') as "dateOfBirth",
+        nullif(trim(u."familyParentUserId"), '') as "familyParentUserId"
       from "Users" u
       where u."userId" in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
     `);
@@ -181,22 +183,13 @@ export async function POST(request: Request) {
     }
 
     await ensureFamilyAccountSchema();
+    await ensureUserAccountCoreSchema();
     await ensureLocalAuthSchema();
     await ensureUserProfileSchema();
 
-    await db.execute(sql`
-      alter table "Users"
-      add column if not exists "phone" varchar(32)
-    `);
-
-    await db.execute(sql`
-      alter table "Users"
-      add column if not exists "dob" date
-    `);
-
     const existingEmailResult = await db.execute(sql`
       select "userId"
-      , nullif(trim(to_jsonb("Users")->>'familyParentUserId'), '') as "familyParentUserId"
+      , nullif(trim("Users"."familyParentUserId"), '') as "familyParentUserId"
       from "Users"
       where lower(coalesce("email", '')) = ${childEmail}
       limit 1
@@ -214,7 +207,7 @@ export async function POST(request: Request) {
     const existingProfileNameResult = await db.execute(sql`
       select
         u."userId" as "userId",
-        nullif(trim(to_jsonb(u)->>'familyParentUserId'), '') as "familyParentUserId"
+        nullif(trim(u."familyParentUserId"), '') as "familyParentUserId"
       from "UserProfile" up
       inner join "Users" u on u."userId" = up."userId"
       where lower(trim(coalesce(up."profileName", ''))) = lower(${accountIdentifier})
@@ -321,12 +314,13 @@ export async function PATCH(request: Request) {
     }
 
     await ensureFamilyAccountSchema();
+    await ensureUserAccountCoreSchema();
 
     const result = await db.execute(sql`
       select
         u."userId" as "userId",
-        nullif(trim(to_jsonb(u)->>'dob'), '') as "dateOfBirth",
-        nullif(trim(to_jsonb(u)->>'familyParentUserId'), '') as "familyParentUserId"
+        nullif(trim(u."dob"), '') as "dateOfBirth",
+        nullif(trim(u."familyParentUserId"), '') as "familyParentUserId"
       from "Users" u
       where u."userId" = ${memberUserId}
       limit 1

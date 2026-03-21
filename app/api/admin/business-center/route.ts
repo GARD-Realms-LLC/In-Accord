@@ -11,6 +11,7 @@ import {
   getUserPreferences,
   updateUserPreferences,
 } from "@/lib/user-preferences";
+import { ensureUserAccountCoreSchema } from "@/lib/user-account-core-schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -129,7 +130,7 @@ export async function GET() {
 
     const entries = rows
       .map((row) => {
-        const raw = row.businessCenterJson ?? "{}";
+        const raw = String(row.businessCenterJson ?? "{}");
         let parsed: Record<string, unknown> = {};
 
         try {
@@ -302,6 +303,8 @@ export async function PATCH(req: Request) {
       return new NextResponse("Forbidden", { status: 403 });
     }
 
+    await ensureUserAccountCoreSchema();
+
     const body = (await req.json().catch(() => ({}))) as {
       userId?: unknown;
       decision?: unknown;
@@ -412,8 +415,8 @@ export async function PATCH(req: Request) {
         select
           coalesce(up."profileName", u."name", u."email", u."userId") as "profileName",
           u."email" as "email",
-          nullif(trim(to_jsonb(u)->>'phone'), '') as "phone",
-          nullif(trim(to_jsonb(u)->>'dob'), '') as "dateOfBirth"
+          nullif(trim(u."phone"), '') as "phone",
+          nullif(trim(u."dob"), '') as "dateOfBirth"
         from "Users" u
         left join "UserProfile" up on up."userId" = u."userId"
         where u."userId" = ${userId}

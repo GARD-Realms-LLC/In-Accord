@@ -9,8 +9,7 @@ import { ChatHeader } from "@/components/chat/chat-header";
 import { ChatInput } from "@/components/chat/chat-input";
 import { LiveChannelMessagesPane } from "@/components/chat/live-channel-messages-pane";
 import { VoiceStateSession } from "@/components/server/voice-state-session";
-import { VideoChannelMeetingPanel as VideoChannelMeetingPanelMesh } from "@/components/server/video-channel-meeting-panel";
-import { VideoChannelMeetingPanel as VideoChannelMeetingPanelSfu } from "@/components/server/video-channel-meeting-panel-sfu";
+import { VideoChannelMeetingPanel } from "@/components/server/video-channel-meeting-panel";
 import { MeetingParticipantsRail } from "@/components/server/meeting-participants-rail";
 // import { MediaRoom } from "@/components/media-room";
 import { channel, db, member, message, server } from "@/lib/db";
@@ -21,7 +20,7 @@ import {
 } from "@/lib/channel-permissions";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 import { getUserProfileNameMap } from "@/lib/user-profile";
-import type { Profile } from "@/lib/db/types";
+import type { Member, Profile } from "@/lib/db/types";
 import { listThreadsForMessages } from "@/lib/channel-threads";
 import { listActiveVoiceMembersForChannel, pruneStaleVoiceStates } from "@/lib/voice-states";
 import { resolveChannelRouteContext, resolveServerRouteContext } from "@/lib/route-slug-resolver";
@@ -42,6 +41,67 @@ interface ChannelIdPageProps {
   }>;
 }
 
+type ServerChannelRow = {
+  id: string;
+  name: string;
+  type: ChannelType;
+  createdAt: Date;
+};
+
+type ChannelMessageRow = {
+  id: string;
+  content: string;
+  fileUrl: string | null;
+  deleted: boolean;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+  member?: (Member & {
+    profile?: Profile | null;
+  }) | null;
+};
+
+type ServerMemberRow = {
+  id: string;
+  profileId: string;
+  role: string;
+  createdAt: Date;
+  profile: Profile | null;
+};
+
+type CurrentMemberRow = {
+  id: string;
+  serverId: string;
+  profileId: string;
+  role: string;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+};
+
+type CurrentChannelRow = {
+  id: string;
+  serverId: string;
+  profileId: string;
+  name: string;
+  type: ChannelType;
+  icon: string | null;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+};
+
+const normalizeMemberRole = (value: unknown): MemberRole => {
+  const normalized = String(value ?? "").trim().toUpperCase();
+
+  if (normalized === MemberRole.ADMIN || normalized === "ADMINISTRATOR") {
+    return MemberRole.ADMIN;
+  }
+
+  if (normalized === MemberRole.MODERATOR) {
+    return MemberRole.MODERATOR;
+  }
+
+  return MemberRole.GUEST;
+};
+
 const formatPostTimestamp = (value: Date | string) => {
   const parsed = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(parsed.getTime())) {
@@ -55,6 +115,15 @@ const formatPostTimestamp = (value: Date | string) => {
     hour: "numeric",
     minute: "2-digit",
   });
+};
+
+const normalizeDateValue = (value: Date | string | null | undefined) => {
+  if (value instanceof Date) {
+    return value;
+  }
+
+  const parsed = new Date(value ?? 0);
+  return Number.isNaN(parsed.getTime()) ? new Date(0) : parsed;
 };
 
 const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
@@ -81,16 +150,34 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
   const serverId = resolvedServer.id;
   const serverPath = buildServerPath({ id: resolvedServer.id, name: resolvedServer.name });
 
-  const currentMember = await db.query.member.findFirst({
-    where: and(
-      eq(member.serverId, serverId),
-      eq(member.profileId, profile.id)
-    ),
-  });
+  const currentMemberRows = await db.execute(sql`
+    select
+      m."id" as "id",
+      m."serverId" as "serverId",
+      m."profileId" as "profileId",
+      m."role" as "role",
+      m."createdAt" as "createdAt",
+      m."updatedAt" as "updatedAt"
+    from "Member" m
+    where m."serverId" = ${serverId}
+      and m."profileId" = ${profile.id}
+    limit 1
+  `);
 
-  if (!currentMember) {
+  const currentMemberRow = ((currentMemberRows as unknown as { rows?: CurrentMemberRow[] }).rows ?? [])[0] ?? null;
+
+  if (!currentMemberRow) {
     redirect("/");
   }
+
+  const currentMember: Member = {
+    id: currentMemberRow.id,
+    serverId: currentMemberRow.serverId,
+    profileId: currentMemberRow.profileId,
+    role: normalizeMemberRole(currentMemberRow.role),
+    createdAt: normalizeDateValue(currentMemberRow.createdAt),
+    updatedAt: normalizeDateValue(currentMemberRow.updatedAt),
+  };
 
   const serverOwner = await db
     .select({ id: server.id })
@@ -99,7 +186,7 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
     .limit(1);
 
   const resolveDefaultVisibleChannelPath = async () => {
-    const channels = await db
+    const channels: ServerChannelRow[] = await db
       .select({ id: channel.id, name: channel.name, type: channel.type, createdAt: channel.createdAt })
       .from(channel)
       .where(eq(channel.serverId, serverId))
@@ -144,9 +231,23 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
     );
   }
 
-  const currentChannel = await db.query.channel.findFirst({
-    where: and(eq(channel.id, channelId), eq(channel.serverId, serverId)),
-  });
+  const currentChannelRows = await db.execute(sql`
+    select
+      c."id" as "id",
+      c."serverId" as "serverId",
+      c."profileId" as "profileId",
+      c."name" as "name",
+      c."type" as "type",
+      c."icon" as "icon",
+      c."createdAt" as "createdAt",
+      c."updatedAt" as "updatedAt"
+    from "Channel" c
+    where c."id" = ${channelId}
+      and c."serverId" = ${serverId}
+    limit 1
+  `);
+
+  const currentChannel = ((currentChannelRows as unknown as { rows?: CurrentChannelRow[] }).rows ?? [])[0] ?? null;
 
   if (!currentChannel) {
     redirect("/");
@@ -213,17 +314,84 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
     channel: { id: currentChannel.id, name: currentChannel.name },
   });
 
-  const channelMessages = await db.query.message.findMany({
-    where: and(eq(message.channelId, currentChannel.id), isNull(message.threadId)),
-    orderBy: [asc(message.createdAt)],
-    with: {
-      member: {
-        with: {
-          profile: true,
-        },
-      },
-    },
-  });
+  const channelMessageRows = await db.execute(sql`
+    select
+      msg."id" as "id",
+      msg."content" as "content",
+      msg."fileUrl" as "fileUrl",
+      msg."deleted" as "deleted",
+      msg."createdAt" as "createdAt",
+      msg."updatedAt" as "updatedAt",
+      m."id" as "memberId",
+      m."serverId" as "memberServerId",
+      m."profileId" as "memberProfileId",
+      m."role" as "memberRole",
+      m."createdAt" as "memberCreatedAt",
+      m."updatedAt" as "memberUpdatedAt",
+      u."userId" as "profileUserId",
+      u."name" as "profileName",
+      u."email" as "profileEmail",
+      coalesce(u."avatarUrl", u."avatar", u."icon") as "profileImageUrl",
+      u.[account.created] as "profileCreatedAt",
+      u."lastLogin" as "profileUpdatedAt"
+    from "Message" msg
+    left join "Member" m on m."id" = msg."memberId"
+    left join "Users" u on u."userId" = m."profileId"
+    where msg."channelId" = ${currentChannel.id}
+      and msg."threadId" is null
+    order by msg."createdAt" asc
+  `);
+
+  const channelMessages: ChannelMessageRow[] = (((channelMessageRows as unknown as {
+    rows?: Array<{
+      id: string;
+      content: string | null;
+      fileUrl: string | null;
+      deleted: boolean | null;
+      createdAt: Date | string;
+      updatedAt: Date | string;
+      memberId: string | null;
+      memberServerId: string | null;
+      memberProfileId: string | null;
+      memberRole: string | null;
+      memberCreatedAt: Date | string | null;
+      memberUpdatedAt: Date | string | null;
+      profileUserId: string | null;
+      profileName: string | null;
+      profileEmail: string | null;
+      profileImageUrl: string | null;
+      profileCreatedAt: Date | string | null;
+      profileUpdatedAt: Date | string | null;
+    }>;
+  }).rows ?? []).map((row) => ({
+    id: String(row.id ?? "").trim(),
+    content: String(row.content ?? ""),
+    fileUrl: typeof row.fileUrl === "string" ? row.fileUrl : null,
+    deleted: Boolean(row.deleted),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    member: row.memberId
+      ? {
+          id: String(row.memberId).trim(),
+          serverId: String(row.memberServerId ?? serverId).trim() || serverId,
+          profileId: String(row.memberProfileId ?? "").trim(),
+          role: normalizeMemberRole(row.memberRole),
+          createdAt: normalizeDateValue(row.memberCreatedAt),
+          updatedAt: normalizeDateValue(row.memberUpdatedAt),
+          profile: row.memberProfileId
+            ? {
+                id: String(row.memberProfileId).trim(),
+                userId: String(row.profileUserId ?? row.memberProfileId).trim() || String(row.memberProfileId).trim(),
+                name: String(row.profileName ?? row.profileEmail ?? "Deleted User").trim() || "Deleted User",
+                email: row.profileEmail ?? "",
+                imageUrl: String(row.profileImageUrl ?? "/in-accord-steampunk-logo.png").trim() || "/in-accord-steampunk-logo.png",
+                createdAt: normalizeDateValue(row.profileCreatedAt),
+                updatedAt: normalizeDateValue(row.profileUpdatedAt),
+              }
+            : null,
+        }
+      : null,
+  })));
 
   if (isPerfLoggingEnabled) {
     console.info(
@@ -276,13 +444,54 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
     }).rows ?? []).map((row) => [row.userId, row.role ?? null])
   );
 
-  const serverMembers = await db.query.member.findMany({
-    where: eq(member.serverId, serverId),
-    with: {
-      profile: true,
-    },
-    orderBy: [asc(member.createdAt)],
-  });
+  const serverMemberRows = await db.execute(sql`
+    select
+      m."id" as "id",
+      m."profileId" as "profileId",
+      m."role" as "role",
+      m."createdAt" as "createdAt",
+      u."userId" as "profileUserId",
+      u."name" as "profileName",
+      u."email" as "profileEmail",
+      coalesce(u."avatarUrl", u."avatar", u."icon") as "profileImageUrl",
+      u.[account.created] as "profileCreatedAt",
+      u."lastLogin" as "profileUpdatedAt"
+    from "Member" m
+    left join "Users" u on u."userId" = m."profileId"
+    where m."serverId" = ${serverId}
+    order by m."createdAt" asc
+  `);
+
+  const serverMembers: ServerMemberRow[] = (((serverMemberRows as unknown as {
+    rows?: Array<{
+      id: string;
+      profileId: string;
+      role: string | null;
+      createdAt: Date | string;
+      profileUserId: string | null;
+      profileName: string | null;
+      profileEmail: string | null;
+      profileImageUrl: string | null;
+      profileCreatedAt: Date | string | null;
+      profileUpdatedAt: Date | string | null;
+    }>;
+  }).rows ?? []).map((row) => ({
+    id: String(row.id ?? "").trim(),
+    profileId: String(row.profileId ?? "").trim(),
+    role: normalizeMemberRole(row.role),
+    createdAt: normalizeDateValue(row.createdAt),
+    profile: row.profileId
+      ? {
+          id: String(row.profileId).trim(),
+          userId: String(row.profileUserId ?? row.profileId).trim() || String(row.profileId).trim(),
+          name: String(row.profileName ?? row.profileEmail ?? "Deleted User").trim() || "Deleted User",
+          email: row.profileEmail ?? "",
+          imageUrl: String(row.profileImageUrl ?? "/in-accord-steampunk-logo.png").trim() || "/in-accord-steampunk-logo.png",
+          createdAt: normalizeDateValue(row.profileCreatedAt),
+          updatedAt: normalizeDateValue(row.profileUpdatedAt),
+        }
+      : null,
+  })));
 
   const mentionProfileNameMap = await getUserProfileNameMap(serverMembers.map((item) => item.profileId));
 
@@ -339,8 +548,8 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
   const mentionUsers = serverMembers.map((item) => {
     const resolvedName =
       mentionProfileNameMap.get(item.profileId) ??
-      item.profile.name ??
-      item.profile.email ??
+      item.profile?.name ??
+      item.profile?.email ??
       "Deleted User";
 
     return {
@@ -368,14 +577,14 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
     serverMembers.map((item) => {
       const profileDisplayName =
         mentionProfileNameMap.get(item.profileId) ??
-        item.profile.name ??
-        item.profile.email ??
+        item.profile?.name ??
+        item.profile?.email ??
         "Deleted User";
 
       return [
         item.profileId,
         {
-          profileImageUrl: item.profile.imageUrl ?? "/in-accord-steampunk-logo.png",
+          profileImageUrl: item.profile?.imageUrl ?? "/in-accord-steampunk-logo.png",
           displayName: profileDisplayName,
         },
       ] as const;
@@ -402,7 +611,7 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
       updatedAt: sourceProfile?.updatedAt ?? new Date(0),
     };
 
-    const safeMember = {
+    const safeMember: Member & { profile: Profile & { role?: string | null } } = {
       ...(item.member ?? {}),
       id:
         item.member?.id ??
@@ -410,7 +619,10 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
           ? ((item as { memberId?: string }).memberId as string)
           : `missing-member-${item.id}`),
       profileId: item.member?.profileId ?? fallbackProfileId,
-      role: item.member?.role ?? "GUEST",
+      role: normalizeMemberRole(item.member?.role),
+      serverId: item.member?.serverId ?? serverId,
+      createdAt: normalizeDateValue(item.member?.createdAt ?? item.createdAt),
+      updatedAt: normalizeDateValue(item.member?.updatedAt ?? item.updatedAt),
       profile: safeProfile,
     };
 
@@ -437,15 +649,9 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
 
   const isAudioChannel = currentChannel.type === ChannelType.AUDIO;
   const isVideoChannel = currentChannel.type === ChannelType.VIDEO;
-  const hasLiveKitMeetingTransport =
-    Boolean(String(process.env.NEXT_PUBLIC_LIVEKIT_URL ?? "").trim()) &&
-    Boolean(String(process.env.LIVEKIT_API_KEY ?? "").trim()) &&
-    Boolean(String(process.env.LIVEKIT_API_SECRET ?? "").trim());
-  const VideoMeetingPanelComponent = hasLiveKitMeetingTransport
-    ? VideoChannelMeetingPanelSfu
-    : VideoChannelMeetingPanelMesh;
+  const currentMemberRole = normalizeMemberRole(currentMember.role);
   const canPublishAnnouncement =
-    currentChannel.type !== ChannelType.ANNOUNCEMENT || currentMember.role !== MemberRole.GUEST;
+    currentChannel.type !== ChannelType.ANNOUNCEMENT || currentMemberRole !== MemberRole.GUEST;
   const canSendToChannel = channelPermissions.allowSend && canPublishAnnouncement;
   const mediaChannelLabel = isAudioChannel ? "Voice" : "Video";
   const isLiveSession =
@@ -454,7 +660,10 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
   const isMeetingPopoutView = isVideoChannel && isMeetingPopoutRequested;
   const isVideoPopoutChatMode = isVideoChannel && isPopoutChatRequested && !isMeetingPopoutView;
   const normalizedChannelIcon = String((currentChannel as { icon?: string | null }).icon ?? "").trim();
-  const canBulkDeleteMessages = Boolean(memberContext?.isServerOwner) || currentMember.role === "ADMIN" || hasInAccordAdministrativeAccess(profile.role);
+  const canBulkDeleteMessages =
+    Boolean(memberContext?.isServerOwner) ||
+    currentMemberRole === MemberRole.ADMIN ||
+    hasInAccordAdministrativeAccess(profile.role);
   const initialLiveMessages = hydratedChannelMessages.map((item) => ({
     id: item.id,
     content: item.content,
@@ -525,7 +734,7 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
               )}
 
               {isVideoChannel ? (
-                <VideoMeetingPanelComponent
+                <VideoChannelMeetingPanel
                   serverId={serverId}
                   channelId={currentChannel.id}
                   channelPath={canonicalChannelPath}
@@ -688,7 +897,7 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
                       : `No messages yet. Start the conversation in #${currentChannel.name}.`
                   }
                   className="flex-1 overflow-y-auto"
-                  canPurgeDeletedMessage={Boolean(memberContext?.isServerOwner) || currentMember.role === "ADMIN" || hasInAccordAdministrativeAccess(profile.role)}
+                  canPurgeDeletedMessage={canBulkDeleteMessages}
                 />
               </div>
             </div>
@@ -729,20 +938,14 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
                 : `No messages yet. Start the conversation in #${currentChannel.name}.`
             }
             className="flex-1 overflow-y-auto"
-            canPurgeDeletedMessage={Boolean(memberContext?.isServerOwner) || currentMember.role === "ADMIN" || hasInAccordAdministrativeAccess(profile.role)}
+            canPurgeDeletedMessage={canBulkDeleteMessages}
           />
           </>
         )}
       </div>
 
       {isMeetingPopoutView || isVideoChannel ? null : (
-        <div
-          className="theme-server-chat-bar self-start rounded-2xl border border-border bg-card shadow-lg shadow-black/25"
-          style={{
-            width: "calc(100% - var(--inaccord-right-footer-safe-width, 0px))",
-            maxWidth: "100%",
-          }}
-        >
+        <div className="theme-server-chat-bar w-[calc(100vw-584px)] max-w-full rounded-2xl border border-border bg-card shadow-lg shadow-black/25">
           <ChatInput
             name={currentChannel.name}
             type="channel"
@@ -777,7 +980,7 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
         </div>
       )}
 
-      {currentChannel.type === ChannelType.ANNOUNCEMENT && currentMember.role === MemberRole.GUEST ? (
+      {currentChannel.type === ChannelType.ANNOUNCEMENT && currentMemberRole === MemberRole.GUEST ? (
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
           This announcement channel is read-only for guests. Moderators and server managers can publish updates here.
         </div>

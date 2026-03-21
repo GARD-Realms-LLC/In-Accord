@@ -97,6 +97,16 @@ const readPackageVersions = async () => {
   };
 };
 
+const hasLocalGitWorkspace = async () => {
+  try {
+    const gitHeadPath = path.join(process.cwd(), ".git", "HEAD");
+    const gitHead = await readFile(gitHeadPath, "utf8");
+    return Boolean(String(gitHead ?? "").trim());
+  } catch {
+    return false;
+  }
+};
+
 const runDesktopBuildPublish = async (): Promise<BuildPublishResult> => {
   await runNpm(["run", "version:bump:patch"]);
   await runNpm(["run", "app:dist:win"]);
@@ -120,6 +130,13 @@ export async function POST() {
     const auth = await ensureAdmin();
     if (!auth.ok) {
       return auth.response;
+    }
+
+    if (!(await hasLocalGitWorkspace())) {
+      return readResponse(
+        "Desktop build publishing is unavailable in the deployed website runtime. Run it from the local repo workspace.",
+        409,
+      );
     }
 
     if (activeDesktopBuildPublish) {

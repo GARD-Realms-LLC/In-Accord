@@ -9,6 +9,7 @@
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
+    "noImplicitAny": false,
     "noEmit": true,
     "esModuleInterop": true,
     "module": "esnext",
@@ -37,20 +38,17 @@
     "**/*.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    ".next-dev/types/**/*.ts",
-    ".next/dev/types/**/*.ts",
-    ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-win64/types/**/*.ts",
-    ".next-dev/dev/types/**/*.ts",
-    ".next-desktop/types/**/*.ts",
-    ".next-desktop/dev/types/**/*.ts",
-    ".n/types/**/*.ts",
-    ".n/dev/types/**/*.ts"
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
     "clerk-react/**",
-    "Desktop/**"
+    "Desktop/**",
+    ".n/**",
+    ".next-dev/**",
+    ".next-win64/**",
+    ".next-desktop/**"
   ]
 }

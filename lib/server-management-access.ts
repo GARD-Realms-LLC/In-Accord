@@ -1,6 +1,6 @@
-import { and, eq } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
-import { db, member, server } from "@/lib/db";
+import { db } from "@/lib/db";
 import { isInAccordAdministrator } from "@/lib/in-accord-admin";
 
 type ManagedServerRow = {
@@ -50,15 +50,21 @@ export const getServerManagementAccess = async ({
     };
   }
 
-  const target = await db.query.server.findFirst({
-    where: eq(server.id, normalizedServerId),
-    columns: {
-      id: true,
-      name: true,
-      imageUrl: true,
-      profileId: true,
-    },
-  });
+  const targetResult = await db.execute(sql`
+    select
+      s."id" as "id",
+      s."name" as "name",
+      s."imageUrl" as "imageUrl",
+      s."profileId" as "profileId"
+    from "Server" s
+    where trim(s."id") = trim(${normalizedServerId})
+    limit 1
+  `);
+
+  const target =
+    ((targetResult as {
+      rows?: ManagedServerRow[];
+    }).rows ?? [])[0] ?? null;
 
   if (!target) {
     return {
@@ -71,16 +77,23 @@ export const getServerManagementAccess = async ({
     };
   }
 
+  const membershipResult = await db.execute(sql`
+    select
+      m."id" as "id",
+      m."profileId" as "profileId",
+      m."serverId" as "serverId",
+      m."role" as "role"
+    from "Member" m
+    where trim(m."serverId") = trim(${normalizedServerId})
+      and trim(m."profileId") = trim(${normalizedProfileId})
+    order by m."createdAt" asc, m."id" asc
+    limit 1
+  `);
+
   const membership =
-    (await db.query.member.findFirst({
-    where: and(eq(member.serverId, normalizedServerId), eq(member.profileId, normalizedProfileId)),
-    columns: {
-      id: true,
-      profileId: true,
-      serverId: true,
-      role: true,
-    },
-    })) ?? null;
+    ((membershipResult as {
+      rows?: ManagedMemberRow[];
+    }).rows ?? [])[0] ?? null;
 
   const isOwner = String(target.profileId ?? "").trim() === normalizedProfileId;
   const canManage = isGlobalAdministrator || isOwner;

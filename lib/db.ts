@@ -1,128 +1,84 @@
 import "server-only";
 
-import { drizzle } from "drizzle-orm/sqlite-proxy";
-import type { SQLWrapper } from "drizzle-orm";
-import type { AsyncRemoteCallback } from "drizzle-orm/sqlite-proxy";
+import { drizzle, type SqliteRemoteDatabase } from "drizzle-orm/sqlite-proxy";
+import type { PoolClient } from "pg";
 
 import "@/lib/silence-server-console";
 
 import { executeD1Query } from "@/lib/d1-runtime";
 import * as schema from "@/lib/db/schema";
 
-const d1Callback = ((query, params, method) =>
-  executeD1Query(query, params, method)) as AsyncRemoteCallback;
+const sqliteExecutor = (query: string, params: unknown[], method: "run" | "all" | "values" | "get") =>
+  executeD1Query(query, params, method) as Promise<{ rows: unknown[] }>;
 
-const createDb = () =>
-  drizzle(d1Callback, {
-    schema,
-  });
+let sqliteDb: SqliteRemoteDatabase<typeof schema> | null = null;
 
-type RawExecuteResult = { rows: Array<Record<string, unknown>> };
-type BaseDbInstance = ReturnType<typeof createDb>;
-type BaseTransaction = Parameters<BaseDbInstance["transaction"]>[0] extends (
-  tx: infer TTransaction,
-  ...args: never[]
-) => unknown
-  ? TTransaction
-  : never;
-type ExecuteCapableTransaction = BaseTransaction & {
-  execute: (query: SQLWrapper | string) => Promise<RawExecuteResult>;
-};
-type DbInstance = Omit<BaseDbInstance, "transaction"> & {
-  execute: (query: SQLWrapper | string) => Promise<RawExecuteResult>;
+type D1Database = Omit<SqliteRemoteDatabase<typeof schema>, "transaction"> & {
+  execute: (query: unknown) => Promise<{ rows: unknown[] }>;
   transaction: <TResult>(
-    callback: (
-      tx: ExecuteCapableTransaction,
-    ) => TResult | Promise<TResult>,
-    config?: Parameters<BaseDbInstance["transaction"]>[1],
+    callback: (tx: D1Database) => Promise<TResult>,
+    config?: unknown,
   ) => Promise<TResult>;
 };
 
-let cachedDb: DbInstance | null = null;
-
-const getDb = () => {
-  if (cachedDb) {
-    return cachedDb;
-  }
-
-  cachedDb = createDb() as unknown as DbInstance;
-  return cachedDb;
-};
-
-const buildExecuteMethod = (target: {
-  all: (queryValue: SQLWrapper | string) => Promise<unknown>;
-  run: (queryValue: SQLWrapper | string) => Promise<{
-    rows?: Array<Record<string, unknown>>;
-    results?: Array<Record<string, unknown>>;
-  }>;
-}) => {
-  return async (query: SQLWrapper | string): Promise<RawExecuteResult> => {
-    try {
-      const rows = await target.all(query);
-      return {
-        rows: Array.isArray(rows)
-          ? (rows as Array<Record<string, unknown>>)
-          : [],
-      };
-    } catch {
-      const result = await target.run(query);
-      return {
-        rows: result.rows ?? result.results ?? [],
-      };
-    }
-  };
-};
-
-const wrapExecuteCompatibleTarget = <TTarget extends object>(target: TTarget) =>
-  new Proxy(target as TTarget & {
-    execute: (query: SQLWrapper | string) => Promise<RawExecuteResult>;
-    transaction?: (
-      callback: (tx: unknown) => Promise<unknown>,
-      config?: unknown,
-    ) => Promise<unknown>;
-  }, {
-    get(currentTarget, property, receiver) {
+const wrapDatabaseScope = <TScope extends object>(scope: TScope): TScope =>
+  new Proxy(scope, {
+    get(target, property, receiver) {
       if (property === "execute") {
-        return buildExecuteMethod(currentTarget as never);
+        return async (query: unknown) => {
+          try {
+            const rows = await (target as { all: (queryInput: unknown) => Promise<unknown[]> }).all(query);
+            return { rows: Array.isArray(rows) ? rows : [] };
+          } catch {
+            const result = await (target as { run: (queryInput: unknown) => Promise<{ rows?: unknown[]; results?: unknown[] }> }).run(query);
+            return { rows: result.rows ?? result.results ?? [] };
+          }
+        };
       }
 
       if (property === "transaction") {
-        const transactionMethod = Reflect.get(currentTarget, property, receiver);
-        if (typeof transactionMethod !== "function") {
-          return transactionMethod;
+        const transaction = Reflect.get(target, property, receiver);
+        if (typeof transaction !== "function") {
+          return transaction;
         }
 
         return async (
-          callback: (tx: unknown) => Promise<unknown>,
+          callback: (tx: TScope) => Promise<unknown>,
           config?: unknown,
-        ) =>
-          transactionMethod.call(
-            currentTarget,
-            async (tx: unknown) => callback(wrapExecuteCompatibleTarget(tx as object)),
-            config,
-          );
+        ) => transaction.call(
+          target,
+          async (innerScope: TScope) => callback(wrapDatabaseScope(innerScope)),
+          config,
+        );
       }
 
-      const value = Reflect.get(currentTarget, property, receiver);
-      return typeof value === "function" ? value.bind(currentTarget) : value;
+      const value = Reflect.get(target, property, receiver);
+      return typeof value === "function" ? value.bind(target) : value;
     },
   });
 
-export const pool = new Proxy({} as Record<PropertyKey, never>, {
-  get() {
-    throw new Error(
-      "PostgreSQL pool is unavailable. In-Accord now uses Cloudflare D1.",
-    );
-  },
-}) as never;
+type UnsupportedPostgresPool = {
+  connect: () => Promise<PoolClient>;
+  query: (...args: unknown[]) => Promise<unknown>;
+};
 
-export const db = new Proxy({} as DbInstance, {
+type RuntimeDb = any;
+
+export const pool: UnsupportedPostgresPool = new Proxy({} as UnsupportedPostgresPool, {
+  get() {
+    throw new Error("PostgreSQL pool is unavailable. In-Accord now uses Cloudflare D1.");
+  },
+});
+
+export const db = new Proxy({} as D1Database, {
   get(_target, property, receiver) {
-    const target = wrapExecuteCompatibleTarget(getDb());
+    const target = wrapDatabaseScope(
+      sqliteDb ?? (sqliteDb = drizzle(sqliteExecutor, { schema })),
+    );
     const value = Reflect.get(target, property, receiver);
     return typeof value === "function" ? value.bind(target) : value;
   },
-}) as DbInstance;
+}) as RuntimeDb;
 
 export {
   channel,

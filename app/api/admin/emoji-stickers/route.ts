@@ -105,10 +105,10 @@ const buildPayload = async (filters: {
       s."name" as "name",
       ou."name" as "ownerName",
       ou."email" as "ownerEmail",
-      count(a."id")::int as "assetCount",
-      count(case when a."assetType" = 'EMOJI' then 1 end)::int as "emojiCount",
-      count(case when a."assetType" = 'STICKER' then 1 end)::int as "stickerCount",
-      count(case when a."isEnabled" = true then 1 end)::int as "activeCount"
+        count(a."id") as "assetCount",
+        count(case when a."assetType" = 'EMOJI' then 1 end) as "emojiCount",
+        count(case when a."assetType" = 'STICKER' then 1 end) as "stickerCount",
+        count(case when a."isEnabled" = true then 1 end) as "activeCount"
     from "Server" s
     left join "Users" ou on ou."userId" = s."profileId"
     left join "ServerEmojiSticker" a on a."serverId" = s."id"

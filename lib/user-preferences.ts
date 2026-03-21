@@ -1819,19 +1819,25 @@ export const ensureUserPreferencesSchema = async () => {
     add column if not exists "OtherBotAutoImportOnSave" boolean not null default true
   `);
 
-  const now = new Date();
+  userPreferencesSchemaReady = true;
+};
+
+const ensureUserPreferenceRow = async (userId: string) => {
+  const normalizedUserId = String(userId ?? "").trim();
+  if (!normalizedUserId) {
+    return;
+  }
+
   await db.execute(sql`
     insert into "UserPreference" ("userId", "createdAt", "updatedAt")
-    select u."userId", ${now}, ${now}
-    from "Users" u
+    values (${normalizedUserId}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     on conflict ("userId") do nothing
   `);
-
-  userPreferencesSchemaReady = true;
 };
 
 export const getUserPreferences = async (userId: string): Promise<UserPreferences> => {
   await ensureUserPreferencesSchema();
+  await ensureUserPreferenceRow(userId);
 
   const result = await db.execute(sql`
     select
@@ -2024,6 +2030,7 @@ export const updateUserPreferences = async (
   }>
 ) => {
   await ensureUserPreferencesSchema();
+  await ensureUserPreferenceRow(userId);
 
   const values: Array<ReturnType<typeof sql>> = [];
 
@@ -2252,7 +2259,7 @@ export const updateUserPreferences = async (
     return getUserPreferences(userId);
   }
 
-  values.push(sql`"updatedAt" = now()`);
+  values.push(sql`"updatedAt" = CURRENT_TIMESTAMP`);
 
   await db.execute(sql`
     update "UserPreference"

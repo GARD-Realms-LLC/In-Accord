@@ -16,12 +16,10 @@ import { isImmutableAccountUserId } from "@/lib/account-security";
 import { ADMINISTRATOR_ROLE_KEY } from "@/lib/account-security-constants";
 import { isBotUser } from "@/lib/is-bot-user";
 import { ensureInAccordRoleSchema } from "@/lib/in-accord-roles";
+import { isInAccordProtectedServer } from "@/lib/server-security";
 import { removeServerFromAllProfileServerTabs } from "@/lib/profile-server-tabs";
 import { removeServerFromServerRailFolders } from "@/lib/server-rail-layout";
 import { hardDeleteServerScopedData } from "@/lib/server-hard-delete";
-
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
 
 type UserRow = {
   userId: string;
@@ -207,22 +205,16 @@ export async function POST(request: Request) {
     } | null;
 
     const name = String(body?.name ?? "").trim();
-    const email = String(body?.email ?? "")
-      .trim()
-      .toLowerCase();
+    const email = String(body?.email ?? "").trim().toLowerCase();
     const password = String(body?.password ?? "");
     const role = normalizeManagedUserRole(body?.role);
 
     if (!name || !email || !password) {
-      return new NextResponse("Name, email and password are required", {
-        status: 400,
-      });
+      return new NextResponse("Name, email and password are required", { status: 400 });
     }
 
     if (password.length < 8) {
-      return new NextResponse("Password must be at least 8 characters", {
-        status: 400,
-      });
+      return new NextResponse("Password must be at least 8 characters", { status: 400 });
     }
 
     if (!role) {
@@ -231,9 +223,7 @@ export async function POST(request: Request) {
 
     const allowedRoles = await resolveAllowedRoleSet();
     if (!allowedRoles.has(role)) {
-      return new NextResponse("Role is not available in managed roles.", {
-        status: 400,
-      });
+      return new NextResponse("Role is not available in managed roles.", { status: 400 });
     }
 
     await ensureLocalAuthSchema();
@@ -245,9 +235,7 @@ export async function POST(request: Request) {
       where lower(coalesce("email", '')) = ${email}
       limit 1
     `);
-    const existingRows = (
-      existingResult as unknown as { rows: Array<{ userId: string }> }
-    ).rows;
+    const existingRows = (existingResult as unknown as { rows: Array<{ userId: string }> }).rows;
     if (existingRows?.[0]) {
       return new NextResponse("Email already in use", { status: 409 });
     }
@@ -330,9 +318,7 @@ export async function PATCH(request: Request) {
       action?: string;
     } | null;
 
-    const action = String(body?.action ?? "")
-      .trim()
-      .toLowerCase();
+    const action = String(body?.action ?? "").trim().toLowerCase();
 
     if (action === "assignbotsrole") {
       await ensureInAccordRoleSchema();
@@ -350,17 +336,14 @@ export async function PATCH(request: Request) {
         from "Users"
       `);
 
-      const allUsers =
-        (
-          usersResult as unknown as {
-            rows?: Array<{
-              userId: string;
-              role: string | null;
-              name: string | null;
-              email: string | null;
-            }>;
-          }
-        ).rows ?? [];
+      const allUsers = (usersResult as unknown as {
+        rows?: Array<{
+          userId: string;
+          role: string | null;
+          name: string | null;
+          email: string | null;
+        }>;
+      }).rows ?? [];
 
       let updatedCount = 0;
 
@@ -392,24 +375,16 @@ export async function PATCH(request: Request) {
     }
 
     const userId = String(body?.userId ?? "").trim();
-    const roleProvided = Boolean(
-      body && Object.prototype.hasOwnProperty.call(body, "role"),
-    );
-    const phoneNumberProvided = Boolean(
-      body && Object.prototype.hasOwnProperty.call(body, "phoneNumber"),
-    );
-    const dateOfBirthProvided = Boolean(
-      body && Object.prototype.hasOwnProperty.call(body, "dateOfBirth"),
-    );
+    const roleProvided = Boolean(body && Object.prototype.hasOwnProperty.call(body, "role"));
+    const phoneNumberProvided = Boolean(body && Object.prototype.hasOwnProperty.call(body, "phoneNumber"));
+    const dateOfBirthProvided = Boolean(body && Object.prototype.hasOwnProperty.call(body, "dateOfBirth"));
 
     const role = roleProvided ? normalizeManagedUserRole(body?.role) : null;
     const phoneNumber = phoneNumberProvided
       ? String(body?.phoneNumber ?? "").trim()
       : "";
     const normalizedDateOfBirth = dateOfBirthProvided
-      ? normalizeDateOfBirthInput(
-          typeof body?.dateOfBirth === "string" ? body.dateOfBirth : "",
-        )
+      ? normalizeDateOfBirthInput(typeof body?.dateOfBirth === "string" ? body.dateOfBirth : "")
       : null;
 
     if (!userId) {
@@ -417,10 +392,7 @@ export async function PATCH(request: Request) {
     }
 
     if (!roleProvided && !phoneNumberProvided && !dateOfBirthProvided) {
-      return new NextResponse(
-        "At least one field must be provided: role, phoneNumber, or dateOfBirth",
-        { status: 400 },
-      );
+      return new NextResponse("At least one field must be provided: role, phoneNumber, or dateOfBirth", { status: 400 });
     }
 
     if (roleProvided && !role) {
@@ -430,36 +402,24 @@ export async function PATCH(request: Request) {
     if (roleProvided && role) {
       const allowedRoles = await resolveAllowedRoleSet();
       if (!allowedRoles.has(role)) {
-        return new NextResponse("Role is not available in managed roles.", {
-          status: 400,
-        });
+        return new NextResponse("Role is not available in managed roles.", { status: 400 });
       }
     }
 
     if (phoneNumberProvided && phoneNumber.length > 32) {
-      return new NextResponse("Phone number must be 32 characters or less.", {
-        status: 400,
-      });
+      return new NextResponse("Phone number must be 32 characters or less.", { status: 400 });
     }
 
     if (dateOfBirthProvided && normalizedDateOfBirth === "INVALID") {
-      return new NextResponse(
-        "Date Of Birth must be a valid date in YYYY-MM-DD format.",
-        { status: 400 },
-      );
+      return new NextResponse("Date Of Birth must be a valid date in YYYY-MM-DD format.", { status: 400 });
     }
 
     if (dateOfBirthProvided && !isInAccordAdministrator(profile.role)) {
-      return new NextResponse("Only Administrators can edit Date Of Birth.", {
-        status: 403,
-      });
+      return new NextResponse("Only Administrators can edit Date Of Birth.", { status: 403 });
     }
 
     if (userId === profile.id && role === "USER") {
-      return new NextResponse(
-        "You cannot downgrade your own account to USER.",
-        { status: 400 },
-      );
+      return new NextResponse("You cannot downgrade your own account to USER.", { status: 400 });
     }
 
     const existingResult = await db.execute(sql`
@@ -469,15 +429,9 @@ export async function PATCH(request: Request) {
       limit 1
     `);
 
-    const existingRow = (
-      existingResult as unknown as {
-        rows?: Array<{
-          userId: string;
-          email: string | null;
-          role: string | null;
-        }>;
-      }
-    ).rows?.[0];
+    const existingRow = (existingResult as unknown as {
+      rows?: Array<{ userId: string; email: string | null; role: string | null }>;
+    }).rows?.[0];
 
     if (!existingRow) {
       return new NextResponse("User not found", { status: 404 });
@@ -489,18 +443,12 @@ export async function PATCH(request: Request) {
       if (isImmutableAccountUserId(userId) && role !== ADMINISTRATOR_ROLE_KEY) {
         return new NextResponse(
           `Protected account ${userId} must always keep ${ADMINISTRATOR_ROLE_KEY} role.`,
-          { status: 403 },
+          { status: 403 }
         );
       }
 
-      if (
-        existingRole === ADMINISTRATOR_ROLE_KEY &&
-        role !== ADMINISTRATOR_ROLE_KEY
-      ) {
-        return new NextResponse(
-          "Administrator role cannot be removed from a user account.",
-          { status: 403 },
-        );
+      if (existingRole === ADMINISTRATOR_ROLE_KEY && role !== ADMINISTRATOR_ROLE_KEY) {
+        return new NextResponse("Administrator role cannot be removed from a user account.", { status: 403 });
       }
     }
 
@@ -547,18 +495,15 @@ export async function PATCH(request: Request) {
       limit 1
     `);
 
-    const updatedRow = (
-      updatedResult as unknown as {
-        rows?: Array<{
-          role: string | null;
-          phone: string | null;
-          dateOfBirth: Date | string | null;
-        }>;
-      }
-    ).rows?.[0];
+    const updatedRow = (updatedResult as unknown as {
+      rows?: Array<{
+        role: string | null;
+        phone: string | null;
+        dateOfBirth: Date | string | null;
+      }>;
+    }).rows?.[0];
 
-    const normalizedUpdatedRole =
-      normalizeManagedUserRole(updatedRow?.role) ?? "USER";
+    const normalizedUpdatedRole = normalizeManagedUserRole(updatedRow?.role) ?? "USER";
 
     return NextResponse.json({
       ok: true,
@@ -595,17 +540,11 @@ export async function DELETE(request: Request) {
     }
 
     if (isImmutableAccountUserId(userId)) {
-      return new NextResponse(
-        "This core account is protected and cannot be deleted.",
-        { status: 403 },
-      );
+      return new NextResponse("This core account is protected and cannot be deleted.", { status: 403 });
     }
 
     if (userId === profile.id) {
-      return new NextResponse(
-        "You cannot delete your own account from admin.",
-        { status: 400 },
-      );
+      return new NextResponse("You cannot delete your own account from admin.", { status: 400 });
     }
 
     await ensureLocalAuthSchema();
@@ -617,16 +556,14 @@ export async function DELETE(request: Request) {
       where "userId" = ${userId}
       limit 1
     `);
-    const userRows = (
-      userCheckResult as unknown as {
-        rows: Array<{
-          userId: string;
-          role: string | null;
-          name: string | null;
-          email: string | null;
-        }>;
-      }
-    ).rows;
+    const userRows = (userCheckResult as unknown as {
+      rows: Array<{
+        userId: string;
+        role: string | null;
+        name: string | null;
+        email: string | null;
+      }>;
+    }).rows;
     const userRow = userRows?.[0];
     if (!userRow) {
       return new NextResponse("User not found", { status: 404 });
@@ -638,12 +575,27 @@ export async function DELETE(request: Request) {
       where "profileId" = ${userId}
     `);
 
-    const ownedServers =
-      (
-        ownedServersResult as unknown as {
-          rows?: Array<{ id: string | null; name: string | null }>;
-        }
-      ).rows ?? [];
+    const ownedServers = (ownedServersResult as unknown as {
+      rows?: Array<{ id: string | null; name: string | null }>;
+    }).rows ?? [];
+
+    for (const ownedServer of ownedServers) {
+      const ownedServerId = String(ownedServer.id ?? "").trim();
+      if (!ownedServerId) {
+        continue;
+      }
+
+      if (
+        isInAccordProtectedServer({
+          serverId: ownedServerId,
+          serverName: ownedServer.name,
+        })
+      ) {
+        return new NextResponse("This user owns a protected In-Accord server and cannot be deleted.", {
+          status: 403,
+        });
+      }
+    }
 
     await db.execute(sql`
       delete from "Member"

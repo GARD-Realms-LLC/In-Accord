@@ -39,6 +39,7 @@ import {
   findLatestPrivateMessageCallEvent,
   PRIVATE_MESSAGE_CALL_REQUEST_TIMEOUT_SECONDS,
 } from "@/lib/private-message-calls";
+import type { Member, Profile } from "@/lib/db/types";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -72,6 +73,18 @@ interface UsersPageProps {
     pmCallNotice?: string | string[];
   }>;
 }
+
+type DirectMessageRow = {
+  id: string;
+  content: string;
+  fileUrl: string | null;
+  deleted: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  member: Member & {
+    profile: Profile;
+  };
+};
 
 const UsersPage = async ({ searchParams }: UsersPageProps) => {
   const resolvedSearchParams = await searchParams;
@@ -583,7 +596,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
         const otherMemberData =
           conversation.memberOne.profileId === profile.id ? conversation.memberTwo : conversation.memberOne;
 
-        const messageRows = await db.query.directMessage.findMany({
+        const messageRows: DirectMessageRow[] = await db.query.directMessage.findMany({
           where: eq(directMessage.conversationId, conversation.id),
           orderBy: [asc(directMessage.createdAt)],
           with: {

@@ -238,7 +238,7 @@ export const ensureServerRolesSchema = async () => {
       false,
       false,
       false,
-      now()
+      CURRENT_TIMESTAMP
     from "ServerRole" r
     left join "ServerRolePermission" p
       on p."roleId" = r."id"
@@ -247,27 +247,30 @@ export const ensureServerRolesSchema = async () => {
   `);
 
   await db.execute(sql`
-    delete from "ServerRoleAssignment" a
-    using "ServerRole" r
-    where a."roleId" = r."id"
-      and a."serverId" = r."serverId"
-      and r."isManaged" = true
-      and lower(trim(coalesce(r."name", ''))) in ('admin', 'moderator', 'guest')
+    delete from "ServerRoleAssignment"
+    where ("roleId", "serverId") in (
+      select
+        r."id",
+        r."serverId"
+      from "ServerRole" r
+      where r."isManaged" = true
+        and lower(trim(coalesce(r."name", ''))) in ('admin', 'moderator', 'guest')
+    )
   `);
 
   await db.execute(sql`
-    delete from "ServerRole" r
-    where r."isManaged" = true
-      and lower(trim(coalesce(r."name", ''))) in ('admin', 'moderator', 'guest')
+    delete from "ServerRole"
+    where "isManaged" = true
+      and lower(trim(coalesce("name", ''))) in ('admin', 'moderator', 'guest')
   `);
 
   await db.execute(sql`
-    delete from "ServerRolePermission" p
+    delete from "ServerRolePermission"
     where not exists (
       select 1
       from "ServerRole" r
-      where r."id" = p."roleId"
-        and r."serverId" = p."serverId"
+      where r."id" = "ServerRolePermission"."roleId"
+        and r."serverId" = "ServerRolePermission"."serverId"
     )
   `);
 };

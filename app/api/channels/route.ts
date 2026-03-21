@@ -10,21 +10,7 @@ import { ensureChannelGroupSchema } from "@/lib/channel-groups";
 
 const VALID_CHANNEL_TYPES = new Set(["TEXT", "ANNOUNCEMENT", "AUDIO", "VIDEO"]);
 
-const resolveAllowedChannelTypes = async () => {
-  const result = await db.execute(sql`
-    select e.enumlabel as "label"
-    from pg_type t
-    join pg_enum e on e.enumtypid = t.oid
-    where t.typname = 'ChannelType'
-    order by e.enumsortorder asc
-  `);
-
-  const labels = ((result as unknown as { rows?: Array<{ label: string | null }> }).rows ?? [])
-    .map((row) => String(row.label ?? "").trim().toUpperCase())
-    .filter(Boolean);
-
-  return labels.length ? new Set(labels) : VALID_CHANNEL_TYPES;
-};
+const resolveAllowedChannelTypes = async () => VALID_CHANNEL_TYPES;
 
 const mapChannelMutationError = (error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);

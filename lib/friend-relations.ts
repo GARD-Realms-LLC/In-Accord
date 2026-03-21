@@ -45,37 +45,37 @@ export const ensureFriendRelationsSchema = async () => {
 
   // Canonicalize historical rows that may have stored Member IDs instead of profile IDs.
   await db.execute(sql`
-    update "FriendRequest" fr
+    update "FriendRequest"
     set
       "requesterProfileId" = coalesce(
         (
           select m."profileId"
           from "Member" m
-          where m."id" = fr."requesterProfileId"
+          where m."id" = "FriendRequest"."requesterProfileId"
           limit 1
         ),
-        fr."requesterProfileId"
+        "FriendRequest"."requesterProfileId"
       ),
       "recipientProfileId" = coalesce(
         (
           select m."profileId"
           from "Member" m
-          where m."id" = fr."recipientProfileId"
+          where m."id" = "FriendRequest"."recipientProfileId"
           limit 1
         ),
-        fr."recipientProfileId"
+        "FriendRequest"."recipientProfileId"
       ),
       "updatedAt" = now()
     where
       exists (
         select 1
         from "Member" m
-        where m."id" = fr."requesterProfileId"
+        where m."id" = "FriendRequest"."requesterProfileId"
       )
       or exists (
         select 1
         from "Member" m
-        where m."id" = fr."recipientProfileId"
+        where m."id" = "FriendRequest"."recipientProfileId"
       )
   `);
 

@@ -12,6 +12,7 @@ import { getServerBannerConfig } from "@/lib/server-banner-store";
 import { getServerProfileSettings } from "@/lib/server-profile-settings-store";
 import { listActiveVoiceCountsForServer } from "@/lib/voice-states";
 import { listUnreadChannelIds } from "@/lib/channel-read-state";
+import { resolveBannerUrl } from "@/lib/asset-url";
 
 import { ServerHeader } from "./server-header";
 import { ServerSection } from "./server-section";
@@ -43,6 +44,16 @@ type ChannelGroupRow = {
   sortOrder: number;
 };
 
+type CurrentServerRow = {
+  id: string | null;
+  name: string | null;
+  imageUrl: string | null;
+  inviteCode: string | null;
+  profileId: string | null;
+  createdAt: Date | string | null;
+  updatedAt: Date | string | null;
+};
+
 const iconMap = {
   [ChannelType.TEXT]: <Hash className="mr-2 h-4 w-4" />,
   [ChannelType.ANNOUNCEMENT]: <Bell className="mr-2 h-4 w-4" />,
@@ -55,13 +66,34 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
 
   await ensureChannelGroupSchema();
 
-  const currentServerResult = await db
-    .select()
-    .from(server)
-    .where(eq(server.id, serverId))
-    .limit(1);
+  const currentServerResult = await db.execute(sql`
+    select
+      s."id" as "id",
+      s."name" as "name",
+      s."imageUrl" as "imageUrl",
+      s."inviteCode" as "inviteCode",
+      s."profileId" as "profileId",
+      s."createdAt" as "createdAt",
+      s."updatedAt" as "updatedAt"
+    from "Server" s
+    where s."id" = ${serverId}
+    limit 1
+  `);
 
-  const currentServer = currentServerResult[0];
+  const currentServerRow = ((currentServerResult as unknown as {
+    rows?: CurrentServerRow[];
+  }).rows ?? [])[0] ?? null;
+  const currentServer = currentServerRow?.id
+    ? {
+        id: String(currentServerRow.id).trim(),
+        name: String(currentServerRow.name ?? "").trim(),
+        imageUrl: String(currentServerRow.imageUrl ?? "").trim(),
+        inviteCode: String(currentServerRow.inviteCode ?? "").trim(),
+        profileId: String(currentServerRow.profileId ?? "").trim(),
+        createdAt: currentServerRow.createdAt ? new Date(currentServerRow.createdAt) : new Date(0),
+        updatedAt: currentServerRow.updatedAt ? new Date(currentServerRow.updatedAt) : new Date(0),
+      }
+    : null;
   const bannerConfig = currentServer ? await getServerBannerConfig(currentServer.id) : null;
   const serverProfileSettings = currentServer ? await getServerProfileSettings(currentServer.id) : null;
 
@@ -285,6 +317,15 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
     bannerFit: bannerConfig?.fit ?? "cover",
     bannerScale: bannerConfig?.scale ?? 1,
   };
+  const resolvedServerBannerUrl = resolveBannerUrl(serverWithBanner.bannerUrl);
+  const serverBannerFit =
+    serverWithBanner.bannerFit === "contain" || serverWithBanner.bannerFit === "scale"
+      ? serverWithBanner.bannerFit
+      : "cover";
+  const serverBannerScale =
+    typeof serverWithBanner.bannerScale === "number" && !Number.isNaN(serverWithBanner.bannerScale)
+      ? Math.min(2, Math.max(0.25, serverWithBanner.bannerScale))
+      : 1;
 
   const eventsCount = 0;
   const invitesCount = 0;
@@ -292,15 +333,39 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
   return (
     <div className="theme-channels-rail flex h-full w-full flex-col overflow-hidden rounded-2xl border border-border bg-card text-primary">
       <div className="px-3 pt-2 pb-2">
-        <ServerHeader
-          server={serverWithBanner}
-          viewerProfileId={profile?.id ?? null}
-          viewerMemberId={viewerMemberId}
-          role={role}
-          isServerOwner={isServerOwner}
-          channelGroups={groupedChannelGroups}
-          hasHiddenChannels={hasHiddenChannels}
-        />
+        <div className="relative overflow-hidden rounded-2xl">
+          {resolvedServerBannerUrl ? (
+            <>
+              <img
+                src={resolvedServerBannerUrl}
+                alt={`${currentServer.name} banner`}
+                className={`absolute inset-0 h-full w-full ${
+                  serverBannerFit === "contain" ? "object-contain" : "object-cover"
+                }`}
+                style={
+                  serverBannerFit === "scale"
+                    ? { transform: `scale(${serverBannerScale})`, transformOrigin: "center" }
+                    : undefined
+                }
+              />
+              <div className="absolute inset-0 bg-black/15" />
+            </>
+          ) : (
+            <div className="absolute inset-0 bg-[#1f2023]" />
+          )}
+          <ServerHeader
+            serverId={serverId}
+            serverName={currentServer.name}
+            server={serverWithBanner}
+            viewerProfileId={profile?.id ?? null}
+            viewerMemberId={viewerMemberId}
+            role={role}
+            isServerOwner={isServerOwner}
+            channelGroups={groupedChannelGroups}
+            hasHiddenChannels={hasHiddenChannels}
+            showBackgroundMedia={!resolvedServerBannerUrl}
+          />
+        </div>
         <ServerEventsMenu
           server={serverWithMembers}
           viewerProfileId={profile?.id ?? null}

@@ -15,7 +15,6 @@ const normalizeFolderBackground = (value: unknown) => {
 };
 
 let serverRailLayoutSchemaReady = false;
-const GLOBAL_SERVER_RAIL_LAYOUT_KEY = "__GLOBAL__";
 
 export const normalizeServerRailFolders = (input: unknown): ServerRailFolder[] => {
   if (!Array.isArray(input)) {
@@ -71,13 +70,18 @@ export const ensureServerRailLayoutSchema = async () => {
   serverRailLayoutSchemaReady = true;
 };
 
-export const getServerRailFolders = async (): Promise<ServerRailFolder[]> => {
+export const getServerRailFolders = async (profileId: string): Promise<ServerRailFolder[]> => {
+  const normalizedProfileId = String(profileId ?? "").trim();
+  if (!normalizedProfileId) {
+    return [];
+  }
+
   await ensureServerRailLayoutSchema();
 
   const result = await db.execute(sql`
     select "foldersJson"
     from "ServerRailLayout"
-    where "profileId" = ${GLOBAL_SERVER_RAIL_LAYOUT_KEY}
+    where "profileId" = ${normalizedProfileId}
     limit 1
   `);
 
@@ -85,54 +89,30 @@ export const getServerRailFolders = async (): Promise<ServerRailFolder[]> => {
     rows: Array<{ foldersJson: string | null }>;
   }).rows?.[0];
 
-  if (row?.foldersJson) {
-    try {
-      const parsed = JSON.parse(row.foldersJson) as unknown;
-      return normalizeServerRailFolders(parsed);
-    } catch {
-      return [];
-    }
-  }
-
-  const fallbackResult = await db.execute(sql`
-    select "foldersJson"
-    from "ServerRailLayout"
-    where "foldersJson" is not null
-      and trim("foldersJson") <> ''
-    order by "updatedAt" desc
-    limit 1
-  `);
-
-  const fallbackRow = (fallbackResult as unknown as {
-    rows: Array<{ foldersJson: string | null }>;
-  }).rows?.[0];
-
-  if (!fallbackRow?.foldersJson) {
-    return [];
-  }
-
   try {
-    const parsed = JSON.parse(fallbackRow.foldersJson) as unknown;
-    const normalized = normalizeServerRailFolders(parsed);
-
-    if (normalized.length > 0) {
-      await upsertServerRailFolders(normalized);
-    }
-
-    return normalized;
+    const parsed =
+      typeof row?.foldersJson === "string"
+        ? (JSON.parse(row.foldersJson) as unknown)
+        : row?.foldersJson;
+    return normalizeServerRailFolders(parsed);
   } catch {
     return [];
   }
 };
 
-export const upsertServerRailFolders = async (folders: ServerRailFolder[]) => {
+export const upsertServerRailFolders = async (profileId: string, folders: ServerRailFolder[]) => {
+  const normalizedProfileId = String(profileId ?? "").trim();
+  if (!normalizedProfileId) {
+    return;
+  }
+
   const payload = JSON.stringify(normalizeServerRailFolders(folders));
 
   await ensureServerRailLayoutSchema();
 
   await db.execute(sql`
     insert into "ServerRailLayout" ("profileId", "foldersJson", "updatedAt")
-    values (${GLOBAL_SERVER_RAIL_LAYOUT_KEY}, ${payload}, now())
+    values (${normalizedProfileId}, ${payload}, CURRENT_TIMESTAMP)
     on conflict ("profileId") do update
     set "foldersJson" = excluded."foldersJson",
         "updatedAt" = excluded."updatedAt"
@@ -145,15 +125,41 @@ export const removeServerFromServerRailFolders = async (serverId: string) => {
     return;
   }
 
-  const folders = await getServerRailFolders();
-  const nextFolders = normalizeServerRailFolders(
-    folders
-      .map((folder) => ({
-        ...folder,
-        serverIds: folder.serverIds.filter((id) => id !== normalizedServerId),
-      }))
-      .filter((folder) => folder.serverIds.length > 0)
-  );
+  await ensureServerRailLayoutSchema();
 
-  await upsertServerRailFolders(nextFolders);
+  const result = await db.execute(sql`
+    select "profileId", "foldersJson"
+    from "ServerRailLayout"
+  `);
+
+  const rows = (result as unknown as {
+    rows?: Array<{ profileId: string | null; foldersJson: string | null }>;
+  }).rows ?? [];
+
+  for (const row of rows) {
+    const normalizedProfileId = String(row.profileId ?? "").trim();
+    if (!normalizedProfileId) {
+      continue;
+    }
+
+    let folders: ServerRailFolder[] = [];
+    try {
+      folders = normalizeServerRailFolders(
+        typeof row.foldersJson === "string" ? JSON.parse(row.foldersJson) : row.foldersJson
+      );
+    } catch {
+      folders = [];
+    }
+
+    const nextFolders = normalizeServerRailFolders(
+      folders
+        .map((folder) => ({
+          ...folder,
+          serverIds: folder.serverIds.filter((id) => id !== normalizedServerId),
+        }))
+        .filter((folder) => folder.serverIds.length > 0)
+    );
+
+    await upsertServerRailFolders(normalizedProfileId, nextFolders);
+  }
 };

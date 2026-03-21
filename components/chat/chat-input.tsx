@@ -785,12 +785,10 @@ export const ChatInput = ({
     content,
     fileUrl = null,
     optimistic = true,
-    resetComposerOnSuccess = true,
   }: {
     content: string;
     fileUrl?: string | null;
     optimistic?: boolean;
-    resetComposerOnSuccess?: boolean;
   }) => {
     const url = qs.stringifyUrl({
       url: resolvedApiUrl,
@@ -820,10 +818,8 @@ export const ChatInput = ({
         }
       );
 
-      if (resetComposerOnSuccess) {
-        stopConversationTyping();
-        resetComposerState();
-      }
+      stopConversationTyping();
+      resetComposerState();
 
       if (response.data?.id) {
         emitLocalChatConfirmedMessageForRoute(apiUrl, query, {
@@ -843,47 +839,17 @@ export const ChatInput = ({
   };
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    const originalQuote = activeQuote;
-    const originalContent = values.content;
-
     try {
       setSendError(null);
 
       const encodedContent = encodeMentionLabelsForSubmit(values.content);
       const isSlashCommandSubmission = type === "channel" && !activeQuote && encodedContent.trim().startsWith("/");
-      const shouldPreResetComposer = !isSlashCommandSubmission;
-
-      if (shouldPreResetComposer) {
-        stopConversationTyping();
-        resetComposerState();
-      }
 
       await sendMessage({
         content: buildQuotedContent(encodedContent, activeQuote),
         optimistic: !isSlashCommandSubmission,
-        resetComposerOnSuccess: !shouldPreResetComposer,
       });
     } catch (error: unknown) {
-      const shouldRestoreComposer = !(
-        type === "channel" &&
-        !originalQuote &&
-        encodeMentionLabelsForSubmit(originalContent).trim().startsWith("/")
-      );
-
-      if (shouldRestoreComposer) {
-        const currentComposerValue = String(form.getValues("content") ?? "");
-        if (!currentComposerValue.trim()) {
-          form.setValue("content", originalContent, {
-            shouldDirty: true,
-            shouldTouch: true,
-          });
-
-          if (originalQuote) {
-            setActiveQuote(originalQuote);
-          }
-        }
-      }
-
       if (axios.isAxiosError(error)) {
         const statusCode = error.response?.status;
         const dataMessage =

@@ -7,6 +7,9 @@ import {
   upsertServerRailFolders,
 } from "@/lib/server-rail-layout";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET() {
   try {
     const profile = await currentProfile();
@@ -15,7 +18,7 @@ export async function GET() {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const folders = await getServerRailFolders();
+    const folders = await getServerRailFolders(profile.id);
     return NextResponse.json({ folders });
   } catch (error) {
     console.error("[SERVER_RAIL_LAYOUT_GET]", error);
@@ -37,7 +40,7 @@ export async function PATCH(req: Request) {
 
     const folders = normalizeServerRailFolders(body.folders);
 
-    await upsertServerRailFolders(folders);
+    await upsertServerRailFolders(profile.id, folders);
 
     return NextResponse.json({ ok: true });
   } catch (error) {

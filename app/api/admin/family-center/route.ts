@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db } from "@/lib/db";
@@ -12,6 +11,7 @@ import {
   updateUserPreferences,
 } from "@/lib/user-preferences";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -33,6 +33,8 @@ type FamilyApplicationFile = {
   uploadedAt: string;
 };
 
+type R2Sdk = typeof import("@aws-sdk/client-s3");
+
 const r2AccountId = process.env.CLOUDFLARE_R2_ACCOUNT_ID;
 const r2AccessKeyId = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID;
 const r2SecretAccessKey = process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY;
@@ -46,16 +48,31 @@ const hasR2Config =
   !isPlaceholder(r2SecretAccessKey) &&
   !isPlaceholder(r2BucketName);
 
-const r2Client = hasR2Config
-  ? new S3Client({
-      region: "auto",
-      endpoint: `https://${r2AccountId!}.r2.cloudflarestorage.com`,
-      credentials: {
-        accessKeyId: r2AccessKeyId!,
-        secretAccessKey: r2SecretAccessKey!,
-      },
-    })
-  : null;
+let r2SdkPromise: Promise<R2Sdk> | null = null;
+
+const getR2Sdk = async () => {
+  if (!r2SdkPromise) {
+    r2SdkPromise = import("@aws-sdk/client-s3");
+  }
+
+  return r2SdkPromise;
+};
+
+const getR2Client = async () => {
+  if (!hasR2Config) {
+    return null;
+  }
+
+  const { S3Client } = await getR2Sdk();
+  return new S3Client({
+    region: "auto",
+    endpoint: `https://${r2AccountId!}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId: r2AccessKeyId!,
+      secretAccessKey: r2SecretAccessKey!,
+    },
+  });
+};
 
 const extractR2ObjectKey = async (url: string): Promise<string | null> => {
   const trimmed = String(url ?? "").trim();
@@ -86,7 +103,7 @@ const toIsoOrNull = (value: Date | string | null | undefined) => {
   return parsed.toISOString();
 };
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const profile = await currentProfile();
 
@@ -121,7 +138,7 @@ export async function GET() {
 
     const entries = rows
       .map((row) => {
-        const raw = row.familyCenterJson ?? "{}";
+        const raw = String(row.familyCenterJson ?? "{}");
         let parsed: Record<string, unknown> = {};
 
         try {
@@ -230,6 +247,21 @@ export async function GET() {
     return NextResponse.json({ entries, summary });
   } catch (error) {
     console.error("[ADMIN_FAMILY_CENTER_GET]", error);
+
+    if (new URL(request.url).searchParams.get("debug") === "1") {
+      return NextResponse.json(
+        {
+          ok: false,
+          message: error instanceof Error ? error.message : String(error),
+          stack:
+            error instanceof Error
+              ? error.stack?.split("\n").slice(0, 12) ?? []
+              : [],
+        },
+        { status: 500 },
+      );
+    }
+
     return new NextResponse("Internal Error", { status: 500 });
   }
 }
@@ -323,7 +355,11 @@ export async function PATCH(req: Request) {
 
     let nextApplicationFiles = current.familyCenter.familyApplicationFiles;
 
-    if (r2Client && nextApplicationFiles.length > 0) {
+    if (nextApplicationFiles.length > 0) {
+      const r2Client = await getR2Client();
+
+      if (r2Client) {
+        const { DeleteObjectCommand, GetObjectCommand, PutObjectCommand } = await getR2Sdk();
       const primaryFile = nextApplicationFiles[0];
       const sourceKey = await extractR2ObjectKey(primaryFile.url);
 
@@ -378,6 +414,7 @@ export async function PATCH(req: Request) {
             ...nextApplicationFiles.slice(1),
           ];
         }
+      }
       }
     }
 

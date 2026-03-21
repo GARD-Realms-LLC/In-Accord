@@ -160,7 +160,7 @@ export async function DELETE(
     await ensureChannelThreadSchema();
     await ensureVoiceStateSchema();
 
-    await db.transaction(async (tx) => {
+    await db.transaction(async (tx: any) => {
       const channelResult = await tx.execute(sql`
         select "id"
         from "Channel"

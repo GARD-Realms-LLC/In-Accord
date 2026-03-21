@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { ensureLegacyServerBannerPointersImported } from "@/lib/legacy-banner-db-migration";
+import { ensureSchemaInitialized } from "@/lib/schema-init-state";
 
 export type BannerFitMode = "cover" | "contain" | "scale";
 
@@ -11,54 +12,46 @@ export interface ServerBannerConfig {
   scale: number;
 }
 
-declare global {
-  // eslint-disable-next-line no-var
-  var inAccordServerBannerSchemaReady: boolean | undefined;
-}
-
 const ensureServerBannerSchema = async () => {
-  if (globalThis.inAccordServerBannerSchemaReady) {
-    return;
-  }
+  await ensureSchemaInitialized("server-banner-schema", async () => {
+    await db.execute(sql`
+      create table if not exists "ServerBanner" (
+        "serverId" varchar(191) primary key,
+        "url" text,
+        "fit" varchar(20) not null default 'cover',
+        "scale" double precision not null default 1,
+        "createdAt" timestamp not null default CURRENT_TIMESTAMP,
+        "updatedAt" timestamp not null default CURRENT_TIMESTAMP
+      )
+    `);
 
-  await db.execute(sql`
-    create table if not exists "ServerBanner" (
-      "serverId" varchar(191) primary key,
-      "url" text,
-      "fit" varchar(20) not null default 'cover',
-      "scale" double precision not null default 1,
-      "createdAt" timestamp not null default now(),
-      "updatedAt" timestamp not null default now()
-    )
-  `);
+    await db.execute(sql`
+      alter table "ServerBanner"
+      add column if not exists "url" text
+    `);
 
-  await db.execute(sql`
-    alter table "ServerBanner"
-    add column if not exists "url" text
-  `);
+    await db.execute(sql`
+      alter table "ServerBanner"
+      add column if not exists "fit" varchar(20) not null default 'cover'
+    `);
 
-  await db.execute(sql`
-    alter table "ServerBanner"
-    add column if not exists "fit" varchar(20) not null default 'cover'
-  `);
+    await db.execute(sql`
+      alter table "ServerBanner"
+      add column if not exists "scale" double precision not null default 1
+    `);
 
-  await db.execute(sql`
-    alter table "ServerBanner"
-    add column if not exists "scale" double precision not null default 1
-  `);
+    await db.execute(sql`
+      alter table "ServerBanner"
+      add column if not exists "createdAt" timestamp not null default CURRENT_TIMESTAMP
+    `);
 
-  await db.execute(sql`
-    alter table "ServerBanner"
-    add column if not exists "createdAt" timestamp not null default now()
-  `);
+    await db.execute(sql`
+      alter table "ServerBanner"
+      add column if not exists "updatedAt" timestamp not null default CURRENT_TIMESTAMP
+    `);
 
-  await db.execute(sql`
-    alter table "ServerBanner"
-    add column if not exists "updatedAt" timestamp not null default now()
-  `);
-
-  await ensureLegacyServerBannerPointersImported();
-  globalThis.inAccordServerBannerSchemaReady = true;
+    await ensureLegacyServerBannerPointersImported();
+  });
 };
 
 const normalizeScale = (value?: number) => {

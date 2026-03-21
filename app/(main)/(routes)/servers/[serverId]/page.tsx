@@ -14,6 +14,13 @@ interface ServerIdPageProps {
   }>;
 }
 
+type ServerChannelRow = {
+  id: string;
+  name: string;
+  type: ChannelType;
+  createdAt: Date;
+};
+
 const ServerIdPage = async ({ params }: ServerIdPageProps) => {
   const { serverId: serverParam } = await params;
 
@@ -68,7 +75,7 @@ const ServerIdPage = async ({ params }: ServerIdPageProps) => {
     .limit(1);
   const memberContext = await resolveMemberContext({ profileId: profile.id, serverId });
 
-  const serverChannels = await db
+  const serverChannels: ServerChannelRow[] = await db
     .select({ id: channel.id, name: channel.name, type: channel.type, createdAt: channel.createdAt })
     .from(channel)
     .where(eq(channel.serverId, serverId))

@@ -43,12 +43,12 @@ export async function GET(
         s."createdAt" as "createdAt",
         s."updatedAt" as "updatedAt",
         (
-          select count(*)::int
+        select count(*)
           from "Member" m
           where m."serverId" = s."id"
         ) as "memberCount",
         (
-          select count(*)::int
+        select count(*)
           from "Channel" c
           where c."serverId" = s."id"
         ) as "channelCount"
@@ -78,7 +78,12 @@ export async function GET(
       return new NextResponse("Not found", { status: 404 });
     }
 
-    const bannerConfig = await getServerBannerConfig(serverId);
+    let bannerConfig: Awaited<ReturnType<typeof getServerBannerConfig>> | null = null;
+    try {
+      bannerConfig = await getServerBannerConfig(serverId);
+    } catch (error) {
+      console.error("[SERVER_PROFILE_CARD_BANNER]", serverId, error);
+    }
 
     return NextResponse.json({
       id: row.id,

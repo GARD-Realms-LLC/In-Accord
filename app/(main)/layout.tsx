@@ -22,13 +22,7 @@ const MainLayout = async ({ children }: { children: React.ReactNode }) => {
   }
 
   return (
-    <div
-      className="h-full"
-      style={{
-        ["--inaccord-footer-clock-width" as any]:
-          "clamp(10.5rem, calc(100vw - var(--inaccord-chat-left-edge, 364px) - 40rem), 18rem)",
-      }}
-    >
+    <div className="h-full">
       <LastLocationTracker />
       <div className="fixed bottom-23.5 left-0 top-0 z-50 flex w-27 flex-col">
         <NavigationSidebar />
@@ -53,10 +47,7 @@ const MainLayout = async ({ children }: { children: React.ReactNode }) => {
         profileJoinedAt={profile.createdAt ? profile.createdAt.toISOString() : null}
         profileLastLogonAt={profile.updatedAt ? profile.updatedAt.toISOString() : null}
       />
-      <aside
-        className="fixed bottom-2 right-0 z-30 flex h-21 items-center justify-center px-2 pb-2"
-        style={{ width: "var(--inaccord-footer-clock-width, 18rem)" }}
-      >
+      <aside className="fixed bottom-2 right-0 z-30 flex h-21 w-72 items-center justify-center px-2 pb-2">
         <UserLocalTime />
       </aside>
       <main className="h-full pl-27">{children}</main>

@@ -17,7 +17,7 @@ type RecentLoginRow = {
   lastLogin: Date | string | null;
 };
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const profile = await currentProfile();
 
@@ -33,9 +33,9 @@ export async function GET() {
 
     const summaryResult = await db.execute(sql`
       select
-        (select count(*)::int from "Users") as "totalUsers",
+        (select count(*) from "Users") as "totalUsers",
         (
-          select count(*)::int
+          select count(*)
           from "Users" u
           where upper(trim(coalesce(u."role", ''))) in (
             'MODERATOR',
@@ -43,17 +43,17 @@ export async function GET() {
           )
         ) as "adminUsers",
         (
-          select count(*)::int
+          select count(*)
           from "Users" u
           where u."lastLogin" is null
         ) as "neverLoggedIn",
         (
-          select count(*)::int
+          select count(*)
           from "Users" u
-          where u."lastLogin" is null or u."lastLogin" < now() - interval '30 days'
+          where u."lastLogin" is null or u."lastLogin" < datetime('now', '-30 days')
         ) as "inactive30d",
         (
-          select count(*)::int
+          select count(*)
           from "Server" s
           left join "Users" u on u."userId" = s."profileId"
           where s."profileId" is null or u."userId" is null
@@ -79,7 +79,7 @@ export async function GET() {
         u."lastLogin" as "lastLogin"
       from "Users" u
       left join "UserProfile" up on up."userId" = u."userId"
-      order by u."lastLogin" desc nulls last
+      order by u."lastLogin" desc
       limit 25
     `);
 
@@ -103,6 +103,21 @@ export async function GET() {
     });
   } catch (error) {
     console.error("[ADMIN_SECURITY_GET]", error);
+
+    if (new URL(request.url).searchParams.get("debug") === "1") {
+      return NextResponse.json(
+        {
+          ok: false,
+          message: error instanceof Error ? error.message : String(error),
+          stack:
+            error instanceof Error
+              ? error.stack?.split("\n").slice(0, 12) ?? []
+              : [],
+        },
+        { status: 500 },
+      );
+    }
+
     return new NextResponse("Internal Error", { status: 500 });
   }
 }

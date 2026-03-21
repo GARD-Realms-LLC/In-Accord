@@ -39,10 +39,11 @@ const MemberIdPage = async ({
   const resolvedServer = await resolveServerRouteContext({
     profileId: profile.id,
     serverParam,
+    profileRole: profile.role,
   });
 
   if (!resolvedServer) {
-    return redirect("/");
+    return redirect("/servers");
   }
 
   const serverId = resolvedServer.id;
@@ -56,7 +57,7 @@ const MemberIdPage = async ({
   });
 
   if (!currentMember) {
-    return redirect("/");
+    return redirect(serverPath);
   }
 
   const targetMemberResult = await db.execute(sql`

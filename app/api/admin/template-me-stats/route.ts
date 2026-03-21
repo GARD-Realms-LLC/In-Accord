@@ -218,11 +218,11 @@ export async function GET(req: Request) {
       : [];
 
     const attachedServers = attachedRows
-      .map((row) => ({
+      .map((row: { id: string | null; name: string | null }) => ({
         id: String(row.id ?? "").trim(),
         name: String(row.name ?? "").trim() || String(row.id ?? "").trim(),
       }))
-      .filter((row) => row.id.length > 0);
+      .filter((row: ServerUsageRow) => row.id.length > 0);
 
     let statsServers: ServerUsageRow[] = [];
 
@@ -237,11 +237,11 @@ export async function GET(req: Request) {
         .where(inArray(server.id, serverIdsFromStats));
 
       statsServers = rows
-        .map((row) => ({
+        .map((row: { id: string | null; name: string | null }) => ({
           id: String(row.id ?? "").trim(),
           name: String(row.name ?? "").trim() || String(row.id ?? "").trim(),
         }))
-        .filter((row) => row.id.length > 0);
+        .filter((row: ServerUsageRow) => row.id.length > 0);
     }
 
     const mergedServerMap = new Map<string, ServerUsageRow>();
@@ -287,8 +287,8 @@ export async function GET(req: Request) {
       inner join "Users" u on u."userId" = m."profileId"
       inner join "Server" s on s."id" = m."serverId"
       where
-        lower(coalesce(u."name", '')) like '%template%'
-        and lower(coalesce(u."name", '')) like '%bot%'
+        regexp_replace(lower(coalesce(u."name", '')), '\\s+', ' ', 'g') like '%template%'
+        and regexp_replace(lower(coalesce(u."name", '')), '\\s+', ' ', 'g') like '%bot%'
     `);
 
     const globalRows = (globalTemplateBotMembershipRows as unknown as {
@@ -367,14 +367,14 @@ export async function GET(req: Request) {
           templateBotIdSuffixes,
           botProfileIds,
           statsServerIds: serverIdsFromStats,
-          attachedServerIds: attachedServers.map((entry) => entry.id),
+          attachedServerIds: attachedServers.map((entry: ServerUsageRow) => entry.id),
           runtimeGuildIds: Array.from(runtimeGuildMap.keys()),
           runtimeGuildSourceBots,
           globalServerIds,
           genericBotcfgServerIds,
           suffixMatchedProfileIds,
           suffixMatchedServerIds,
-          mergedServerIds: serversUsingTemplates.map((entry) => entry.id),
+          mergedServerIds: serversUsingTemplates.map((entry: ServerUsageRow) => entry.id),
         },
       },
       {

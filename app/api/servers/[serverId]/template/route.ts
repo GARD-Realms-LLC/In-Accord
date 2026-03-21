@@ -924,7 +924,7 @@ export async function POST(req: Request, { params }: Params) {
     await ensureChannelOtherSettingsSchema();
     await ensureChannelPermissionSchema();
 
-    const importResult = await db.transaction(async (tx) => {
+    const importResult = await db.transaction(async (tx: any) => {
       if (replaceChannels) {
         await tx.execute(sql`
           delete from "ChannelPermission"

@@ -128,7 +128,7 @@ export const pruneStaleVoiceStates = async ({
 
   await db.execute(sql`
     delete from "VoiceState"
-    where "updatedAt" < now() - (${maxAgeSeconds} * interval '1 second')
+    where "updatedAt" < datetime(CURRENT_TIMESTAMP, '-' || ${maxAgeSeconds} || ' seconds')
   `);
 };
 
@@ -243,7 +243,7 @@ export const getMemberVoiceState = async ({
     from "VoiceState" vs
     where vs."serverId" = ${serverId}
       and vs."memberId" = ${memberId}
-      and vs."updatedAt" >= now() - (${maxAgeSeconds} * interval '1 second')
+      and vs."updatedAt" >= datetime(CURRENT_TIMESTAMP, '-' || ${maxAgeSeconds} || ' seconds')
     limit 1
   `);
 
@@ -282,7 +282,7 @@ export const listActiveVoiceMembersForChannel = async ({
     left join "UserProfile" up on up."userId" = m."profileId"
     where vs."serverId" = ${serverId}
       and vs."channelId" = ${channelId}
-      and vs."updatedAt" >= now() - (${maxAgeSeconds} * interval '1 second')
+      and vs."updatedAt" >= datetime(CURRENT_TIMESTAMP, '-' || ${maxAgeSeconds} || ' seconds')
     order by vs."connectedAt" asc
   `);
 
@@ -317,10 +317,10 @@ export const listActiveVoiceCountsForServer = async ({
   const result = await db.execute(sql`
     select
       vs."channelId" as "channelId",
-      count(*)::int as "connectedCount"
+      count(*) as "connectedCount"
     from "VoiceState" vs
     where vs."serverId" = ${serverId}
-      and vs."updatedAt" >= now() - (${maxAgeSeconds} * interval '1 second')
+      and vs."updatedAt" >= datetime(CURRENT_TIMESTAMP, '-' || ${maxAgeSeconds} || ' seconds')
     group by vs."channelId"
   `);
 

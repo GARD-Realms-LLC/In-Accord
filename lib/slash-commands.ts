@@ -1,6 +1,6 @@
-import { and, eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
-import { db, member, server } from "@/lib/db";
+import { db } from "@/lib/db";
 import { canManageChannelMessages, resolveMemberContext } from "@/lib/channel-permissions";
 import { makeIntegrationBotProfileId } from "@/lib/integration-bot-profile";
 import { bulkDeleteChannelMessages } from "@/lib/message-bulk-delete";
@@ -27,6 +27,13 @@ export type SlashCommandDefinition = {
 type BotMemberRow = {
   memberId: string;
   profileId: string;
+};
+
+type ServerRow = {
+  id: string;
+  name: string | null;
+  profileId: string;
+  imageUrl: string | null;
 };
 
 const slugifyCommand = (value: string) =>
@@ -88,6 +95,39 @@ const dedupeCommands = (items: SlashCommandDefinition[]) => {
   return next;
 };
 
+const getServerById = async (serverId: string): Promise<ServerRow | null> => {
+  const result = await db.execute(sql`
+    select
+      s."id" as "id",
+      s."name" as "name",
+      s."profileId" as "profileId",
+      s."imageUrl" as "imageUrl"
+    from "Server" s
+    where trim(s."id") = trim(${serverId})
+    limit 1
+  `);
+
+  const row = ((result as unknown as {
+    rows?: Array<{
+      id: string | null;
+      name: string | null;
+      profileId: string | null;
+      imageUrl: string | null;
+    }>;
+  }).rows ?? [])[0];
+
+  if (!row?.id || !row.profileId) {
+    return null;
+  }
+
+  return {
+    id: String(row.id).trim(),
+    name: row.name ?? null,
+    profileId: String(row.profileId).trim(),
+    imageUrl: row.imageUrl ?? null,
+  };
+};
+
 export const listServerSlashCommands = async (
   serverId: string,
   options?: { channelId?: string | null }
@@ -97,9 +137,7 @@ export const listServerSlashCommands = async (
     return [];
   }
 
-  const targetServer = await db.query.server.findFirst({
-    where: eq(server.id, normalizedServerId),
-  });
+  const targetServer = await getServerById(normalizedServerId);
 
   if (!targetServer) {
     return [];
@@ -337,9 +375,7 @@ export const executeServerSlashCommand = async ({
       };
     }
 
-    const targetServer = await db.query.server.findFirst({
-      where: eq(server.id, serverId),
-    });
+    const targetServer = await getServerById(serverId);
 
     if (!targetServer) {
       return {
@@ -547,9 +583,17 @@ export const hasServerMembership = async ({
   serverId: string;
   profileId: string;
 }) => {
-  const currentMember = await db.query.member.findFirst({
-    where: and(eq(member.serverId, serverId), eq(member.profileId, profileId)),
-  });
+  const result = await db.execute(sql`
+    select m."id" as "id"
+    from "Member" m
+    where trim(m."serverId") = trim(${serverId})
+      and trim(m."profileId") = trim(${profileId})
+    limit 1
+  `);
 
-  return Boolean(currentMember);
+  return Boolean(
+    ((result as unknown as {
+      rows?: Array<{ id: string | null }>;
+    }).rows ?? [])[0]?.id
+  );
 };

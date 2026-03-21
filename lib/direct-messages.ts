@@ -114,9 +114,9 @@ export const getGlobalRecentDmsForProfile = async ({
       coalesce(nullif(trim(up."profileName"), ''), u."name", u."email", 'User') as "displayName",
       coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
       up."avatarDecorationUrl" as "avatarDecorationUrl",
-      u."account.created" as "profileCreatedAt",
+        u.[account.created] as "profileCreatedAt",
       coalesce(max(dm."createdAt"), now()) as "lastMessageAt",
-      0::integer as "unreadCount"
+      0 as "unreadCount"
     from conversations_with_other cwo
     inner join inbound_conversations ic on ic."conversationId" = cwo."conversationId"
     inner join "Member" om on om."id" = cwo."otherMemberId"
@@ -132,8 +132,8 @@ export const getGlobalRecentDmsForProfile = async ({
       coalesce(nullif(trim(up."profileName"), ''), u."name", u."email", 'User'),
       coalesce(u."avatarUrl", u."avatar", u."icon"),
       up."avatarDecorationUrl",
-      u."account.created"
-    order by max(dm."createdAt") desc nulls last
+        u.[account.created]
+    order by "lastMessageAt" desc
     limit 50
   `);
 

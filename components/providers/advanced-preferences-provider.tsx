@@ -88,14 +88,6 @@ const applyAdvancedPreferencesToDocument = (preferences: AdvancedPreferences) =>
   }
 };
 
-const isDesktopShell = () => {
-  if (typeof window === "undefined") {
-    return false;
-  }
-
-  return typeof (window as Window & { electronAPI?: unknown }).electronAPI === "object";
-};
-
 export const AdvancedPreferencesProvider = () => {
   const [advancedPreferences, setAdvancedPreferences] = useState<AdvancedPreferences>({
     ...defaultAdvancedPreferences,
@@ -174,7 +166,7 @@ export const AdvancedPreferencesProvider = () => {
   }, []);
 
   useEffect(() => {
-    if (!confirmBeforeQuitEnabled || isDesktopShell()) {
+    if (!confirmBeforeQuitEnabled) {
       return;
     }
 

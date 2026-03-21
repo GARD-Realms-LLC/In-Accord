@@ -72,7 +72,7 @@ export async function PATCH(req: Request) {
       }
     }
 
-    await db.transaction(async (tx) => {
+    await db.transaction(async (tx: any) => {
       for (let i = 0; i < orderedGroupIds.length; i += 1) {
         const groupId = orderedGroupIds[i];
         await tx.execute(sql`

@@ -45,7 +45,7 @@ export async function POST(req: Request) {
   await ensureAnnouncementChannelSchema();
     await ensureSystemChannelSchema();
 
-    await db.transaction(async (tx) => {
+    await db.transaction(async (tx: any) => {
       const resolvedImageUrl =
         normalizedImageUrl
           ? normalizedImageUrl

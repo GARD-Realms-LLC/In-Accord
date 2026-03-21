@@ -38,10 +38,15 @@ export const NavigationSidebar = async () => {
       s."profileId" as "profileId",
       s."createdAt" as "createdAt",
       s."updatedAt" as "updatedAt"
-    from "Member" m
-    inner join "Server" s on s."id" = m."serverId"
-    where m."profileId" = ${profile.id}
-    order by "createdAt" asc
+    from "Server" s
+    where s."profileId" = ${profile.id}
+       or exists (
+         select 1
+         from "Member" m
+         where m."serverId" = s."id"
+           and m."profileId" = ${profile.id}
+       )
+    order by s."createdAt" asc
   `);
 
   const servers = (
@@ -152,8 +157,8 @@ export const NavigationSidebar = async () => {
   if (canSeeAdminTotalsButtons) {
     const totalsResult = await db.execute(sql`
       select
-        (select count(*)::int from "Users") as "totalMembers",
-        (select count(*)::int from "Server") as "totalServers"
+        (select count(*) from "Users") as "totalMembers",
+        (select count(*) from "Server") as "totalServers"
     `);
 
     const totalsRow = (totalsResult as unknown as {
@@ -169,14 +174,22 @@ export const NavigationSidebar = async () => {
     try {
       const reportTotalsResult = await db.execute(sql`
         select
-          count(*) filter (
-            where coalesce(r."targetType", '') = 'BUG'
-              and coalesce(r."status", '') in ('OPEN', 'IN_REVIEW')
-          )::int as "openBugCount",
-          count(*) filter (
-            where coalesce(r."targetType", '') <> 'BUG'
-              and coalesce(r."status", '') in ('OPEN', 'IN_REVIEW')
-          )::int as "openReportCount"
+          coalesce(sum(
+            case
+              when coalesce(r."targetType", '') = 'BUG'
+               and coalesce(r."status", '') in ('OPEN', 'IN_REVIEW')
+              then 1
+              else 0
+            end
+          ), 0) as "openBugCount",
+          coalesce(sum(
+            case
+              when coalesce(r."targetType", '') <> 'BUG'
+               and coalesce(r."status", '') in ('OPEN', 'IN_REVIEW')
+              then 1
+              else 0
+            end
+          ), 0) as "openReportCount"
         from "Report" r
       `);
 
@@ -222,13 +235,21 @@ export const NavigationSidebar = async () => {
         )
     )
     select
-      count(*)::int as "friendedCount",
-      count(*) filter (
-        where upper(trim(coalesce(up."presenceStatus", 'OFFLINE'))) not in ('OFFLINE', 'INVISIBLE')
-      )::int as "onlineFriendedCount",
-      count(*) filter (
-        where upper(trim(coalesce(up."presenceStatus", 'OFFLINE'))) in ('OFFLINE', 'INVISIBLE')
-      )::int as "offlineFriendedCount"
+      count(*) as "friendedCount",
+      coalesce(sum(
+        case
+          when upper(trim(coalesce(up."presenceStatus", 'OFFLINE'))) not in ('OFFLINE', 'INVISIBLE')
+          then 1
+          else 0
+        end
+      ), 0) as "onlineFriendedCount",
+      coalesce(sum(
+        case
+          when upper(trim(coalesce(up."presenceStatus", 'OFFLINE'))) in ('OFFLINE', 'INVISIBLE')
+          then 1
+          else 0
+        end
+      ), 0) as "offlineFriendedCount"
     from accepted_friend_profiles afp
     left join "UserProfile" up on up."userId" = afp."friendProfileId"
     where afp."friendProfileId" is not null

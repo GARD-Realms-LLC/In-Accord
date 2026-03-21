@@ -97,7 +97,7 @@ export const listUnreadChannelIds = async ({
           where crs."channelId" = ${message.channelId}
             and crs."profileId" = ${profileId}
           limit 1
-        ), timestamp 'epoch')`
+        ), datetime(0, 'unixepoch'))`
       )
     )
     .groupBy(message.channelId);

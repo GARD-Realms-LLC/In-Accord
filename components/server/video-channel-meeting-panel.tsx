@@ -181,7 +181,6 @@ const WEBRTC_MAX_SIMULTANEOUS_REMOTE_VIDEO_PEERS = parsePositiveInteger(
   process.env.NEXT_PUBLIC_WEBRTC_MAX_SIMULTANEOUS_REMOTE_VIDEO_PEERS,
   6
 );
-const WEBRTC_TRANSPORT_STALL_MS = 12000;
 const WEBRTC_HAS_TURN = WEBRTC_ICE_SERVERS.some((server) => {
   const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
   return urls.some((value) => /^(turn|turns):/i.test(String(value ?? "").trim()));
@@ -284,13 +283,10 @@ export const VideoChannelMeetingPanel = ({
   const remoteStreamsRef = useRef<Map<string, MediaStream>>(new Map());
   const pendingSignalsRef = useRef<Map<string, WebRtcSignalPayload["signal"][]>>(new Map());
   const emitSignalRef = useRef<(targetProfileId: string, signal: WebRtcSignalPayload["signal"]) => void>(() => {});
+  const requestRemoteOfferRef = useRef<(remoteProfileId: string, minimumIntervalMs?: number) => boolean>(() => false);
   const cleanupPeerRef = useRef<(remoteProfileId: string, options?: { preserveResetCooldown?: boolean }) => void>(
     () => {}
   );
-  const requestRemoteOfferRef = useRef<(remoteProfileId: string, minimumIntervalMs?: number) => boolean>(() => false);
-  const schedulePeerNegotiationRef = useRef<
-    (remoteProfileId: string, peerConnection: RTCPeerConnection, minimumIntervalMs?: number) => boolean | void
-  >(() => false);
   const syncLocalTracksRef = useRef<(remoteProfileId: string, peerConnection: RTCPeerConnection) => Promise<void>>(
     async () => {}
   );
@@ -309,7 +305,6 @@ export const VideoChannelMeetingPanel = ({
   const pendingRenegotiateRef = useRef<Map<string, boolean>>(new Map());
   const lastPeerTraceStatsRef = useRef<Map<string, PeerTraceStats>>(new Map());
   const peerSignalDebugRef = useRef<Map<string, PeerSignalDebug>>(new Map());
-  const lastPeerTransportProgressAtRef = useRef<Map<string, number>>(new Map());
   const subscribedRemoteProfileIdsRef = useRef<Set<string>>(new Set());
   const localMediaStreamRef = useRef<MediaStream | null>(null);
   const lastLocalVideoTrackTokenRef = useRef<string | null>(null);
@@ -330,7 +325,6 @@ export const VideoChannelMeetingPanel = ({
   >({});
   const [, setPeerSignalDebugTick] = useState(0);
   const [peerRecoveryTick, setPeerRecoveryTick] = useState(0);
-  const [relayBlockedPeers, setRelayBlockedPeers] = useState<Record<string, boolean>>({});
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isCameraEnabled, setIsCameraEnabled] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -346,11 +340,6 @@ export const VideoChannelMeetingPanel = ({
 
   const isMeetingCreator = Boolean(meetingCreatorProfileId && meetingCreatorProfileId === currentProfileId);
   const connectedMembersView = liveConnectedMembers;
-  const shouldCurrentPeerCreateOffer = (remoteProfileId: string) => {
-    // Keep the initial/recovery offerer deterministic so camera-enabled peers
-    // don't both race into parallel offers and strand the transport at "stable".
-    return shouldInitiateInitialOffer(currentProfileId, remoteProfileId);
-  };
 
   useEffect(() => {
     setLiveConnectedMembers(connectedMembers);
@@ -628,10 +617,6 @@ export const VideoChannelMeetingPanel = ({
 
           if (videoTrack) {
             videoTrack.onended = () => {
-              if (cancelled) {
-                return;
-              }
-
               setCaptureIntent("none");
               syncStreamingState(false, null);
             };
@@ -642,10 +627,6 @@ export const VideoChannelMeetingPanel = ({
           setCaptureIntent("camera");
           if (videoTrack) {
             videoTrack.onended = () => {
-              if (cancelled) {
-                return;
-              }
-
               setCaptureIntent("none");
               syncCameraState(false);
             };
@@ -660,10 +641,6 @@ export const VideoChannelMeetingPanel = ({
           return stream;
         });
       } catch {
-        if (cancelled) {
-          return;
-        }
-
         if (captureIntent === "stream") {
           syncStreamingState(false, null);
         } else {
@@ -682,8 +659,12 @@ export const VideoChannelMeetingPanel = ({
 
     return () => {
       cancelled = true;
-      localMediaStreamRef.current?.getTracks().forEach((track) => track.stop());
-      localMediaStreamRef.current = null;
+      setLocalMediaStream((existing) => {
+        if (existing) {
+          existing.getTracks().forEach((track) => track.stop());
+        }
+        return null;
+      });
     };
   }, [canConnect, captureIntent, isLiveSession, VOICE_TOGGLE_STREAM_EVENT]);
 
@@ -1017,18 +998,10 @@ export const VideoChannelMeetingPanel = ({
 
     const updatePeerStatus = (remoteProfileId: string, peerConnection: RTCPeerConnection) => {
       const hasRemoteVideo = Boolean(
-        remoteStreamsRef.current
-          .get(remoteProfileId)
-          ?.getVideoTracks()
-          .some((track) => track.readyState !== "ended" && !track.muted) ??
+        remoteStreamsRef.current.get(remoteProfileId)?.getVideoTracks().some((track) => track.readyState !== "ended") ??
           peerConnection
             .getReceivers()
-            .some(
-              (receiver) =>
-                receiver.track?.kind === "video" &&
-                receiver.track.readyState !== "ended" &&
-                !receiver.track.muted
-            )
+            .some((receiver) => receiver.track?.kind === "video" && receiver.track.readyState !== "ended")
       );
 
       setPeerStatuses((current) => {
@@ -1083,18 +1056,8 @@ export const VideoChannelMeetingPanel = ({
       pendingRenegotiateRef.current.delete(remoteProfileId);
       lastPeerTraceStatsRef.current.delete(remoteProfileId);
       peerSignalDebugRef.current.delete(remoteProfileId);
-      lastPeerTransportProgressAtRef.current.delete(remoteProfileId);
       remoteStreamsRef.current.delete(remoteProfileId);
       setPeerSignalDebugTick((value) => value + 1);
-      setRelayBlockedPeers((current) => {
-        if (!(remoteProfileId in current)) {
-          return current;
-        }
-
-        const next = { ...current };
-        delete next[remoteProfileId];
-        return next;
-      });
       setPeerTelemetry((current) => {
         if (!(remoteProfileId in current)) {
           return current;
@@ -1124,10 +1087,6 @@ export const VideoChannelMeetingPanel = ({
       });
     };
 
-    const markPeerTransportProgress = (remoteProfileId: string) => {
-      lastPeerTransportProgressAtRef.current.set(remoteProfileId, Date.now());
-    };
-
     const emitSignal = (targetProfileId: string, signal: WebRtcSignalPayload["signal"]) => {
       const currentSignalDebug = peerSignalDebugRef.current.get(targetProfileId) ?? {
         inboundSignals: 0,
@@ -1149,6 +1108,7 @@ export const VideoChannelMeetingPanel = ({
         lastOutboundAt: Date.now(),
       });
       setPeerSignalDebugTick((value) => value + 1);
+
       const socket = socketRef.current;
       if (!socket || !socketConnectedRef.current) {
         const pendingSignals = pendingSignalsRef.current.get(targetProfileId) ?? [];
@@ -1178,25 +1138,12 @@ export const VideoChannelMeetingPanel = ({
       emitSignal(remoteProfileId, { renegotiate: true });
       return true;
     };
-    requestRemoteOfferRef.current = requestRemoteOffer;
-
-    const schedulePeerNegotiation = (
-      remoteProfileId: string,
-      peerConnection: RTCPeerConnection,
-      minimumIntervalMs?: number
-    ) => {
-      if (shouldCurrentPeerCreateOffer(remoteProfileId)) {
-        void renegotiatePeer(remoteProfileId, peerConnection);
-        return true;
-      }
-
-      return requestRemoteOffer(remoteProfileId, minimumIntervalMs);
-    };
-    schedulePeerNegotiationRef.current = schedulePeerNegotiation;
 
     const syncLocalTracks = async (remoteProfileId: string, peerConnection: RTCPeerConnection) => {
       const localStream = localMediaStreamRef.current;
       const localVideoTrack = localStream?.getVideoTracks()[0] ?? null;
+      const shouldInitiateOffer = shouldInitiateInitialOffer(currentProfileId, remoteProfileId);
+
       const existingTransceivers = peerConnection.getTransceivers();
       let videoTransceiver = peerVideoTransceiversRef.current.get(remoteProfileId);
 
@@ -1213,6 +1160,10 @@ export const VideoChannelMeetingPanel = ({
       }
 
       if (!videoTransceiver) {
+        if (!shouldInitiateOffer && !peerConnection.remoteDescription) {
+          return;
+        }
+
         videoTransceiver = peerConnection.addTransceiver("video", {
           direction: localVideoTrack ? "sendrecv" : "recvonly",
         });
@@ -1323,14 +1274,12 @@ export const VideoChannelMeetingPanel = ({
         return existing;
       }
 
-      const peerConnection = new RTCPeerConnection({
-        iceServers: WEBRTC_ICE_SERVERS,
-        iceCandidatePoolSize: 4,
-      });
+      const peerConnection = new RTCPeerConnection({ iceServers: WEBRTC_ICE_SERVERS });
       peerConnectionsRef.current.set(remoteProfileId, peerConnection);
-      markPeerTransportProgress(remoteProfileId);
-      const videoTransceiver = peerConnection.addTransceiver("video", { direction: "recvonly" });
-      peerVideoTransceiversRef.current.set(remoteProfileId, videoTransceiver);
+      if (shouldInitiateInitialOffer(currentProfileId, remoteProfileId)) {
+        const videoTransceiver = peerConnection.addTransceiver("video", { direction: "recvonly" });
+        peerVideoTransceiversRef.current.set(remoteProfileId, videoTransceiver);
+      }
       ignoreOfferRef.current.set(remoteProfileId, false);
       makingOfferRef.current.set(remoteProfileId, false);
       settingRemoteAnswerPendingRef.current.set(remoteProfileId, false);
@@ -1346,10 +1295,6 @@ export const VideoChannelMeetingPanel = ({
       };
 
       peerConnection.ontrack = (event) => {
-        if (disposed) {
-          return;
-        }
-
         const [eventStream] = event.streams;
         const stream = eventStream ?? (() => {
           const existing = remoteStreamsRef.current.get(remoteProfileId) ?? new MediaStream();
@@ -1364,55 +1309,10 @@ export const VideoChannelMeetingPanel = ({
           ...current,
           [remoteProfileId]: stream,
         }));
-        markPeerTransportProgress(remoteProfileId);
         updatePeerStatusRef.current(remoteProfileId, peerConnection);
-
-        event.track.onunmute = () => {
-          if (disposed) {
-            return;
-          }
-
-          markPeerTransportProgress(remoteProfileId);
-          setRemoteStreams((current) => ({
-            ...current,
-            [remoteProfileId]: stream,
-          }));
-          updatePeerStatusRef.current(remoteProfileId, peerConnection);
-        };
-
-        event.track.onmute = () => {
-          if (disposed) {
-            return;
-          }
-
-          setRemoteStreams((current) => ({
-            ...current,
-            [remoteProfileId]: stream,
-          }));
-          updatePeerStatusRef.current(remoteProfileId, peerConnection);
-        };
-
-        event.track.onended = () => {
-          if (disposed) {
-            return;
-          }
-
-          try {
-            stream.removeTrack(event.track);
-          } catch {
-            // Ignore remove failures and still refresh the transport state.
-          }
-
-          setRemoteStreams((current) => ({
-            ...current,
-            [remoteProfileId]: stream,
-          }));
-          updatePeerStatusRef.current(remoteProfileId, peerConnection);
-        };
       };
 
       peerConnection.onconnectionstatechange = () => {
-        markPeerTransportProgress(remoteProfileId);
         updatePeerStatusRef.current(remoteProfileId, peerConnection);
 
         if (peerConnection.connectionState === "closed") {
@@ -1421,7 +1321,6 @@ export const VideoChannelMeetingPanel = ({
       };
 
       peerConnection.oniceconnectionstatechange = () => {
-        markPeerTransportProgress(remoteProfileId);
         updatePeerStatusRef.current(remoteProfileId, peerConnection);
 
         if (["connected", "completed"].includes(peerConnection.iceConnectionState)) {
@@ -1439,13 +1338,18 @@ export const VideoChannelMeetingPanel = ({
 
         iceRestartAttemptedRef.current.set(remoteProfileId, true);
 
-        try {
-          peerConnection.restartIce();
-        } catch {
-          // browser support varies; renegotiation below still retries transport setup
+        if (shouldInitiateInitialOffer(currentProfileId, remoteProfileId)) {
+          try {
+            peerConnection.restartIce();
+          } catch {
+            // browser support varies; renegotiation below still retries transport setup
+          }
+
+          void renegotiatePeerRef.current(remoteProfileId, peerConnection);
+          return;
         }
 
-        void schedulePeerNegotiation(remoteProfileId, peerConnection);
+        emitSignalRef.current(remoteProfileId, { renegotiate: true });
       };
 
       updatePeerStatus(remoteProfileId, peerConnection);
@@ -1454,6 +1358,7 @@ export const VideoChannelMeetingPanel = ({
     };
 
     emitSignalRef.current = emitSignal;
+    requestRemoteOfferRef.current = requestRemoteOffer;
     cleanupPeerRef.current = cleanupPeer;
     syncLocalTracksRef.current = syncLocalTracks;
     ensurePeerConnectionRef.current = ensurePeerConnection;
@@ -1531,9 +1436,7 @@ export const VideoChannelMeetingPanel = ({
 
       try {
         if (incomingRenegotiate) {
-          if (shouldCurrentPeerCreateOffer(remoteProfileId)) {
-            await renegotiatePeerRef.current(remoteProfileId, peerConnection);
-          }
+          await renegotiatePeerRef.current(remoteProfileId, peerConnection);
           return;
         }
 
@@ -1565,7 +1468,7 @@ export const VideoChannelMeetingPanel = ({
 
             if (pendingRenegotiateRef.current.get(remoteProfileId) && peerConnection.signalingState === "stable") {
               pendingRenegotiateRef.current.set(remoteProfileId, false);
-              void schedulePeerNegotiation(remoteProfileId, peerConnection);
+              void renegotiatePeerRef.current(remoteProfileId, peerConnection);
             }
 
             if (peerConnection.localDescription) {
@@ -1582,7 +1485,7 @@ export const VideoChannelMeetingPanel = ({
 
             if (pendingRenegotiateRef.current.get(remoteProfileId) && peerConnection.signalingState === "stable") {
               pendingRenegotiateRef.current.set(remoteProfileId, false);
-              void schedulePeerNegotiation(remoteProfileId, peerConnection);
+              void renegotiatePeerRef.current(remoteProfileId, peerConnection);
             }
           } else {
             ignoreOfferRef.current.set(remoteProfileId, false);
@@ -1594,7 +1497,7 @@ export const VideoChannelMeetingPanel = ({
 
             if (pendingRenegotiateRef.current.get(remoteProfileId) && peerConnection.signalingState === "stable") {
               pendingRenegotiateRef.current.set(remoteProfileId, false);
-              void schedulePeerNegotiation(remoteProfileId, peerConnection);
+              void renegotiatePeerRef.current(remoteProfileId, peerConnection);
             }
           }
         } else if (incomingCandidate) {
@@ -1645,12 +1548,11 @@ export const VideoChannelMeetingPanel = ({
       flushPendingSignals();
 
       for (const [remoteProfileId, peerConnection] of Array.from(peerConnectionsRef.current.entries())) {
-        if (shouldCurrentPeerCreateOffer(remoteProfileId)) {
-          void renegotiatePeer(remoteProfileId, peerConnection);
+        if (!shouldInitiateInitialOffer(currentProfileId, remoteProfileId)) {
           continue;
         }
 
-        requestRemoteOffer(remoteProfileId);
+        void renegotiatePeer(remoteProfileId, peerConnection);
       }
     };
 
@@ -1694,12 +1596,9 @@ export const VideoChannelMeetingPanel = ({
         return;
       }
 
-      if (shouldCurrentPeerCreateOffer(payload.profileId)) {
+      if (shouldInitiateInitialOffer(currentProfileId, payload.profileId)) {
         void renegotiatePeerRef.current(payload.profileId, peerConnection);
-        return;
       }
-
-      requestRemoteOffer(payload.profileId);
     };
 
     const onPeerSnapshot = (payload: WebRtcPeerSnapshotPayload) => {
@@ -1726,12 +1625,12 @@ export const VideoChannelMeetingPanel = ({
           continue;
         }
 
-        if (shouldCurrentPeerCreateOffer(remoteProfileId)) {
+        if (shouldInitiateInitialOffer(currentProfileId, remoteProfileId)) {
           void renegotiatePeerRef.current(remoteProfileId, peerConnection);
           continue;
         }
 
-        requestRemoteOffer(remoteProfileId);
+        requestRemoteOfferRef.current(remoteProfileId, 0);
       }
     };
 
@@ -1791,34 +1690,41 @@ export const VideoChannelMeetingPanel = ({
 
     const remoteMembers = subscribedRemoteMembers;
     const remoteProfileIds = subscribedRemoteProfileIds;
-    const nextRelayBlockedProfileIds = new Set<string>();
 
     for (const remoteMember of remoteMembers) {
       const remoteProfileId = remoteMember.profileId;
       const hadPeerConnection = peerConnectionsRef.current.has(remoteProfileId);
       const peerConnection = ensurePeerConnectionRef.current(remoteProfileId);
       if (peerConnection) {
+        const shouldInitiateOffer = shouldInitiateInitialOffer(currentProfileId, remoteProfileId);
+
         if (!hadPeerConnection) {
-          if (shouldCurrentPeerCreateOffer(remoteProfileId)) {
+          if (shouldInitiateOffer) {
             void renegotiatePeerRef.current(remoteProfileId, peerConnection);
           } else {
-            requestRemoteOfferRef.current(remoteProfileId);
+            requestRemoteOfferRef.current(remoteProfileId, 0);
           }
+
           continue;
         }
 
         if (
+          shouldInitiateOffer &&
           !peerConnection.remoteDescription &&
           peerConnection.signalingState === "stable"
         ) {
           const lastOfferSentAt = lastOfferSentAtRef.current.get(remoteProfileId) ?? 0;
           if (Date.now() - lastOfferSentAt >= 3000) {
-            if (shouldCurrentPeerCreateOffer(remoteProfileId)) {
-              void renegotiatePeerRef.current(remoteProfileId, peerConnection);
-            } else {
-              requestRemoteOfferRef.current(remoteProfileId);
-            }
+            void renegotiatePeerRef.current(remoteProfileId, peerConnection);
           }
+        }
+
+        if (
+          !shouldInitiateOffer &&
+          !peerConnection.remoteDescription &&
+          peerConnection.signalingState === "stable"
+        ) {
+          requestRemoteOfferRef.current(remoteProfileId);
         }
 
         const remoteStatus = peerStatuses[remoteProfileId] ?? null;
@@ -1827,16 +1733,22 @@ export const VideoChannelMeetingPanel = ({
         if (
           expectsRemoteVideo &&
           !remoteStatus?.hasRemoteVideo &&
+          shouldInitiateOffer &&
           peerConnection.signalingState === "stable"
         ) {
           const lastOfferSentAt = lastOfferSentAtRef.current.get(remoteProfileId) ?? 0;
           if (Date.now() - lastOfferSentAt >= 3000) {
-            if (shouldCurrentPeerCreateOffer(remoteProfileId)) {
-              void renegotiatePeerRef.current(remoteProfileId, peerConnection);
-            } else {
-              requestRemoteOfferRef.current(remoteProfileId);
-            }
+            void renegotiatePeerRef.current(remoteProfileId, peerConnection);
           }
+        }
+
+        if (
+          expectsRemoteVideo &&
+          !remoteStatus?.hasRemoteVideo &&
+          !shouldInitiateOffer &&
+          peerConnection.signalingState === "stable"
+        ) {
+          requestRemoteOfferRef.current(remoteProfileId);
         }
 
         const staleOfferAgeMs = Date.now() - (lastOfferSentAtRef.current.get(remoteProfileId) ?? 0);
@@ -1844,67 +1756,29 @@ export const VideoChannelMeetingPanel = ({
           remoteStatus?.signalingState === "have-local-offer" &&
           remoteTelemetry?.flowState !== "flowing" &&
           staleOfferAgeMs >= 6000;
-        const lastPeerTransportProgressAt = lastPeerTransportProgressAtRef.current.get(remoteProfileId) ?? 0;
-        const staleTransportAgeMs = lastPeerTransportProgressAt > 0 ? Date.now() - lastPeerTransportProgressAt : 0;
-        const staleReceivedVideo =
-          expectsRemoteVideo &&
-          remoteStatus?.hasRemoteVideo &&
-          staleTransportAgeMs >= WEBRTC_TRANSPORT_STALL_MS &&
-          peerConnection.remoteDescription &&
-          remoteStatus?.signalingState === "stable" &&
-          remoteTelemetry?.flowState !== "flowing";
-        const transportLooksStuck =
-          expectsRemoteVideo &&
-          staleTransportAgeMs >= WEBRTC_TRANSPORT_STALL_MS &&
-          peerConnection.remoteDescription &&
-          remoteStatus?.signalingState === "stable" &&
-          (staleReceivedVideo ||
-            (
-              !remoteStatus?.hasRemoteVideo &&
-              (
-                ["new", "connecting", "disconnected"].includes(remoteStatus?.connectionState ?? "new") ||
-                ["new", "checking", "disconnected"].includes(remoteStatus?.iceConnectionState ?? "new") ||
-                (
-                  remoteStatus?.connectionState === "connected" &&
-                  remoteTelemetry?.flowState !== "flowing"
-                )
-              )
-            ));
-        const relayLikelyRequired =
-          !WEBRTC_HAS_TURN &&
-          transportLooksStuck &&
-          Boolean(peerConnection.remoteDescription) &&
-          remoteStatus?.signalingState === "stable";
-
-        if (relayLikelyRequired) {
-          nextRelayBlockedProfileIds.add(remoteProfileId);
-        }
 
         const peerLooksPoisoned =
           expectsRemoteVideo &&
-          !relayLikelyRequired &&
           ((
             !remoteStatus?.hasRemoteVideo &&
             (!peerConnection.remoteDescription ||
               remoteStatus?.iceConnectionState === "failed" ||
               remoteStatus?.connectionState === "failed")
           ) ||
-            staleLocalOffer ||
-            transportLooksStuck);
+            staleLocalOffer);
 
         if (peerLooksPoisoned) {
           const lastPeerResetAt = lastPeerResetAtRef.current.get(remoteProfileId) ?? 0;
           if (Date.now() - lastPeerResetAt >= 8000) {
             lastPeerResetAtRef.current.set(remoteProfileId, Date.now());
-
             cleanupPeerRef.current(remoteProfileId, { preserveResetCooldown: true });
 
             const nextPeerConnection = ensurePeerConnectionRef.current(remoteProfileId);
             if (nextPeerConnection) {
-              if (shouldCurrentPeerCreateOffer(remoteProfileId)) {
+              if (shouldInitiateInitialOffer(currentProfileId, remoteProfileId)) {
                 void renegotiatePeerRef.current(remoteProfileId, nextPeerConnection);
               } else {
-                requestRemoteOfferRef.current(remoteProfileId);
+                emitSignalRef.current(remoteProfileId, { renegotiate: true });
               }
             }
           }
@@ -1917,24 +1791,6 @@ export const VideoChannelMeetingPanel = ({
         cleanupPeerRef.current(remoteProfileId);
       }
     }
-
-    setRelayBlockedPeers((current) => {
-      const next = Object.fromEntries(
-        Array.from(nextRelayBlockedProfileIds.values()).map((profileId) => [profileId, true])
-      );
-
-      const currentKeys = Object.keys(current);
-      const nextKeys = Object.keys(next);
-
-      if (
-        currentKeys.length === nextKeys.length &&
-        currentKeys.every((profileId) => next[profileId] === true)
-      ) {
-        return current;
-      }
-
-      return next;
-    });
   }, [currentProfileId, isLiveSession, peerRecoveryTick, peerStatuses, peerTelemetry, subscribedRemoteMembers, subscribedRemoteProfileIds]);
 
   useEffect(() => {
@@ -1961,7 +1817,12 @@ export const VideoChannelMeetingPanel = ({
         // renegotiation below remains the authoritative recovery path
       });
 
-      void schedulePeerNegotiationRef.current(remoteProfileId, peerConnection);
+      if (shouldInitiateInitialOffer(currentProfileId, remoteProfileId)) {
+        void renegotiatePeerRef.current(remoteProfileId, peerConnection);
+        continue;
+      }
+
+      emitSignalRef.current(remoteProfileId, { renegotiate: true });
     }
   }, [channelId, currentProfileId, isLiveSession, localMediaStream, serverId]);
 
@@ -2288,8 +2149,6 @@ export const VideoChannelMeetingPanel = ({
     : null;
   const stageMemberTransportStatus = stageMember?.profileId ? peerStatuses[stageMember.profileId] ?? null : null;
   const stageMemberTelemetry = stageMember?.profileId ? peerTelemetry[stageMember.profileId] ?? null : null;
-  const stageMemberRelayBlocked = Boolean(stageMember?.profileId && relayBlockedPeers[stageMember.profileId]);
-  const relayBlockedTransportMembers = remoteTransportMembers.filter(({ member }) => relayBlockedPeers[member.profileId]);
   const stageMemberStatusText = !stageMember
     ? ""
     : stageMember.profileId === currentProfileId
@@ -2308,14 +2167,10 @@ export const VideoChannelMeetingPanel = ({
           ? stageMember.isStreaming
             ? `${getStreamStageText(stageMember.streamLabel)} • ${stageMemberTelemetry.signalStrength}`
             : `Camera live • ${stageMemberTelemetry.signalStrength}`
-        : stageMemberTelemetry?.flowState === "stalled"
+          : stageMemberTelemetry?.flowState === "stalled"
             ? stageMember.isStreaming
               ? "Stream stalled"
               : "Camera stalled"
-        : stageMemberRelayBlocked
-          ? stageMember.isStreaming
-            ? "Stream relay required"
-            : "Camera relay required"
         : stageMemberTransportStatus?.iceConnectionState === "failed" || stageMemberTransportStatus?.connectionState === "failed"
           ? stageMember.isStreaming
             ? "Stream transport failed"
@@ -2414,12 +2269,6 @@ export const VideoChannelMeetingPanel = ({
           </div>
         ) : null}
 
-        {isLiveSession && relayBlockedTransportMembers.length > 0 ? (
-          <div className="rounded-md border border-amber-400/45 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-100">
-            Video relay is not configured. Remote camera and screen-share can stay stuck until TURN or the SFU meeting transport is configured.
-          </div>
-        ) : null}
-
         {isLiveSession && isMeetingCreator && hasRemoteTransportFailure && !WEBRTC_HAS_TURN ? (
           <div className="rounded-md border border-amber-400/45 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-100">
             TURN relay is not configured. Remote camera and screen-share between different networks can fail until relay credentials are provided.
@@ -2445,14 +2294,10 @@ export const VideoChannelMeetingPanel = ({
                   ? isSubscribed
                     ? "waiting"
                     : "budgeted"
-                  : relayBlockedPeers[member.profileId]
-                    ? "relay"
                   : telemetry?.flowState === "flowing"
                     ? "live"
-                  : telemetry?.flowState === "stalled"
+                    : telemetry?.flowState === "stalled"
                       ? "stalled"
-                      : telemetry?.flowState === "idle" && status.hasRemoteVideo
-                        ? "stalled"
                       : status.hasRemoteVideo
                         ? "received"
                     : status.iceConnectionState === "failed" || status.connectionState === "failed"
@@ -2472,8 +2317,6 @@ export const VideoChannelMeetingPanel = ({
                       <div className="mt-0.5 truncate text-[10px] text-zinc-400">
                         {!isSubscribed
                           ? "not attached in current mesh budget"
-                          : relayBlockedPeers[member.profileId]
-                            ? "relay required for remote video"
                           : telemetry
                           ? [
                               `flow:${telemetry.flowState}`,
@@ -2494,8 +2337,6 @@ export const VideoChannelMeetingPanel = ({
                       className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
                         statusLabel === "live"
                           ? "border-emerald-400/50 bg-emerald-500/15 text-emerald-200"
-                          : statusLabel === "relay"
-                            ? "border-amber-400/50 bg-amber-500/15 text-amber-100"
                           : statusLabel === "stalled"
                             ? "border-amber-400/50 bg-amber-500/15 text-amber-200"
                             : statusLabel === "failed"

@@ -7,9 +7,7 @@ import { currentProfile } from "@/lib/current-profile";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 import { makeIntegrationBotProfileId } from "@/lib/integration-bot-profile";
 import { ensureServerRolesSchema } from "@/lib/server-roles";
-import { server } from "@/lib/db/schema";
 import { getUserPreferences } from "@/lib/user-preferences";
-import { and, eq } from "drizzle-orm";
 
 interface ServerUserRolesRailProps {
   serverId: string;
@@ -40,25 +38,64 @@ type ServerRoleGroupRow = {
   position: number;
 };
 
+type TargetServerRow = {
+  id: string;
+  profileId: string;
+};
+
+const normalizeMemberRole = (value: unknown): MemberRole => {
+  const normalized = String(value ?? "").trim().toUpperCase();
+  if (
+    normalized === MemberRole.ADMIN ||
+    normalized === "ADMINISTRATOR" ||
+    normalized === "ADMINS" ||
+    normalized === "ADMINISTRATORS"
+  ) {
+    return MemberRole.ADMIN;
+  }
+  if (
+    normalized === MemberRole.MODERATOR ||
+    normalized === "MOD" ||
+    normalized === "MODS" ||
+    normalized === "MODERATORS"
+  ) {
+    return MemberRole.MODERATOR;
+  }
+  return MemberRole.GUEST;
+};
+
 export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps) => {
   const profile = await currentProfile();
   await ensureServerRolesSchema();
 
-  const targetServer = await db.query.server.findFirst({
-    where: eq(server.id, serverId),
-    columns: {
-      id: true,
-      profileId: true,
-    },
-  });
+  const targetServerResult = await db.execute(sql`
+    select
+      s."id" as "id",
+      s."profileId" as "profileId"
+    from "Server" s
+    where trim(s."id") = trim(${serverId})
+    limit 1
+  `);
+
+  const targetServerRows = ((targetServerResult as unknown as {
+    rows?: Array<{ id: string | null; profileId: string | null }>;
+  }).rows ?? []).map((row) => ({
+    id: String(row.id ?? "").trim(),
+    profileId: String(row.profileId ?? "").trim(),
+  } satisfies TargetServerRow));
+
+  const targetServer = targetServerRows[0] ?? null;
 
   if (!targetServer) {
     return null;
   }
 
   const ownerPreferences = await getUserPreferences(targetServer.profileId);
+  const ownedBots = Array.isArray(ownerPreferences.OtherBots)
+    ? ownerPreferences.OtherBots
+    : [];
   const validOwnedBotProfileIds = new Set(
-    ownerPreferences.OtherBots.map((bot) => makeIntegrationBotProfileId(targetServer.profileId, bot.id))
+    ownedBots.map((bot) => makeIntegrationBotProfileId(targetServer.profileId, bot.id))
   );
 
   const ownerBotPrefix = `botcfg_${targetServer.profileId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 60)}_`;
@@ -69,34 +106,48 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
     select
       m."id" as "id",
       m."role" as "role",
-      top_role."id" as "assignedRoleId",
-      top_role."name" as "assignedRoleName",
-      top_role."position" as "assignedRolePosition",
+      (
+        select sr."id"
+        from "ServerRoleAssignment" sra
+        inner join "ServerRole" sr on sr."id" = sra."roleId"
+        where sra."memberId" = m."id"
+          and sra."serverId" = ${serverId}
+          and coalesce(sr."showInOnlineMembers", false) = true
+        order by sr."position" asc, sr."name" asc
+        limit 1
+      ) as "assignedRoleId",
+      (
+        select sr."name"
+        from "ServerRoleAssignment" sra
+        inner join "ServerRole" sr on sr."id" = sra."roleId"
+        where sra."memberId" = m."id"
+          and sra."serverId" = ${serverId}
+          and coalesce(sr."showInOnlineMembers", false) = true
+        order by sr."position" asc, sr."name" asc
+        limit 1
+      ) as "assignedRoleName",
+      (
+        select sr."position"
+        from "ServerRoleAssignment" sra
+        inner join "ServerRole" sr on sr."id" = sra."roleId"
+        where sra."memberId" = m."id"
+          and sra."serverId" = ${serverId}
+          and coalesce(sr."showInOnlineMembers", false) = true
+        order by sr."position" asc, sr."name" asc
+        limit 1
+      ) as "assignedRolePosition",
       m."profileId" as "profileId",
       u."role" as "globalRole",
       u."name" as "realName",
       up."profileName" as "profileName",
       up."bannerUrl" as "bannerUrl",
       up."presenceStatus" as "presenceStatus",
-      nullif(trim(to_jsonb(up)->>'currentGame'), '') as "currentGame",
+      nullif(trim(up."currentGame"), '') as "currentGame",
       u."email" as "email",
       coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
-      u."account.created" as "joinedAt",
+        u.[account.created] as "joinedAt",
       u."lastLogin" as "lastLogonAt"
     from "Member" m
-    left join lateral (
-      select
-        sr."id" as "id",
-        sr."name" as "name",
-        sr."position" as "position"
-      from "ServerRoleAssignment" sra
-      inner join "ServerRole" sr on sr."id" = sra."roleId"
-      where sra."memberId" = m."id"
-        and sra."serverId" = ${serverId}
-        and coalesce(sr."showInOnlineMembers", false) = true
-      order by sr."position" asc, sr."name" asc
-      limit 1
-    ) top_role on true
     left join "Users" u on u."userId" = m."profileId"
     left join "UserProfile" up on up."userId" = m."profileId"
     where m."serverId" = ${serverId}
@@ -127,7 +178,7 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
   }));
 
   const rolesCountResult = await db.execute(sql`
-    select count(*)::int as "count"
+        select count(*) as "count"
     from "ServerRole" r
     where r."serverId" = ${serverId}
       and coalesce(r."isManaged", false) = false
@@ -141,12 +192,15 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
   );
   const roleGroupsCount = roleGroups.length;
 
-  const rows = ((membersResult as unknown as { rows: RoleRow[] }).rows ?? []).filter((row) => {
-    if (!row.profileId.startsWith(ownerBotPrefix)) {
+  const rows = (((membersResult as unknown as { rows: RoleRow[] }).rows ?? []).map((row) => ({
+    ...row,
+    role: normalizeMemberRole(row.role),
+  })) as RoleRow[]).filter((row) => {
+    if (!String(row.profileId ?? "").startsWith(ownerBotPrefix)) {
       return true;
     }
 
-    return validOwnedBotProfileIds.has(row.profileId);
+    return validOwnedBotProfileIds.has(String(row.profileId ?? "").trim());
   });
 
   const currentMemberRole = rows.find((row) => row.profileId === profile?.id)?.role;

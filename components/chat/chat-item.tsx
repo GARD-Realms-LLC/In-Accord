@@ -6,23 +6,8 @@ import qs from "query-string";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { type Member, MemberRole, type Profile } from "@/lib/db/types";
-import {
-  Ban,
-  Check,
-  Clock3,
-  Crown,
-  Edit,
-  FileIcon,
-  Flag,
-  MessageCircle,
-  Network,
-  Reply,
-  SmilePlus,
-  Trash,
-  UserPlus,
-  Users,
-  Wrench,
-} from "lucide-react";
+import { Ban, Crown, Edit, FileIcon, Flag, MessageCircle, Network, Reply, SmilePlus, Trash, UserPlus, Users, Wrench } from "lucide-react";
+import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
@@ -39,44 +24,19 @@ import { cn } from "@/lib/utils";
 import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { BannerImage } from "@/components/ui/banner-image";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useModal } from "@/hooks/use-modal-store";
-import {
-  getInAccordStaffLabel,
-  isInAccordAdministrator,
-  isInAccordDeveloper,
-  isInAccordModerator,
-} from "@/lib/in-accord-admin";
+import { getInAccordStaffLabel, isInAccordAdministrator, isInAccordDeveloper, isInAccordModerator } from "@/lib/in-accord-admin";
 import { isBotUser } from "@/lib/is-bot-user";
-import {
-  extractQuotedContent,
-  getQuoteSnippetFromBody,
-} from "@/lib/message-quotes";
+import { extractQuotedContent, getQuoteSnippetFromBody } from "@/lib/message-quotes";
 import { parseMentionSegments } from "@/lib/mentions";
 import { extractUrlsFromText, splitTextWithUrls } from "@/lib/link-previews";
 import { resolveProfileIcons, type ProfileIcon } from "@/lib/profile-icons";
 import { emitLocalChatMutationForRoute } from "@/lib/chat-live-events";
 import { resolveBannerUrl } from "@/lib/asset-url";
-import {
-  getDirectFriendRelationshipLabel,
-  getDirectFriendStatusFromRequestResponse,
-  normalizeDirectFriendStatus,
-  type DirectFriendStatus,
-  type FriendRequestPostResponse,
-} from "@/lib/direct-friend-status";
 
 interface ChatItemProps {
   id: string;
@@ -129,20 +89,7 @@ type EmotePickerSlot = {
 
 type PostEmoteItem = EmoteReaction | EmotePickerSlot;
 
-const basicEmotes = [
-  "😀",
-  "😂",
-  "😍",
-  "🔥",
-  "👏",
-  "🎉",
-  "👍",
-  "👀",
-  "💯",
-  "🤝",
-  "😎",
-  "🙏",
-];
+const basicEmotes = ["😀", "😂", "😍", "🔥", "👏", "🎉", "👍", "👀", "💯", "🤝", "😎", "🙏"];
 
 const createInitialPostEmoteItems = (): PostEmoteItem[] => [
   {
@@ -152,12 +99,10 @@ const createInitialPostEmoteItems = (): PostEmoteItem[] => [
 ];
 
 const createPostEmoteItemsFromReactions = (
-  reactions?: Array<{ emoji: string; count: number }>,
+  reactions?: Array<{ emoji: string; count: number }>
 ): PostEmoteItem[] => {
   const reactionItems: PostEmoteItem[] = (reactions ?? [])
-    .filter(
-      (item) => typeof item.emoji === "string" && item.emoji.trim().length > 0,
-    )
+    .filter((item) => typeof item.emoji === "string" && item.emoji.trim().length > 0)
     .map((item) => ({
       id: crypto.randomUUID(),
       kind: "reaction" as const,
@@ -166,10 +111,7 @@ const createPostEmoteItemsFromReactions = (
       reactedByCurrentMember: false,
     }));
 
-  return [
-    ...reactionItems,
-    { id: crypto.randomUUID(), kind: "picker" as const },
-  ];
+  return [...reactionItems, { id: crypto.randomUUID(), kind: "picker" as const }];
 };
 
 const reactionSummary = (items: PostEmoteItem[]) =>
@@ -225,14 +167,13 @@ const defaultRuntimeTextImagesPreferences: RuntimeTextImagesPreferences = {
   convertEmoticons: true,
 };
 
-const defaultRuntimeAccessibilityPreferences: RuntimeAccessibilityPreferences =
-  {
-    preferReducedMotion: false,
-    highContrastMode: false,
-    largerChatFont: false,
-    enableScreenReaderAnnouncements: true,
-    messageSpacing: "comfortable",
-  };
+const defaultRuntimeAccessibilityPreferences: RuntimeAccessibilityPreferences = {
+  preferReducedMotion: false,
+  highContrastMode: false,
+  largerChatFont: false,
+  enableScreenReaderAnnouncements: true,
+  messageSpacing: "comfortable",
+};
 
 const defaultRuntimeEmojiPreferences: RuntimeEmojiPreferences = {
   showComposerEmojiButton: true,
@@ -241,16 +182,12 @@ const defaultRuntimeEmojiPreferences: RuntimeEmojiPreferences = {
   favoriteEmojis: ["😀", "😂", "😍", "🔥", "👏", "🎉", "👍", "👀"],
 };
 
-const normalizeRuntimeTextImagesPreferences = (
-  value: unknown,
-): RuntimeTextImagesPreferences => {
+const normalizeRuntimeTextImagesPreferences = (value: unknown): RuntimeTextImagesPreferences => {
   if (!value || typeof value !== "object") {
     return { ...defaultRuntimeTextImagesPreferences };
   }
 
-  const source = value as Partial<
-    Record<keyof RuntimeTextImagesPreferences, unknown>
-  >;
+  const source = value as Partial<Record<keyof RuntimeTextImagesPreferences, unknown>>;
 
   return {
     showEmbeds:
@@ -280,9 +217,7 @@ const normalizeRuntimeTextImagesPreferences = (
   };
 };
 
-const normalizeRuntimeNotificationPreferences = (
-  value: unknown,
-): RuntimeNotificationPreferences => {
+const normalizeRuntimeNotificationPreferences = (value: unknown): RuntimeNotificationPreferences => {
   if (!value || typeof value !== "object") {
     return { ...defaultRuntimeNotificationPreferences };
   }
@@ -318,19 +253,14 @@ const normalizeRuntimeNotificationPreferences = (
   };
 };
 
-const normalizeRuntimeAccessibilityPreferences = (
-  value: unknown,
-): RuntimeAccessibilityPreferences => {
+const normalizeRuntimeAccessibilityPreferences = (value: unknown): RuntimeAccessibilityPreferences => {
   if (!value || typeof value !== "object") {
     return { ...defaultRuntimeAccessibilityPreferences };
   }
 
-  const source = value as Partial<
-    Record<keyof RuntimeAccessibilityPreferences, unknown>
-  >;
+  const source = value as Partial<Record<keyof RuntimeAccessibilityPreferences, unknown>>;
   const messageSpacing =
-    source.messageSpacing === "compact" ||
-    source.messageSpacing === "comfortable"
+    source.messageSpacing === "compact" || source.messageSpacing === "comfortable"
       ? source.messageSpacing
       : defaultRuntimeAccessibilityPreferences.messageSpacing;
 
@@ -355,19 +285,14 @@ const normalizeRuntimeAccessibilityPreferences = (
   };
 };
 
-const normalizeRuntimeEmojiPreferences = (
-  value: unknown,
-): RuntimeEmojiPreferences => {
+const normalizeRuntimeEmojiPreferences = (value: unknown): RuntimeEmojiPreferences => {
   if (!value || typeof value !== "object") {
     return { ...defaultRuntimeEmojiPreferences };
   }
 
-  const source = value as Partial<
-    Record<keyof RuntimeEmojiPreferences, unknown>
-  >;
+  const source = value as Partial<Record<keyof RuntimeEmojiPreferences, unknown>>;
   const defaultComposerEmoji =
-    typeof source.defaultComposerEmoji === "string" &&
-    source.defaultComposerEmoji.trim().length > 0
+    typeof source.defaultComposerEmoji === "string" && source.defaultComposerEmoji.trim().length > 0
       ? source.defaultComposerEmoji.trim().slice(0, 16)
       : defaultRuntimeEmojiPreferences.defaultComposerEmoji;
 
@@ -378,8 +303,8 @@ const normalizeRuntimeEmojiPreferences = (
             .filter((item): item is string => typeof item === "string")
             .map((item) => item.trim())
             .filter((item) => item.length > 0)
-            .slice(0, 32),
-        ),
+            .slice(0, 32)
+        )
       )
     : [...defaultRuntimeEmojiPreferences.favoriteEmojis];
 
@@ -398,25 +323,18 @@ const normalizeRuntimeEmojiPreferences = (
 };
 
 const RUNTIME_NOTIFICATION_PREF_CACHE_TTL_MS = 60_000;
-let runtimeNotificationPreferencesCache: RuntimeNotificationPreferences | null =
-  null;
+let runtimeNotificationPreferencesCache: RuntimeNotificationPreferences | null = null;
 let runtimeNotificationPreferencesCacheExpiresAt = 0;
-let runtimeNotificationPreferencesInFlight: Promise<RuntimeNotificationPreferences> | null =
-  null;
-let runtimeTextImagesPreferencesCache: RuntimeTextImagesPreferences | null =
-  null;
+let runtimeNotificationPreferencesInFlight: Promise<RuntimeNotificationPreferences> | null = null;
+let runtimeTextImagesPreferencesCache: RuntimeTextImagesPreferences | null = null;
 let runtimeTextImagesPreferencesCacheExpiresAt = 0;
-let runtimeTextImagesPreferencesInFlight: Promise<RuntimeTextImagesPreferences> | null =
-  null;
-let runtimeAccessibilityPreferencesCache: RuntimeAccessibilityPreferences | null =
-  null;
+let runtimeTextImagesPreferencesInFlight: Promise<RuntimeTextImagesPreferences> | null = null;
+let runtimeAccessibilityPreferencesCache: RuntimeAccessibilityPreferences | null = null;
 let runtimeAccessibilityPreferencesCacheExpiresAt = 0;
-let runtimeAccessibilityPreferencesInFlight: Promise<RuntimeAccessibilityPreferences> | null =
-  null;
+let runtimeAccessibilityPreferencesInFlight: Promise<RuntimeAccessibilityPreferences> | null = null;
 let runtimeEmojiPreferencesCache: RuntimeEmojiPreferences | null = null;
 let runtimeEmojiPreferencesCacheExpiresAt = 0;
-let runtimeEmojiPreferencesInFlight: Promise<RuntimeEmojiPreferences> | null =
-  null;
+let runtimeEmojiPreferencesInFlight: Promise<RuntimeEmojiPreferences> | null = null;
 
 const emoticonToEmojiMap: Record<string, string> = {
   ":)": "😊",
@@ -439,10 +357,7 @@ const convertEmoticonsToEmoji = (value: string) => {
 
   for (const [emoticon, emoji] of Object.entries(emoticonToEmojiMap)) {
     const escaped = emoticon.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    next = next.replace(
-      new RegExp(`(^|\\s)${escaped}(?=\\s|$)`, "g"),
-      `$1${emoji}`,
-    );
+    next = next.replace(new RegExp(`(^|\\s)${escaped}(?=\\s|$)`, "g"), `$1${emoji}`);
   }
 
   return next;
@@ -470,8 +385,7 @@ const fetchRuntimeNotificationPreferences = async (force = false) => {
     .catch(() => ({ ...defaultRuntimeNotificationPreferences }))
     .then((next) => {
       runtimeNotificationPreferencesCache = next;
-      runtimeNotificationPreferencesCacheExpiresAt =
-        Date.now() + RUNTIME_NOTIFICATION_PREF_CACHE_TTL_MS;
+      runtimeNotificationPreferencesCacheExpiresAt = Date.now() + RUNTIME_NOTIFICATION_PREF_CACHE_TTL_MS;
       return next;
     })
     .finally(() => {
@@ -498,14 +412,11 @@ const fetchRuntimeTextImagesPreferences = async (force = false) => {
     .get<{
       textImages?: unknown;
     }>("/api/profile/preferences")
-    .then((response) =>
-      normalizeRuntimeTextImagesPreferences(response.data?.textImages),
-    )
+    .then((response) => normalizeRuntimeTextImagesPreferences(response.data?.textImages))
     .catch(() => ({ ...defaultRuntimeTextImagesPreferences }))
     .then((next) => {
       runtimeTextImagesPreferencesCache = next;
-      runtimeTextImagesPreferencesCacheExpiresAt =
-        Date.now() + RUNTIME_NOTIFICATION_PREF_CACHE_TTL_MS;
+      runtimeTextImagesPreferencesCacheExpiresAt = Date.now() + RUNTIME_NOTIFICATION_PREF_CACHE_TTL_MS;
       return next;
     })
     .finally(() => {
@@ -532,14 +443,11 @@ const fetchRuntimeAccessibilityPreferences = async (force = false) => {
     .get<{
       accessibility?: unknown;
     }>("/api/profile/preferences")
-    .then((response) =>
-      normalizeRuntimeAccessibilityPreferences(response.data?.accessibility),
-    )
+    .then((response) => normalizeRuntimeAccessibilityPreferences(response.data?.accessibility))
     .catch(() => ({ ...defaultRuntimeAccessibilityPreferences }))
     .then((next) => {
       runtimeAccessibilityPreferencesCache = next;
-      runtimeAccessibilityPreferencesCacheExpiresAt =
-        Date.now() + RUNTIME_NOTIFICATION_PREF_CACHE_TTL_MS;
+      runtimeAccessibilityPreferencesCacheExpiresAt = Date.now() + RUNTIME_NOTIFICATION_PREF_CACHE_TTL_MS;
       return next;
     })
     .finally(() => {
@@ -570,8 +478,7 @@ const fetchRuntimeEmojiPreferences = async (force = false) => {
     .catch(() => ({ ...defaultRuntimeEmojiPreferences }))
     .then((next) => {
       runtimeEmojiPreferencesCache = next;
-      runtimeEmojiPreferencesCacheExpiresAt =
-        Date.now() + RUNTIME_NOTIFICATION_PREF_CACHE_TTL_MS;
+      runtimeEmojiPreferencesCacheExpiresAt = Date.now() + RUNTIME_NOTIFICATION_PREF_CACHE_TTL_MS;
       return next;
     })
     .finally(() => {
@@ -589,11 +496,7 @@ const NOTIFICATION_SEEN_CACHE_LIMIT = 5_000;
 const PREVIEW_CACHE_LIMIT = 1_000;
 const PROFILE_CARD_CACHE_LIMIT = 1_000;
 
-const addToBoundedSet = (
-  target: Set<string>,
-  value: string,
-  limit = NOTIFICATION_SEEN_CACHE_LIMIT,
-) => {
+const addToBoundedSet = (target: Set<string>, value: string, limit = NOTIFICATION_SEEN_CACHE_LIMIT) => {
   target.add(value);
 
   while (target.size > limit) {
@@ -606,12 +509,7 @@ const addToBoundedSet = (
   }
 };
 
-const setBoundedMapEntry = <TValue,>(
-  target: Map<string, TValue>,
-  key: string,
-  value: TValue,
-  limit: number,
-) => {
+const setBoundedMapEntry = <TValue,>(target: Map<string, TValue>, key: string, value: TValue, limit: number) => {
   target.set(key, value);
 
   while (target.size > limit) {
@@ -663,7 +561,7 @@ type ProfileCardData = {
   email: string;
   imageUrl: string;
   isDirectFriend?: boolean;
-  directFriendStatus?: DirectFriendStatus;
+  directFriendStatus?: "self" | "friends" | "not_friends";
   mutualServersPercent?: number;
   mutualServersCount?: number;
   mutualFriendsCount?: number;
@@ -795,40 +693,32 @@ const fetchProfileCardData = async ({
   } as const;
 
   const [cardResult, mutualsResult] = await Promise.allSettled([
-    axios.get<ProfileCardData>(
-      `/api/profile/${encodeURIComponent(profileId)}/card`,
-      requestConfig,
-    ),
-    axios.get<MutualProfileData>(
-      `/api/profile/${encodeURIComponent(profileId)}/mutuals`,
-      requestConfig,
-    ),
+    axios.get<ProfileCardData>(`/api/profile/${encodeURIComponent(profileId)}/card`, requestConfig),
+    axios.get<MutualProfileData>(`/api/profile/${encodeURIComponent(profileId)}/mutuals`, requestConfig),
   ]);
 
   if (cardResult.status === "rejected" && mutualsResult.status === "rejected") {
-    throw (
-      mutualsResult.reason ??
-      cardResult.reason ??
-      new Error("Live profile data is unavailable.")
-    );
+    throw mutualsResult.reason ?? cardResult.reason ?? new Error("Live profile data is unavailable.");
   }
 
-  const cardData =
-    cardResult.status === "fulfilled"
-      ? cardResult.value.data
-      : createEmptyProfileCardData();
-  const mutualData =
-    mutualsResult.status === "fulfilled" ? mutualsResult.value.data : null;
+  const cardData = cardResult.status === "fulfilled"
+    ? cardResult.value.data
+    : createEmptyProfileCardData();
+  const mutualData = mutualsResult.status === "fulfilled"
+    ? mutualsResult.value.data
+    : null;
 
   return {
     ...cardData,
     isDirectFriend: mutualData
       ? Boolean(mutualData.isDirectFriend)
       : Boolean(cardData.isDirectFriend),
-    directFriendStatus: normalizeDirectFriendStatus(
-      mutualData?.directFriendStatus,
-      normalizeDirectFriendStatus(cardData.directFriendStatus),
-    ),
+    directFriendStatus:
+      mutualData?.directFriendStatus === "friends" || mutualData?.directFriendStatus === "self"
+        ? mutualData.directFriendStatus
+        : cardData.directFriendStatus === "friends" || cardData.directFriendStatus === "self"
+          ? cardData.directFriendStatus
+          : "not_friends",
     mutualServersPercent:
       typeof mutualData?.mutualServersPercent === "number"
         ? mutualData.mutualServersPercent
@@ -848,12 +738,12 @@ const fetchProfileCardData = async ({
           ? cardData.mutualFriendsCount
           : 0,
     mutualServers: Array.isArray(mutualData?.mutualServers)
-      ? (mutualData?.mutualServers ?? [])
+      ? mutualData?.mutualServers ?? []
       : Array.isArray(cardData.mutualServers)
         ? cardData.mutualServers
         : [],
     mutualFriends: Array.isArray(mutualData?.mutualFriends)
-      ? (mutualData?.mutualFriends ?? [])
+      ? mutualData?.mutualFriends ?? []
       : Array.isArray(cardData.mutualFriends)
         ? cardData.mutualFriends
         : [],
@@ -874,13 +764,10 @@ type VoiceJoinNotification = {
   joinPath: string;
 };
 
-const VOICE_JOIN_MARKER_REGEX =
-  /\s*\[\[JOIN_CHANNEL:([^:\]]+):([^\]]+)\]\]\s*$/i;
+const VOICE_JOIN_MARKER_REGEX = /\s*\[\[JOIN_CHANNEL:([^:\]]+):([^\]]+)\]\]\s*$/i;
 const VOICE_JOIN_URL_REGEX = /\s+Join:\s+(https?:\/\/\S+)\s*$/i;
 
-const parseVoiceJoinNotification = (
-  rawText: string,
-): VoiceJoinNotification | null => {
+const parseVoiceJoinNotification = (rawText: string): VoiceJoinNotification | null => {
   const text = String(rawText ?? "");
 
   const markerMatch = text.match(VOICE_JOIN_MARKER_REGEX);
@@ -905,9 +792,7 @@ const parseVoiceJoinNotification = (
 
   try {
     const parsedUrl = new URL(rawUrl);
-    const routeMatch = parsedUrl.pathname.match(
-      /^\/servers\/([^/]+)\/channels\/([^/?#]+)/i,
-    );
+    const routeMatch = parsedUrl.pathname.match(/^\/servers\/([^/]+)\/channels\/([^/?#]+)/i);
     if (!routeMatch) {
       return null;
     }
@@ -972,22 +857,16 @@ export const ChatItem = ({
   const [isProfilePopoverOpen, setIsProfilePopoverOpen] = useState(false);
   const [profileCard, setProfileCard] = useState<ProfileCardData | null>(null);
   const [isProfileCardLoading, setIsProfileCardLoading] = useState(false);
-  const [profileCardLoadError, setProfileCardLoadError] = useState<
-    string | null
-  >(null);
+  const [profileCardLoadError, setProfileCardLoadError] = useState<string | null>(null);
   const [botCommands, setBotCommands] = useState<string[]>([]);
   const [botCommandsName, setBotCommandsName] = useState("Bot");
   const [isLoadingBotCommands, setIsLoadingBotCommands] = useState(false);
   const [isBotCommandsDialogOpen, setIsBotCommandsDialogOpen] = useState(false);
   const [displayName, setDisplayName] = useState(member.profile.name);
-  const [displayImageUrl, setDisplayImageUrl] = useState(
-    member.profile.imageUrl,
-  );
-  const [linkPreviews, setLinkPreviews] = useState<
-    Record<string, LinkPreview | null>
-  >({});
+  const [displayImageUrl, setDisplayImageUrl] = useState(member.profile.imageUrl);
+  const [linkPreviews, setLinkPreviews] = useState<Record<string, LinkPreview | null>>({});
   const [postEmoteItems, setPostEmoteItems] = useState<PostEmoteItem[]>(() =>
-    createPostEmoteItemsFromReactions(initialReactions),
+    createPostEmoteItemsFromReactions(initialReactions)
   );
   const [activePickerId, setActivePickerId] = useState<string | null>(null);
   const [isThreadActionPending, setIsThreadActionPending] = useState(false);
@@ -1007,15 +886,12 @@ export const ChatItem = ({
     useState<RuntimeEmojiPreferences>({
       ...defaultRuntimeEmojiPreferences,
     });
-  const [openMutualDetails, setOpenMutualDetails] =
-    useState<MutualDetailsState | null>(null);
+  const [openMutualDetails, setOpenMutualDetails] = useState<MutualDetailsState | null>(null);
   const { onOpen } = useModal();
   const params = useParams();
   const router = useRouter();
 
-  const applyServerReactions = (
-    reactions?: Array<{ emoji: string; count: number }>,
-  ) => {
+  const applyServerReactions = (reactions?: Array<{ emoji: string; count: number }>) => {
     setPostEmoteItems((prev) => {
       const next = createPostEmoteItemsFromReactions(reactions);
 
@@ -1035,17 +911,13 @@ export const ChatItem = ({
       return;
     }
 
-    const clicked = postEmoteItems.find(
-      (item) => item.id === reactionId && item.kind === "reaction",
-    );
+    const clicked = postEmoteItems.find((item) => item.id === reactionId && item.kind === "reaction");
     if (!clicked || clicked.kind !== "reaction") {
       return;
     }
 
     setPostEmoteItems((prev) => {
-      const clicked = prev.find(
-        (item) => item.id === reactionId && item.kind === "reaction",
-      );
+      const clicked = prev.find((item) => item.id === reactionId && item.kind === "reaction");
       if (!clicked || clicked.kind !== "reaction") {
         return prev;
       }
@@ -1057,7 +929,7 @@ export const ChatItem = ({
               count: item.count + 1,
               reactedByCurrentMember: true,
             }
-          : item,
+          : item
       );
     });
 
@@ -1067,12 +939,7 @@ export const ChatItem = ({
         scope: reactionScope,
       })
       .then((response) => {
-        const reactions =
-          (
-            response.data as {
-              reactions?: Array<{ emoji: string; count: number }>;
-            }
-          ).reactions ?? [];
+        const reactions = (response.data as { reactions?: Array<{ emoji: string; count: number }> }).reactions ?? [];
         applyServerReactions(reactions);
       })
       .catch(() => {
@@ -1086,9 +953,7 @@ export const ChatItem = ({
     }
 
     setPostEmoteItems((prev) => {
-      const pickerIndex = prev.findIndex(
-        (item) => item.id === pickerId && item.kind === "picker",
-      );
+      const pickerIndex = prev.findIndex((item) => item.id === pickerId && item.kind === "picker");
       if (pickerIndex === -1) {
         return prev;
       }
@@ -1120,12 +985,7 @@ export const ChatItem = ({
         scope: reactionScope,
       })
       .then((response) => {
-        const reactions =
-          (
-            response.data as {
-              reactions?: Array<{ emoji: string; count: number }>;
-            }
-          ).reactions ?? [];
+        const reactions = (response.data as { reactions?: Array<{ emoji: string; count: number }> }).reactions ?? [];
         applyServerReactions(reactions);
       })
       .catch(() => {
@@ -1153,61 +1013,21 @@ export const ChatItem = ({
     }
 
     setIsProfilePopoverOpen(false);
-    router.push(
-      `/users?serverId=${encodeURIComponent(effectiveServerId)}&memberId=${encodeURIComponent(member.id)}`,
-    );
+    router.push(`/users?serverId=${encodeURIComponent(effectiveServerId)}&memberId=${encodeURIComponent(member.id)}`);
   };
 
   const onAddFriend = async () => {
     setIsProfilePopoverOpen(false);
 
     try {
-      const response = await axios.post<FriendRequestPostResponse>(
-        "/api/friends/requests",
-        {
-          profileId: member.profile.id,
-        },
-      );
-      const nextRelationshipStatus = getDirectFriendStatusFromRequestResponse(
-        response.data,
-      );
-
-      if (nextRelationshipStatus) {
-        setProfileCard((current) =>
-          current
-            ? {
-                ...current,
-                isDirectFriend: nextRelationshipStatus === "friends",
-                directFriendStatus: nextRelationshipStatus,
-              }
-            : current,
-        );
-      }
-
+      await axios.post("/api/friends/requests", {
+        profileId: member.profile.id,
+      });
       router.refresh();
-
-      if (nextRelationshipStatus === "friends") {
-        window.alert("You are already direct friends.");
-        return;
-      }
-
-      if (nextRelationshipStatus === "incoming_pending") {
-        window.alert(
-          "This user already sent you a friend request. Accept it from Pending.",
-        );
-        return;
-      }
-
-      if (response.data.created === false) {
-        window.alert("Friend request already pending.");
-        return;
-      }
-
       window.alert("Friend request sent.");
     } catch (error) {
       const message = axios.isAxiosError(error)
-        ? ((error.response?.data as { error?: string } | undefined)?.error ??
-          "Failed to send friend request.")
+        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Failed to send friend request."
         : "Failed to send friend request.";
       window.alert(message);
     }
@@ -1224,8 +1044,7 @@ export const ChatItem = ({
       window.alert("User blocked.");
     } catch (error) {
       const message = axios.isAxiosError(error)
-        ? ((error.response?.data as { error?: string } | undefined)?.error ??
-          "Failed to block user.")
+        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Failed to block user."
         : "Failed to block user.";
       window.alert(message);
     }
@@ -1243,8 +1062,7 @@ export const ChatItem = ({
       window.alert("User report submitted.");
     } catch (error) {
       const message = axios.isAxiosError(error)
-        ? ((error.response?.data as { error?: string } | undefined)?.error ??
-          "Failed to submit report.")
+        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Failed to submit report."
         : "Failed to submit report.";
       window.alert(message);
     }
@@ -1258,14 +1076,14 @@ export const ChatItem = ({
     try {
       setIsLoadingBotCommands(true);
 
-      const response = await axios.get<{
-        botName?: string;
-        commands?: string[];
-      }>(`/api/profile/${encodeURIComponent(member.profile.id)}/bot-commands`, {
-        params: {
-          memberId: member.id,
-        },
-      });
+      const response = await axios.get<{ botName?: string; commands?: string[] }>(
+        `/api/profile/${encodeURIComponent(member.profile.id)}/bot-commands`,
+        {
+          params: {
+            memberId: member.id,
+          },
+        }
+      );
 
       const commands = Array.isArray(response.data?.commands)
         ? response.data.commands
@@ -1327,9 +1145,7 @@ export const ChatItem = ({
     }
 
     setOpenMutualDetails(null);
-    router.push(
-      `/users?serverId=${encodeURIComponent(normalizedServerId)}&memberId=${encodeURIComponent(normalizedMemberId)}`,
-    );
+    router.push(`/users?serverId=${encodeURIComponent(normalizedServerId)}&memberId=${encodeURIComponent(normalizedMemberId)}`);
   };
 
   const onReportMessage = async () => {
@@ -1337,8 +1153,7 @@ export const ChatItem = ({
       return;
     }
 
-    const sourceLabel =
-      reactionScope === "direct" ? "private message" : "channel message";
+    const sourceLabel = reactionScope === "direct" ? "private message" : "channel message";
 
     try {
       await axios.post("/api/reports", {
@@ -1350,8 +1165,7 @@ export const ChatItem = ({
       window.alert("Message report submitted.");
     } catch (error) {
       const message = axios.isAxiosError(error)
-        ? ((error.response?.data as { error?: string } | undefined)?.error ??
-          "Failed to submit report.")
+        ? (error.response?.data as { error?: string } | undefined)?.error ?? "Failed to submit report."
         : "Failed to submit report.";
       window.alert(message);
     }
@@ -1372,7 +1186,7 @@ export const ChatItem = ({
           authorProfileId: member.profile.id,
           snippet: getQuoteSnippetFromBody(body),
         },
-      }),
+      })
     );
   };
 
@@ -1400,34 +1214,26 @@ export const ChatItem = ({
           : channelId;
 
     if (existingThreadId) {
-      router.push(
-        `/servers/${routeServerSegment}/channels/${routeChannelSegment}/threads/${existingThreadId}`,
-      );
+      router.push(`/servers/${routeServerSegment}/channels/${routeChannelSegment}/threads/${existingThreadId}`);
       return;
     }
 
     try {
       setIsThreadActionPending(true);
 
-      const sourceTitle = getQuoteSnippetFromBody(
-        extractQuotedContent(content).body || content,
-      );
+      const sourceTitle = getQuoteSnippetFromBody(extractQuotedContent(content).body || content);
       const response = await axios.post(`/api/channels/${channelId}/threads`, {
         serverId,
         sourceMessageId: id,
         title: sourceTitle,
       });
 
-      const createdThreadId = String(
-        (response.data as { threadId?: string }).threadId ?? "",
-      ).trim();
+      const createdThreadId = String((response.data as { threadId?: string }).threadId ?? "").trim();
       if (!createdThreadId) {
         throw new Error("Thread creation response did not include threadId");
       }
 
-      router.push(
-        `/servers/${routeServerSegment}/channels/${routeChannelSegment}/threads/${createdThreadId}`,
-      );
+      router.push(`/servers/${routeServerSegment}/channels/${routeChannelSegment}/threads/${createdThreadId}`);
     } catch (error) {
       console.error("[CHAT_ITEM_OPEN_THREAD]", error);
       window.alert("Unable to open thread right now.");
@@ -1470,25 +1276,18 @@ export const ChatItem = ({
         const next = normalizeRuntimeEmojiPreferences(customEvent.detail.emoji);
         setRuntimeEmojiPreferences(next);
         runtimeEmojiPreferencesCache = next;
-        runtimeEmojiPreferencesCacheExpiresAt =
-          Date.now() + RUNTIME_NOTIFICATION_PREF_CACHE_TTL_MS;
+        runtimeEmojiPreferencesCacheExpiresAt = Date.now() + RUNTIME_NOTIFICATION_PREF_CACHE_TTL_MS;
         return;
       }
 
       void syncEmojiPreferences(true);
     };
 
-    window.addEventListener(
-      "inaccord:emoji-preferences-updated",
-      onEmojiPreferencesChanged,
-    );
+    window.addEventListener("inaccord:emoji-preferences-updated", onEmojiPreferencesChanged);
 
     return () => {
       cancelled = true;
-      window.removeEventListener(
-        "inaccord:emoji-preferences-updated",
-        onEmojiPreferencesChanged,
-      );
+      window.removeEventListener("inaccord:emoji-preferences-updated", onEmojiPreferencesChanged);
     };
   }, []);
 
@@ -1524,14 +1323,11 @@ export const ChatItem = ({
       const customEvent = event as CustomEvent<{ accessibility?: unknown }>;
 
       if (customEvent.detail?.accessibility) {
-        const next = normalizeRuntimeAccessibilityPreferences(
-          customEvent.detail.accessibility,
-        );
+        const next = normalizeRuntimeAccessibilityPreferences(customEvent.detail.accessibility);
 
         setRuntimeAccessibilityPreferences(next);
         runtimeAccessibilityPreferencesCache = next;
-        runtimeAccessibilityPreferencesCacheExpiresAt =
-          Date.now() + RUNTIME_NOTIFICATION_PREF_CACHE_TTL_MS;
+        runtimeAccessibilityPreferencesCacheExpiresAt = Date.now() + RUNTIME_NOTIFICATION_PREF_CACHE_TTL_MS;
         return;
       }
 
@@ -1540,14 +1336,14 @@ export const ChatItem = ({
 
     window.addEventListener(
       "inaccord:accessibility-preferences-updated",
-      onAccessibilityPreferencesChanged,
+      onAccessibilityPreferencesChanged
     );
 
     return () => {
       cancelled = true;
       window.removeEventListener(
         "inaccord:accessibility-preferences-updated",
-        onAccessibilityPreferencesChanged,
+        onAccessibilityPreferencesChanged
       );
     };
   }, []);
@@ -1597,10 +1393,7 @@ export const ChatItem = ({
     const requestSequence = profileCardRequestSequenceRef.current + 1;
     profileCardRequestSequenceRef.current = requestSequence;
     const loadingTimeout = window.setTimeout(() => {
-      if (
-        cancelled ||
-        profileCardRequestSequenceRef.current !== requestSequence
-      ) {
+      if (cancelled || profileCardRequestSequenceRef.current !== requestSequence) {
         return;
       }
 
@@ -1621,27 +1414,18 @@ export const ChatItem = ({
           viewerMemberId: currentMember.id,
         });
 
-        if (
-          !cancelled &&
-          profileCardRequestSequenceRef.current === requestSequence
-        ) {
+        if (!cancelled && profileCardRequestSequenceRef.current === requestSequence) {
           setProfileCard(data);
           setProfileCardLoadError(null);
         }
       } catch (error) {
-        if (
-          !cancelled &&
-          profileCardRequestSequenceRef.current === requestSequence
-        ) {
+        if (!cancelled && profileCardRequestSequenceRef.current === requestSequence) {
           setProfileCard(null);
           setProfileCardLoadError(getProfileCardLoadErrorMessage(error));
         }
       } finally {
         window.clearTimeout(loadingTimeout);
-        if (
-          !cancelled &&
-          profileCardRequestSequenceRef.current === requestSequence
-        ) {
+        if (!cancelled && profileCardRequestSequenceRef.current === requestSequence) {
           setIsProfileCardLoading(false);
         }
       }
@@ -1656,12 +1440,7 @@ export const ChatItem = ({
         setIsProfileCardLoading(false);
       }
     };
-  }, [
-    currentMember.profileId,
-    isProfilePopoverOpen,
-    member.id,
-    member.profile.id,
-  ]);
+  }, [currentMember.profileId, isProfilePopoverOpen, member.id, member.profile.id]);
 
   useEffect(() => {
     setDisplayName(member.profile.name);
@@ -1720,8 +1499,7 @@ export const ChatItem = ({
   const isEmote = !!fileUrl && content.trim().toLowerCase() === "[emote]";
   const isSticker =
     !!fileUrl &&
-    (content.trim().toLowerCase() === "[sticker]" ||
-      /\/stickers\//i.test(fileUrl));
+    (content.trim().toLowerCase() === "[sticker]" || /\/stickers\//i.test(fileUrl));
   const isSoundEfx =
     !!fileUrl &&
     (content.trim().toLowerCase() === "[sound_efx]" ||
@@ -1731,15 +1509,7 @@ export const ChatItem = ({
   const isAdmin = currentMember.role === MemberRole.ADMIN;
   const isModerator = currentMember.role === MemberRole.MODERATOR;
   const isOwner = currentMember.id === member.id;
-  const normalizedDisplayName = String(displayName ?? "")
-    .trim()
-    .toLowerCase();
-  const isMessageFromDeletedUser = normalizedDisplayName === "deleted user";
-  const canDeleteDeletedUserMessage =
-    canPurgeDeletedMessage && isMessageFromDeletedUser;
-  const canDeleteMessage =
-    !deleted &&
-    (isAdmin || isModerator || isOwner || canDeleteDeletedUserMessage);
+  const canDeleteMessage = !deleted && (isAdmin || isModerator || isOwner);
   const canEditMessage = !deleted && isOwner && !fileUrl;
   const isPDF = fileType === "pdf" && fileUrl;
   const isImage = !isPDF && !isSoundEfx && fileUrl;
@@ -1747,46 +1517,24 @@ export const ChatItem = ({
     name: displayName,
     email: member.profile.email,
   });
-  const canShowBotCommands =
-    showBotBadge || member.profile.id.startsWith("botcfg_");
-  const globalRoleFromProfile =
-    (member.profile as Profile & { role?: string | null }).role ?? null;
+  const canShowBotCommands = showBotBadge || member.profile.id.startsWith("botcfg_");
+  const globalRoleFromProfile = (member.profile as Profile & { role?: string | null }).role ?? null;
   const effectiveGlobalRole = profileCard?.role ?? globalRoleFromProfile;
   const isGlobalDeveloper = isInAccordDeveloper(effectiveGlobalRole);
   const isGlobalAdministrator = isInAccordAdministrator(effectiveGlobalRole);
   const isGlobalModerator = isInAccordModerator(effectiveGlobalRole);
   const globalRoleLabel = getInAccordStaffLabel(effectiveGlobalRole);
-  const highestRoleIcon = isGlobalDeveloper ? (
-    <Wrench
-      suppressHydrationWarning
-      className="h-4 w-4 text-cyan-400"
-      aria-label={globalRoleLabel ?? "Developer"}
-    />
-  ) : isGlobalAdministrator ? (
-    <Crown
-      suppressHydrationWarning
-      className="h-4 w-4 text-rose-500"
-      aria-label={globalRoleLabel ?? "Administrator"}
-    />
-  ) : isGlobalModerator ? (
-    <ModeratorLineIcon
-      suppressHydrationWarning
-      className="h-4 w-4 text-indigo-500"
-      aria-label={globalRoleLabel ?? "Moderator"}
-    />
-  ) : isInAccordAdministrator(member.role) ? (
-    <Crown
-      suppressHydrationWarning
-      className="h-4 w-4 text-rose-500"
-      aria-label="Administrator"
-    />
-  ) : isInAccordModerator(member.role) ? (
-    <ModeratorLineIcon
-      suppressHydrationWarning
-      className="h-4 w-4 text-indigo-500"
-      aria-label="Moderator"
-    />
-  ) : null;
+  const highestRoleIcon = isGlobalDeveloper
+    ? <Wrench suppressHydrationWarning className="h-4 w-4 text-cyan-400" aria-label={globalRoleLabel ?? "Developer"} />
+    : isGlobalAdministrator
+      ? <Crown suppressHydrationWarning className="h-4 w-4 text-rose-500" aria-label={globalRoleLabel ?? "Administrator"} />
+      : isGlobalModerator
+        ? <ModeratorLineIcon suppressHydrationWarning className="h-4 w-4 text-indigo-500" aria-label={globalRoleLabel ?? "Moderator"} />
+        : isInAccordAdministrator(member.role)
+          ? <Crown suppressHydrationWarning className="h-4 w-4 text-rose-500" aria-label="Administrator" />
+          : isInAccordModerator(member.role)
+            ? <ModeratorLineIcon suppressHydrationWarning className="h-4 w-4 text-indigo-500" aria-label="Moderator" />
+            : null;
   const highestRoleLabel = isGlobalDeveloper
     ? "Developer"
     : isGlobalAdministrator
@@ -1798,42 +1546,33 @@ export const ChatItem = ({
           : isInAccordModerator(member.role)
             ? "Moderator"
             : null;
-  const roleAndMetaIcons = (
-    <>
-      <NewUserCloverBadge
-        createdAt={member.profile.createdAt}
-        className="text-xs"
-      />
-      {showBotBadge ? (
-        <BotAppBadge className="ml-1.5 h-4 px-1 text-[9px]" />
-      ) : null}
-      {highestRoleIcon && highestRoleLabel ? (
-        <ActionTooltip label={highestRoleLabel} align="center">
-          {highestRoleIcon}
-        </ActionTooltip>
-      ) : null}
-    </>
-  );
+    const roleAndMetaIcons = (
+      <>
+        <NewUserCloverBadge createdAt={member.profile.createdAt} className="text-xs" />
+        {showBotBadge ? <BotAppBadge className="ml-1.5 h-4 px-1 text-[9px]" /> : null}
+        {highestRoleIcon && highestRoleLabel ? (
+          <ActionTooltip label={highestRoleLabel} align="center">
+            {highestRoleIcon}
+          </ActionTooltip>
+        ) : null}
+      </>
+    );
   const displayMemberRole = isInAccordAdministrator(member.role)
     ? "Administrator"
     : isInAccordModerator(member.role)
       ? "Moderator"
       : String(member.role ?? "User");
   const effectiveBannerUrl = resolveBannerUrl(
-    profileCard?.effectiveBannerUrl ?? profileCard?.bannerUrl ?? null,
+    profileCard?.effectiveBannerUrl ?? profileCard?.bannerUrl ?? null
   );
   const effectiveAvatarDecorationUrl =
     profileCard?.effectiveAvatarDecorationUrl ??
     profileCard?.avatarDecorationUrl ??
-    (member.profile as Profile & { avatarDecorationUrl?: string | null })
-      .avatarDecorationUrl ??
-    null;
+    ((member.profile as Profile & { avatarDecorationUrl?: string | null }).avatarDecorationUrl ?? null);
   const effectiveProfileEffectUrl =
     profileCard?.effectiveProfileEffectUrl ??
     profileCard?.profileEffectUrl ??
-    (member.profile as Profile & { profileEffectUrl?: string | null })
-      .profileEffectUrl ??
-    null;
+    ((member.profile as Profile & { profileEffectUrl?: string | null }).profileEffectUrl ?? null);
   const effectiveProfileIcons =
     profileCard?.profileIcons && profileCard.profileIcons.length > 0
       ? profileCard.profileIcons
@@ -1848,62 +1587,23 @@ export const ChatItem = ({
   const effectiveNameplateColor =
     profileCard?.effectiveNameplateColor ?? profileCard?.nameplateColor ?? null;
   const effectiveNameplateImageUrl =
-    profileCard?.effectiveNameplateImageUrl ??
-    profileCard?.nameplateImageUrl ??
-    null;
-  const mutualServersCount =
-    profileCard?.mutualServers?.length ||
-    (typeof profileCard?.mutualServersCount === "number"
-      ? profileCard.mutualServersCount
-      : 0);
-  const mutualFriendsCount =
-    profileCard?.mutualFriends?.length ||
-    (typeof profileCard?.mutualFriendsCount === "number"
-      ? profileCard.mutualFriendsCount
-      : 0);
-  const mutualServersPercent =
-    typeof profileCard?.mutualServersPercent === "number"
-      ? profileCard.mutualServersPercent
-      : 0;
+    profileCard?.effectiveNameplateImageUrl ?? profileCard?.nameplateImageUrl ?? null;
+  const mutualServersCount = profileCard?.mutualServers?.length || (typeof profileCard?.mutualServersCount === "number" ? profileCard.mutualServersCount : 0);
+  const mutualFriendsCount = profileCard?.mutualFriends?.length || (typeof profileCard?.mutualFriendsCount === "number" ? profileCard.mutualFriendsCount : 0);
+  const mutualServersPercent = typeof profileCard?.mutualServersPercent === "number" ? profileCard.mutualServersPercent : 0;
   const hasProfileCardLoadError = Boolean(profileCardLoadError);
   const isSelfProfileCard = profileCard?.directFriendStatus === "self";
-  const mutualServersLabel =
-    mutualServersCount > 0
-      ? `${mutualServersPercent}% in common · ${mutualServersCount}`
-      : "NOT WORKING";
-  const mutualFriendsLabel =
-    mutualFriendsCount > 0 ? `${mutualFriendsCount} in common` : "NOT WORKING";
-  const directFriendRelationshipLabel = getDirectFriendRelationshipLabel(
-    normalizeDirectFriendStatus(
-      profileCard?.directFriendStatus,
-      profileCard?.isDirectFriend ? "friends" : "not_friends",
-    ),
-  );
-  const resolvedDirectFriendStatus = normalizeDirectFriendStatus(
-    profileCard?.directFriendStatus,
-    profileCard?.isDirectFriend ? "friends" : "not_friends",
-  );
-  const friendActionTooltipLabel =
-    resolvedDirectFriendStatus === "friends"
-      ? "Already direct friends"
-      : resolvedDirectFriendStatus === "incoming_pending"
-        ? "Incoming friend request pending"
-        : resolvedDirectFriendStatus === "outgoing_pending"
-          ? "Friend request sent"
-          : "Add Friend";
-  const friendActionDisabled =
-    isProfileCardLoading ||
-    hasProfileCardLoadError ||
-    resolvedDirectFriendStatus !== "not_friends";
-  const friendActionIcon =
-    resolvedDirectFriendStatus === "friends" ? (
-      <Check suppressHydrationWarning className="h-4 w-4" />
-    ) : resolvedDirectFriendStatus === "incoming_pending" ||
-      resolvedDirectFriendStatus === "outgoing_pending" ? (
-      <Clock3 suppressHydrationWarning className="h-4 w-4" />
-    ) : (
-      <UserPlus suppressHydrationWarning className="h-4 w-4" />
-    );
+  const mutualServersLabel = mutualServersCount > 0
+    ? `${mutualServersPercent}% in common · ${mutualServersCount}`
+    : "NOT WORKING";
+  const mutualFriendsLabel = mutualFriendsCount > 0
+    ? `${mutualFriendsCount} in common`
+    : "NOT WORKING";
+  const directFriendRelationshipLabel = profileCard?.directFriendStatus === "self"
+    ? "This is you"
+    : profileCard?.isDirectFriend
+      ? "Direct friends"
+      : "Not direct friends";
   const memberCreatedDate = profileCard?.createdAt
     ? new Date(profileCard.createdAt)
     : member.profile.createdAt
@@ -1913,44 +1613,34 @@ export const ChatItem = ({
     memberCreatedDate && !Number.isNaN(memberCreatedDate.getTime())
       ? memberCreatedDate.toLocaleString()
       : "Unknown";
-  const { quote: quotedMessage, body: rawMessageBody } =
-    extractQuotedContent(content);
+  const { quote: quotedMessage, body: rawMessageBody } = extractQuotedContent(content);
   const voiceJoinNotification = parseVoiceJoinNotification(rawMessageBody);
   const messageBody = voiceJoinNotification?.displayText ?? rawMessageBody;
   const normalizedMessageBody = runtimeTextImagesPreferences.convertEmoticons
     ? convertEmoticonsToEmoji(messageBody)
     : messageBody;
   const contentSegments = parseMentionSegments(normalizedMessageBody);
-  const hasMention = contentSegments.some(
-    (segment) => segment.kind === "mention",
-  );
+  const hasMention = contentSegments.some((segment) => segment.kind === "mention");
   const isMentioningCurrentUser = contentSegments.some(
     (segment) =>
       segment.kind === "mention" &&
       segment.entityType === "user" &&
-      segment.entityId === currentMember.profileId,
+      segment.entityId === currentMember.profileId
   );
   const isReplyToCurrentUser =
     typeof quotedMessage?.authorProfileId === "string" &&
     quotedMessage.authorProfileId.trim().length > 0 &&
     quotedMessage.authorProfileId === currentMember.profileId;
   const plainContentForNotification = contentSegments
-    .map((segment) =>
-      segment.kind === "mention" ? `@${segment.label}` : segment.value,
-    )
+    .map((segment) => (segment.kind === "mention" ? `@${segment.label}` : segment.value))
     .join("")
     .trim();
-  const messageUrls = useMemo(
-    () => extractUrlsFromText(normalizedMessageBody, 3),
-    [normalizedMessageBody],
-  );
+  const messageUrls = useMemo(() => extractUrlsFromText(normalizedMessageBody, 3), [normalizedMessageBody]);
   const renderedPreviews = messageUrls
     .map((url) => linkPreviews[url])
     .filter((item): item is LinkPreview => Boolean(item));
   const threadIdFromSocketQuery =
-    typeof socketQuery?.threadId === "string"
-      ? socketQuery.threadId.trim()
-      : "";
+    typeof socketQuery?.threadId === "string" ? socketQuery.threadId.trim() : "";
   const canUseThreads =
     reactionScope === "channel" &&
     !!serverId &&
@@ -1962,7 +1652,8 @@ export const ChatItem = ({
       ? "Open Thread"
       : "Start Thread"
     : "Threads only in channels";
-  const actionIconClassName = "w-4 h-4 transition";
+  const actionIconClassName =
+    "w-4 h-4 transition";
   const actionIconEnabledClassName =
     "cursor-pointer text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300";
   const actionIconDisabledClassName =
@@ -1995,8 +1686,7 @@ export const ChatItem = ({
           };
 
           runtimeNotificationPreferencesCache = next;
-          runtimeNotificationPreferencesCacheExpiresAt =
-            Date.now() + RUNTIME_NOTIFICATION_PREF_CACHE_TTL_MS;
+          runtimeNotificationPreferencesCacheExpiresAt = Date.now() + RUNTIME_NOTIFICATION_PREF_CACHE_TTL_MS;
           return next;
         });
         return;
@@ -2021,30 +1711,23 @@ export const ChatItem = ({
         };
 
         runtimeNotificationPreferencesCache = next;
-        runtimeNotificationPreferencesCacheExpiresAt =
-          Date.now() + RUNTIME_NOTIFICATION_PREF_CACHE_TTL_MS;
+        runtimeNotificationPreferencesCacheExpiresAt = Date.now() + RUNTIME_NOTIFICATION_PREF_CACHE_TTL_MS;
         return next;
       });
     };
 
-    window.addEventListener(
-      "inaccord:mentions-setting-updated",
-      onMentionsPreferenceChanged,
-    );
+    window.addEventListener("inaccord:mentions-setting-updated", onMentionsPreferenceChanged);
     window.addEventListener(
       "inaccord:notification-preferences-updated",
-      onNotificationPreferencesChanged,
+      onNotificationPreferencesChanged
     );
 
     return () => {
       cancelled = true;
-      window.removeEventListener(
-        "inaccord:mentions-setting-updated",
-        onMentionsPreferenceChanged,
-      );
+      window.removeEventListener("inaccord:mentions-setting-updated", onMentionsPreferenceChanged);
       window.removeEventListener(
         "inaccord:notification-preferences-updated",
-        onNotificationPreferencesChanged,
+        onNotificationPreferencesChanged
       );
     };
   }, [runtimeNotificationPreferences.mentionsEnabled]);
@@ -2068,14 +1751,11 @@ export const ChatItem = ({
       const customEvent = event as CustomEvent<{ textImages?: unknown }>;
 
       if (customEvent.detail?.textImages) {
-        const next = normalizeRuntimeTextImagesPreferences(
-          customEvent.detail.textImages,
-        );
+        const next = normalizeRuntimeTextImagesPreferences(customEvent.detail.textImages);
 
         setRuntimeTextImagesPreferences(next);
         runtimeTextImagesPreferencesCache = next;
-        runtimeTextImagesPreferencesCacheExpiresAt =
-          Date.now() + RUNTIME_NOTIFICATION_PREF_CACHE_TTL_MS;
+        runtimeTextImagesPreferencesCacheExpiresAt = Date.now() + RUNTIME_NOTIFICATION_PREF_CACHE_TTL_MS;
         return;
       }
 
@@ -2084,14 +1764,14 @@ export const ChatItem = ({
 
     window.addEventListener(
       "inaccord:text-images-preferences-updated",
-      onTextImagesPreferencesChanged,
+      onTextImagesPreferencesChanged
     );
 
     return () => {
       cancelled = true;
       window.removeEventListener(
         "inaccord:text-images-preferences-updated",
-        onTextImagesPreferencesChanged,
+        onTextImagesPreferencesChanged
       );
     };
   }, []);
@@ -2114,10 +1794,8 @@ export const ChatItem = ({
     }
 
     const isDirectMessage = reactionScope === "direct";
-    const shouldNotifyMention =
-      isMentioningCurrentUser && runtimeNotificationPreferences.mentionsEnabled;
-    const shouldNotifyReply =
-      isReplyToCurrentUser && runtimeNotificationPreferences.notifyOnReplies;
+    const shouldNotifyMention = isMentioningCurrentUser && runtimeNotificationPreferences.mentionsEnabled;
+    const shouldNotifyReply = isReplyToCurrentUser && runtimeNotificationPreferences.notifyOnReplies;
     const shouldNotifyDirectMessage =
       isDirectMessage && runtimeNotificationPreferences.notifyOnDirectMessages;
 
@@ -2202,10 +1880,7 @@ export const ChatItem = ({
   ]);
 
   useEffect(() => {
-    if (
-      !runtimeTextImagesPreferences.showEmbeds ||
-      !runtimeTextImagesPreferences.showLinkPreviews
-    ) {
+    if (!runtimeTextImagesPreferences.showEmbeds || !runtimeTextImagesPreferences.showLinkPreviews) {
       setLinkPreviews({});
       return;
     }
@@ -2227,12 +1902,9 @@ export const ChatItem = ({
         }
 
         try {
-          const response = await axios.get<{ preview?: LinkPreview | null }>(
-            "/api/link-preview",
-            {
-              params: { url },
-            },
-          );
+          const response = await axios.get<{ preview?: LinkPreview | null }>("/api/link-preview", {
+            params: { url },
+          });
 
           const preview = response.data.preview ?? null;
           setBoundedMapEntry(previewCache, url, preview, PREVIEW_CACHE_LIMIT);
@@ -2263,8 +1935,7 @@ export const ChatItem = ({
 
   if (deleted) {
     const deletedByName = String(displayName ?? "").trim() || "Deleted User";
-    const canHardDeleteDeletedMessage =
-      canPurgeDeletedMessage && reactionScope === "channel";
+    const canHardDeleteDeletedMessage = canPurgeDeletedMessage && reactionScope === "channel";
     const deletedTimestampLabel = String(timestamp ?? "").trim();
 
     return (
@@ -2272,10 +1943,7 @@ export const ChatItem = ({
         <div className="rounded-md border border-zinc-300/70 bg-zinc-100/70 px-3 py-2 text-xs italic text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-400">
           A message has been deleted by: "{deletedByName}".
           {deletedTimestampLabel ? (
-            <span className="not-italic text-zinc-500 dark:text-zinc-400">
-              {" "}
-              ({deletedTimestampLabel})
-            </span>
+            <span className="not-italic text-zinc-500 dark:text-zinc-400"> ({deletedTimestampLabel})</span>
           ) : null}
         </div>
         {canHardDeleteDeletedMessage ? (
@@ -2301,9 +1969,7 @@ export const ChatItem = ({
     <div
       className={cn(
         "chat-message-item relative group flex w-full items-center px-4 transition",
-        runtimeAccessibilityPreferences.messageSpacing === "compact"
-          ? "py-2"
-          : "py-4",
+        runtimeAccessibilityPreferences.messageSpacing === "compact" ? "py-2" : "py-4",
         runtimeAccessibilityPreferences.highContrastMode
           ? "outline-1 outline-white/25 dark:outline-white/40"
           : null,
@@ -2311,14 +1977,11 @@ export const ChatItem = ({
           ? "border-l-4 border-amber-400/80 bg-amber-500/10 hover:bg-amber-500/15 dark:bg-amber-500/10 dark:hover:bg-amber-500/15"
           : hasMention
             ? "border-l-4 border-zinc-500/70 bg-zinc-500/5 hover:bg-zinc-500/10 dark:bg-zinc-500/5 dark:hover:bg-zinc-500/10"
-            : "hover:bg-[#2e3035]",
+            : "hover:bg-[#2e3035]"
       )}
     >
       <div className="group flex w-full min-w-0 items-start gap-x-2">
-        <Popover
-          open={isProfilePopoverOpen}
-          onOpenChange={setIsProfilePopoverOpen}
-        >
+        <Popover open={isProfilePopoverOpen} onOpenChange={setIsProfilePopoverOpen}>
           <PopoverTrigger asChild>
             <button
               type="button"
@@ -2327,10 +1990,7 @@ export const ChatItem = ({
               aria-label={`Open profile for ${displayName}`}
               title={`View ${displayName}'s profile`}
             >
-              <UserAvatar
-                src={profileCard?.effectiveImageUrl ?? displayImageUrl}
-                decorationSrc={effectiveAvatarDecorationUrl}
-              />
+              <UserAvatar src={profileCard?.effectiveImageUrl ?? displayImageUrl} decorationSrc={effectiveAvatarDecorationUrl} />
             </button>
           </PopoverTrigger>
           <PopoverContent
@@ -2359,10 +2019,7 @@ export const ChatItem = ({
               </div>
 
               <div className="min-w-0">
-                <ProfileIconRow
-                  icons={effectiveProfileIcons}
-                  className="mb-1"
-                />
+                <ProfileIconRow icons={effectiveProfileIcons} className="mb-1" />
                 <div className="flex w-full min-w-0 items-start gap-1.5">
                   <ProfileNameWithServerTag
                     name={displayName || "Deleted User"}
@@ -2390,20 +2047,11 @@ export const ChatItem = ({
               <div className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] p-3 text-xs">
                 <div className="space-y-1 text-[#dbdee1]">
                   <p>
-                    Name:{" "}
-                    {profileCard?.effectiveProfileName ||
-                      profileCard?.realName ||
-                      profileCard?.profileName ||
-                      displayName ||
-                      member.profile.email?.split("@")[0] ||
-                      member.profile.id ||
-                      "Deleted User"}
+                    Name: {profileCard?.effectiveProfileName || profileCard?.realName || profileCard?.profileName || displayName || member.profile.email?.split("@")[0] || member.profile.id || "Deleted User"}
                   </p>
                   <p>Pronouns: {profileCard?.pronouns || "Not set"}</p>
                   <p>Comment: {profileCard?.comment || "Not set"}</p>
-                  <p>
-                    Email: {profileCard?.email || member.profile.email || "N/A"}
-                  </p>
+                  <p>Email: {profileCard?.email || member.profile.email || "N/A"}</p>
                   <p>Role: {displayMemberRole}</p>
                   <p>Created: {memberCreatedDisplay}</p>
                 </div>
@@ -2411,9 +2059,7 @@ export const ChatItem = ({
 
               {profileCard?.selectedServerTag ? (
                 <div className="mt-2 rounded-lg border border-white/10 bg-[#1a1b1e] p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
-                    Server Tag
-                  </p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">Server Tag</p>
                   <div className="mt-2">
                     <span
                       className="inline-flex items-center gap-1.5 rounded-full border border-[#5865f2]/35 bg-[#5865f2]/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#d7dcff]"
@@ -2426,12 +2072,7 @@ export const ChatItem = ({
                 </div>
               ) : null}
 
-              <div
-                className={cn(
-                  "mt-3 grid gap-2",
-                  isSelfProfileCard ? "grid-cols-1" : "grid-cols-2",
-                )}
-              >
+              <div className={cn("mt-3 grid gap-2", isSelfProfileCard ? "grid-cols-1" : "grid-cols-2")}>
                 <div className="col-span-2 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-xs text-[#dbdee1]">
                   <span className="font-medium">Relationship: </span>
                   <span className="text-[#949ba4]">
@@ -2499,31 +2140,17 @@ export const ChatItem = ({
                   </ActionTooltip>
                 ) : null}
 
-                {!isSelfProfileCard ? (
-                  <ActionTooltip
-                    label={friendActionTooltipLabel}
-                    align="center"
+                <ActionTooltip label="Add Friend" align="center">
+                  <button
+                    type="button"
+                    onClick={onAddFriend}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/15 bg-[#1e1f22] text-[#dbdee1] transition hover:bg-[#2a2b30]"
+                    aria-label="Add friend"
+                    title="Add Friend"
                   >
-                    <button
-                      type="button"
-                      onClick={onAddFriend}
-                      disabled={friendActionDisabled}
-                      className={cn(
-                        "inline-flex h-8 w-8 items-center justify-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-70",
-                        resolvedDirectFriendStatus === "friends"
-                          ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-200"
-                          : resolvedDirectFriendStatus === "incoming_pending" ||
-                              resolvedDirectFriendStatus === "outgoing_pending"
-                            ? "border-amber-500/35 bg-amber-500/15 text-amber-200"
-                            : "border-white/15 bg-[#1e1f22] text-[#dbdee1] hover:bg-[#2a2b30]",
-                      )}
-                      aria-label={friendActionTooltipLabel}
-                      title={friendActionTooltipLabel}
-                    >
-                      {friendActionIcon}
-                    </button>
-                  </ActionTooltip>
-                ) : null}
+                    <UserPlus suppressHydrationWarning className="h-4 w-4" />
+                  </button>
+                </ActionTooltip>
 
                 <ActionTooltip label="Block" align="center">
                   <button
@@ -2545,10 +2172,7 @@ export const ChatItem = ({
                     aria-label="Open private message"
                     title="Private Message"
                   >
-                    <MessageCircle
-                      suppressHydrationWarning
-                      className="h-4 w-4"
-                    />
+                    <MessageCircle suppressHydrationWarning className="h-4 w-4" />
                   </button>
                 </ActionTooltip>
 
@@ -2573,21 +2197,14 @@ export const ChatItem = ({
           botName={botCommandsName || displayName || "Bot"}
           commands={botCommands}
         />
-        <Dialog
-          open={Boolean(openMutualDetails)}
-          onOpenChange={(open) => {
-            if (!open) {
-              setOpenMutualDetails(null);
-            }
-          }}
-        >
+        <Dialog open={Boolean(openMutualDetails)} onOpenChange={(open) => {
+          if (!open) {
+            setOpenMutualDetails(null);
+          }
+        }}>
           <DialogContent className="max-w-lg overflow-hidden border-black/30 bg-[#111214] p-0 text-[#dbdee1]">
             <DialogHeader className="px-6 pt-6">
-              <DialogTitle>
-                {openMutualDetails?.type === "servers"
-                  ? "Mutual Servers"
-                  : "Mutual Friends"}
-              </DialogTitle>
+              <DialogTitle>{openMutualDetails?.type === "servers" ? "Mutual Servers" : "Mutual Friends"}</DialogTitle>
               <DialogDescription className="text-[#949ba4]">
                 Shared with {openMutualDetails?.displayName || "this user"}
               </DialogDescription>
@@ -2595,60 +2212,43 @@ export const ChatItem = ({
             <ScrollArea className="max-h-[min(60vh,28rem)] px-6 pb-6">
               <div className="space-y-2">
                 {openMutualDetails?.type === "servers" ? (
-                  openMutualDetails.mutualServers.length ? (
-                    openMutualDetails.mutualServers.map((serverItem) => (
-                      <button
-                        key={serverItem.id}
-                        type="button"
-                        onClick={() => onOpenMutualServer(serverItem.id)}
-                        className="flex w-full items-center gap-3 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-left transition hover:bg-[#232428]"
-                      >
-                        <img
-                          src={serverItem.imageUrl}
-                          alt={serverItem.name}
-                          className="h-10 w-10 rounded-full object-cover"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-[#dbdee1]">
-                            {serverItem.name}
-                          </p>
-                        </div>
-                      </button>
-                    ))
-                  ) : (
+                  openMutualDetails.mutualServers.length ? openMutualDetails.mutualServers.map((serverItem) => (
+                    <button
+                      key={serverItem.id}
+                      type="button"
+                      onClick={() => onOpenMutualServer(serverItem.id)}
+                      className="flex w-full items-center gap-3 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-left transition hover:bg-[#232428]"
+                    >
+                      <img src={serverItem.imageUrl} alt={serverItem.name} className="h-10 w-10 rounded-full object-cover" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-[#dbdee1]">{serverItem.name}</p>
+                      </div>
+                    </button>
+                  )) : (
                     <div className="rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-4 text-sm text-[#949ba4]">
                       No mutual servers found.
                     </div>
                   )
-                ) : openMutualDetails?.mutualFriends.length ? (
-                  openMutualDetails.mutualFriends.map((friendItem) => (
+                ) : (
+                  openMutualDetails?.mutualFriends.length ? openMutualDetails.mutualFriends.map((friendItem) => (
                     <button
                       key={friendItem.profileId}
                       type="button"
-                      onClick={() =>
-                        onOpenPrivateMessageByRoute({
-                          serverId: friendItem.serverId,
-                          memberId: friendItem.memberId,
-                        })
-                      }
+                      onClick={() => onOpenPrivateMessageByRoute({ serverId: friendItem.serverId, memberId: friendItem.memberId })}
                       disabled={!friendItem.serverId || !friendItem.memberId}
                       className="flex w-full items-center gap-3 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2 text-left transition hover:bg-[#232428] disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <UserAvatar src={friendItem.imageUrl} />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-[#dbdee1]">
-                          {friendItem.displayName}
-                        </p>
-                        <p className="truncate text-xs text-[#949ba4]">
-                          {friendItem.email || friendItem.profileId}
-                        </p>
+                        <p className="truncate text-sm font-medium text-[#dbdee1]">{friendItem.displayName}</p>
+                        <p className="truncate text-xs text-[#949ba4]">{friendItem.email || friendItem.profileId}</p>
                       </div>
                     </button>
-                  ))
-                ) : (
-                  <div className="rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-4 text-sm text-[#949ba4]">
-                    No mutual friends found.
-                  </div>
+                  )) : (
+                    <div className="rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-4 text-sm text-[#949ba4]">
+                      No mutual friends found.
+                    </div>
+                  )
                 )}
               </div>
             </ScrollArea>
@@ -2668,15 +2268,15 @@ export const ChatItem = ({
                   memberId={member.id}
                   nameClassName={cn(
                     "font-semibold",
-                    runtimeAccessibilityPreferences.largerChatFont
-                      ? "text-base"
-                      : "text-sm",
+                    runtimeAccessibilityPreferences.largerChatFont ? "text-base" : "text-sm"
                   )}
                   plateMetaIcons={roleAndMetaIcons}
                 />
               </button>
             </div>
-            <span className="text-xs text-[#949ba4]">{timestamp}</span>
+            <span className="text-xs text-[#949ba4]">
+              {timestamp}
+            </span>
           </div>
           {isImage && runtimeTextImagesPreferences.showInlineMedia && (
             <a
@@ -2688,8 +2288,8 @@ export const ChatItem = ({
                 isEmote
                   ? "h-16 w-16 rounded-md"
                   : isSticker
-                    ? "h-40 w-40 rounded-lg"
-                    : "aspect-square rounded-md border bg-secondary h-48 w-48",
+                  ? "h-40 w-40 rounded-lg"
+                  : "aspect-square rounded-md border bg-secondary h-48 w-48"
               )}
             >
               {isGif && runtimeTextImagesPreferences.autoplayGifs ? (
@@ -2702,40 +2302,26 @@ export const ChatItem = ({
               ) : isGif ? (
                 <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-zinc-900/70 px-2 text-center text-[11px] text-zinc-100">
                   <span>GIF autoplay is off</span>
-                  <span className="text-[10px] text-zinc-300">
-                    Open to view
-                  </span>
+                  <span className="text-[10px] text-zinc-300">Open to view</span>
                 </div>
-              ) : isSticker &&
-                !runtimeTextImagesPreferences.autoplayStickers ? (
+              ) : isSticker && !runtimeTextImagesPreferences.autoplayStickers ? (
                 <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-zinc-900/70 px-2 text-center text-[11px] text-zinc-100">
                   <span>Sticker autoplay is off</span>
-                  <span className="text-[10px] text-zinc-300">
-                    Open to view
-                  </span>
+                  <span className="text-[10px] text-zinc-300">Open to view</span>
                 </div>
               ) : (
-                // Use the direct asset URL here so chat media does not wait on Next image optimization.
-                // That keeps emotes, stickers, and uploaded pictures visible as soon as the message renders.
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
+                <Image
                   src={fileUrl}
                   alt={content}
-                  className={cn(
-                    "h-full w-full",
-                    isSticker ? "object-contain" : "object-cover",
-                  )}
-                  loading="lazy"
+                  fill
+                  className={isSticker ? "object-contain" : "object-cover"}
                 />
               )}
             </a>
           )}
           {isImage && !runtimeTextImagesPreferences.showInlineMedia ? (
             <div className="relative mt-2 flex items-center p-2 rounded-md border border-zinc-300/70 bg-zinc-100/80 dark:border-zinc-700 dark:bg-zinc-900/80">
-              <FileIcon
-                suppressHydrationWarning
-                className="h-10 w-10 fill-indigo-200 stroke-indigo-400"
-              />
+              <FileIcon suppressHydrationWarning className="h-10 w-10 fill-indigo-200 stroke-indigo-400" />
               <a
                 href={fileUrl}
                 target="_blank"
@@ -2748,10 +2334,7 @@ export const ChatItem = ({
           ) : null}
           {isPDF && runtimeTextImagesPreferences.showInlineMedia && (
             <div className="relative flex items-center p-2 mt-2 rounded-md bg-background/10">
-              <FileIcon
-                suppressHydrationWarning
-                className="h-10 w-10 fill-indigo-200 stroke-indigo-400"
-              />
+              <FileIcon suppressHydrationWarning className="h-10 w-10 fill-indigo-200 stroke-indigo-400" />
               <a
                 href={fileUrl}
                 target="_blank"
@@ -2764,10 +2347,7 @@ export const ChatItem = ({
           )}
           {isPDF && !runtimeTextImagesPreferences.showInlineMedia && (
             <div className="relative flex items-center p-2 mt-2 rounded-md border border-zinc-300/70 bg-zinc-100/80 dark:border-zinc-700 dark:bg-zinc-900/80">
-              <FileIcon
-                suppressHydrationWarning
-                className="h-10 w-10 fill-indigo-200 stroke-indigo-400"
-              />
+              <FileIcon suppressHydrationWarning className="h-10 w-10 fill-indigo-200 stroke-indigo-400" />
               <a
                 href={fileUrl}
                 target="_blank"
@@ -2778,9 +2358,7 @@ export const ChatItem = ({
               </a>
             </div>
           )}
-          {isSoundEfx &&
-          fileUrl &&
-          runtimeTextImagesPreferences.showInlineMedia ? (
+          {isSoundEfx && fileUrl && runtimeTextImagesPreferences.showInlineMedia ? (
             <div className="mt-2 w-full max-w-md rounded-md border border-zinc-300/70 bg-zinc-100/80 p-2 dark:border-zinc-700 dark:bg-zinc-900/80">
               <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
                 Sound EFX
@@ -2790,14 +2368,9 @@ export const ChatItem = ({
               </audio>
             </div>
           ) : null}
-          {isSoundEfx &&
-          fileUrl &&
-          !runtimeTextImagesPreferences.showInlineMedia ? (
+          {isSoundEfx && fileUrl && !runtimeTextImagesPreferences.showInlineMedia ? (
             <div className="relative mt-2 flex items-center p-2 rounded-md border border-zinc-300/70 bg-zinc-100/80 dark:border-zinc-700 dark:bg-zinc-900/80">
-              <FileIcon
-                suppressHydrationWarning
-                className="h-10 w-10 fill-indigo-200 stroke-indigo-400"
-              />
+              <FileIcon suppressHydrationWarning className="h-10 w-10 fill-indigo-200 stroke-indigo-400" />
               <a
                 href={fileUrl}
                 target="_blank"
@@ -2810,45 +2383,32 @@ export const ChatItem = ({
           ) : null}
           {!fileUrl && !isEditing && (
             <div
-              aria-live={
-                runtimeAccessibilityPreferences.enableScreenReaderAnnouncements
-                  ? "polite"
-                  : "off"
-              }
+              aria-live={runtimeAccessibilityPreferences.enableScreenReaderAnnouncements ? "polite" : "off"}
               aria-atomic="false"
             >
               {quotedMessage ? (
                 <div className="mb-1 rounded-md border-l-2 border-indigo-400/70 bg-indigo-500/10 px-2 py-1 text-xs text-indigo-100/95">
-                  <p className="font-semibold text-indigo-200">
-                    Replying to {quotedMessage.authorName}
-                  </p>
-                  <p className="mt-0.5 truncate">
-                    {quotedMessage.snippet || "Quoted message"}
-                  </p>
+                  <p className="font-semibold text-indigo-200">Replying to {quotedMessage.authorName}</p>
+                  <p className="mt-0.5 truncate">{quotedMessage.snippet || "Quoted message"}</p>
                 </div>
               ) : null}
 
               <p
                 className={cn(
                   "chat-wrap-text max-w-full text-[#2e3338] dark:text-[#dbdee1]",
-                  runtimeAccessibilityPreferences.largerChatFont
-                    ? "text-base leading-7"
-                    : "text-sm",
+                  runtimeAccessibilityPreferences.largerChatFont ? "text-base leading-7" : "text-sm",
                   runtimeAccessibilityPreferences.highContrastMode
                     ? "text-zinc-900 dark:text-zinc-100"
                     : null,
                   deleted &&
-                    "italic text-zinc-500 dark:text-zinc-400 text-xs mt-1",
+                    "italic text-zinc-500 dark:text-zinc-400 text-xs mt-1"
                 )}
               >
                 {contentSegments.map((segment, index) => {
                   if (segment.kind === "text") {
                     return (
                       <span key={`text-${index}`}>
-                        {renderTextWithLinks(
-                          segment.value,
-                          `content-${id}-${index}`,
-                        )}
+                        {renderTextWithLinks(segment.value, `content-${id}-${index}`)}
                       </span>
                     );
                   }
@@ -2860,7 +2420,7 @@ export const ChatItem = ({
                         "mx-0.5 inline-flex rounded px-1.5 py-0.5 font-semibold",
                         segment.entityType === "role"
                           ? "bg-amber-500/20 text-amber-700 dark:text-amber-200"
-                          : "bg-indigo-500/20 text-indigo-700 dark:text-indigo-200",
+                          : "bg-indigo-500/20 text-indigo-700 dark:text-indigo-200"
                       )}
                       title={`Mentioned ${segment.entityType}: ${segment.label}`}
                     >
@@ -2887,9 +2447,7 @@ export const ChatItem = ({
                 </div>
               ) : null}
 
-              {runtimeTextImagesPreferences.showEmbeds &&
-              runtimeTextImagesPreferences.showLinkPreviews &&
-              renderedPreviews.length ? (
+              {runtimeTextImagesPreferences.showEmbeds && runtimeTextImagesPreferences.showLinkPreviews && renderedPreviews.length ? (
                 <div className="mt-2 space-y-2">
                   {renderedPreviews.map((preview) => (
                     <a
@@ -2944,7 +2502,7 @@ export const ChatItem = ({
                         : "gap-1.5 px-2.5 py-1",
                       item.reactedByCurrentMember
                         ? "border-emerald-400/80 bg-emerald-500/15 text-emerald-100"
-                        : "border-zinc-600/80 bg-zinc-700/40 text-zinc-200 hover:bg-zinc-700/60",
+                        : "border-zinc-600/80 bg-zinc-700/40 text-zinc-200 hover:bg-zinc-700/60"
                     )}
                   >
                     <span>{item.emoji}</span>
@@ -2954,18 +2512,11 @@ export const ChatItem = ({
                   <div key={item.id} className="relative">
                     <button
                       type="button"
-                      onClick={() =>
-                        setActivePickerId((prev) =>
-                          prev === item.id ? null : item.id,
-                        )
-                      }
+                      onClick={() => setActivePickerId((prev) => (prev === item.id ? null : item.id))}
                       className="inline-flex items-center gap-1 rounded-full border border-dashed border-zinc-500/80 bg-zinc-700/25 px-2.5 py-1 text-xs text-zinc-200 transition hover:bg-zinc-700/50"
                       title="Pick emoji"
                     >
-                      <SmilePlus
-                        suppressHydrationWarning
-                        className="h-3.5 w-3.5"
-                      />
+                      <SmilePlus suppressHydrationWarning className="h-3.5 w-3.5" />
                       <span>Add</span>
                     </button>
 
@@ -2985,7 +2536,7 @@ export const ChatItem = ({
                       </div>
                     ) : null}
                   </div>
-                ),
+                )
               )}
             </div>
           ) : null}
@@ -3038,7 +2589,7 @@ export const ChatItem = ({
                 actionIconClassName,
                 canUseThreads && !isThreadActionPending
                   ? actionIconEnabledClassName
-                  : actionIconDisabledClassName,
+                  : actionIconDisabledClassName
               )}
             />
           </ActionTooltip>
@@ -3051,10 +2602,7 @@ export const ChatItem = ({
             />
           </ActionTooltip>
 
-          <ActionTooltip
-            label={canEditMessage ? "Edit" : "Edit unavailable"}
-            align="center"
-          >
+          <ActionTooltip label={canEditMessage ? "Edit" : "Edit unavailable"} align="center">
             <Edit
               suppressHydrationWarning
               onClick={() => {
@@ -3064,17 +2612,12 @@ export const ChatItem = ({
               }}
               className={cn(
                 actionIconClassName,
-                canEditMessage
-                  ? actionIconEnabledClassName
-                  : actionIconDisabledClassName,
+                canEditMessage ? actionIconEnabledClassName : actionIconDisabledClassName
               )}
             />
           </ActionTooltip>
 
-          <ActionTooltip
-            label={canDeleteMessage ? "Delete" : "Delete unavailable"}
-            align="center"
-          >
+          <ActionTooltip label={canDeleteMessage ? "Delete" : "Delete unavailable"} align="center">
             <Trash
               suppressHydrationWarning
               onClick={() => {
@@ -3087,9 +2630,7 @@ export const ChatItem = ({
               }}
               className={cn(
                 actionIconClassName,
-                canDeleteMessage
-                  ? actionIconEnabledClassName
-                  : actionIconDisabledClassName,
+                canDeleteMessage ? actionIconEnabledClassName : actionIconDisabledClassName
               )}
             />
           </ActionTooltip>

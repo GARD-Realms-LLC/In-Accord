@@ -25,170 +25,168 @@ export const ensureChannelGroupSchema = async () => {
     return;
   }
 
-  await db.execute(sql`select pg_advisory_lock(hashtext('ensure_channel_group_schema_v1'))`);
+  await db.execute(sql`
+    create table if not exists "ChannelGroup" (
+      "id" varchar(191) primary key,
+      "name" varchar(191) not null,
+      "serverId" varchar(191) not null,
+      "profileId" varchar(191) not null,
+      "sortOrder" integer not null default 0,
+      "createdAt" timestamp not null,
+      "updatedAt" timestamp not null
+    )
+  `);
 
-  try {
-    if (channelGroupSchemaReady) {
-      return;
-    }
+  await db.execute(sql`
+    alter table "ChannelGroup"
+    add column if not exists "sortOrder" integer not null default 0
+  `);
 
-    await db.execute(sql`
-      create table if not exists "ChannelGroup" (
-        "id" varchar(191) primary key,
-        "name" varchar(191) not null,
-        "serverId" varchar(191) not null,
-        "profileId" varchar(191) not null,
-        "sortOrder" integer not null default 0,
-        "createdAt" timestamp not null,
-        "updatedAt" timestamp not null
-      )
-    `);
+  await db.execute(sql`
+    alter table "ChannelGroup"
+    add column if not exists "icon" varchar(32)
+  `);
 
-    await db.execute(sql`
-      alter table "ChannelGroup"
-      add column if not exists "sortOrder" integer not null default 0
-    `);
-
-    await db.execute(sql`
-      alter table "ChannelGroup"
-      add column if not exists "icon" varchar(32)
-    `);
-
-    await db.execute(sql`
-      with ranked as (
-        select
-          g."id",
-          row_number() over (
-            partition by g."serverId"
-            order by g."sortOrder" asc, g."createdAt" asc, g."id" asc
-          ) as rn
-        from "ChannelGroup" g
-      )
-      update "ChannelGroup" g
-      set "sortOrder" = r.rn
+  await db.execute(sql`
+    with ranked as (
+      select
+        g."id",
+        row_number() over (
+          partition by g."serverId"
+          order by g."sortOrder" asc, g."createdAt" asc, g."id" asc
+        ) as rn
+      from "ChannelGroup" g
+    )
+    update "ChannelGroup"
+    set "sortOrder" = (
+      select r.rn
       from ranked r
-      where g."id" = r."id"
-    `);
-
-    await db.execute(sql`
-      create index if not exists "ChannelGroup_serverId_idx"
-      on "ChannelGroup" ("serverId")
-    `);
-
-    await db.execute(sql`
-      create index if not exists "ChannelGroup_serverId_sortOrder_idx"
-      on "ChannelGroup" ("serverId", "sortOrder")
-    `);
-
-    await db.execute(sql`
-      alter table "Channel"
-      add column if not exists "channelGroupId" varchar(191)
-    `);
-
-    await db.execute(sql`
-      alter table "Channel"
-      add column if not exists "icon" varchar(32)
-    `);
-
-    await db.execute(sql`
-      alter table "Channel"
-      add column if not exists "sortOrder" integer not null default 0
-    `);
-
-    await db.execute(sql`
-      with ranked as (
-        select
-          c."id",
-          row_number() over (
-            partition by c."serverId", coalesce(c."channelGroupId", '')
-            order by c."sortOrder" asc, c."createdAt" asc, c."id" asc
-          ) as rn
-        from "Channel" c
-      )
-      update "Channel" c
-      set "sortOrder" = r.rn
+      where r."id" = "ChannelGroup"."id"
+    )
+    where exists (
+      select 1
       from ranked r
-      where c."id" = r."id"
-    `);
+      where r."id" = "ChannelGroup"."id"
+    )
+  `);
 
-    await db.execute(sql`
-      create index if not exists "Channel_channelGroupId_idx"
-      on "Channel" ("channelGroupId")
-    `);
+  await db.execute(sql`
+    create index if not exists "ChannelGroup_serverId_idx"
+    on "ChannelGroup" ("serverId")
+  `);
 
-    await db.execute(sql`
-      create index if not exists "Channel_serverId_group_sortOrder_idx"
-      on "Channel" ("serverId", "channelGroupId", "sortOrder")
-    `);
+  await db.execute(sql`
+    create index if not exists "ChannelGroup_serverId_sortOrder_idx"
+    on "ChannelGroup" ("serverId", "sortOrder")
+  `);
 
-  // Dedupe channel names per server (case-insensitive, trimmed), keeping oldest.
-    await db.execute(sql`
-      with ranked as (
-        select
-          c."id",
-          row_number() over (
-            partition by c."serverId", lower(trim(coalesce(c."name", '')))
-            order by c."createdAt" asc, c."id" asc
-          ) as rn
-        from "Channel" c
-      )
-      update "Channel" c
-      set
-        "name" = concat(
-          coalesce(nullif(trim(c."name"), ''), 'channel'),
-          '-',
-          left(c."id", 6)
-        ),
-        "updatedAt" = now()
+  await db.execute(sql`
+    alter table "Channel"
+    add column if not exists "channelGroupId" varchar(191)
+  `);
+
+  await db.execute(sql`
+    alter table "Channel"
+    add column if not exists "icon" varchar(32)
+  `);
+
+  await db.execute(sql`
+    alter table "Channel"
+    add column if not exists "sortOrder" integer not null default 0
+  `);
+
+  await db.execute(sql`
+    with ranked as (
+      select
+        c."id",
+        row_number() over (
+          partition by c."serverId", coalesce(c."channelGroupId", '')
+          order by c."sortOrder" asc, c."createdAt" asc, c."id" asc
+        ) as rn
+      from "Channel" c
+    )
+    update "Channel"
+    set "sortOrder" = (
+      select r.rn
       from ranked r
-      where c."id" = r."id"
-        and r.rn > 1
-    `);
-
-  // Dedupe channel-group names per server (case-insensitive, trimmed), keeping oldest.
-    await db.execute(sql`
-      with ranked as (
-        select
-          g."id",
-          row_number() over (
-            partition by g."serverId", lower(trim(coalesce(g."name", '')))
-            order by g."createdAt" asc, g."id" asc
-          ) as rn
-        from "ChannelGroup" g
-      )
-      update "ChannelGroup" g
-      set
-        "name" = concat(
-          coalesce(nullif(trim(g."name"), ''), 'group'),
-          '-',
-          left(g."id", 6)
-        ),
-        "updatedAt" = now()
+      where r."id" = "Channel"."id"
+    )
+    where exists (
+      select 1
       from ranked r
-      where g."id" = r."id"
-        and r.rn > 1
-    `);
+      where r."id" = "Channel"."id"
+    )
+  `);
 
-    await db.execute(sql`
-      create unique index if not exists "Channel_unique_name_per_server"
-      on "Channel" (
-        "serverId",
-        lower(trim(coalesce("name", '')))
-      )
-    `);
+  await db.execute(sql`
+    create index if not exists "Channel_channelGroupId_idx"
+    on "Channel" ("channelGroupId")
+  `);
 
-    await db.execute(sql`
-      create unique index if not exists "ChannelGroup_unique_name_per_server"
-      on "ChannelGroup" (
-        "serverId",
-        lower(trim(coalesce("name", '')))
-      )
-    `);
+  await db.execute(sql`
+    create index if not exists "Channel_serverId_group_sortOrder_idx"
+    on "Channel" ("serverId", "channelGroupId", "sortOrder")
+  `);
 
-    channelGroupSchemaReady = true;
-  } finally {
-    await db.execute(sql`select pg_advisory_unlock(hashtext('ensure_channel_group_schema_v1'))`);
-  }
+  await db.execute(sql`
+    with ranked as (
+      select
+        c."id",
+        row_number() over (
+          partition by c."serverId", lower(trim(coalesce(c."name", '')))
+          order by c."createdAt" asc, c."id" asc
+        ) as rn
+      from "Channel" c
+    )
+    update "Channel"
+    set
+      "name" = coalesce(nullif(trim("Channel"."name"), ''), 'channel') || '-' || substr("Channel"."id", 1, 6),
+      "updatedAt" = CURRENT_TIMESTAMP
+    where "Channel"."id" in (
+      select r."id"
+      from ranked r
+      where r.rn > 1
+    )
+  `);
+
+  await db.execute(sql`
+    with ranked as (
+      select
+        g."id",
+        row_number() over (
+          partition by g."serverId", lower(trim(coalesce(g."name", '')))
+          order by g."createdAt" asc, g."id" asc
+        ) as rn
+      from "ChannelGroup" g
+    )
+    update "ChannelGroup"
+    set
+      "name" = coalesce(nullif(trim("ChannelGroup"."name"), ''), 'group') || '-' || substr("ChannelGroup"."id", 1, 6),
+      "updatedAt" = CURRENT_TIMESTAMP
+    where "ChannelGroup"."id" in (
+      select r."id"
+      from ranked r
+      where r.rn > 1
+    )
+  `);
+
+  await db.execute(sql`
+    create unique index if not exists "Channel_unique_name_per_server"
+    on "Channel" (
+      "serverId",
+      lower(trim(coalesce("name", '')))
+    )
+  `);
+
+  await db.execute(sql`
+    create unique index if not exists "ChannelGroup_unique_name_per_server"
+    on "ChannelGroup" (
+      "serverId",
+      lower(trim(coalesce("name", '')))
+    )
+  `);
+
+  channelGroupSchemaReady = true;
 };
 
 type EnsureMediaChannelsGroupedForServerArgs = {
@@ -226,7 +224,7 @@ export const ensureMediaChannelsGroupedForServer = async ({
 
   await ensureChannelGroupSchema();
 
-  await db.transaction(async (tx) => {
+  await db.transaction(async (tx: any) => {
     for (const mediaType of normalizedTypes) {
       const config = MEDIA_GROUP_CONFIG[mediaType];
       const groupLookupResult = await tx.execute(sql`
@@ -258,17 +256,17 @@ export const ensureMediaChannelsGroupedForServer = async ({
 
       if (selectedGroupId) {
         await tx.execute(sql`
-          update "ChannelGroup" g
+          update "ChannelGroup"
           set
             "name" = ${config.targetName},
-            "updatedAt" = now()
-          where g."id" = ${selectedGroupId}
-            and lower(trim(coalesce(g."name", ''))) <> lower(trim(${config.targetName}))
+            "updatedAt" = CURRENT_TIMESTAMP
+          where "ChannelGroup"."id" = ${selectedGroupId}
+            and lower(trim(coalesce("ChannelGroup"."name", ''))) <> lower(trim(${config.targetName}))
             and not exists (
               select 1
               from "ChannelGroup" conflict
               where conflict."serverId" = ${normalizedServerId}
-                and conflict."id" <> g."id"
+                and conflict."id" <> "ChannelGroup"."id"
                 and lower(trim(coalesce(conflict."name", ''))) = lower(trim(${config.targetName}))
             )
         `);
@@ -323,8 +321,8 @@ export const ensureMediaChannelsGroupedForServer = async ({
             ${normalizedServerId},
             ${normalizedProfileId},
             ${nextSortOrder},
-            now(),
-            now()
+            CURRENT_TIMESTAMP,
+            CURRENT_TIMESTAMP
           )
           on conflict do nothing
         `);
@@ -353,14 +351,14 @@ export const ensureMediaChannelsGroupedForServer = async ({
       }
 
       await tx.execute(sql`
-        update "Channel" c
+        update "Channel"
         set
           "channelGroupId" = ${selectedGroupId},
-          "updatedAt" = now()
-        where c."serverId" = ${normalizedServerId}
-          and c."type" = ${mediaType}
-          and c."channelGroupId" is null
-          and lower(trim(coalesce(c."name", ''))) <> 'stage'
+          "updatedAt" = CURRENT_TIMESTAMP
+        where "Channel"."serverId" = ${normalizedServerId}
+          and "Channel"."type" = ${mediaType}
+          and "Channel"."channelGroupId" is null
+          and lower(trim(coalesce("Channel"."name", ''))) <> 'stage'
       `);
     }
   });

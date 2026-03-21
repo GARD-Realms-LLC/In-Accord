@@ -169,6 +169,32 @@ const isLoopbackOrigin = (value) => {
   }
 };
 
+const normalizePostgresHost = (value) => {
+  const trimmedValue = stripWrappingQuotes(value);
+  if (!trimmedValue) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(trimmedValue);
+    if (
+      parsed.protocol !== "postgres:" &&
+      parsed.protocol !== "postgresql:"
+    ) {
+      return null;
+    }
+
+    return parsed.hostname.trim().toLowerCase() || null;
+  } catch {
+    return null;
+  }
+};
+
+const isLoopbackPostgresUrl = (value) => {
+  const host = normalizePostgresHost(value);
+  return host === "localhost" || host === "127.0.0.1" || host === "::1";
+};
+
 const readCloudflareRouteOrigin = async () => {
   const wranglerConfigPath = path.join(ROOT_DIR, "wrangler.jsonc");
   let rawConfig;
@@ -284,6 +310,26 @@ const readRequiredDesktopAppOrigin = async () => {
   throw new Error(
     "Desktop app origin is still set to localhost. Set INACCORD_DESKTOP_APP_ORIGIN to your real site origin, or keep a Cloudflare custom-domain route in wrangler.jsonc.",
   );
+};
+
+const validateNonLocalLiveDatabaseUrl = async () => {
+  const envEntries = await readEnvFileEntries();
+  const liveDatabaseUrl = envEntries.get("LIVE_DATABASE_URL");
+  const databaseUrl = envEntries.get("DATABASE_URL");
+  const candidateUrl =
+    (liveDatabaseUrl && !/^\s*replace_/i.test(liveDatabaseUrl)
+      ? liveDatabaseUrl
+      : databaseUrl) ?? "";
+
+  if (!candidateUrl.trim()) {
+    return;
+  }
+
+  if (isLoopbackPostgresUrl(candidateUrl)) {
+    throw new Error(
+      "LIVE_DATABASE_URL/DATABASE_URL points to localhost. Refusing to package a desktop build against a machine-local PostgreSQL source.",
+    );
+  }
 };
 
 const prepareStandaloneAssets = async () => {
@@ -619,6 +665,7 @@ const syncConfiguredUpdateFeed = async (updateFeed) => {
 const main = async () => {
   const updateFeed = await readRequiredUpdateFeed();
   const desktopAppOrigin = await readRequiredDesktopAppOrigin();
+  await validateNonLocalLiveDatabaseUrl();
 
   await buildStandaloneApp(updateFeed, desktopAppOrigin);
   const appDirectory = await packageDesktopApp();

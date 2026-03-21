@@ -26,10 +26,10 @@ export async function GET() {
 
     const countsResult = await db.execute(sql`
       select
-        (select count(*)::int from "Users") as "totalMembers",
-        (select count(*)::int from "Server") as "totalServers",
-        (select count(*)::int from "Channel") as "totalChannels",
-        (select count(*)::int from "Message") as "totalMessages"
+        (select count(*) from "Users") as "totalMembers",
+        (select count(*) from "Server") as "totalServers",
+        (select count(*) from "Channel") as "totalChannels",
+        (select count(*) from "Message") as "totalMessages"
     `);
 
     const countsRow = (countsResult as unknown as {

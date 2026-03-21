@@ -107,7 +107,8 @@ export async function POST() {
       ok: true,
       setup: await getDatabaseRuntimeSetup(),
       ready: await isDatabaseRuntimeReady(),
-      message: "In-Accord now runs on Cloudflare D1. No PostgreSQL sync is used.",
+      message:
+        "In-Accord now runs on Cloudflare D1. PostgreSQL snapshot imports are not available from this route.",
     });
   } catch (error) {
     console.error("[ADMIN_DATABASE_RUNTIME_POST]", error);

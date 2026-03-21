@@ -3,6 +3,7 @@ import { and, eq, inArray } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { db, member, profile, server } from "@/lib/db";
+import type { Profile } from "@/lib/db/types";
 import { resolveServerRouteContext } from "@/lib/route-slug-resolver";
 import { getServerManagementAccess } from "@/lib/server-management-access";
 import {
@@ -121,13 +122,13 @@ export async function GET(
       const responses = await getServerOnboardingResponses(resolvedServerId);
       const profileIds = Array.from(new Set(responses.map((item) => item.profileId).filter(Boolean)));
 
-      const memberProfiles = profileIds.length
+      const memberProfiles: Profile[] = profileIds.length
         ? await db.query.profile.findMany({
             where: inArray(profile.id, profileIds),
           })
         : [];
 
-      const profileById = new Map(memberProfiles.map((item) => [item.id, item]));
+      const profileById = new Map<string, Profile>(memberProfiles.map((item) => [item.id, item]));
 
       return NextResponse.json({
         serverId: resolvedServerId,

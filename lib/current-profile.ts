@@ -45,6 +45,15 @@ type CachedProfile = {
 
 const currentProfileCache = new Map<string, { value: CachedProfile | null; expiresAt: number }>();
 
+const normalizeProfileDate = (value: Date | string | null | undefined) => {
+  if (!value) {
+    return new Date(0);
+  }
+
+  const parsed = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+  return Number.isNaN(parsed.getTime()) ? new Date(0) : parsed;
+};
+
 const getCachedCurrentProfile = (userId: string) => {
   if (DISABLE_CURRENT_PROFILE_CACHE) {
     return null;
@@ -131,8 +140,8 @@ const getBasicCurrentProfile = async (userId: string): Promise<CachedProfile | n
     role: user.role ?? null,
     imageUrl: resolveAvatarUrl(user.imageUrl) ?? "/in-accord-steampunk-logo.png",
     email: user.email ?? "",
-    createdAt: user.accountCreated ? new Date(user.accountCreated) : new Date(0),
-    updatedAt: user.lastLogin ? new Date(user.lastLogin) : new Date(0),
+    createdAt: normalizeProfileDate(user.accountCreated),
+    updatedAt: normalizeProfileDate(user.lastLogin),
   };
 };
 
@@ -256,8 +265,8 @@ export const currentProfile = async () => {
           role: user.role ?? null,
           imageUrl: resolveAvatarUrl(user.imageUrl) ?? "/in-accord-steampunk-logo.png",
           email: user.email ?? "",
-          createdAt: user.accountCreated ? new Date(user.accountCreated) : new Date(0),
-          updatedAt: user.lastLogin ? new Date(user.lastLogin) : new Date(0),
+          createdAt: normalizeProfileDate(user.accountCreated),
+          updatedAt: normalizeProfileDate(user.lastLogin),
         }
       : null;
 

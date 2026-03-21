@@ -36,14 +36,16 @@ export const ensureSystemChannelSchema = async () => {
       from "Channel" c
       where lower(trim(coalesce(c."name", ''))) in ('general', 'rules', 'stage')
     )
-    update "Channel" c
+    update "Channel"
     set
-      "name" = concat('channel-', left(c."id", 6)),
+      "name" = 'channel-' || substr("Channel"."id", 1, 6),
       "isSystem" = false,
       "updatedAt" = now()
-    from ranked r
-    where c."id" = r."id"
-      and r.rn > 1
+    where "Channel"."id" in (
+      select r."id"
+      from ranked r
+      where r.rn > 1
+    )
   `);
 
   await db.execute(sql`
@@ -101,7 +103,7 @@ export const ensureRulesChannelForServer = async (serverId: string, profileId?: 
       await db.execute(sql`
         update "Channel"
         set
-          "name" = concat('channel-', left(${duplicateId}, 6)),
+          "name" = ${`channel-${String(duplicateId).slice(0, 6)}`},
           "isSystem" = false,
           "updatedAt" = now()
         where "id" = ${duplicateId}
@@ -218,7 +220,7 @@ export const ensureStageChannelForServer = async (serverId: string, profileId?: 
       await db.execute(sql`
         update "Channel"
         set
-          "name" = concat('channel-', left(${duplicateId}, 6)),
+          "name" = ${`channel-${String(duplicateId).slice(0, 6)}`},
           "isSystem" = false,
           "updatedAt" = now()
         where "id" = ${duplicateId}

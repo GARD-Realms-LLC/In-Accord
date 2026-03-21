@@ -48,12 +48,12 @@ export async function GET() {
         s."createdAt" as "createdAt",
         s."updatedAt" as "updatedAt",
         (
-          select count(*)::int
+        select count(*)
           from "Member" m
           where m."serverId" = s."id"
         ) as "memberCount",
         (
-          select count(*)::int
+        select count(*)
           from "Channel" c
           where c."serverId" = s."id"
         ) as "channelCount"
@@ -66,7 +66,13 @@ export async function GET() {
 
     const servers = await Promise.all(
       rows.map(async (row) => {
-        const bannerConfig = await getServerBannerConfig(row.id);
+        let bannerConfig: Awaited<ReturnType<typeof getServerBannerConfig>> | null = null;
+        try {
+          bannerConfig = await getServerBannerConfig(row.id);
+        } catch (error) {
+          console.error("[ADMIN_SERVERS_BANNER]", row.id, error);
+        }
+
         return {
           id: row.id,
           name: row.name ?? "Untitled Server",

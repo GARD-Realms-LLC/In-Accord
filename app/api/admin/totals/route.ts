@@ -22,8 +22,8 @@ export async function GET() {
 
     const totalsResult = await db.execute(sql`
       select
-        (select count(*)::int from "Users") as "totalMembers",
-        (select count(*)::int from "Server") as "totalServers"
+        (select count(*) from "Users") as "totalMembers",
+        (select count(*) from "Server") as "totalServers"
     `);
 
     const totalsRow = (totalsResult as unknown as {
@@ -35,14 +35,22 @@ export async function GET() {
 
     const reportTotalsResult = await db.execute(sql`
       select
-        count(*) filter (
-          where coalesce(r."targetType", '') = 'BUG'
-            and coalesce(r."status", '') in ('OPEN', 'IN_REVIEW')
-        )::int as "openBugCount",
-        count(*) filter (
-          where coalesce(r."targetType", '') <> 'BUG'
-            and coalesce(r."status", '') in ('OPEN', 'IN_REVIEW')
-        )::int as "openReportCount"
+        coalesce(sum(
+          case
+            when coalesce(r."targetType", '') = 'BUG'
+             and coalesce(r."status", '') in ('OPEN', 'IN_REVIEW')
+            then 1
+            else 0
+          end
+        ), 0) as "openBugCount",
+        coalesce(sum(
+          case
+            when coalesce(r."targetType", '') <> 'BUG'
+             and coalesce(r."status", '') in ('OPEN', 'IN_REVIEW')
+            then 1
+            else 0
+          end
+        ), 0) as "openReportCount"
       from "Report" r
     `);
 

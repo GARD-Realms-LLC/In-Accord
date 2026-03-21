@@ -44,10 +44,11 @@ const ChannelThreadsPage = async ({ params }: ChannelThreadsPageProps) => {
   const resolvedServer = await resolveServerRouteContext({
     profileId: profile.id,
     serverParam,
+    profileRole: profile.role,
   });
 
   if (!resolvedServer) {
-    return redirect("/");
+    return redirect("/servers");
   }
 
   const serverId = resolvedServer.id;
@@ -105,13 +106,13 @@ const ChannelThreadsPage = async ({ params }: ChannelThreadsPageProps) => {
       ct."lastActivityAt" as "lastActivityAt",
       ct."createdAt" as "createdAt",
       (
-        select count(*)::int
+        select count(*)
         from "Message" tm
         where tm."threadId" = ct."id"
           and tm."deleted" = false
       ) as "replyCount",
       (
-        select count(distinct participants."participantId")::int
+        select count(distinct participants."participantId")
         from (
           select source."memberId" as "participantId"
           from "Message" source
@@ -123,7 +124,7 @@ const ChannelThreadsPage = async ({ params }: ChannelThreadsPageProps) => {
         ) participants
       ) as "participantCount",
       (
-        select count(*)::int
+        select count(*)
         from "Message" tm
         where tm."threadId" = ct."id"
           and tm."deleted" = false
@@ -140,7 +141,7 @@ const ChannelThreadsPage = async ({ params }: ChannelThreadsPageProps) => {
                 and trs."profileId" = ${viewerProfileId}
               limit 1
             ),
-            timestamp 'epoch'
+            datetime('1970-01-01 00:00:00')
           )
       ) as "unreadCount"
     from "ChannelThread" ct

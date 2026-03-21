@@ -122,7 +122,7 @@ export const BuildStalenessProvider = ({
     `A newer build is ready: Version ${currentDisplayVersion} • Build #${currentBuildNumber}. Reload to keep this page in sync.`;
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-3 z-[1000] flex justify-center px-4">
+    <div className="pointer-events-none fixed inset-x-0 top-3 z-1000 flex justify-center px-4">
       <div className="pointer-events-auto flex max-w-2xl items-center gap-3 rounded-2xl border border-amber-400/35 bg-neutral-950/96 px-4 py-3 text-sm text-amber-50 shadow-[0_18px_60px_rgba(0,0,0,0.45)] backdrop-blur">
         <div className="min-w-0">
           <div className="font-semibold tracking-[0.14em] text-amber-300 uppercase">

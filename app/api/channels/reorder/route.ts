@@ -96,33 +96,33 @@ export async function PATCH(req: Request) {
     const fromSort = Number(dragged.sortOrder ?? 0);
     const toSort = Number(target.sortOrder ?? 0);
 
-    await db.transaction(async (tx) => {
+    await db.transaction(async (tx: any) => {
       const now = new Date();
 
       if (fromGroupId === toGroupId) {
         if (fromSort < toSort) {
           await tx.execute(sql`
-            update "Channel" c
+            update "Channel"
             set
-              "sortOrder" = c."sortOrder" - 1,
+              "sortOrder" = "Channel"."sortOrder" - 1,
               "updatedAt" = ${now}
-            where c."serverId" = ${serverId}
-              and c."channelGroupId" is not distinct from ${fromGroupId}
-              and c."sortOrder" > ${fromSort}
-              and c."sortOrder" <= ${toSort}
-              and c."id" <> ${draggedChannelId}
+            where "Channel"."serverId" = ${serverId}
+              and "Channel"."channelGroupId" is not distinct from ${fromGroupId}
+              and "Channel"."sortOrder" > ${fromSort}
+              and "Channel"."sortOrder" <= ${toSort}
+              and "Channel"."id" <> ${draggedChannelId}
           `);
         } else {
           await tx.execute(sql`
-            update "Channel" c
+            update "Channel"
             set
-              "sortOrder" = c."sortOrder" + 1,
+              "sortOrder" = "Channel"."sortOrder" + 1,
               "updatedAt" = ${now}
-            where c."serverId" = ${serverId}
-              and c."channelGroupId" is not distinct from ${fromGroupId}
-              and c."sortOrder" >= ${toSort}
-              and c."sortOrder" < ${fromSort}
-              and c."id" <> ${draggedChannelId}
+            where "Channel"."serverId" = ${serverId}
+              and "Channel"."channelGroupId" is not distinct from ${fromGroupId}
+              and "Channel"."sortOrder" >= ${toSort}
+              and "Channel"."sortOrder" < ${fromSort}
+              and "Channel"."id" <> ${draggedChannelId}
           `);
         }
 
@@ -139,23 +139,23 @@ export async function PATCH(req: Request) {
       }
 
       await tx.execute(sql`
-        update "Channel" c
+        update "Channel"
         set
-          "sortOrder" = c."sortOrder" - 1,
+          "sortOrder" = "Channel"."sortOrder" - 1,
           "updatedAt" = ${now}
-        where c."serverId" = ${serverId}
-          and c."channelGroupId" is not distinct from ${fromGroupId}
-          and c."sortOrder" > ${fromSort}
+        where "Channel"."serverId" = ${serverId}
+          and "Channel"."channelGroupId" is not distinct from ${fromGroupId}
+          and "Channel"."sortOrder" > ${fromSort}
       `);
 
       await tx.execute(sql`
-        update "Channel" c
+        update "Channel"
         set
-          "sortOrder" = c."sortOrder" + 1,
+          "sortOrder" = "Channel"."sortOrder" + 1,
           "updatedAt" = ${now}
-        where c."serverId" = ${serverId}
-          and c."channelGroupId" is not distinct from ${toGroupId}
-          and c."sortOrder" >= ${toSort}
+        where "Channel"."serverId" = ${serverId}
+          and "Channel"."channelGroupId" is not distinct from ${toGroupId}
+          and "Channel"."sortOrder" >= ${toSort}
       `);
 
       await tx.execute(sql`

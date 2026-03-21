@@ -1,7 +1,7 @@
 {
   "name": "In-Accord",
-  "version": "1.0.275",
-  "inaccordDisplayVersion": "1.1.1",
+  "version": "1.0.224",
+  "inaccordDisplayVersion": "1.0.49",
   "private": true,
   "repository": {
     "type": "git",
@@ -15,7 +15,6 @@
   "scripts": {
     "app:dev": "node dev/app/run-dev.cjs",
     "app:dist:win": "node dev/app/package-win.cjs",
-    "repair:next-install": "node scripts/repair-next-install.cjs",
     "clean:next": "node -e \"const fs=require('fs');for(const p of [process.env.NEXT_DIST_DIR||'.next','.next/dev/types','.next-dev/dev/types'])fs.rmSync(p,{recursive:true,force:true})\"",
     "clean:next:all": "node -e \"const fs=require('fs');for(const p of ['.next-dev','.next'])fs.rmSync(p,{recursive:true,force:true})\"",
     "cleanup:caches": "node scripts/cleanup-caches.cjs",
@@ -24,12 +23,8 @@
     "dev": "set NEXT_DIST_DIR=.next-dev&& next dev --webpack -p 3000",
     "dev:3000": "set NEXT_DIST_DIR=.next&& npm run clean:next && next dev --webpack -p 3000",
     "version:bump:patch": "node scripts/bump-version.cjs",
-    "build": "node scripts/build-app.cjs",
+    "build": "npm run clean:next && next build --webpack",
     "start": "next start",
-    "preview:cloudflare": "opennextjs-cloudflare build && opennextjs-cloudflare preview --config wrangler.jsonc",
-    "deploy:cloudflare": "opennextjs-cloudflare build && opennextjs-cloudflare deploy --config wrangler.jsonc",
-    "cloudflare:typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
-    "postinstall": "node scripts/repair-next-install.cjs",
     "lint": "next lint",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
@@ -47,7 +42,6 @@
     "db:remove:stage-groups": "node scripts/remove-stage-channel-groups.cjs --use-database-url --apply",
     "db:backfill:ungroup-audio-video:dry": "node scripts/backfill-ungroup-audio-video-channels.cjs --use-database-url",
     "db:backfill:ungroup-audio-video": "node scripts/backfill-ungroup-audio-video-channels.cjs --use-database-url --apply",
-    "github:oauth:read": "node scripts/read-github-oauth-config.cjs",
     "bot:template-me:inspect": "node scripts/inspect-bot-ciphers.cjs",
     "bot:template-me:smoke": "node scripts/smoke-template-me-control-port.cjs",
     "bot:template-me:live": "node scripts/template-me-live-terminal.cjs"
@@ -118,6 +112,6 @@
     "electron": "^41.0.3",
     "electron-winstaller": "^5.4.0",
     "eslint": "^9.39.0",
-    "wrangler": "^4.75.0"
+    "wrangler": "^4.76.0"
   }
 }

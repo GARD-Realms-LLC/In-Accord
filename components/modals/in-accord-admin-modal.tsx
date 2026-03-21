@@ -1,44 +1,7 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ComponentType,
-  type MouseEvent as ReactMouseEvent,
-} from "react";
-import {
-  Baby,
-  Bot,
-  Briefcase,
-  Bug,
-  ChevronDown,
-  ChevronRight,
-  Cloud,
-  Crown,
-  Database,
-  ExternalLink,
-  Eye,
-  EyeOff,
-  Flag,
-  Heart,
-  Link2,
-  Mail,
-  MessageCircle,
-  School,
-  ScrollText,
-  Server,
-  Settings2,
-  ShieldAlert,
-  ShieldCheck,
-  Smile,
-  Trash2,
-  Users,
-  Webhook,
-  Wrench,
-} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type MouseEvent as ReactMouseEvent } from "react";
+import { Baby, Bot, Briefcase, Bug, ChevronDown, ChevronRight, Cloud, Crown, Database, ExternalLink, Eye, EyeOff, Flag, Heart, Link2, Mail, MessageCircle, School, ScrollText, Server, Settings2, ShieldAlert, ShieldCheck, Smile, Trash2, Users, Webhook, Wrench } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 
@@ -53,34 +16,19 @@ import { BotAppBadge } from "@/components/bot-app-badge";
 import { BusinessMemberIcon } from "@/components/business-member-icon";
 import { BannerImage } from "@/components/ui/banner-image";
 import { ModeratorLineIcon } from "@/components/moderator-line-icon";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
 import { ProfileIconRow } from "@/components/profile-icon-row";
 import { ServerProfilePopover } from "@/components/modals/server-profile-popover";
 import { UserAvatar } from "@/components/user-avatar";
 import { useModal } from "@/hooks/use-modal-store";
-import {
-  getInAccordStaffLabel,
-  isInAccordAdministrator,
-  isInAccordDeveloper,
-  isInAccordModerator,
-} from "@/lib/in-accord-admin";
+import { getInAccordStaffLabel, isInAccordAdministrator, isInAccordDeveloper, isInAccordModerator } from "@/lib/in-accord-admin";
 import { resolveBannerUrl } from "@/lib/asset-url";
 import { getOtherApiOrigin } from "@/lib/other-upstream-identifiers";
 import { resolveProfileIcons } from "@/lib/profile-icons";
-import {
-  ADMINISTRATOR_ROLE_KEY,
-  IMMUTABLE_ACCOUNT_USER_ID,
-} from "@/lib/account-security-constants";
+import { ADMINISTRATOR_ROLE_KEY, IMMUTABLE_ACCOUNT_USER_ID } from "@/lib/account-security-constants";
 import { isBotUser } from "@/lib/is-bot-user";
-import {
-  formatPresenceStatusLabel,
-  normalizePresenceStatus,
-} from "@/lib/presence-status";
+import { formatPresenceStatusLabel, normalizePresenceStatus } from "@/lib/presence-status";
 import { cn } from "@/lib/utils";
 
 type AdminSection =
@@ -137,24 +85,18 @@ const adminSections = [
 
 const adminSectionSet = new Set<AdminSection>(adminSections);
 
-const adminSectionMeta: Record<
-  AdminSection,
-  { label: string; description: string }
-> = {
+const adminSectionMeta: Record<AdminSection, { label: string; description: string }> = {
   general: {
     label: "I-A Information",
-    description:
-      "View build status, profile context, and top-level administration details.",
+    description: "View build status, profile context, and top-level administration details.",
   },
   members: {
     label: "I-A Accounts",
-    description:
-      "Manage member accounts, role assignments, and profile-level administration.",
+    description: "Manage member accounts, role assignments, and profile-level administration.",
   },
   iaServerMenu: {
     label: "I-A Server",
-    description:
-      "Quick access hub for server operations, invites, tags, and webhook controls.",
+    description: "Quick access hub for server operations, invites, tags, and webhook controls.",
   },
   servers: {
     label: "Servers",
@@ -162,8 +104,7 @@ const adminSectionMeta: Record<
   },
   ourBoard: {
     label: "In-Aboard",
-    description:
-      "Monitor public listing activity, bump usage, and listing status across servers.",
+    description: "Monitor public listing activity, bump usage, and listing status across servers.",
   },
   serverTags: {
     label: "Server Tags",
@@ -179,33 +120,27 @@ const adminSectionMeta: Record<
   },
   moderation: {
     label: "Moderation",
-    description:
-      "Handle moderation actions, case review, and policy enforcement.",
+    description: "Handle moderation actions, case review, and policy enforcement.",
   },
   roles: {
     label: "I-A Roles",
-    description:
-      "Create, update, and maintain role definitions and permissions.",
+    description: "Create, update, and maintain role definitions and permissions.",
   },
   familyCenter: {
     label: "Family Center",
-    description:
-      "Manage family safety settings and linked account relationships.",
+    description: "Manage family safety settings and linked account relationships.",
   },
   businessCenter: {
     label: "Business Center",
-    description:
-      "Review business workspaces, members, and organization controls.",
+    description: "Review business workspaces, members, and organization controls.",
   },
   schoolCenter: {
     label: "School Center",
-    description:
-      "Monitor school communities, users, and education-focused settings.",
+    description: "Monitor school communities, users, and education-focused settings.",
   },
   auditLog: {
     label: "Audit Log",
-    description:
-      "Inspect historical admin activity and security-relevant events.",
+    description: "Inspect historical admin activity and security-relevant events.",
   },
   invites: {
     label: "Invites",
@@ -217,23 +152,19 @@ const adminSectionMeta: Record<
   },
   webhooks: {
     label: "Webhooks",
-    description:
-      "Configure webhook endpoints and monitor outbound integrations.",
+    description: "Configure webhook endpoints and monitor outbound integrations.",
   },
   security: {
     label: "Security & Audit",
-    description:
-      "Review security posture, login activity, and account protections.",
+    description: "Review security posture, login activity, and account protections.",
   },
   databaseManagement: {
     label: "I-A DB",
-    description:
-      "View database-related information and maintenance entry points.",
+    description: "View database-related information and maintenance entry points.",
   },
   cloudflareManagement: {
     label: "Cloudflare",
-    description:
-      "Set up Cloudflare account access, zone selection, DNS records, and cache actions.",
+    description: "Set up Cloudflare account access, zone selection, DNS records, and cache actions.",
   },
   integrations: {
     label: "Integrations",
@@ -241,18 +172,15 @@ const adminSectionMeta: Record<
   },
   templateMeBot: {
     label: "Template Me Bot",
-    description:
-      "Manage Template Me bot configs used for real external template imports.",
+    description: "Manage Template Me bot configs used for real external template imports.",
   },
   patronage: {
     label: "Patronage",
-    description:
-      "Review support activity and patronage-related account insights.",
+    description: "Review support activity and patronage-related account insights.",
   },
   OtherAppsBots: {
     label: "Apps & Bots",
-    description:
-      "Manage app connections, bot presence, and automation settings.",
+    description: "Manage app connections, bot presence, and automation settings.",
   },
 };
 
@@ -263,37 +191,16 @@ type AdminMenuGroupId =
   | "communityPrograms"
   | "supportRevenue";
 
-const adminMenuGroups: Array<{
-  id: AdminMenuGroupId;
-  label: string;
-  sections: AdminSection[];
-}> = [
+const adminMenuGroups: Array<{ id: AdminMenuGroupId; label: string; sections: AdminSection[] }> = [
   {
     id: "workspace",
     label: "Operations",
-    sections: [
-      "general",
-      "members",
-      "roles",
-      "iaServerMenu",
-      "databaseManagement",
-      "cloudflareManagement",
-      "integrations",
-    ],
+    sections: ["general", "members", "roles", "iaServerMenu", "databaseManagement", "cloudflareManagement", "integrations"],
   },
   {
     id: "serverOperations",
     label: "Server Ops",
-    sections: [
-      "servers",
-      "ourBoard",
-      "serverTags",
-      "invites",
-      "emojiStickers",
-      "templateMeBot",
-      "OtherAppsBots",
-      "webhooks",
-    ],
+    sections: ["servers", "ourBoard", "serverTags", "invites", "emojiStickers", "templateMeBot", "OtherAppsBots", "webhooks"],
   },
   {
     id: "moderationSafety",
@@ -312,10 +219,7 @@ const adminMenuGroups: Array<{
   },
 ];
 
-const adminMenuItemMeta: Record<
-  AdminSection,
-  { label: string; icon: ComponentType<{ className?: string }> }
-> = {
+const adminMenuItemMeta: Record<AdminSection, { label: string; icon: ComponentType<{ className?: string }> }> = {
   general: { label: "I-A Information", icon: Settings2 },
   members: { label: "I-A Accounts", icon: Users },
   iaServerMenu: { label: "I-A Server", icon: Server },
@@ -603,39 +507,6 @@ type AdminSiteUrlSetup = {
   updatedAt: string | null;
 };
 
-type AdminDatabaseRuntimeEndpoint = {
-  target: "live" | "local";
-  label: string;
-  envName: "LIVE_DATABASE_URL" | "DATABASE_URL";
-  configured: boolean;
-  host: string | null;
-  port: string | null;
-  database: string | null;
-  ssl: boolean | null;
-};
-
-type AdminDatabaseRuntimeSetup = {
-  runtime: "d1";
-  activeTarget: "live" | "local";
-  effectiveTarget: "live" | "local";
-  effectiveSource: "runtime" | "fallback";
-  updatedAt: string | null;
-  local: AdminDatabaseRuntimeEndpoint;
-  live: AdminDatabaseRuntimeEndpoint;
-  d1: {
-    configured: boolean;
-    accountId: string | null;
-    databaseId: string | null;
-    databaseName: string | null;
-    managementUrl: string | null;
-    lastImportedAt: string | null;
-    lastImportSource: string | null;
-    lastImportTables: number | null;
-    lastImportRowsWritten: number | null;
-    lastImportNote: string | null;
-  };
-};
-
 type AdminServerPerformance = {
   uptimeSeconds: number;
   nodeVersion: string;
@@ -749,6 +620,8 @@ type AdminMetaInfo = {
     provider?: string;
     applicationsPath?: string;
   };
+  localGitWorkspaceAvailable?: boolean;
+  localDesktopBuildAvailable?: boolean;
   commits: Array<{
     sha: string;
     shortSha: string;
@@ -805,9 +678,7 @@ type AdminFamilyCenterEntry = {
 };
 
 const normalizeAdminRoleForDisplay = (role: string | null | undefined) => {
-  const normalized = String(role ?? "USER")
-    .trim()
-    .toUpperCase();
+  const normalized = String(role ?? "USER").trim().toUpperCase();
 
   if (
     normalized === "ADMIN" ||
@@ -843,37 +714,19 @@ const normalizeAdminRoleForDisplay = (role: string | null | undefined) => {
   return "USER";
 };
 
-const getAdminRoleIcon = (
-  role: string | null | undefined,
-  className = "h-3.5 w-3.5",
-) => {
+const getAdminRoleIcon = (role: string | null | undefined, className = "h-3.5 w-3.5") => {
   const normalizedRole = normalizeAdminRoleForDisplay(role);
 
   if (normalizedRole === "ADMINISTRATOR") {
-    return (
-      <Crown
-        className={`${className} shrink-0 text-rose-500`}
-        aria-label="Administrator"
-      />
-    );
+    return <Crown className={`${className} shrink-0 text-rose-500`} aria-label="Administrator" />;
   }
 
   if (normalizedRole === "DEVELOPER") {
-    return (
-      <Wrench
-        className={`${className} shrink-0 text-cyan-400`}
-        aria-label="Developer"
-      />
-    );
+    return <Wrench className={`${className} shrink-0 text-cyan-400`} aria-label="Developer" />;
   }
 
   if (normalizedRole === "MODERATOR") {
-    return (
-      <ModeratorLineIcon
-        className={`${className} shrink-0 text-indigo-500`}
-        aria-label="Moderator"
-      />
-    );
+    return <ModeratorLineIcon className={`${className} shrink-0 text-indigo-500`} aria-label="Moderator" />;
   }
 
   return null;
@@ -884,9 +737,7 @@ const isNetworkFetchFailure = (error: unknown) => {
     return false;
   }
 
-  return /failed to fetch|networkerror|load failed/i.test(
-    String(error.message ?? ""),
-  );
+  return /failed to fetch|networkerror|load failed/i.test(String(error.message ?? ""));
 };
 
 const formatManagedRoleLabelFromKey = (roleKey: string) =>
@@ -896,9 +747,7 @@ const formatManagedRoleLabelFromKey = (roleKey: string) =>
     .map((token) => token.slice(0, 1) + token.slice(1).toLowerCase())
     .join(" ") || roleKey;
 
-const isInAccordOtherConfig = (
-  row: Pick<AdminOtherConfig, "configName" | "applicationId">,
-) => {
+const isInAccordOtherConfig = (row: Pick<AdminOtherConfig, "configName" | "applicationId">) => {
   const source = `${row.configName} ${row.applicationId}`.toLowerCase();
   return (
     source.includes("in-accord") ||
@@ -907,9 +756,7 @@ const isInAccordOtherConfig = (
   );
 };
 
-const isTemplateMeBotConfig = (
-  row: Pick<AdminOtherConfig, "type" | "configName" | "applicationId">,
-) => {
+const isTemplateMeBotConfig = (row: Pick<AdminOtherConfig, "type" | "configName" | "applicationId">) => {
   if (row.type !== "BOT") {
     return false;
   }
@@ -924,16 +771,12 @@ const isTemplateMeBotConfig = (
 };
 
 const readAdminJsonOrText = async <TPayload extends Record<string, unknown>>(
-  response: Response,
+  response: Response
 ): Promise<TPayload & { message?: string }> => {
-  const contentType = String(
-    response.headers.get("content-type") || "",
-  ).toLowerCase();
+  const contentType = String(response.headers.get("content-type") || "").toLowerCase();
 
   if (contentType.includes("application/json")) {
-    return ((await response.json().catch(() => ({}))) ?? {}) as TPayload & {
-      message?: string;
-    };
+    return ((await response.json().catch(() => ({}))) ?? {}) as TPayload & { message?: string };
   }
 
   const message = String(await response.text().catch(() => "")).trim();
@@ -944,9 +787,7 @@ export const InAccordAdminModal = () => {
   const { isOpen, onClose, type, data } = useModal();
   const router = useRouter();
   const [activeSection, setActiveSection] = useState<AdminSection>("general");
-  const [collapsedMenuGroups, setCollapsedMenuGroups] = useState<
-    Record<AdminMenuGroupId, boolean>
-  >({
+  const [collapsedMenuGroups, setCollapsedMenuGroups] = useState<Record<AdminMenuGroupId, boolean>>({
     workspace: false,
     serverOperations: false,
     moderationSafety: false,
@@ -959,25 +800,18 @@ export const InAccordAdminModal = () => {
   const [servers, setServers] = useState<AdminServer[]>([]);
   const [isLoadingServers, setIsLoadingServers] = useState(false);
   const [serversError, setServersError] = useState<string | null>(null);
-  const [ourBoardEntries, setOurBoardEntries] = useState<AdminOurBoardEntry[]>(
-    [],
-  );
-  const [ourBoardSummary, setOurBoardSummary] =
-    useState<AdminOurBoardSummary | null>(null);
+  const [ourBoardEntries, setOurBoardEntries] = useState<AdminOurBoardEntry[]>([]);
+  const [ourBoardSummary, setOurBoardSummary] = useState<AdminOurBoardSummary | null>(null);
   const [isLoadingOurBoard, setIsLoadingOurBoard] = useState(false);
   const [ourBoardError, setOurBoardError] = useState<string | null>(null);
   const [ourBoardSearch, setOurBoardSearch] = useState("");
-  const [ourBoardListedFilter, setOurBoardListedFilter] = useState<
-    "ALL" | "LISTED" | "UNLISTED"
-  >("ALL");
+  const [ourBoardListedFilter, setOurBoardListedFilter] = useState<"ALL" | "LISTED" | "UNLISTED">("ALL");
   const [memberSearch, setMemberSearch] = useState("");
   const [memberRoleFilter, setMemberRoleFilter] = useState("ALL");
   const [serverSearch, setServerSearch] = useState("");
   const [serverOwnerFilter, setServerOwnerFilter] = useState("ALL");
   const [serverTags, setServerTags] = useState<AdminServerTag[]>([]);
-  const [serverTagIconOptions, setServerTagIconOptions] = useState<
-    ServerTagIconOption[]
-  >([]);
+  const [serverTagIconOptions, setServerTagIconOptions] = useState<ServerTagIconOption[]>([]);
   const [serverTagsError, setServerTagsError] = useState<string | null>(null);
   const [isLoadingServerTags, setIsLoadingServerTags] = useState(false);
   const [serverTagSearch, setServerTagSearch] = useState("");
@@ -985,21 +819,11 @@ export const InAccordAdminModal = () => {
   const [serverTagDrafts, setServerTagDrafts] = useState<
     Record<string, { tagCode: string; iconKey: string }>
   >({});
-  const [savingServerTagServerId, setSavingServerTagServerId] = useState<
-    string | null
-  >(null);
-  const [serverTagsActionError, setServerTagsActionError] = useState<
-    string | null
-  >(null);
-  const [serverTagsActionSuccess, setServerTagsActionSuccess] = useState<
-    string | null
-  >(null);
-  const [columnWidths, setColumnWidths] = useState([
-    240, 210, 230, 180, 100, 100,
-  ]);
-  const [serverColumnWidths, setServerColumnWidths] = useState([
-    240, 220, 220, 180, 110, 110,
-  ]);
+  const [savingServerTagServerId, setSavingServerTagServerId] = useState<string | null>(null);
+  const [serverTagsActionError, setServerTagsActionError] = useState<string | null>(null);
+  const [serverTagsActionSuccess, setServerTagsActionSuccess] = useState<string | null>(null);
+  const [columnWidths, setColumnWidths] = useState([240, 210, 230, 180, 100, 100]);
+  const [serverColumnWidths, setServerColumnWidths] = useState([240, 220, 220, 180, 110, 110]);
   const [newUserName, setNewUserName] = useState("");
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserPassword, setNewUserPassword] = useState("");
@@ -1007,56 +831,27 @@ export const InAccordAdminModal = () => {
   const [newUserRole, setNewUserRole] = useState("USER");
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [createUserError, setCreateUserError] = useState<string | null>(null);
-  const [createUserSuccess, setCreateUserSuccess] = useState<string | null>(
-    null,
-  );
+  const [createUserSuccess, setCreateUserSuccess] = useState<string | null>(null);
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
-  const [updatingUserRoleId, setUpdatingUserRoleId] = useState<string | null>(
-    null,
-  );
-  const [updatingUserDetailsId, setUpdatingUserDetailsId] = useState<
-    string | null
-  >(null);
+  const [updatingUserRoleId, setUpdatingUserRoleId] = useState<string | null>(null);
+  const [updatingUserDetailsId, setUpdatingUserDetailsId] = useState<string | null>(null);
   const [isAssigningBotsRole, setIsAssigningBotsRole] = useState(false);
-  const [userRoleDrafts, setUserRoleDrafts] = useState<Record<string, string>>(
-    {},
-  );
-  const [userPhoneDrafts, setUserPhoneDrafts] = useState<
-    Record<string, string>
-  >({});
-  const [userDateOfBirthDrafts, setUserDateOfBirthDrafts] = useState<
-    Record<string, string>
-  >({});
-  const [securitySummary, setSecuritySummary] =
-    useState<AdminSecuritySummary | null>(null);
-  const [securityRecentLogins, setSecurityRecentLogins] = useState<
-    AdminRecentLogin[]
-  >([]);
+  const [userRoleDrafts, setUserRoleDrafts] = useState<Record<string, string>>({});
+  const [userPhoneDrafts, setUserPhoneDrafts] = useState<Record<string, string>>({});
+  const [userDateOfBirthDrafts, setUserDateOfBirthDrafts] = useState<Record<string, string>>({});
+  const [securitySummary, setSecuritySummary] = useState<AdminSecuritySummary | null>(null);
+  const [securityRecentLogins, setSecurityRecentLogins] = useState<AdminRecentLogin[]>([]);
   const [isLoadingSecurity, setIsLoadingSecurity] = useState(false);
   const [securityError, setSecurityError] = useState<string | null>(null);
-  const [moderationFocus, setModerationFocus] = useState<
-    "REVIEW_QUEUE" | "ADMIN_COVERAGE" | "OWNER_ISSUES"
-  >("REVIEW_QUEUE");
+  const [moderationFocus, setModerationFocus] = useState<"REVIEW_QUEUE" | "ADMIN_COVERAGE" | "OWNER_ISSUES">("REVIEW_QUEUE");
   const [moderationSearch, setModerationSearch] = useState("");
-  const [integrationsSummary, setIntegrationsSummary] =
-    useState<AdminIntegrationsSummary | null>(null);
-  const [integrationProviders, setIntegrationProviders] = useState<
-    AdminIntegrationProvider[]
-  >([]);
-  const [integrationProviderSetup, setIntegrationProviderSetup] =
-    useState<AdminIntegrationProviderSetup | null>(null);
-  const [
-    isLoadingIntegrationProviderSetup,
-    setIsLoadingIntegrationProviderSetup,
-  ] = useState(false);
-  const [
-    isSavingIntegrationProviderSetup,
-    setIsSavingIntegrationProviderSetup,
-  ] = useState<string | null>(null);
-  const [integrationProviderSetupError, setIntegrationProviderSetupError] =
-    useState<string | null>(null);
-  const [integrationProviderSetupSuccess, setIntegrationProviderSetupSuccess] =
-    useState<string | null>(null);
+  const [integrationsSummary, setIntegrationsSummary] = useState<AdminIntegrationsSummary | null>(null);
+  const [integrationProviders, setIntegrationProviders] = useState<AdminIntegrationProvider[]>([]);
+  const [integrationProviderSetup, setIntegrationProviderSetup] = useState<AdminIntegrationProviderSetup | null>(null);
+  const [isLoadingIntegrationProviderSetup, setIsLoadingIntegrationProviderSetup] = useState(false);
+  const [isSavingIntegrationProviderSetup, setIsSavingIntegrationProviderSetup] = useState<string | null>(null);
+  const [integrationProviderSetupError, setIntegrationProviderSetupError] = useState<string | null>(null);
+  const [integrationProviderSetupSuccess, setIntegrationProviderSetupSuccess] = useState<string | null>(null);
   const [integrationProviderDrafts, setIntegrationProviderDrafts] = useState<
     Record<string, { clientId: string; clientSecret: string }>
   >({
@@ -1066,169 +861,76 @@ export const InAccordAdminModal = () => {
     xbox: { clientId: "", clientSecret: "" },
     youtube: { clientId: "", clientSecret: "" },
   });
-  const [topConnectedUsers, setTopConnectedUsers] = useState<
-    AdminTopConnectedUser[]
-  >([]);
-  const [recentOtherConfigs, setRecentOtherConfigs] = useState<
-    AdminOtherConfig[]
-  >([]);
+  const [topConnectedUsers, setTopConnectedUsers] = useState<AdminTopConnectedUser[]>([]);
+  const [recentOtherConfigs, setRecentOtherConfigs] = useState<AdminOtherConfig[]>([]);
   const [OtherConfigQuery, setOtherConfigQuery] = useState("");
-  const [OtherConfigTypeFilter, setOtherConfigTypeFilter] = useState<
-    "ALL" | "APP" | "BOT"
-  >("ALL");
-  const [OtherConfigStatusFilter, setOtherConfigStatusFilter] = useState<
-    "ALL" | "ENABLED" | "DISABLED"
-  >("ALL");
-  const [editingOtherConfigKey, setEditingOtherConfigKey] = useState<
-    string | null
-  >(null);
-  const [OtherConfigDrafts, setOtherConfigDrafts] = useState<
-    Record<
-      string,
-      { configName: string; applicationId: string; botToken: string }
-    >
-  >({});
-  const [OtherBotTokenDrafts, setOtherBotTokenDrafts] = useState<
-    Record<string, string>
-  >({});
-  const [OtherConfigActionPendingKey, setOtherConfigActionPendingKey] =
-    useState<string | null>(null);
-  const [OtherBotTokenActionPendingKey, setOtherBotTokenActionPendingKey] =
-    useState<string | null>(null);
-  const [OtherConfigActionError, setOtherConfigActionError] = useState<
-    string | null
-  >(null);
-  const [OtherConfigActionSuccess, setOtherConfigActionSuccess] = useState<
-    string | null
-  >(null);
+  const [OtherConfigTypeFilter, setOtherConfigTypeFilter] = useState<"ALL" | "APP" | "BOT">("ALL");
+  const [OtherConfigStatusFilter, setOtherConfigStatusFilter] = useState<"ALL" | "ENABLED" | "DISABLED">("ALL");
+  const [editingOtherConfigKey, setEditingOtherConfigKey] = useState<string | null>(null);
+  const [OtherConfigDrafts, setOtherConfigDrafts] = useState<Record<string, { configName: string; applicationId: string; botToken: string }>>({});
+  const [OtherBotTokenDrafts, setOtherBotTokenDrafts] = useState<Record<string, string>>({});
+  const [OtherConfigActionPendingKey, setOtherConfigActionPendingKey] = useState<string | null>(null);
+  const [OtherBotTokenActionPendingKey, setOtherBotTokenActionPendingKey] = useState<string | null>(null);
+  const [OtherConfigActionError, setOtherConfigActionError] = useState<string | null>(null);
+  const [OtherConfigActionSuccess, setOtherConfigActionSuccess] = useState<string | null>(null);
   const [newIntegrationUserId, setNewIntegrationUserId] = useState("");
-  const [newIntegrationType, setNewIntegrationType] = useState<"APP" | "BOT">(
-    "APP",
-  );
+  const [newIntegrationType, setNewIntegrationType] = useState<"APP" | "BOT">("APP");
   const [newIntegrationName, setNewIntegrationName] = useState("");
-  const [newIntegrationApplicationId, setNewIntegrationApplicationId] =
-    useState("");
+  const [newIntegrationApplicationId, setNewIntegrationApplicationId] = useState("");
   const [newIntegrationEnabled, setNewIntegrationEnabled] = useState(true);
-  const [isCreatingIntegrationConfig, setIsCreatingIntegrationConfig] =
-    useState(false);
-  const [OtherConfigSortKey, setOtherConfigSortKey] =
-    useState<OtherConfigSortKey>("createdAt");
-  const [OtherConfigSortDirection, setOtherConfigSortDirection] =
-    useState<OtherSortDirection>("desc");
+  const [isCreatingIntegrationConfig, setIsCreatingIntegrationConfig] = useState(false);
+  const [OtherConfigSortKey, setOtherConfigSortKey] = useState<OtherConfigSortKey>("createdAt");
+  const [OtherConfigSortDirection, setOtherConfigSortDirection] = useState<OtherSortDirection>("desc");
   const [isLoadingIntegrations, setIsLoadingIntegrations] = useState(false);
-  const [integrationsError, setIntegrationsError] = useState<string | null>(
-    null,
-  );
-  const [templateMeRuntimeState, setTemplateMeRuntimeState] =
-    useState<TemplateMeRuntimeState | null>(null);
-  const [templateMeRuntimeInviteUrl, setTemplateMeRuntimeInviteUrl] = useState<
-    string | null
-  >(null);
-  const [isLoadingTemplateMeRuntime, setIsLoadingTemplateMeRuntime] =
-    useState(false);
-  const [templateMeRuntimeActionPending, setTemplateMeRuntimeActionPending] =
-    useState<"start" | "stop" | "restart" | null>(null);
-  const [templateMeRuntimeError, setTemplateMeRuntimeError] = useState<
-    string | null
-  >(null);
-  const [templateMeRuntimeSuccess, setTemplateMeRuntimeSuccess] = useState<
-    string | null
-  >(null);
-  const [templateMeStats, setTemplateMeStats] =
-    useState<TemplateMeBotStats | null>(null);
-  const [isLoadingTemplateMeStats, setIsLoadingTemplateMeStats] =
-    useState(false);
-  const [templateMeStatsError, setTemplateMeStatsError] = useState<
-    string | null
-  >(null);
-  const [templateMeTerminalOutput, setTemplateMeTerminalOutput] =
-    useState<string>("");
-  const [templateMeTerminalStatus, setTemplateMeTerminalStatus] = useState<
-    | "connecting"
-    | "connected"
-    | "running"
-    | "stopped"
-    | "error"
-    | "disconnected"
-  >("disconnected");
-  const [templateMeTerminalStartedAt, setTemplateMeTerminalStartedAt] =
-    useState<string | null>(null);
-  const [templateMeTerminalUpdatedAt, setTemplateMeTerminalUpdatedAt] =
-    useState<string | null>(null);
-  const [templateMeTerminalLastExitCode, setTemplateMeTerminalLastExitCode] =
-    useState<number | null>(null);
-  const [templateMeTerminalLastError, setTemplateMeTerminalLastError] =
-    useState<string | null>(null);
+  const [integrationsError, setIntegrationsError] = useState<string | null>(null);
+  const [templateMeRuntimeState, setTemplateMeRuntimeState] = useState<TemplateMeRuntimeState | null>(null);
+  const [templateMeRuntimeInviteUrl, setTemplateMeRuntimeInviteUrl] = useState<string | null>(null);
+  const [isLoadingTemplateMeRuntime, setIsLoadingTemplateMeRuntime] = useState(false);
+  const [templateMeRuntimeActionPending, setTemplateMeRuntimeActionPending] = useState<"start" | "stop" | "restart" | null>(null);
+  const [templateMeRuntimeError, setTemplateMeRuntimeError] = useState<string | null>(null);
+  const [templateMeRuntimeSuccess, setTemplateMeRuntimeSuccess] = useState<string | null>(null);
+  const [templateMeStats, setTemplateMeStats] = useState<TemplateMeBotStats | null>(null);
+  const [isLoadingTemplateMeStats, setIsLoadingTemplateMeStats] = useState(false);
+  const [templateMeStatsError, setTemplateMeStatsError] = useState<string | null>(null);
+  const [templateMeTerminalOutput, setTemplateMeTerminalOutput] = useState<string>("");
+  const [templateMeTerminalStatus, setTemplateMeTerminalStatus] = useState<"connecting" | "connected" | "running" | "stopped" | "error" | "disconnected">("disconnected");
+  const [templateMeTerminalStartedAt, setTemplateMeTerminalStartedAt] = useState<string | null>(null);
+  const [templateMeTerminalUpdatedAt, setTemplateMeTerminalUpdatedAt] = useState<string | null>(null);
+  const [templateMeTerminalLastExitCode, setTemplateMeTerminalLastExitCode] = useState<number | null>(null);
+  const [templateMeTerminalLastError, setTemplateMeTerminalLastError] = useState<string | null>(null);
   const templateMeTerminalScrollRef = useRef<HTMLPreElement | null>(null);
-  const [selectedTemplateMeRuntimeTarget, setSelectedTemplateMeRuntimeTarget] =
-    useState("");
+  const [selectedTemplateMeRuntimeTarget, setSelectedTemplateMeRuntimeTarget] = useState("");
   const [reports, setReports] = useState<AdminReport[]>([]);
   const [isLoadingReports, setIsLoadingReports] = useState(false);
   const [reportsError, setReportsError] = useState<string | null>(null);
-  const [reportStatusFilter, setReportStatusFilter] = useState<
-    "ALL" | AdminReport["status"]
-  >("ALL");
-  const [reportTargetTypeFilter, setReportTargetTypeFilter] = useState<
-    "ALL" | "USER" | "SERVER" | "MESSAGE" | "BUG"
-  >("ALL");
+  const [reportStatusFilter, setReportStatusFilter] = useState<"ALL" | AdminReport["status"]>("ALL");
+  const [reportTargetTypeFilter, setReportTargetTypeFilter] = useState<"ALL" | "USER" | "SERVER" | "MESSAGE" | "BUG">("ALL");
   const [updatingReportId, setUpdatingReportId] = useState<string | null>(null);
-  const [reportStatusDrafts, setReportStatusDrafts] = useState<
-    Record<string, AdminReport["status"]>
-  >({});
-  const [reportNoteDrafts, setReportNoteDrafts] = useState<
-    Record<string, string>
-  >({});
-  const [reportPostNoteDrafts, setReportPostNoteDrafts] = useState<
-    Record<string, string>
-  >({});
-  const [reportSeverityDrafts, setReportSeverityDrafts] = useState<
-    Record<string, "LOW" | "MEDIUM" | "HIGH" | "CRITICAL">
-  >({});
-  const [viewingIssueReport, setViewingIssueReport] =
-    useState<AdminReport | null>(null);
-  const [viewingReportNotes, setViewingReportNotes] =
-    useState<AdminReport | null>(null);
-  const [viewingReportNoteEntry, setViewingReportNoteEntry] = useState<
-    string | null
-  >(null);
-  const [patronageEntries, setPatronageEntries] = useState<
-    AdminPatronageEntry[]
-  >([]);
-  const [patronageSummary, setPatronageSummary] =
-    useState<AdminPatronageSummary | null>(null);
+  const [reportStatusDrafts, setReportStatusDrafts] = useState<Record<string, AdminReport["status"]>>({});
+  const [reportNoteDrafts, setReportNoteDrafts] = useState<Record<string, string>>({});
+  const [reportPostNoteDrafts, setReportPostNoteDrafts] = useState<Record<string, string>>({});
+  const [reportSeverityDrafts, setReportSeverityDrafts] = useState<Record<string, "LOW" | "MEDIUM" | "HIGH" | "CRITICAL">>({});
+  const [viewingIssueReport, setViewingIssueReport] = useState<AdminReport | null>(null);
+  const [viewingReportNotes, setViewingReportNotes] = useState<AdminReport | null>(null);
+  const [viewingReportNoteEntry, setViewingReportNoteEntry] = useState<string | null>(null);
+  const [patronageEntries, setPatronageEntries] = useState<AdminPatronageEntry[]>([]);
+  const [patronageSummary, setPatronageSummary] = useState<AdminPatronageSummary | null>(null);
   const [isLoadingPatronage, setIsLoadingPatronage] = useState(false);
   const [patronageError, setPatronageError] = useState<string | null>(null);
-  const [patronageActionSuccess, setPatronageActionSuccess] = useState<
-    string | null
-  >(null);
+  const [patronageActionSuccess, setPatronageActionSuccess] = useState<string | null>(null);
   const [patronageSearch, setPatronageSearch] = useState("");
-  const [patronageTypeFilter, setPatronageTypeFilter] = useState<
-    "ALL" | "ONE_TIME" | "MONTHLY"
-  >("ALL");
-  const [patronageStatusFilter, setPatronageStatusFilter] = useState<
-    "ALL" | "PENDING" | "SUCCEEDED" | "FAILED" | "CANCELED" | "REFUNDED"
-  >("ALL");
-  const [patronageSetup, setPatronageSetup] =
-    useState<AdminPatronageSetup | null>(null);
+  const [patronageTypeFilter, setPatronageTypeFilter] = useState<"ALL" | "ONE_TIME" | "MONTHLY">("ALL");
+  const [patronageStatusFilter, setPatronageStatusFilter] = useState<"ALL" | "PENDING" | "SUCCEEDED" | "FAILED" | "CANCELED" | "REFUNDED">("ALL");
+  const [patronageSetup, setPatronageSetup] = useState<AdminPatronageSetup | null>(null);
   const [isLoadingPatronageSetup, setIsLoadingPatronageSetup] = useState(false);
   const [isSavingPatronageSetup, setIsSavingPatronageSetup] = useState(false);
-  const [patronageSetupSecretDraft, setPatronageSetupSecretDraft] =
-    useState("");
-  const [patronageSetupPublishableDraft, setPatronageSetupPublishableDraft] =
-    useState("");
-  const [patronageSetupWebhookDraft, setPatronageSetupWebhookDraft] =
-    useState("");
-  const [patronagePayoutLabelDraft, setPatronagePayoutLabelDraft] =
-    useState("");
-  const [
-    patronagePayoutContactEmailDraft,
-    setPatronagePayoutContactEmailDraft,
-  ] = useState("");
-  const [patronagePayoutNoticeDraft, setPatronagePayoutNoticeDraft] =
-    useState("");
-  const [siteUrlSetup, setSiteUrlSetup] = useState<AdminSiteUrlSetup | null>(
-    null,
-  );
+  const [patronageSetupSecretDraft, setPatronageSetupSecretDraft] = useState("");
+  const [patronageSetupPublishableDraft, setPatronageSetupPublishableDraft] = useState("");
+  const [patronageSetupWebhookDraft, setPatronageSetupWebhookDraft] = useState("");
+  const [patronagePayoutLabelDraft, setPatronagePayoutLabelDraft] = useState("");
+  const [patronagePayoutContactEmailDraft, setPatronagePayoutContactEmailDraft] = useState("");
+  const [patronagePayoutNoticeDraft, setPatronagePayoutNoticeDraft] = useState("");
+  const [siteUrlSetup, setSiteUrlSetup] = useState<AdminSiteUrlSetup | null>(null);
   const [siteUrlDraft, setSiteUrlDraft] = useState("");
   const [hostingServiceNameDraft, setHostingServiceNameDraft] = useState("");
   const [hostingHostNameDraft, setHostingHostNameDraft] = useState("");
@@ -1246,238 +948,118 @@ export const InAccordAdminModal = () => {
   const [isSavingSiteUrlSetup, setIsSavingSiteUrlSetup] = useState(false);
   const [siteUrlError, setSiteUrlError] = useState<string | null>(null);
   const [siteUrlSuccess, setSiteUrlSuccess] = useState<string | null>(null);
-  const [databaseRuntimeSetup, setDatabaseRuntimeSetup] =
-    useState<AdminDatabaseRuntimeSetup | null>(null);
-  const [databaseD1AccountIdDraft, setDatabaseD1AccountIdDraft] =
-    useState("");
-  const [databaseD1DatabaseIdDraft, setDatabaseD1DatabaseIdDraft] =
-    useState("");
-  const [databaseD1DatabaseNameDraft, setDatabaseD1DatabaseNameDraft] =
-    useState("");
-  const [databaseD1ManagementUrlDraft, setDatabaseD1ManagementUrlDraft] =
-    useState("");
-  const [isLoadingDatabaseRuntime, setIsLoadingDatabaseRuntime] =
-    useState(false);
-  const [isSavingDatabaseRuntime, setIsSavingDatabaseRuntime] =
-    useState(false);
-  const [isSwitchingDatabaseRuntime, setIsSwitchingDatabaseRuntime] =
-    useState(false);
-  const [isSyncingDatabaseD1, setIsSyncingDatabaseD1] = useState(false);
-  const [databaseRuntimeError, setDatabaseRuntimeError] = useState<
-    string | null
-  >(null);
-  const [databaseRuntimeSuccess, setDatabaseRuntimeSuccess] = useState<
-    string | null
-  >(null);
-  const [serverPerformance, setServerPerformance] =
-    useState<AdminServerPerformance | null>(null);
-  const [isLoadingServerPerformance, setIsLoadingServerPerformance] =
-    useState(false);
-  const [serverPerformanceError, setServerPerformanceError] = useState<
-    string | null
-  >(null);
+  const [serverPerformance, setServerPerformance] = useState<AdminServerPerformance | null>(null);
+  const [isLoadingServerPerformance, setIsLoadingServerPerformance] = useState(false);
+  const [serverPerformanceError, setServerPerformanceError] = useState<string | null>(null);
   const [managedFiles, setManagedFiles] = useState<AdminManagedFile[]>([]);
   const [managedFilesFolderDraft, setManagedFilesFolderDraft] = useState("");
   const [isLoadingManagedFiles, setIsLoadingManagedFiles] = useState(false);
-  const [managedFilesError, setManagedFilesError] = useState<string | null>(
-    null,
-  );
-  const [managedFilesSuccess, setManagedFilesSuccess] = useState<string | null>(
-    null,
-  );
+  const [managedFilesError, setManagedFilesError] = useState<string | null>(null);
+  const [managedFilesSuccess, setManagedFilesSuccess] = useState<string | null>(null);
   const [managedFileUpload, setManagedFileUpload] = useState<File | null>(null);
   const [isUploadingManagedFile, setIsUploadingManagedFile] = useState(false);
-  const [deletingManagedFilePath, setDeletingManagedFilePath] = useState<
-    string | null
-  >(null);
-  const [selectedManagedFilePaths, setSelectedManagedFilePaths] = useState<
-    string[]
-  >([]);
-  const [databaseManagerTables, setDatabaseManagerTables] = useState<
-    AdminDatabaseManagerTable[]
-  >([]);
-  const [selectedDatabaseManagerTable, setSelectedDatabaseManagerTable] =
-    useState("");
-  const [databaseManagerColumns, setDatabaseManagerColumns] = useState<
-    string[]
-  >([]);
-  const [databaseManagerRows, setDatabaseManagerRows] = useState<
-    Array<Record<string, unknown>>
-  >([]);
-  const [isLoadingDatabaseManager, setIsLoadingDatabaseManager] =
-    useState(false);
-  const [databaseManagerError, setDatabaseManagerError] = useState<
-    string | null
-  >(null);
-  const [cloudflareSetup, setCloudflareSetup] =
-    useState<AdminCloudflareSetup | null>(null);
-  const [cloudflareZones, setCloudflareZones] = useState<AdminCloudflareZone[]>(
-    [],
-  );
-  const [cloudflareDnsRecords, setCloudflareDnsRecords] = useState<
-    AdminCloudflareDnsRecord[]
-  >([]);
+  const [deletingManagedFilePath, setDeletingManagedFilePath] = useState<string | null>(null);
+  const [selectedManagedFilePaths, setSelectedManagedFilePaths] = useState<string[]>([]);
+  const [databaseManagerTables, setDatabaseManagerTables] = useState<AdminDatabaseManagerTable[]>([]);
+  const [selectedDatabaseManagerTable, setSelectedDatabaseManagerTable] = useState("");
+  const [databaseManagerColumns, setDatabaseManagerColumns] = useState<string[]>([]);
+  const [databaseManagerRows, setDatabaseManagerRows] = useState<Array<Record<string, unknown>>>([]);
+  const [isLoadingDatabaseManager, setIsLoadingDatabaseManager] = useState(false);
+  const [databaseManagerError, setDatabaseManagerError] = useState<string | null>(null);
+  const [cloudflareSetup, setCloudflareSetup] = useState<AdminCloudflareSetup | null>(null);
+  const [cloudflareZones, setCloudflareZones] = useState<AdminCloudflareZone[]>([]);
+  const [cloudflareDnsRecords, setCloudflareDnsRecords] = useState<AdminCloudflareDnsRecord[]>([]);
   const [cloudflareApiTokenDraft, setCloudflareApiTokenDraft] = useState("");
   const [cloudflareAccountIdDraft, setCloudflareAccountIdDraft] = useState("");
   const [cloudflareSelectedZoneId, setCloudflareSelectedZoneId] = useState("");
-  const [cloudflareSelectedZoneName, setCloudflareSelectedZoneName] =
-    useState("");
+  const [cloudflareSelectedZoneName, setCloudflareSelectedZoneName] = useState("");
   const [cloudflareDnsTypeDraft, setCloudflareDnsTypeDraft] = useState("A");
   const [cloudflareDnsNameDraft, setCloudflareDnsNameDraft] = useState("");
-  const [cloudflareDnsContentDraft, setCloudflareDnsContentDraft] =
-    useState("");
+  const [cloudflareDnsContentDraft, setCloudflareDnsContentDraft] = useState("");
   const [cloudflareDnsTtlDraft, setCloudflareDnsTtlDraft] = useState("1");
-  const [cloudflareDnsProxiedDraft, setCloudflareDnsProxiedDraft] =
-    useState(false);
-  const [cloudflareEditingDnsRecordId, setCloudflareEditingDnsRecordId] =
-    useState<string | null>(null);
+  const [cloudflareDnsProxiedDraft, setCloudflareDnsProxiedDraft] = useState(false);
+  const [cloudflareEditingDnsRecordId, setCloudflareEditingDnsRecordId] = useState<string | null>(null);
   const [cloudflarePurgeUrlDraft, setCloudflarePurgeUrlDraft] = useState("");
   const [isLoadingCloudflare, setIsLoadingCloudflare] = useState(false);
   const [isSavingCloudflare, setIsSavingCloudflare] = useState(false);
-  const [isCloudflareActionPending, setIsCloudflareActionPending] =
-    useState(false);
-  const [cloudflareActionPendingRecordId, setCloudflareActionPendingRecordId] =
-    useState<string | null>(null);
+  const [isCloudflareActionPending, setIsCloudflareActionPending] = useState(false);
+  const [cloudflareActionPendingRecordId, setCloudflareActionPendingRecordId] = useState<string | null>(null);
   const [cloudflareError, setCloudflareError] = useState<string | null>(null);
-  const [cloudflareSuccess, setCloudflareSuccess] = useState<string | null>(
-    null,
-  );
+  const [cloudflareSuccess, setCloudflareSuccess] = useState<string | null>(null);
   const [newPatronageDonorName, setNewPatronageDonorName] = useState("");
   const [newPatronageDonorEmail, setNewPatronageDonorEmail] = useState("");
-  const [newPatronageType, setNewPatronageType] = useState<
-    "ONE_TIME" | "MONTHLY"
-  >("ONE_TIME");
+  const [newPatronageType, setNewPatronageType] = useState<"ONE_TIME" | "MONTHLY">("ONE_TIME");
   const [newPatronageAmount, setNewPatronageAmount] = useState("");
   const [newPatronageCurrency, setNewPatronageCurrency] = useState("USD");
   const [newPatronageProvider, setNewPatronageProvider] = useState("");
   const [newPatronageReference, setNewPatronageReference] = useState("");
   const [newPatronageNote, setNewPatronageNote] = useState("");
   const [isCreatingPatronage, setIsCreatingPatronage] = useState(false);
-  const [updatingPatronageId, setUpdatingPatronageId] = useState<string | null>(
-    null,
-  );
-  const [emojiStickerServers, setEmojiStickerServers] = useState<
-    AdminEmojiStickerServer[]
-  >([]);
-  const [emojiStickerAssets, setEmojiStickerAssets] = useState<
-    AdminEmojiStickerAsset[]
-  >([]);
-  const [emojiStickerSummary, setEmojiStickerSummary] =
-    useState<AdminEmojiStickerSummary | null>(null);
-  const [emojiStickerServerFilter, setEmojiStickerServerFilter] =
-    useState("ALL");
-  const [emojiStickerTypeFilter, setEmojiStickerTypeFilter] = useState<
-    "ALL" | "EMOJI" | "STICKER"
-  >("ALL");
-  const [emojiStickerStatusFilter, setEmojiStickerStatusFilter] = useState<
-    "ALL" | "ACTIVE" | "DISABLED"
-  >("ALL");
+  const [updatingPatronageId, setUpdatingPatronageId] = useState<string | null>(null);
+  const [emojiStickerServers, setEmojiStickerServers] = useState<AdminEmojiStickerServer[]>([]);
+  const [emojiStickerAssets, setEmojiStickerAssets] = useState<AdminEmojiStickerAsset[]>([]);
+  const [emojiStickerSummary, setEmojiStickerSummary] = useState<AdminEmojiStickerSummary | null>(null);
+  const [emojiStickerServerFilter, setEmojiStickerServerFilter] = useState("ALL");
+  const [emojiStickerTypeFilter, setEmojiStickerTypeFilter] = useState<"ALL" | "EMOJI" | "STICKER">("ALL");
+  const [emojiStickerStatusFilter, setEmojiStickerStatusFilter] = useState<"ALL" | "ACTIVE" | "DISABLED">("ALL");
   const [isLoadingEmojiStickers, setIsLoadingEmojiStickers] = useState(false);
-  const [emojiStickersError, setEmojiStickersError] = useState<string | null>(
-    null,
-  );
-  const [emojiStickerActionSuccess, setEmojiStickerActionSuccess] = useState<
-    string | null
-  >(null);
+  const [emojiStickersError, setEmojiStickersError] = useState<string | null>(null);
+  const [emojiStickerActionSuccess, setEmojiStickerActionSuccess] = useState<string | null>(null);
   const [creatingEmojiSticker, setCreatingEmojiSticker] = useState(false);
-  const [emojiStickerActionItemId, setEmojiStickerActionItemId] = useState<
-    string | null
-  >(null);
+  const [emojiStickerActionItemId, setEmojiStickerActionItemId] = useState<string | null>(null);
   const [newEmojiStickerServerId, setNewEmojiStickerServerId] = useState("");
-  const [newEmojiStickerType, setNewEmojiStickerType] = useState<
-    "EMOJI" | "STICKER"
-  >("EMOJI");
+  const [newEmojiStickerType, setNewEmojiStickerType] = useState<"EMOJI" | "STICKER">("EMOJI");
   const [newEmojiStickerName, setNewEmojiStickerName] = useState("");
   const [newEmojiStickerValue, setNewEmojiStickerValue] = useState("");
   const [managedRoles, setManagedRoles] = useState<AdminManagedRole[]>([]);
   const [isLoadingManagedRoles, setIsLoadingManagedRoles] = useState(false);
-  const [managedRolesError, setManagedRolesError] = useState<string | null>(
-    null,
-  );
-  const [managedRolesActionError, setManagedRolesActionError] = useState<
-    string | null
-  >(null);
-  const [managedRolesActionSuccess, setManagedRolesActionSuccess] = useState<
-    string | null
-  >(null);
+  const [managedRolesError, setManagedRolesError] = useState<string | null>(null);
+  const [managedRolesActionError, setManagedRolesActionError] = useState<string | null>(null);
+  const [managedRolesActionSuccess, setManagedRolesActionSuccess] = useState<string | null>(null);
   const [newRoleKey, setNewRoleKey] = useState("");
   const [newRoleLabel, setNewRoleLabel] = useState("");
   const [isCreatingRole, setIsCreatingRole] = useState(false);
   const [updatingRoleKey, setUpdatingRoleKey] = useState<string | null>(null);
   const [deletingRoleKey, setDeletingRoleKey] = useState<string | null>(null);
-  const [roleLabelDrafts, setRoleLabelDrafts] = useState<
-    Record<string, string>
-  >({});
+  const [roleLabelDrafts, setRoleLabelDrafts] = useState<Record<string, string>>({});
   const [metaInfo, setMetaInfo] = useState<AdminMetaInfo | null>(null);
   const [isLoadingMetaInfo, setIsLoadingMetaInfo] = useState(false);
   const [metaInfoError, setMetaInfoError] = useState<string | null>(null);
   const [isForcePushingMain, setIsForcePushingMain] = useState(false);
-  const [forcePushMainError, setForcePushMainError] = useState<string | null>(
-    null,
-  );
-  const [forcePushMainSuccess, setForcePushMainSuccess] = useState<
-    string | null
-  >(null);
-  const [isBuildingAndPublishingDesktop, setIsBuildingAndPublishingDesktop] =
-    useState(false);
-  const [buildAndPublishDesktopError, setBuildAndPublishDesktopError] =
-    useState<string | null>(null);
-  const [buildAndPublishDesktopSuccess, setBuildAndPublishDesktopSuccess] =
-    useState<string | null>(null);
+  const [forcePushMainError, setForcePushMainError] = useState<string | null>(null);
+  const [forcePushMainSuccess, setForcePushMainSuccess] = useState<string | null>(null);
+  const [isDesktopBuilding, setIsDesktopBuilding] = useState(false);
+  const [desktopBuildError, setDesktopBuildError] = useState<string | null>(null);
+  const [desktopBuildSuccess, setDesktopBuildSuccess] = useState<string | null>(null);
   const [webhooks, setWebhooks] = useState<AdminWebhook[]>([]);
   const [isLoadingWebhooks, setIsLoadingWebhooks] = useState(false);
   const [webhooksError, setWebhooksError] = useState<string | null>(null);
-  const [webhooksActionError, setWebhooksActionError] = useState<string | null>(
-    null,
-  );
-  const [webhooksActionSuccess, setWebhooksActionSuccess] = useState<
-    string | null
-  >(null);
+  const [webhooksActionError, setWebhooksActionError] = useState<string | null>(null);
+  const [webhooksActionSuccess, setWebhooksActionSuccess] = useState<string | null>(null);
   const [newWebhookName, setNewWebhookName] = useState("");
   const [newWebhookUrl, setNewWebhookUrl] = useState("");
-  const [newWebhookEventType, setNewWebhookEventType] =
-    useState("MESSAGE_CREATE");
+  const [newWebhookEventType, setNewWebhookEventType] = useState("MESSAGE_CREATE");
   const [newWebhookServerId, setNewWebhookServerId] = useState("GLOBAL");
   const [isCreatingWebhook, setIsCreatingWebhook] = useState(false);
-  const [webhookActionPendingId, setWebhookActionPendingId] = useState<
-    string | null
-  >(null);
-  const [familyCenterEntries, setFamilyCenterEntries] = useState<
-    AdminFamilyCenterEntry[]
-  >([]);
+  const [webhookActionPendingId, setWebhookActionPendingId] = useState<string | null>(null);
+  const [familyCenterEntries, setFamilyCenterEntries] = useState<AdminFamilyCenterEntry[]>([]);
   const [isLoadingFamilyCenter, setIsLoadingFamilyCenter] = useState(false);
-  const [familyCenterError, setFamilyCenterError] = useState<string | null>(
-    null,
-  );
-  const [familyCenterSuccess, setFamilyCenterSuccess] = useState<string | null>(
-    null,
-  );
+  const [familyCenterError, setFamilyCenterError] = useState<string | null>(null);
+  const [familyCenterSuccess, setFamilyCenterSuccess] = useState<string | null>(null);
   const [familyCenterSearch, setFamilyCenterSearch] = useState("");
-  const [familyCenterStatusFilter, setFamilyCenterStatusFilter] = useState<
-    "ALL" | "SUBMITTED" | "APROVED" | "DENIED"
-  >("ALL");
-  const [businessSectionFilter, setBusinessSectionFilter] =
-    useState<string>("ALL");
-  const [listRowDensity, setListRowDensity] = useState<
-    "COMPACT" | "COMFORTABLE" | "SPACIOUS"
-  >("COMFORTABLE");
-  const [familyCenterRowDensity, setFamilyCenterRowDensity] = useState<
-    "COMPACT" | "COMFORTABLE" | "SPACIOUS"
-  >("COMFORTABLE");
-  const [deletingFamilyApplicationUserId, setDeletingFamilyApplicationUserId] =
-    useState<string | null>(null);
-  const [
-    reviewingFamilyApplicationActionUserId,
-    setReviewingFamilyApplicationActionUserId,
-  ] = useState<string | null>(null);
-  const [reviewingFamilyApplication, setReviewingFamilyApplication] =
-    useState<AdminFamilyCenterEntry | null>(null);
-  const [previewingFamilyApplicationFile, setPreviewingFamilyApplicationFile] =
-    useState<{
-      name: string;
-      url: string;
-      mimeType: string;
-    } | null>(null);
+  const [familyCenterStatusFilter, setFamilyCenterStatusFilter] = useState<"ALL" | "SUBMITTED" | "APROVED" | "DENIED">("ALL");
+  const [businessSectionFilter, setBusinessSectionFilter] = useState<string>("ALL");
+  const [listRowDensity, setListRowDensity] = useState<"COMPACT" | "COMFORTABLE" | "SPACIOUS">("COMFORTABLE");
+  const [familyCenterRowDensity, setFamilyCenterRowDensity] = useState<"COMPACT" | "COMFORTABLE" | "SPACIOUS">("COMFORTABLE");
+  const [deletingFamilyApplicationUserId, setDeletingFamilyApplicationUserId] = useState<string | null>(null);
+  const [reviewingFamilyApplicationActionUserId, setReviewingFamilyApplicationActionUserId] = useState<string | null>(null);
+  const [reviewingFamilyApplication, setReviewingFamilyApplication] = useState<AdminFamilyCenterEntry | null>(null);
+  const [previewingFamilyApplicationFile, setPreviewingFamilyApplicationFile] = useState<{
+    name: string;
+    url: string;
+    mimeType: string;
+  } | null>(null);
+
 
   const isModalOpen = isOpen && type === "inAccordAdmin";
 
@@ -1513,19 +1095,19 @@ export const InAccordAdminModal = () => {
         nextUsers.reduce<Record<string, string>>((acc, user) => {
           acc[user.userId] = normalizeAdminRoleForDisplay(user.role);
           return acc;
-        }, {}),
+        }, {})
       );
       setUserPhoneDrafts(
         nextUsers.reduce<Record<string, string>>((acc, user) => {
           acc[user.userId] = user.phoneNumber ?? "";
           return acc;
-        }, {}),
+        }, {})
       );
       setUserDateOfBirthDrafts(
         nextUsers.reduce<Record<string, string>>((acc, user) => {
           acc[user.userId] = user.dateOfBirth ?? "";
           return acc;
-        }, {}),
+        }, {})
       );
       notifyAdminTotalsRefresh();
     } catch (error) {
@@ -1563,9 +1145,7 @@ export const InAccordAdminModal = () => {
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_META_LOAD]", error);
       setMetaInfo(null);
-      setMetaInfoError(
-        "Unable to load build and GitHub information right now.",
-      );
+      setMetaInfoError("Unable to load build and GitHub information right now.");
     } finally {
       setIsLoadingMetaInfo(false);
     }
@@ -1595,34 +1175,28 @@ export const InAccordAdminModal = () => {
       }>(response);
 
       if (!response.ok || !payload.ok) {
-        throw new Error(
-          payload.message || `Failed to force push main (${response.status})`,
-        );
+        throw new Error(payload.message || `Failed to force push main (${response.status})`);
       }
 
       setForcePushMainSuccess(
-        payload.remoteBefore &&
-          payload.remoteAfter &&
-          payload.remoteBefore !== payload.remoteAfter
+        payload.remoteBefore && payload.remoteAfter && payload.remoteBefore !== payload.remoteAfter
           ? `Force pushed main (${payload.remoteBefore.slice(0, 7)} → ${payload.remoteAfter.slice(0, 7)}).`
-          : payload.message || "Force push to main completed.",
+          : payload.message || "Force push to main completed."
       );
       await loadMetaInfo();
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_FORCE_PUSH_MAIN]", error);
-      setForcePushMainError(
-        error instanceof Error ? error.message : "Unable to force push main.",
-      );
+      setForcePushMainError(error instanceof Error ? error.message : "Unable to force push main.");
     } finally {
       setIsForcePushingMain(false);
     }
   }, [loadMetaInfo]);
 
-  const onBuildAndPublishDesktop = useCallback(async () => {
+  const onDesktopBuildPublish = useCallback(async () => {
     try {
-      setIsBuildingAndPublishingDesktop(true);
-      setBuildAndPublishDesktopError(null);
-      setBuildAndPublishDesktopSuccess(null);
+      setIsDesktopBuilding(true);
+      setDesktopBuildError(null);
+      setDesktopBuildSuccess(null);
 
       const response = await fetch("/api/admin/desktop-build-publish", {
         method: "POST",
@@ -1641,26 +1215,18 @@ export const InAccordAdminModal = () => {
       }>(response);
 
       if (!response.ok || !payload.ok) {
-        throw new Error(
-          payload.message ||
-            `Failed to build and publish desktop (${response.status})`,
-        );
+        throw new Error(payload.message || `Failed to build desktop updater (${response.status})`);
       }
 
-      setBuildAndPublishDesktopSuccess(
-        payload.message ||
-          `Desktop build ${payload.appVersion || "Unknown"} / ${payload.displayVersion || "Unknown"} published to the updater feed.`,
-      );
+      setDesktopBuildSuccess(payload.message || "Desktop build completed.");
       await loadMetaInfo();
     } catch (error) {
-      console.error("[IN_ACCORD_ADMIN_DESKTOP_BUILD_PUBLISH]", error);
-      setBuildAndPublishDesktopError(
-        error instanceof Error
-          ? error.message
-          : "Unable to build and publish the desktop updater.",
+      console.error("[IN_ACCORD_ADMIN_DESKTOP_BUILD]", error);
+      setDesktopBuildError(
+        error instanceof Error ? error.message : "Unable to build the desktop updater."
       );
     } finally {
-      setIsBuildingAndPublishingDesktop(false);
+      setIsDesktopBuilding(false);
     }
   }, [loadMetaInfo]);
 
@@ -1685,9 +1251,7 @@ export const InAccordAdminModal = () => {
       const nextRoles = (payload.roles ?? []).map((role) => ({
         ...role,
         roleKey: normalizeAdminRoleForDisplay(role.roleKey),
-        roleLabel:
-          String(role.roleLabel ?? "").trim() ||
-          normalizeAdminRoleForDisplay(role.roleKey),
+        roleLabel: String(role.roleLabel ?? "").trim() || normalizeAdminRoleForDisplay(role.roleKey),
       }));
 
       setManagedRoles(nextRoles);
@@ -1695,7 +1259,7 @@ export const InAccordAdminModal = () => {
         nextRoles.reduce<Record<string, string>>((acc, role) => {
           acc[role.roleKey] = role.roleLabel;
           return acc;
-        }, {}),
+        }, {})
       );
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_ROLES_LOAD]", error);
@@ -1721,12 +1285,7 @@ export const InAccordAdminModal = () => {
   }, [data.query, isModalOpen]);
 
   useEffect(() => {
-    if (
-      !isModalOpen ||
-      (activeSection !== "members" &&
-        activeSection !== "roles" &&
-        activeSection !== "integrations")
-    ) {
+    if (!isModalOpen || (activeSection !== "members" && activeSection !== "roles" && activeSection !== "integrations")) {
       return;
     }
 
@@ -1734,10 +1293,7 @@ export const InAccordAdminModal = () => {
   }, [activeSection, isModalOpen]);
 
   useEffect(() => {
-    if (
-      !isModalOpen ||
-      (activeSection !== "members" && activeSection !== "roles")
-    ) {
+    if (!isModalOpen || (activeSection !== "members" && activeSection !== "roles")) {
       return;
     }
 
@@ -1814,9 +1370,7 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        throw new Error(
-          `Failed to load security insights (${response.status})`,
-        );
+        throw new Error(`Failed to load security insights (${response.status})`);
       }
 
       const payload = (await response.json()) as {
@@ -1850,9 +1404,7 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        throw new Error(
-          `Failed to load integrations insights (${response.status})`,
-        );
+        throw new Error(`Failed to load integrations insights (${response.status})`);
       }
 
       const payload = (await response.json()) as {
@@ -1877,7 +1429,7 @@ export const InAccordAdminModal = () => {
       setIntegrationsError(
         isNetworkFetchFailure(error)
           ? "Network issue: could not reach integrations insights right now."
-          : "Unable to load integrations insights right now.",
+          : "Unable to load integrations insights right now."
       );
     } finally {
       setIsLoadingIntegrations(false);
@@ -1898,9 +1450,7 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        throw new Error(
-          `Failed to load Template Me runtime (${response.status})`,
-        );
+        throw new Error(`Failed to load Template Me runtime (${response.status})`);
       }
 
       const payload = (await response.json()) as {
@@ -1914,134 +1464,108 @@ export const InAccordAdminModal = () => {
       console.error("[IN_ACCORD_ADMIN_TEMPLATE_ME_RUNTIME_LOAD]", error);
       setTemplateMeRuntimeState(null);
       setTemplateMeRuntimeInviteUrl(null);
-      setTemplateMeRuntimeError(
-        "Unable to load Template Me runtime status right now.",
-      );
+      setTemplateMeRuntimeError("Unable to load Template Me runtime status right now.");
     } finally {
       setIsLoadingTemplateMeRuntime(false);
     }
   }, []);
 
-  const loadTemplateMeStats = useCallback(
-    async (targets: Array<{ userId: string; botId?: string }>) => {
-      try {
-        setIsLoadingTemplateMeStats(true);
-        setTemplateMeStatsError(null);
+  const loadTemplateMeStats = useCallback(async (targets: Array<{ userId: string; botId?: string }>) => {
+    try {
+      setIsLoadingTemplateMeStats(true);
+      setTemplateMeStatsError(null);
 
-        const normalizedTargets = Array.from(
-          new Map(
-            targets
-              .map((target) => ({
-                userId: String(target.userId ?? "").trim(),
-                botId: String(target.botId ?? "").trim() || undefined,
-              }))
-              .filter((target) => target.userId.length > 0)
-              .map((target) => [
-                `${target.userId}:${target.botId ?? ""}`,
-                target,
-              ]),
-          ).values(),
-        );
+      const normalizedTargets = Array.from(
+        new Map(
+          targets
+            .map((target) => ({
+              userId: String(target.userId ?? "").trim(),
+              botId: String(target.botId ?? "").trim() || undefined,
+            }))
+            .filter((target) => target.userId.length > 0)
+            .map((target) => [`${target.userId}:${target.botId ?? ""}`, target])
+        ).values()
+      );
 
-        if (normalizedTargets.length === 0) {
-          setTemplateMeStats(null);
-          setTemplateMeStatsError(null);
-          return;
-        }
-
-        const target = normalizedTargets[0];
-        const query = new URLSearchParams({ userId: target.userId });
-        if (target.botId) {
-          query.set("botId", target.botId);
-        }
-
-        const response = await fetch(
-          `/api/admin/template-me-stats?${query.toString()}`,
-          {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            cache: "no-store",
-          },
-        );
-
-        if (!response.ok) {
-          const message =
-            (await response.text()) ||
-            `Failed to load Template Me stats (${response.status})`;
-          throw new Error(message);
-        }
-
-        const payload = (await response.json()) as TemplateMeBotStats;
-        setTemplateMeStats(payload);
-      } catch (error) {
-        console.error("[IN_ACCORD_ADMIN_TEMPLATE_ME_STATS_LOAD]", error);
+      if (normalizedTargets.length === 0) {
         setTemplateMeStats(null);
-        setTemplateMeStatsError(
-          error instanceof Error
-            ? error.message
-            : "Unable to load Template Me stats right now.",
-        );
-      } finally {
-        setIsLoadingTemplateMeStats(false);
+        setTemplateMeStatsError(null);
+        return;
       }
-    },
-    [],
-  );
 
-  const onTemplateMeRuntimeAction = useCallback(
-    async (action: "start" | "stop" | "restart") => {
-      try {
-        setTemplateMeRuntimeActionPending(action);
-        setTemplateMeRuntimeError(null);
-        setTemplateMeRuntimeSuccess(null);
-
-        const response = await fetch("/api/admin/template-me-runtime", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ action }),
-        });
-
-        if (!response.ok) {
-          const message =
-            (await response.text()) ||
-            `Template Me runtime ${action} failed (${response.status})`;
-          setTemplateMeRuntimeError(message);
-          return;
-        }
-
-        const payload = (await response.json()) as {
-          state?: TemplateMeRuntimeState;
-          inviteUrl?: string | null;
-        };
-
-        setTemplateMeRuntimeState(payload.state ?? null);
-        setTemplateMeRuntimeInviteUrl(payload.inviteUrl ?? null);
-        setTemplateMeRuntimeSuccess(
-          action === "start"
-            ? "Template Me bot runtime started."
-            : action === "restart"
-              ? "Template Me bot runtime restarted."
-              : "Template Me bot runtime stopped.",
-        );
-      } catch (error) {
-        if (!isNetworkFetchFailure(error)) {
-          console.error("[IN_ACCORD_ADMIN_TEMPLATE_ME_RUNTIME_ACTION]", error);
-        }
-        setTemplateMeRuntimeError(
-          error instanceof Error
-            ? error.message
-            : "Unable to control Template Me runtime.",
-        );
-      } finally {
-        setTemplateMeRuntimeActionPending(null);
+      const target = normalizedTargets[0];
+      const query = new URLSearchParams({ userId: target.userId });
+      if (target.botId) {
+        query.set("botId", target.botId);
       }
-    },
-    [],
-  );
+
+      const response = await fetch(`/api/admin/template-me-stats?${query.toString()}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Failed to load Template Me stats (${response.status})`;
+        throw new Error(message);
+      }
+
+      const payload = (await response.json()) as TemplateMeBotStats;
+      setTemplateMeStats(payload);
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_TEMPLATE_ME_STATS_LOAD]", error);
+      setTemplateMeStats(null);
+      setTemplateMeStatsError(error instanceof Error ? error.message : "Unable to load Template Me stats right now.");
+    } finally {
+      setIsLoadingTemplateMeStats(false);
+    }
+  }, []);
+
+  const onTemplateMeRuntimeAction = useCallback(async (action: "start" | "stop" | "restart") => {
+    try {
+      setTemplateMeRuntimeActionPending(action);
+      setTemplateMeRuntimeError(null);
+      setTemplateMeRuntimeSuccess(null);
+
+      const response = await fetch("/api/admin/template-me-runtime", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ action }),
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Template Me runtime ${action} failed (${response.status})`;
+        setTemplateMeRuntimeError(message);
+        return;
+      }
+
+      const payload = (await response.json()) as {
+        state?: TemplateMeRuntimeState;
+        inviteUrl?: string | null;
+      };
+
+      setTemplateMeRuntimeState(payload.state ?? null);
+      setTemplateMeRuntimeInviteUrl(payload.inviteUrl ?? null);
+      setTemplateMeRuntimeSuccess(
+        action === "start"
+          ? "Template Me bot runtime started."
+          : action === "restart"
+            ? "Template Me bot runtime restarted."
+            : "Template Me bot runtime stopped."
+      );
+    } catch (error) {
+      if (!isNetworkFetchFailure(error)) {
+        console.error("[IN_ACCORD_ADMIN_TEMPLATE_ME_RUNTIME_ACTION]", error);
+      }
+      setTemplateMeRuntimeError(error instanceof Error ? error.message : "Unable to control Template Me runtime.");
+    } finally {
+      setTemplateMeRuntimeActionPending(null);
+    }
+  }, []);
 
   const loadIntegrationProviderSetup = useCallback(async () => {
     try {
@@ -2057,31 +1581,23 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        throw new Error(
-          `Failed to load integration provider setup (${response.status})`,
-        );
+        throw new Error(`Failed to load integration provider setup (${response.status})`);
       }
 
-      const payload = (await response.json()) as {
-        setup?: AdminIntegrationProviderSetup;
-      };
+      const payload = (await response.json()) as { setup?: AdminIntegrationProviderSetup };
       const setup = payload.setup ?? null;
       setIntegrationProviderSetup(setup);
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_INTEGRATION_PROVIDER_SETUP_LOAD]", error);
       setIntegrationProviderSetup(null);
-      setIntegrationProviderSetupError(
-        "Unable to load provider setup right now.",
-      );
+      setIntegrationProviderSetupError("Unable to load provider setup right now.");
     } finally {
       setIsLoadingIntegrationProviderSetup(false);
     }
   }, []);
 
   const onSaveIntegrationProviderSetup = async (providerKey: string) => {
-    if (
-      !["github", "google", "twitch", "xbox", "youtube"].includes(providerKey)
-    ) {
+    if (!["github", "google", "twitch", "xbox", "youtube"].includes(providerKey)) {
       return;
     }
 
@@ -2090,10 +1606,7 @@ export const InAccordAdminModal = () => {
       setIntegrationProviderSetupError(null);
       setIntegrationProviderSetupSuccess(null);
 
-      const draft = integrationProviderDrafts[providerKey] ?? {
-        clientId: "",
-        clientSecret: "",
-      };
+      const draft = integrationProviderDrafts[providerKey] ?? { clientId: "", clientSecret: "" };
 
       const response = await fetch("/api/admin/integration-provider-settings", {
         method: "PATCH",
@@ -2108,30 +1621,22 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to save provider setup (${response.status})`;
+        const message = (await response.text()) || `Failed to save provider setup (${response.status})`;
         throw new Error(message);
       }
 
-      const payload = (await response.json()) as {
-        setup?: AdminIntegrationProviderSetup;
-      };
+      const payload = (await response.json()) as { setup?: AdminIntegrationProviderSetup };
       setIntegrationProviderSetup(payload.setup ?? null);
       setIntegrationProviderDrafts((current) => ({
         ...current,
         [providerKey]: { clientId: "", clientSecret: "" },
       }));
-      setIntegrationProviderSetupSuccess(
-        `${providerKey.toUpperCase()} setup saved.`,
-      );
+      setIntegrationProviderSetupSuccess(`${providerKey.toUpperCase()} setup saved.`);
       await loadIntegrations();
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_INTEGRATION_PROVIDER_SETUP_SAVE]", error);
       setIntegrationProviderSetupError(
-        error instanceof Error
-          ? error.message
-          : "Unable to save provider setup.",
+        error instanceof Error ? error.message : "Unable to save provider setup."
       );
     } finally {
       setIsSavingIntegrationProviderSetup(null);
@@ -2148,9 +1653,9 @@ export const InAccordAdminModal = () => {
       const effectiveTargetTypeFilter =
         activeSection === "issuesBugs"
           ? "BUG"
-          : activeSection === "reported" && reportTargetTypeFilter === "BUG"
-            ? "ALL"
-            : reportTargetTypeFilter;
+          : (activeSection === "reported" && reportTargetTypeFilter === "BUG"
+              ? "ALL"
+              : reportTargetTypeFilter);
       query.set("targetType", effectiveTargetTypeFilter);
 
       const response = await fetch(`/api/admin/reports?${query.toString()}`, {
@@ -2169,20 +1674,15 @@ export const InAccordAdminModal = () => {
       const nextReports = payload.reports ?? [];
       setReports(nextReports);
       setReportStatusDrafts(
-        Object.fromEntries(nextReports.map((item) => [item.id, item.status])),
+        Object.fromEntries(nextReports.map((item) => [item.id, item.status]))
       );
       setReportNoteDrafts(
-        Object.fromEntries(
-          nextReports.map((item) => [item.id, item.adminNote ?? ""]),
-        ),
+        Object.fromEntries(nextReports.map((item) => [item.id, item.adminNote ?? ""]))
       );
       setReportSeverityDrafts(
         Object.fromEntries(
-          nextReports.map((item) => [
-            item.id,
-            parseReportSeverity(item.reason) ?? "LOW",
-          ]),
-        ) as Record<string, "LOW" | "MEDIUM" | "HIGH" | "CRITICAL">,
+          nextReports.map((item) => [item.id, parseReportSeverity(item.reason) ?? "LOW"])
+        ) as Record<string, "LOW" | "MEDIUM" | "HIGH" | "CRITICAL">
       );
       notifyAdminTotalsRefresh();
     } catch (error) {
@@ -2196,12 +1696,7 @@ export const InAccordAdminModal = () => {
     } finally {
       setIsLoadingReports(false);
     }
-  }, [
-    activeSection,
-    notifyAdminTotalsRefresh,
-    reportStatusFilter,
-    reportTargetTypeFilter,
-  ]);
+  }, [activeSection, notifyAdminTotalsRefresh, reportStatusFilter, reportTargetTypeFilter]);
 
   const loadPatronage = useCallback(async () => {
     try {
@@ -2258,9 +1753,7 @@ export const InAccordAdminModal = () => {
         throw new Error(`Failed to load patronage setup (${response.status})`);
       }
 
-      const payload = (await response.json()) as {
-        setup?: AdminPatronageSetup;
-      };
+      const payload = (await response.json()) as { setup?: AdminPatronageSetup };
       const setup = payload.setup ?? null;
 
       setPatronageSetup(setup);
@@ -2298,15 +1791,11 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to save payment setup (${response.status})`;
+        const message = (await response.text()) || `Failed to save payment setup (${response.status})`;
         throw new Error(message);
       }
 
-      const payload = (await response.json()) as {
-        setup?: AdminPatronageSetup;
-      };
+      const payload = (await response.json()) as { setup?: AdminPatronageSetup };
       setPatronageSetup(payload.setup ?? null);
       setPatronageSetupSecretDraft("");
       setPatronageSetupPublishableDraft("");
@@ -2314,11 +1803,7 @@ export const InAccordAdminModal = () => {
       setPatronageActionSuccess("Payment setup updated.");
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_PATRONAGE_SETUP_SAVE]", error);
-      setPatronageError(
-        error instanceof Error
-          ? error.message
-          : "Unable to save payment setup.",
-      );
+      setPatronageError(error instanceof Error ? error.message : "Unable to save payment setup.");
     } finally {
       setIsSavingPatronageSetup(false);
     }
@@ -2396,9 +1881,7 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to save site URL (${response.status})`;
+        const message = (await response.text()) || `Failed to save site URL (${response.status})`;
         throw new Error(message);
       }
 
@@ -2422,214 +1905,11 @@ export const InAccordAdminModal = () => {
       setSiteUrlSuccess("Hosting and URL settings updated.");
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_SITE_URL_SAVE]", error);
-      setSiteUrlError(
-        error instanceof Error
-          ? error.message
-          : "Unable to save In-Accord URL.",
-      );
+      setSiteUrlError(error instanceof Error ? error.message : "Unable to save In-Accord URL.");
     } finally {
       setIsSavingSiteUrlSetup(false);
     }
   };
-
-  const applyDatabaseRuntimeSetup = useCallback(
-    (setup: AdminDatabaseRuntimeSetup | null) => {
-      setDatabaseRuntimeSetup(setup);
-      setDatabaseD1AccountIdDraft(setup?.d1.accountId ?? "");
-      setDatabaseD1DatabaseIdDraft(setup?.d1.databaseId ?? "");
-      setDatabaseD1DatabaseNameDraft(setup?.d1.databaseName ?? "");
-      setDatabaseD1ManagementUrlDraft(setup?.d1.managementUrl ?? "");
-    },
-    [],
-  );
-
-  const loadDatabaseRuntime = useCallback(async () => {
-    try {
-      setIsLoadingDatabaseRuntime(true);
-      setDatabaseRuntimeError(null);
-
-      const response = await fetch("/api/admin/database-runtime", {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        cache: "no-store",
-      });
-
-      if (!response.ok) {
-        throw new Error(
-          `Failed to load database runtime (${response.status})`,
-        );
-      }
-
-      const payload = (await response.json()) as {
-        setup?: AdminDatabaseRuntimeSetup;
-      };
-      applyDatabaseRuntimeSetup(payload.setup ?? null);
-    } catch (error) {
-      console.error("[IN_ACCORD_ADMIN_DATABASE_RUNTIME_LOAD]", error);
-      applyDatabaseRuntimeSetup(null);
-      setDatabaseRuntimeError(
-        "Unable to load database runtime controls right now.",
-      );
-    } finally {
-      setIsLoadingDatabaseRuntime(false);
-    }
-  }, [applyDatabaseRuntimeSetup]);
-
-  const onSaveDatabaseRuntimeSetup = useCallback(async () => {
-    try {
-      setIsSavingDatabaseRuntime(true);
-      setDatabaseRuntimeError(null);
-      setDatabaseRuntimeSuccess(null);
-
-      const response = await fetch("/api/admin/database-runtime", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          d1AccountId: databaseD1AccountIdDraft.trim(),
-          d1DatabaseId: databaseD1DatabaseIdDraft.trim(),
-          d1DatabaseName: databaseD1DatabaseNameDraft.trim(),
-          d1ManagementUrl: databaseD1ManagementUrlDraft.trim(),
-        }),
-      });
-
-      const payload = await readAdminJsonOrText<{
-        ok?: boolean;
-        message?: string;
-        setup?: AdminDatabaseRuntimeSetup;
-      }>(response);
-
-      if (!response.ok || !payload.ok) {
-        throw new Error(
-          payload.message ||
-            `Failed to save database runtime (${response.status})`,
-        );
-      }
-
-      applyDatabaseRuntimeSetup(payload.setup ?? null);
-      setDatabaseRuntimeSuccess(
-        payload.message || "Database runtime settings saved.",
-      );
-    } catch (error) {
-      console.error("[IN_ACCORD_ADMIN_DATABASE_RUNTIME_SAVE]", error);
-      setDatabaseRuntimeError(
-        error instanceof Error
-          ? error.message
-          : "Unable to save database runtime settings.",
-      );
-    } finally {
-      setIsSavingDatabaseRuntime(false);
-    }
-  }, [
-    applyDatabaseRuntimeSetup,
-    databaseD1AccountIdDraft,
-    databaseD1DatabaseIdDraft,
-    databaseD1DatabaseNameDraft,
-    databaseD1ManagementUrlDraft,
-  ]);
-
-  const onSwitchDatabaseRuntime = useCallback(
-    async (target: "live" | "local") => {
-      try {
-        setIsSwitchingDatabaseRuntime(true);
-        setDatabaseRuntimeError(null);
-        setDatabaseRuntimeSuccess(null);
-
-        const response = await fetch("/api/admin/database-runtime", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            action: "SET_TARGET",
-            target,
-          }),
-        });
-
-        const payload = await readAdminJsonOrText<{
-          ok?: boolean;
-          message?: string;
-          setup?: AdminDatabaseRuntimeSetup;
-        }>(response);
-
-        if (!response.ok || !payload.ok) {
-          throw new Error(
-            payload.message ||
-              `Failed to switch database runtime (${response.status})`,
-          );
-        }
-
-        applyDatabaseRuntimeSetup(payload.setup ?? null);
-        setDatabaseRuntimeSuccess(
-          payload.message ||
-            `Database runtime switched to ${target === "local" ? "Local PostgreSQL" : "Live PostgreSQL"}.`,
-        );
-      } catch (error) {
-        console.error("[IN_ACCORD_ADMIN_DATABASE_RUNTIME_SWITCH]", error);
-        setDatabaseRuntimeError(
-          error instanceof Error
-            ? error.message
-            : "Unable to switch database runtime.",
-        );
-      } finally {
-        setIsSwitchingDatabaseRuntime(false);
-      }
-    },
-    [applyDatabaseRuntimeSetup],
-  );
-
-  const onSyncDatabaseD1 = useCallback(async () => {
-    try {
-      setIsSyncingDatabaseD1(true);
-      setDatabaseRuntimeError(null);
-      setDatabaseRuntimeSuccess(null);
-
-      const response = await fetch("/api/admin/database-runtime", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          action: "SYNC_TO_D1",
-        }),
-      });
-
-      const payload = await readAdminJsonOrText<{
-        ok?: boolean;
-        message?: string;
-        setup?: AdminDatabaseRuntimeSetup;
-        sync?: {
-          databaseName?: string | null;
-          tableCount?: number | null;
-          queryCount?: number | null;
-          rowsWritten?: number | null;
-          databaseSizeMb?: string | null;
-        };
-      }>(response);
-
-      if (!response.ok || !payload.ok) {
-        throw new Error(
-          payload.message || `Failed to sync D1 snapshot (${response.status})`,
-        );
-      }
-
-      applyDatabaseRuntimeSetup(payload.setup ?? null);
-      setDatabaseRuntimeSuccess(
-        payload.message ||
-          `D1 snapshot synced to ${payload.sync?.databaseName ?? "configured database"}.`,
-      );
-    } catch (error) {
-      console.error("[IN_ACCORD_ADMIN_DATABASE_RUNTIME_SYNC_D1]", error);
-      setDatabaseRuntimeError(
-        error instanceof Error ? error.message : "Unable to sync D1 snapshot.",
-      );
-    } finally {
-      setIsSyncingDatabaseD1(false);
-    }
-  }, [applyDatabaseRuntimeSetup]);
 
   const loadServerPerformance = useCallback(async () => {
     try {
@@ -2645,9 +1925,7 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        throw new Error(
-          `Failed to load server performance (${response.status})`,
-        );
+        throw new Error(`Failed to load server performance (${response.status})`);
       }
 
       const payload = (await response.json()) as AdminServerPerformance;
@@ -2661,58 +1939,48 @@ export const InAccordAdminModal = () => {
     }
   }, []);
 
-  const loadManagedFiles = useCallback(
-    async (folderInput?: string) => {
-      try {
-        setIsLoadingManagedFiles(true);
-        setManagedFilesError(null);
+  const loadManagedFiles = useCallback(async (folderInput?: string) => {
+    try {
+      setIsLoadingManagedFiles(true);
+      setManagedFilesError(null);
 
-        const folder = String(
-          folderInput ?? managedFilesFolderDraft ?? "",
-        ).trim();
-        const query = new URLSearchParams();
-        if (folder) {
-          query.set("folder", folder);
-        }
-
-        const response = await fetch(
-          `/api/admin/file-manager${query.toString() ? `?${query.toString()}` : ""}`,
-          {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            cache: "no-store",
-          },
-        );
-
-        if (!response.ok) {
-          throw new Error(`Failed to load file manager (${response.status})`);
-        }
-
-        const payload = (await response.json()) as {
-          folder?: string;
-          files?: AdminManagedFile[];
-        };
-
-        const nextFiles = payload.files ?? [];
-        setManagedFiles(nextFiles);
-        setManagedFilesFolderDraft(payload.folder ?? folder);
-        setSelectedManagedFilePaths((current) =>
-          current.filter((selectedPath) =>
-            nextFiles.some((entry) => entry.path === selectedPath),
-          ),
-        );
-      } catch (error) {
-        console.error("[IN_ACCORD_ADMIN_FILE_MANAGER_LOAD]", error);
-        setManagedFiles([]);
-        setManagedFilesError("Unable to load files right now.");
-      } finally {
-        setIsLoadingManagedFiles(false);
+      const folder = String(folderInput ?? managedFilesFolderDraft ?? "").trim();
+      const query = new URLSearchParams();
+      if (folder) {
+        query.set("folder", folder);
       }
-    },
-    [managedFilesFolderDraft],
-  );
+
+      const response = await fetch(`/api/admin/file-manager${query.toString() ? `?${query.toString()}` : ""}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load file manager (${response.status})`);
+      }
+
+      const payload = (await response.json()) as {
+        folder?: string;
+        files?: AdminManagedFile[];
+      };
+
+      const nextFiles = payload.files ?? [];
+      setManagedFiles(nextFiles);
+      setManagedFilesFolderDraft(payload.folder ?? folder);
+      setSelectedManagedFilePaths((current) =>
+        current.filter((selectedPath) => nextFiles.some((entry) => entry.path === selectedPath))
+      );
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_FILE_MANAGER_LOAD]", error);
+      setManagedFiles([]);
+      setManagedFilesError("Unable to load files right now.");
+    } finally {
+      setIsLoadingManagedFiles(false);
+    }
+  }, [managedFilesFolderDraft]);
 
   const onUploadManagedFile = async () => {
     if (!managedFileUpload) {
@@ -2735,9 +2003,7 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to upload file (${response.status})`;
+        const message = (await response.text()) || `Failed to upload file (${response.status})`;
         throw new Error(message);
       }
 
@@ -2746,18 +2012,14 @@ export const InAccordAdminModal = () => {
       await loadManagedFiles(managedFilesFolderDraft);
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_FILE_MANAGER_UPLOAD]", error);
-      setManagedFilesError(
-        error instanceof Error ? error.message : "Unable to upload file.",
-      );
+      setManagedFilesError(error instanceof Error ? error.message : "Unable to upload file.");
     } finally {
       setIsUploadingManagedFile(false);
     }
   };
 
   const onDeleteManagedFile = async (file: AdminManagedFile) => {
-    const confirmed = window.confirm(
-      `Delete ${file.path}? This cannot be undone.`,
-    );
+    const confirmed = window.confirm(`Delete ${file.path}? This cannot be undone.`);
     if (!confirmed) {
       return;
     }
@@ -2776,9 +2038,7 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to delete file (${response.status})`;
+        const message = (await response.text()) || `Failed to delete file (${response.status})`;
         throw new Error(message);
       }
 
@@ -2786,9 +2046,7 @@ export const InAccordAdminModal = () => {
       await loadManagedFiles(managedFilesFolderDraft);
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_FILE_MANAGER_DELETE]", error);
-      setManagedFilesError(
-        error instanceof Error ? error.message : "Unable to delete file.",
-      );
+      setManagedFilesError(error instanceof Error ? error.message : "Unable to delete file.");
     } finally {
       setDeletingManagedFilePath(null);
     }
@@ -2796,8 +2054,7 @@ export const InAccordAdminModal = () => {
 
   const onOpenFolder = async () => {
     const selectedFolders = managedFiles.filter(
-      (file) =>
-        selectedManagedFilePaths.includes(file.path) && file.isDirectory,
+      (file) => selectedManagedFilePaths.includes(file.path) && file.isDirectory
     );
 
     if (selectedFolders.length > 0) {
@@ -2820,65 +2077,53 @@ export const InAccordAdminModal = () => {
     await loadManagedFiles(folderFromInput);
   };
 
-  const loadDatabaseManager = useCallback(
-    async (tableFullName?: string) => {
-      try {
-        setIsLoadingDatabaseManager(true);
-        setDatabaseManagerError(null);
+  const loadDatabaseManager = useCallback(async (tableFullName?: string) => {
+    try {
+      setIsLoadingDatabaseManager(true);
+      setDatabaseManagerError(null);
 
-        const requestedTable = String(
-          tableFullName ?? selectedDatabaseManagerTable,
-        ).trim();
-        const query = new URLSearchParams();
-        if (requestedTable) {
-          query.set("table", requestedTable);
-        }
-
-        const response = await fetch(
-          `/api/admin/database-manager${query.toString() ? `?${query.toString()}` : ""}`,
-          {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            cache: "no-store",
-          },
-        );
-
-        if (!response.ok) {
-          throw new Error(
-            `Failed to load database manager (${response.status})`,
-          );
-        }
-
-        const payload = (await response.json()) as {
-          tables?: AdminDatabaseManagerTable[];
-          selectedTable?: string | null;
-          columns?: string[];
-          rows?: Array<Record<string, unknown>>;
-        };
-
-        const nextTables = payload.tables ?? [];
-        const nextSelectedTable = String(
-          payload.selectedTable ?? requestedTable ?? "",
-        ).trim();
-
-        setDatabaseManagerTables(nextTables);
-        setSelectedDatabaseManagerTable(nextSelectedTable);
-        setDatabaseManagerColumns(payload.columns ?? []);
-        setDatabaseManagerRows(payload.rows ?? []);
-      } catch (error) {
-        console.error("[IN_ACCORD_ADMIN_DATABASE_MANAGER_LOAD]", error);
-        setDatabaseManagerTables([]);
-        setDatabaseManagerColumns([]);
-        setDatabaseManagerRows([]);
-        setDatabaseManagerError("Unable to load database manager right now.");
-      } finally {
-        setIsLoadingDatabaseManager(false);
+      const requestedTable = String(tableFullName ?? selectedDatabaseManagerTable).trim();
+      const query = new URLSearchParams();
+      if (requestedTable) {
+        query.set("table", requestedTable);
       }
-    },
-    [selectedDatabaseManagerTable],
-  );
+
+      const response = await fetch(`/api/admin/database-manager${query.toString() ? `?${query.toString()}` : ""}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load database manager (${response.status})`);
+      }
+
+      const payload = (await response.json()) as {
+        tables?: AdminDatabaseManagerTable[];
+        selectedTable?: string | null;
+        columns?: string[];
+        rows?: Array<Record<string, unknown>>;
+      };
+
+      const nextTables = payload.tables ?? [];
+      const nextSelectedTable = String(payload.selectedTable ?? requestedTable ?? "").trim();
+
+      setDatabaseManagerTables(nextTables);
+      setSelectedDatabaseManagerTable(nextSelectedTable);
+      setDatabaseManagerColumns(payload.columns ?? []);
+      setDatabaseManagerRows(payload.rows ?? []);
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_DATABASE_MANAGER_LOAD]", error);
+      setDatabaseManagerTables([]);
+      setDatabaseManagerColumns([]);
+      setDatabaseManagerRows([]);
+      setDatabaseManagerError("Unable to load database manager right now.");
+    } finally {
+      setIsLoadingDatabaseManager(false);
+    }
+  }, [selectedDatabaseManagerTable]);
 
   const loadCloudflare = useCallback(async () => {
     try {
@@ -2938,9 +2183,7 @@ export const InAccordAdminModal = () => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          ...(cloudflareApiTokenDraft.trim()
-            ? { apiToken: cloudflareApiTokenDraft.trim() }
-            : {}),
+          ...(cloudflareApiTokenDraft.trim() ? { apiToken: cloudflareApiTokenDraft.trim() } : {}),
           accountId: cloudflareAccountIdDraft.trim(),
           zoneId: cloudflareSelectedZoneId.trim(),
           zoneName: cloudflareSelectedZoneName.trim(),
@@ -2948,26 +2191,18 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to save Cloudflare setup (${response.status})`;
+        const message = (await response.text()) || `Failed to save Cloudflare setup (${response.status})`;
         throw new Error(message);
       }
 
-      const payload = (await response.json()) as {
-        setup?: AdminCloudflareSetup;
-      };
+      const payload = (await response.json()) as { setup?: AdminCloudflareSetup };
       setCloudflareSetup(payload.setup ?? null);
       setCloudflareApiTokenDraft("");
       setCloudflareSuccess("Cloudflare setup saved.");
       await loadCloudflare();
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_CLOUDFLARE_SAVE]", error);
-      setCloudflareError(
-        error instanceof Error
-          ? error.message
-          : "Unable to save Cloudflare setup.",
-      );
+      setCloudflareError(error instanceof Error ? error.message : "Unable to save Cloudflare setup.");
     } finally {
       setIsSavingCloudflare(false);
     }
@@ -2997,9 +2232,7 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to select Cloudflare zone (${response.status})`;
+        const message = (await response.text()) || `Failed to select Cloudflare zone (${response.status})`;
         throw new Error(message);
       }
 
@@ -3014,11 +2247,7 @@ export const InAccordAdminModal = () => {
       setCloudflareEditingDnsRecordId(null);
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_CLOUDFLARE_SELECT_ZONE]", error);
-      setCloudflareError(
-        error instanceof Error
-          ? error.message
-          : "Unable to select Cloudflare zone.",
-      );
+      setCloudflareError(error instanceof Error ? error.message : "Unable to select Cloudflare zone.");
     } finally {
       setIsCloudflareActionPending(false);
     }
@@ -3030,9 +2259,7 @@ export const InAccordAdminModal = () => {
       return;
     }
 
-    const confirmed = window.confirm(
-      "Purge Cloudflare cache for this zone? This clears cached content globally.",
-    );
+    const confirmed = window.confirm("Purge Cloudflare cache for this zone? This clears cached content globally.");
     if (!confirmed) {
       return;
     }
@@ -3054,20 +2281,14 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to purge Cloudflare cache (${response.status})`;
+        const message = (await response.text()) || `Failed to purge Cloudflare cache (${response.status})`;
         throw new Error(message);
       }
 
       setCloudflareSuccess("Cloudflare cache purge requested.");
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_CLOUDFLARE_PURGE_CACHE]", error);
-      setCloudflareError(
-        error instanceof Error
-          ? error.message
-          : "Unable to purge Cloudflare cache.",
-      );
+      setCloudflareError(error instanceof Error ? error.message : "Unable to purge Cloudflare cache.");
     } finally {
       setIsCloudflareActionPending(false);
     }
@@ -3103,9 +2324,7 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to purge cache URL (${response.status})`;
+        const message = (await response.text()) || `Failed to purge cache URL (${response.status})`;
         throw new Error(message);
       }
 
@@ -3113,9 +2332,7 @@ export const InAccordAdminModal = () => {
       setCloudflarePurgeUrlDraft("");
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_CLOUDFLARE_PURGE_URL]", error);
-      setCloudflareError(
-        error instanceof Error ? error.message : "Unable to purge cache URL.",
-      );
+      setCloudflareError(error instanceof Error ? error.message : "Unable to purge cache URL.");
     } finally {
       setIsCloudflareActionPending(false);
     }
@@ -3165,9 +2382,7 @@ export const InAccordAdminModal = () => {
         body: JSON.stringify({
           action: "UPSERT_DNS",
           zoneId: cloudflareSelectedZoneId.trim(),
-          ...(cloudflareEditingDnsRecordId
-            ? { recordId: cloudflareEditingDnsRecordId }
-            : {}),
+          ...(cloudflareEditingDnsRecordId ? { recordId: cloudflareEditingDnsRecordId } : {}),
           type: cloudflareDnsTypeDraft.trim(),
           name: cloudflareDnsNameDraft.trim(),
           content: cloudflareDnsContentDraft.trim(),
@@ -3177,31 +2392,21 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to save DNS record (${response.status})`;
+        const message = (await response.text()) || `Failed to save DNS record (${response.status})`;
         throw new Error(message);
       }
 
-      const payload = (await response.json()) as {
-        dnsRecords?: AdminCloudflareDnsRecord[];
-      };
+      const payload = (await response.json()) as { dnsRecords?: AdminCloudflareDnsRecord[] };
       setCloudflareDnsRecords(payload.dnsRecords ?? []);
       setCloudflareDnsNameDraft("");
       setCloudflareDnsContentDraft("");
       setCloudflareDnsTtlDraft("1");
       setCloudflareDnsProxiedDraft(false);
       setCloudflareEditingDnsRecordId(null);
-      setCloudflareSuccess(
-        cloudflareEditingDnsRecordId
-          ? "Cloudflare DNS record updated."
-          : "Cloudflare DNS record saved.",
-      );
+      setCloudflareSuccess(cloudflareEditingDnsRecordId ? "Cloudflare DNS record updated." : "Cloudflare DNS record saved.");
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_CLOUDFLARE_DNS_SAVE]", error);
-      setCloudflareError(
-        error instanceof Error ? error.message : "Unable to save DNS record.",
-      );
+      setCloudflareError(error instanceof Error ? error.message : "Unable to save DNS record.");
     } finally {
       setIsCloudflareActionPending(false);
     }
@@ -3213,9 +2418,7 @@ export const InAccordAdminModal = () => {
       return;
     }
 
-    const confirmed = window.confirm(
-      `Delete DNS record ${record.type} ${record.name}?`,
-    );
+    const confirmed = window.confirm(`Delete DNS record ${record.type} ${record.name}?`);
     if (!confirmed) {
       return;
     }
@@ -3238,15 +2441,11 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to delete DNS record (${response.status})`;
+        const message = (await response.text()) || `Failed to delete DNS record (${response.status})`;
         throw new Error(message);
       }
 
-      const payload = (await response.json()) as {
-        dnsRecords?: AdminCloudflareDnsRecord[];
-      };
+      const payload = (await response.json()) as { dnsRecords?: AdminCloudflareDnsRecord[] };
       setCloudflareDnsRecords(payload.dnsRecords ?? []);
       setCloudflareSuccess("Cloudflare DNS record deleted.");
       if (cloudflareEditingDnsRecordId === record.id) {
@@ -3254,9 +2453,7 @@ export const InAccordAdminModal = () => {
       }
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_CLOUDFLARE_DNS_DELETE]", error);
-      setCloudflareError(
-        error instanceof Error ? error.message : "Unable to delete DNS record.",
-      );
+      setCloudflareError(error instanceof Error ? error.message : "Unable to delete DNS record.");
     } finally {
       setCloudflareActionPendingRecordId(null);
     }
@@ -3338,16 +2535,13 @@ export const InAccordAdminModal = () => {
       query.set("assetType", emojiStickerTypeFilter);
       query.set("status", emojiStickerStatusFilter);
 
-      const response = await fetch(
-        `/api/admin/emoji-stickers?${query.toString()}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          cache: "no-store",
+      const response = await fetch(`/api/admin/emoji-stickers?${query.toString()}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
+        cache: "no-store",
+      });
 
       if (!response.ok) {
         throw new Error(`Failed to load emoji/stickers (${response.status})`);
@@ -3368,7 +2562,7 @@ export const InAccordAdminModal = () => {
           emojiAssets: 0,
           stickerAssets: 0,
           activeAssets: 0,
-        },
+        }
       );
 
       if (!newEmojiStickerServerId && serversFromApi.length > 0) {
@@ -3376,21 +2570,14 @@ export const InAccordAdminModal = () => {
       }
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_EMOJI_STICKERS_LOAD]", error);
-      setEmojiStickersError(
-        "Unable to load emoji and sticker inventory right now.",
-      );
+      setEmojiStickersError("Unable to load emoji and sticker inventory right now.");
       setEmojiStickerServers([]);
       setEmojiStickerAssets([]);
       setEmojiStickerSummary(null);
     } finally {
       setIsLoadingEmojiStickers(false);
     }
-  }, [
-    emojiStickerServerFilter,
-    emojiStickerStatusFilter,
-    emojiStickerTypeFilter,
-    newEmojiStickerServerId,
-  ]);
+  }, [emojiStickerServerFilter, emojiStickerStatusFilter, emojiStickerTypeFilter, newEmojiStickerServerId]);
 
   const loadWebhooks = useCallback(async () => {
     try {
@@ -3425,12 +2612,7 @@ export const InAccordAdminModal = () => {
       setIsLoadingFamilyCenter(true);
       setFamilyCenterError(null);
 
-      const centerApiPath =
-        activeSection === "businessCenter"
-          ? "/api/admin/business-center"
-          : activeSection === "schoolCenter"
-            ? "/api/admin/school-center"
-            : "/api/admin/family-center";
+      const centerApiPath = activeSection === "businessCenter" ? "/api/admin/business-center" : activeSection === "schoolCenter" ? "/api/admin/school-center" : "/api/admin/family-center";
 
       const response = await fetch(centerApiPath, {
         method: "GET",
@@ -3441,20 +2623,16 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        throw new Error(
-          `Failed to load ${activeSection === "businessCenter" ? "business" : activeSection === "schoolCenter" ? "school" : "family"} center records (${response.status})`,
-        );
+        throw new Error(`Failed to load ${activeSection === "businessCenter" ? "business" : activeSection === "schoolCenter" ? "school" : "family"} center records (${response.status})`);
       }
 
-      const payload = (await response.json()) as {
-        entries?: AdminFamilyCenterEntry[];
-      };
+      const payload = (await response.json()) as { entries?: AdminFamilyCenterEntry[] };
       setFamilyCenterEntries(payload.entries ?? []);
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_FAMILY_CENTER_LOAD]", error);
       setFamilyCenterEntries([]);
       setFamilyCenterError(
-        `Unable to load ${activeSection === "businessCenter" ? "Business" : activeSection === "schoolCenter" ? "School" : "Family"} Center records right now.`,
+        `Unable to load ${activeSection === "businessCenter" ? "Business" : activeSection === "schoolCenter" ? "School" : "Family"} Center records right now.`
       );
     } finally {
       setIsLoadingFamilyCenter(false);
@@ -3484,12 +2662,7 @@ export const InAccordAdminModal = () => {
   }, [activeSection, isModalOpen, loadSecurity]);
 
   useEffect(() => {
-    if (
-      !isModalOpen ||
-      (activeSection !== "integrations" &&
-        activeSection !== "OtherAppsBots" &&
-        activeSection !== "templateMeBot")
-    ) {
+    if (!isModalOpen || (activeSection !== "integrations" && activeSection !== "OtherAppsBots" && activeSection !== "templateMeBot")) {
       return;
     }
 
@@ -3536,7 +2709,7 @@ export const InAccordAdminModal = () => {
       setTemplateMeTerminalStatus((current) =>
         current === "running" || current === "stopped" || current === "error"
           ? current
-          : "connected",
+          : "connected"
       );
     };
 
@@ -3551,9 +2724,7 @@ export const InAccordAdminModal = () => {
           lastError?: unknown;
         };
 
-        setTemplateMeTerminalOutput(
-          typeof payload.output === "string" ? payload.output : "",
-        );
+        setTemplateMeTerminalOutput(typeof payload.output === "string" ? payload.output : "");
         setTemplateMeTerminalStatus(
           payload.status === "running" || payload.status === "starting"
             ? "running"
@@ -3561,25 +2732,16 @@ export const InAccordAdminModal = () => {
               ? "stopped"
               : payload.status === "error"
                 ? "error"
-                : "connected",
+                : "connected"
         );
-        setTemplateMeTerminalStartedAt(
-          typeof payload.startedAt === "string" ? payload.startedAt : null,
-        );
-        setTemplateMeTerminalUpdatedAt(
-          typeof payload.updatedAt === "string"
-            ? payload.updatedAt
-            : new Date().toISOString(),
-        );
+        setTemplateMeTerminalStartedAt(typeof payload.startedAt === "string" ? payload.startedAt : null);
+        setTemplateMeTerminalUpdatedAt(typeof payload.updatedAt === "string" ? payload.updatedAt : new Date().toISOString());
         setTemplateMeTerminalLastExitCode(
-          typeof payload.lastExitCode === "number" &&
-            Number.isFinite(payload.lastExitCode)
+          typeof payload.lastExitCode === "number" && Number.isFinite(payload.lastExitCode)
             ? payload.lastExitCode
-            : null,
+            : null
         );
-        setTemplateMeTerminalLastError(
-          typeof payload.lastError === "string" ? payload.lastError : null,
-        );
+        setTemplateMeTerminalLastError(typeof payload.lastError === "string" ? payload.lastError : null);
       } catch {
         setTemplateMeTerminalStatus("error");
       }
@@ -3589,7 +2751,7 @@ export const InAccordAdminModal = () => {
       setTemplateMeTerminalStatus((current) =>
         current === "running" || current === "stopped" || current === "error"
           ? current
-          : "connecting",
+          : "connecting"
       );
     };
 
@@ -3625,12 +2787,7 @@ export const InAccordAdminModal = () => {
   }, [activeSection, isModalOpen, loadMetaInfo]);
 
   useEffect(() => {
-    if (
-      !isModalOpen ||
-      (activeSection !== "servers" &&
-        activeSection !== "invites" &&
-        activeSection !== "webhooks")
-    ) {
+    if (!isModalOpen || (activeSection !== "servers" && activeSection !== "invites" && activeSection !== "webhooks")) {
       return;
     }
 
@@ -3654,12 +2811,7 @@ export const InAccordAdminModal = () => {
   }, [activeSection, isModalOpen, loadWebhooks]);
 
   useEffect(() => {
-    if (
-      !isModalOpen ||
-      (activeSection !== "familyCenter" &&
-        activeSection !== "businessCenter" &&
-        activeSection !== "schoolCenter")
-    ) {
+    if (!isModalOpen || (activeSection !== "familyCenter" && activeSection !== "businessCenter" && activeSection !== "schoolCenter")) {
       return;
     }
 
@@ -3690,10 +2842,7 @@ export const InAccordAdminModal = () => {
   }, [activeSection, isModalOpen, reportTargetTypeFilter]);
 
   useEffect(() => {
-    if (
-      !isModalOpen ||
-      (activeSection !== "reported" && activeSection !== "issuesBugs")
-    ) {
+    if (!isModalOpen || (activeSection !== "reported" && activeSection !== "issuesBugs")) {
       return;
     }
 
@@ -3710,11 +2859,7 @@ export const InAccordAdminModal = () => {
   }, [activeSection, isModalOpen, loadPatronage, loadPatronageSetup]);
 
   useEffect(() => {
-    if (
-      !isModalOpen ||
-      (activeSection !== "iaServerMenu" &&
-        activeSection !== "databaseManagement")
-    ) {
+    if (!isModalOpen || (activeSection !== "iaServerMenu" && activeSection !== "databaseManagement")) {
       return;
     }
 
@@ -3726,16 +2871,11 @@ export const InAccordAdminModal = () => {
       return;
     }
 
-    void loadDatabaseRuntime();
     void loadDatabaseManager();
-  }, [activeSection, isModalOpen, loadDatabaseManager, loadDatabaseRuntime]);
+  }, [activeSection, isModalOpen, loadDatabaseManager]);
 
   useEffect(() => {
-    if (
-      !isModalOpen ||
-      (activeSection !== "cloudflareManagement" &&
-        activeSection !== "iaServerMenu")
-    ) {
+    if (!isModalOpen || activeSection !== "cloudflareManagement") {
       return;
     }
 
@@ -3752,9 +2892,7 @@ export const InAccordAdminModal = () => {
   }, [activeSection, isModalOpen, loadManagedFiles, loadServerPerformance]);
 
   useEffect(() => {
-    const activeGroup = adminMenuGroups.find((group) =>
-      group.sections.includes(activeSection),
-    );
+    const activeGroup = adminMenuGroups.find((group) => group.sections.includes(activeSection));
     if (!activeGroup) {
       return;
     }
@@ -3924,17 +3062,6 @@ export const InAccordAdminModal = () => {
       setIsSavingSiteUrlSetup(false);
       setSiteUrlError(null);
       setSiteUrlSuccess(null);
-      setDatabaseRuntimeSetup(null);
-      setDatabaseD1AccountIdDraft("");
-      setDatabaseD1DatabaseIdDraft("");
-      setDatabaseD1DatabaseNameDraft("");
-      setDatabaseD1ManagementUrlDraft("");
-      setIsLoadingDatabaseRuntime(false);
-      setIsSavingDatabaseRuntime(false);
-      setIsSwitchingDatabaseRuntime(false);
-      setIsSyncingDatabaseD1(false);
-      setDatabaseRuntimeError(null);
-      setDatabaseRuntimeSuccess(null);
       setServerPerformance(null);
       setIsLoadingServerPerformance(false);
       setServerPerformanceError(null);
@@ -4041,19 +3168,14 @@ export const InAccordAdminModal = () => {
 
   const onReviewFamilyApplicationDecision = async (
     entry: AdminFamilyCenterEntry,
-    decision: "ACCEPT" | "DECLINE",
+    decision: "ACCEPT" | "DECLINE"
   ) => {
     try {
       setReviewingFamilyApplicationActionUserId(entry.userId);
       setFamilyCenterError(null);
       setFamilyCenterSuccess(null);
 
-      const centerApiPath =
-        activeSection === "businessCenter"
-          ? "/api/admin/business-center"
-          : activeSection === "schoolCenter"
-            ? "/api/admin/school-center"
-            : "/api/admin/family-center";
+      const centerApiPath = activeSection === "businessCenter" ? "/api/admin/business-center" : activeSection === "schoolCenter" ? "/api/admin/school-center" : "/api/admin/family-center";
 
       const response = await fetch(centerApiPath, {
         method: "PATCH",
@@ -4067,9 +3189,7 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to update application (${response.status})`;
+        const message = (await response.text()) || `Failed to update application (${response.status})`;
         throw new Error(message);
       }
 
@@ -4086,7 +3206,7 @@ export const InAccordAdminModal = () => {
                 ...current,
                 applicationStatus: nextStatus,
               }
-            : current,
+            : current
         );
       }
 
@@ -4094,16 +3214,12 @@ export const InAccordAdminModal = () => {
       setPreviewingFamilyApplicationFile(null);
 
       setFamilyCenterSuccess(
-        `${decision === "ACCEPT" ? "Accepted" : "Declined"} application for ${entry.displayName}.`,
+        `${decision === "ACCEPT" ? "Accepted" : "Declined"} application for ${entry.displayName}.`
       );
       await loadFamilyCenter();
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_FAMILY_CENTER_REVIEW_ACTION]", error);
-      setFamilyCenterError(
-        error instanceof Error
-          ? error.message
-          : "Unable to update application.",
-      );
+      setFamilyCenterError(error instanceof Error ? error.message : "Unable to update application.");
     } finally {
       setReviewingFamilyApplicationActionUserId(null);
     }
@@ -4111,7 +3227,7 @@ export const InAccordAdminModal = () => {
 
   const onDeleteFamilyApplication = async (entry: AdminFamilyCenterEntry) => {
     const confirmed = window.confirm(
-      `Delete ${activeSection === "businessCenter" ? "business" : activeSection === "schoolCenter" ? "school" : "family"} application ${entry.applicationId}? This clears the submitted application status and files for this user.`,
+      `Delete ${activeSection === "businessCenter" ? "business" : activeSection === "schoolCenter" ? "school" : "family"} application ${entry.applicationId}? This clears the submitted application status and files for this user.`
     );
 
     if (!confirmed) {
@@ -4123,12 +3239,7 @@ export const InAccordAdminModal = () => {
       setFamilyCenterError(null);
       setFamilyCenterSuccess(null);
 
-      const centerApiPath =
-        activeSection === "businessCenter"
-          ? "/api/admin/business-center"
-          : activeSection === "schoolCenter"
-            ? "/api/admin/school-center"
-            : "/api/admin/family-center";
+      const centerApiPath = activeSection === "businessCenter" ? "/api/admin/business-center" : activeSection === "schoolCenter" ? "/api/admin/school-center" : "/api/admin/family-center";
 
       const response = await fetch(
         `${centerApiPath}?userId=${encodeURIComponent(entry.userId)}`,
@@ -4137,13 +3248,11 @@ export const InAccordAdminModal = () => {
           headers: {
             "Content-Type": "application/json",
           },
-        },
+        }
       );
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to delete application (${response.status})`;
+        const message = (await response.text()) || `Failed to delete application (${response.status})`;
         throw new Error(message);
       }
 
@@ -4156,11 +3265,7 @@ export const InAccordAdminModal = () => {
       await loadFamilyCenter();
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_FAMILY_CENTER_DELETE]", error);
-      setFamilyCenterError(
-        error instanceof Error
-          ? error.message
-          : "Unable to delete application.",
-      );
+      setFamilyCenterError(error instanceof Error ? error.message : "Unable to delete application.");
     } finally {
       setDeletingFamilyApplicationUserId(null);
     }
@@ -4173,7 +3278,7 @@ export const InAccordAdminModal = () => {
       adminNote?: string;
       assignAction?: "SELF" | "UNASSIGN";
       severity?: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
-    },
+    }
   ) => {
     try {
       setUpdatingReportId(reportId);
@@ -4187,18 +3292,14 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to update report (${response.status})`;
+        const message = (await response.text()) || `Failed to update report (${response.status})`;
         throw new Error(message);
       }
 
       await loadReports();
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_REPORTS_PATCH]", error);
-      setReportsError(
-        error instanceof Error ? error.message : "Unable to update report.",
-      );
+      setReportsError(error instanceof Error ? error.message : "Unable to update report.");
     } finally {
       setUpdatingReportId(null);
     }
@@ -4236,15 +3337,10 @@ export const InAccordAdminModal = () => {
 
     const currentReport = reports.find((item) => item.id === reportId);
     const existingNote = String(currentReport?.adminNote ?? "").trim();
-    const author =
-      String(
-        (data as { profileName?: string } | undefined)?.profileName ?? "Staff",
-      ).trim() || "Staff";
+    const author = String((data as { profileName?: string } | undefined)?.profileName ?? "Staff").trim() || "Staff";
     const timestamp = new Date().toLocaleString();
     const postedEntry = `[${timestamp}] ${author}: ${nextNote}`;
-    const combinedNote = existingNote
-      ? `${existingNote}\n---\n${postedEntry}`
-      : postedEntry;
+    const combinedNote = existingNote ? `${existingNote}\n---\n${postedEntry}` : postedEntry;
 
     await onUpdateReport(reportId, { adminNote: combinedNote });
     setReportPostNoteDrafts((current) => ({
@@ -4291,9 +3387,7 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to record donation (${response.status})`;
+        const message = (await response.text()) || `Failed to record donation (${response.status})`;
         throw new Error(message);
       }
 
@@ -4307,9 +3401,7 @@ export const InAccordAdminModal = () => {
       await loadPatronage();
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_PATRONAGE_CREATE]", error);
-      setPatronageError(
-        error instanceof Error ? error.message : "Unable to record donation.",
-      );
+      setPatronageError(error instanceof Error ? error.message : "Unable to record donation.");
     } finally {
       setIsCreatingPatronage(false);
     }
@@ -4317,7 +3409,7 @@ export const InAccordAdminModal = () => {
 
   const onUpdatePatronageStatus = async (
     id: string,
-    status: "PENDING" | "SUCCEEDED" | "FAILED" | "CANCELED" | "REFUNDED",
+    status: "PENDING" | "SUCCEEDED" | "FAILED" | "CANCELED" | "REFUNDED"
   ) => {
     setPatronageError(null);
     setPatronageActionSuccess(null);
@@ -4337,9 +3429,7 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to update donation (${response.status})`;
+        const message = (await response.text()) || `Failed to update donation (${response.status})`;
         throw new Error(message);
       }
 
@@ -4347,11 +3437,7 @@ export const InAccordAdminModal = () => {
       await loadPatronage();
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_PATRONAGE_STATUS]", error);
-      setPatronageError(
-        error instanceof Error
-          ? error.message
-          : "Unable to update donation status.",
-      );
+      setPatronageError(error instanceof Error ? error.message : "Unable to update donation status.");
     } finally {
       setUpdatingPatronageId(null);
     }
@@ -4379,9 +3465,7 @@ export const InAccordAdminModal = () => {
     }
 
     if (!/^[a-z0-9_]{2,32}$/.test(name)) {
-      setEmojiStickersError(
-        "Name must be 2-32 chars and use lowercase letters, numbers, or underscore.",
-      );
+      setEmojiStickersError("Name must be 2-32 chars and use lowercase letters, numbers, or underscore.");
       return;
     }
 
@@ -4413,34 +3497,23 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to create asset (${response.status})`;
+        const message = (await response.text()) || `Failed to create asset (${response.status})`;
         throw new Error(message);
       }
 
       setNewEmojiStickerName("");
       setNewEmojiStickerValue("");
-      setEmojiStickerActionSuccess(
-        `${newEmojiStickerType === "EMOJI" ? "Emoji" : "Sticker"} saved.`,
-      );
+      setEmojiStickerActionSuccess(`${newEmojiStickerType === "EMOJI" ? "Emoji" : "Sticker"} saved.`);
       await loadEmojiStickers();
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_EMOJI_STICKERS_CREATE]", error);
-      setEmojiStickersError(
-        error instanceof Error
-          ? error.message
-          : "Unable to create emoji/sticker asset.",
-      );
+      setEmojiStickersError(error instanceof Error ? error.message : "Unable to create emoji/sticker asset.");
     } finally {
       setCreatingEmojiSticker(false);
     }
   };
 
-  const onEmojiStickerAction = async (
-    itemId: string,
-    action: "ENABLE" | "DISABLE" | "DELETE",
-  ) => {
+  const onEmojiStickerAction = async (itemId: string, action: "ENABLE" | "DISABLE" | "DELETE") => {
     setEmojiStickersError(null);
     setEmojiStickerActionSuccess(null);
 
@@ -4459,9 +3532,7 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to apply action (${response.status})`;
+        const message = (await response.text()) || `Failed to apply action (${response.status})`;
         throw new Error(message);
       }
 
@@ -4470,14 +3541,12 @@ export const InAccordAdminModal = () => {
           ? "Asset deleted."
           : action === "ENABLE"
             ? "Asset enabled."
-            : "Asset disabled.",
+            : "Asset disabled."
       );
       await loadEmojiStickers();
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_EMOJI_STICKERS_ACTION]", error);
-      setEmojiStickersError(
-        error instanceof Error ? error.message : "Unable to update asset.",
-      );
+      setEmojiStickersError(error instanceof Error ? error.message : "Unable to update asset.");
     } finally {
       setEmojiStickerActionItemId(null);
     }
@@ -4486,10 +3555,8 @@ export const InAccordAdminModal = () => {
   const onCreateWebhook = async () => {
     const name = newWebhookName.trim();
     const endpointUrl = newWebhookUrl.trim();
-    const eventType =
-      newWebhookEventType.trim().toUpperCase() || "MESSAGE_CREATE";
-    const serverId =
-      newWebhookServerId === "GLOBAL" ? null : newWebhookServerId;
+    const eventType = newWebhookEventType.trim().toUpperCase() || "MESSAGE_CREATE";
+    const serverId = newWebhookServerId === "GLOBAL" ? null : newWebhookServerId;
 
     setWebhooksActionError(null);
     setWebhooksActionSuccess(null);
@@ -4500,9 +3567,7 @@ export const InAccordAdminModal = () => {
     }
 
     if (!/^https?:\/\//i.test(endpointUrl)) {
-      setWebhooksActionError(
-        "Endpoint URL must start with http:// or https://.",
-      );
+      setWebhooksActionError("Endpoint URL must start with http:// or https://.");
       return;
     }
 
@@ -4523,9 +3588,7 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to create webhook (${response.status})`;
+        const message = (await response.text()) || `Failed to create webhook (${response.status})`;
         throw new Error(message);
       }
 
@@ -4533,7 +3596,7 @@ export const InAccordAdminModal = () => {
       setWebhooksActionSuccess(
         payload.secretKey
           ? `Webhook created. Secret: ${payload.secretKey}`
-          : "Webhook created.",
+          : "Webhook created."
       );
       setNewWebhookName("");
       setNewWebhookUrl("");
@@ -4542,9 +3605,7 @@ export const InAccordAdminModal = () => {
       await loadWebhooks();
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_WEBHOOK_CREATE]", error);
-      setWebhooksActionError(
-        error instanceof Error ? error.message : "Unable to create webhook.",
-      );
+      setWebhooksActionError(error instanceof Error ? error.message : "Unable to create webhook.");
     } finally {
       setIsCreatingWebhook(false);
     }
@@ -4552,15 +3613,13 @@ export const InAccordAdminModal = () => {
 
   const onWebhookAction = async (
     webhook: AdminWebhook,
-    action: "toggle" | "rotate-secret" | "delete",
+    action: "toggle" | "rotate-secret" | "delete"
   ) => {
     setWebhooksActionError(null);
     setWebhooksActionSuccess(null);
 
     if (action === "delete") {
-      const confirmed = window.confirm(
-        `Delete webhook ${webhook.name}? This cannot be undone.`,
-      );
+      const confirmed = window.confirm(`Delete webhook ${webhook.name}? This cannot be undone.`);
       if (!confirmed) {
         return;
       }
@@ -4570,20 +3629,15 @@ export const InAccordAdminModal = () => {
       setWebhookActionPendingId(webhook.id);
 
       if (action === "delete") {
-        const response = await fetch(
-          `/api/admin/webhooks?webhookId=${encodeURIComponent(webhook.id)}`,
-          {
-            method: "DELETE",
-            headers: {
-              "Content-Type": "application/json",
-            },
+        const response = await fetch(`/api/admin/webhooks?webhookId=${encodeURIComponent(webhook.id)}`, {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
           },
-        );
+        });
 
         if (!response.ok) {
-          const message =
-            (await response.text()) ||
-            `Failed to delete webhook (${response.status})`;
+          const message = (await response.text()) || `Failed to delete webhook (${response.status})`;
           throw new Error(message);
         }
 
@@ -4602,22 +3656,18 @@ export const InAccordAdminModal = () => {
         });
 
         if (!response.ok) {
-          const message =
-            (await response.text()) ||
-            `Failed to update webhook (${response.status})`;
+          const message = (await response.text()) || `Failed to update webhook (${response.status})`;
           throw new Error(message);
         }
 
         const payload = (await response.json()) as { secretKey?: string };
         if (action === "toggle") {
-          setWebhooksActionSuccess(
-            `Webhook ${webhook.enabled ? "disabled" : "enabled"}.`,
-          );
+          setWebhooksActionSuccess(`Webhook ${webhook.enabled ? "disabled" : "enabled"}.`);
         } else {
           setWebhooksActionSuccess(
             payload.secretKey
               ? `Webhook secret rotated. New secret: ${payload.secretKey}`
-              : "Webhook secret rotated.",
+              : "Webhook secret rotated."
           );
         }
       }
@@ -4625,9 +3675,7 @@ export const InAccordAdminModal = () => {
       await loadWebhooks();
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_WEBHOOK_ACTION]", error);
-      setWebhooksActionError(
-        error instanceof Error ? error.message : "Unable to update webhook.",
-      );
+      setWebhooksActionError(error instanceof Error ? error.message : "Unable to update webhook.");
     } finally {
       setWebhookActionPendingId(null);
     }
@@ -4661,10 +3709,7 @@ export const InAccordAdminModal = () => {
   }, [managedRoles]);
 
   const parseNewRoleKeyInput = (input: string) => {
-    const normalized = input
-      .trim()
-      .toUpperCase()
-      .replace(/[\s-]+/g, "_");
+    const normalized = input.trim().toUpperCase().replace(/[\s-]+/g, "_");
 
     if (!normalized) {
       return null;
@@ -4693,9 +3738,7 @@ export const InAccordAdminModal = () => {
     setManagedRolesActionSuccess(null);
 
     if (!roleKey) {
-      setManagedRolesActionError(
-        "Role key must be 2-64 chars and use letters, numbers, or underscore.",
-      );
+      setManagedRolesActionError("Role key must be 2-64 chars and use letters, numbers, or underscore.");
       return;
     }
 
@@ -4714,9 +3757,7 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to create role (${response.status})`;
+        const message = (await response.text()) || `Failed to create role (${response.status})`;
         throw new Error(message);
       }
 
@@ -4726,9 +3767,7 @@ export const InAccordAdminModal = () => {
       await loadManagedRoles();
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_ROLE_CREATE]", error);
-      setManagedRolesActionError(
-        error instanceof Error ? error.message : "Unable to create role.",
-      );
+      setManagedRolesActionError(error instanceof Error ? error.message : "Unable to create role.");
     } finally {
       setIsCreatingRole(false);
     }
@@ -4755,9 +3794,7 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to update role (${response.status})`;
+        const message = (await response.text()) || `Failed to update role (${response.status})`;
         throw new Error(message);
       }
 
@@ -4765,18 +3802,14 @@ export const InAccordAdminModal = () => {
       await loadManagedRoles();
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_ROLE_UPDATE]", error);
-      setManagedRolesActionError(
-        error instanceof Error ? error.message : "Unable to update role.",
-      );
+      setManagedRolesActionError(error instanceof Error ? error.message : "Unable to update role.");
     } finally {
       setUpdatingRoleKey(null);
     }
   };
 
   const onDeleteManagedRole = async (roleKey: string) => {
-    const confirmed = window.confirm(
-      `Delete role ${roleKey}? Users must be reassigned first.`,
-    );
+    const confirmed = window.confirm(`Delete role ${roleKey}? Users must be reassigned first.`);
     if (!confirmed) {
       return;
     }
@@ -4787,20 +3820,15 @@ export const InAccordAdminModal = () => {
     try {
       setDeletingRoleKey(roleKey);
 
-      const response = await fetch(
-        `/api/admin/roles?roleKey=${encodeURIComponent(roleKey)}`,
-        {
-          method: "DELETE",
-          headers: {
-            "Content-Type": "application/json",
-          },
+      const response = await fetch(`/api/admin/roles?roleKey=${encodeURIComponent(roleKey)}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
+      });
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to delete role (${response.status})`;
+        const message = (await response.text()) || `Failed to delete role (${response.status})`;
         throw new Error(message);
       }
 
@@ -4808,9 +3836,7 @@ export const InAccordAdminModal = () => {
       await loadManagedRoles();
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_ROLE_DELETE]", error);
-      setManagedRolesActionError(
-        error instanceof Error ? error.message : "Unable to delete role.",
-      );
+      setManagedRolesActionError(error instanceof Error ? error.message : "Unable to delete role.");
     } finally {
       setDeletingRoleKey(null);
     }
@@ -4846,9 +3872,7 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to create user (${response.status})`;
+        const message = (await response.text()) || `Failed to create user (${response.status})`;
         throw new Error(message);
       }
 
@@ -4860,9 +3884,7 @@ export const InAccordAdminModal = () => {
       await loadUsers();
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_CREATE_USER]", error);
-      setCreateUserError(
-        error instanceof Error ? error.message : "Unable to create user.",
-      );
+      setCreateUserError(error instanceof Error ? error.message : "Unable to create user.");
     } finally {
       setIsCreatingUser(false);
     }
@@ -4870,16 +3892,23 @@ export const InAccordAdminModal = () => {
 
   const onDeleteUser = async (user: AdminUser) => {
     if (user.userId === IMMUTABLE_ACCOUNT_USER_ID) {
-      setCreateUserError(
-        `User ${IMMUTABLE_ACCOUNT_USER_ID} is a protected core account and cannot be deleted.`,
-      );
+      setCreateUserError(`User ${IMMUTABLE_ACCOUNT_USER_ID} is a protected core account and cannot be deleted.`);
       return;
     }
 
+    const canForceBotMembershipCleanup =
+      isBotUser({
+        role: user.role,
+        name: user.profileName || user.name,
+        email: user.email,
+      }) &&
+      user.ownedServerCount === 0 &&
+      user.joinedServerCount > 0;
+
     const confirmed = window.confirm(
-      user.ownedServerCount > 0 || user.joinedServerCount > 0
-        ? `Delete user ${user.email || user.userId}? This will also remove memberships and any owned servers. This cannot be undone.`
-        : `Delete user ${user.email || user.userId}? This cannot be undone.`,
+      canForceBotMembershipCleanup
+        ? `Delete bot/app account ${user.email || user.userId} and remove all memberships first? This permanently removes the account from the system.`
+        : `Delete user ${user.email || user.userId}? This cannot be undone.`
     );
 
     if (!confirmed) {
@@ -4893,13 +3922,13 @@ export const InAccordAdminModal = () => {
       setDeletingUserId(user.userId);
 
       const response = await fetch(
-        `/api/admin/users?userId=${encodeURIComponent(user.userId)}`,
+        `/api/admin/users?userId=${encodeURIComponent(user.userId)}${canForceBotMembershipCleanup ? "&forceCleanup=true" : ""}`,
         {
           method: "DELETE",
           headers: {
             "Content-Type": "application/json",
           },
-        },
+        }
       );
 
       if (response.status === 409) {
@@ -4911,19 +3940,19 @@ export const InAccordAdminModal = () => {
       }
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to delete user (${response.status})`;
+        const message = (await response.text()) || `Failed to delete user (${response.status})`;
         throw new Error(message);
       }
 
-      setCreateUserSuccess(`User ${user.email || user.userId} deleted.`);
+      setCreateUserSuccess(
+        canForceBotMembershipCleanup
+          ? `Bot/app account ${user.email || user.userId} removed from the system.`
+          : `User ${user.email || user.userId} deleted.`
+      );
       await loadUsers();
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_DELETE_USER]", error);
-      setCreateUserError(
-        error instanceof Error ? error.message : "Unable to delete user.",
-      );
+      setCreateUserError(error instanceof Error ? error.message : "Unable to delete user.");
     } finally {
       setDeletingUserId(null);
     }
@@ -4943,10 +3972,7 @@ export const InAccordAdminModal = () => {
     }));
   };
 
-  const onChangeUserDateOfBirthDraft = (
-    userId: string,
-    dateOfBirth: string,
-  ) => {
+  const onChangeUserDateOfBirthDraft = (userId: string, dateOfBirth: string) => {
     setUserDateOfBirthDrafts((current) => ({
       ...current,
       [userId]: dateOfBirth,
@@ -4954,9 +3980,7 @@ export const InAccordAdminModal = () => {
   };
 
   const onUpdateUserRole = async (user: AdminUser) => {
-    const role = normalizeAdminRoleForDisplay(
-      userRoleDrafts[user.userId] ?? user.role,
-    );
+    const role = normalizeAdminRoleForDisplay(userRoleDrafts[user.userId] ?? user.role);
     const currentRole = normalizeAdminRoleForDisplay(user.role);
 
     setCreateUserError(null);
@@ -4966,23 +3990,13 @@ export const InAccordAdminModal = () => {
       return;
     }
 
-    if (
-      user.userId === IMMUTABLE_ACCOUNT_USER_ID &&
-      role !== ADMINISTRATOR_ROLE_KEY
-    ) {
-      setCreateUserError(
-        `User ${IMMUTABLE_ACCOUNT_USER_ID} must remain ${ADMINISTRATOR_ROLE_KEY}.`,
-      );
+    if (user.userId === IMMUTABLE_ACCOUNT_USER_ID && role !== ADMINISTRATOR_ROLE_KEY) {
+      setCreateUserError(`User ${IMMUTABLE_ACCOUNT_USER_ID} must remain ${ADMINISTRATOR_ROLE_KEY}.`);
       return;
     }
 
-    if (
-      currentRole === ADMINISTRATOR_ROLE_KEY &&
-      role !== ADMINISTRATOR_ROLE_KEY
-    ) {
-      setCreateUserError(
-        "Administrator role cannot be removed from a user account.",
-      );
+    if (currentRole === ADMINISTRATOR_ROLE_KEY && role !== ADMINISTRATOR_ROLE_KEY) {
+      setCreateUserError("Administrator role cannot be removed from a user account.");
       return;
     }
 
@@ -5001,37 +4015,23 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to update user role (${response.status})`;
+        const message = (await response.text()) || `Failed to update user role (${response.status})`;
         throw new Error(message);
       }
 
-      setCreateUserSuccess(
-        `Updated role for ${user.email || user.userId} to ${role}.`,
-      );
+      setCreateUserSuccess(`Updated role for ${user.email || user.userId} to ${role}.`);
       await loadUsers();
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_UPDATE_USER_ROLE]", error);
-      setCreateUserError(
-        error instanceof Error ? error.message : "Unable to update user role.",
-      );
+      setCreateUserError(error instanceof Error ? error.message : "Unable to update user role.");
     } finally {
       setUpdatingUserRoleId(null);
     }
   };
 
   const onUpdateUserDetails = async (user: AdminUser) => {
-    const phoneNumber = (
-      userPhoneDrafts[user.userId] ??
-      user.phoneNumber ??
-      ""
-    ).trim();
-    const dateOfBirth = (
-      userDateOfBirthDrafts[user.userId] ??
-      user.dateOfBirth ??
-      ""
-    ).trim();
+    const phoneNumber = (userPhoneDrafts[user.userId] ?? user.phoneNumber ?? "").trim();
+    const dateOfBirth = (userDateOfBirthDrafts[user.userId] ?? user.dateOfBirth ?? "").trim();
     const canEditDateOfBirth = isInAccordAdministrator(data.profileRole);
 
     const hasPhoneChanged = phoneNumber !== (user.phoneNumber ?? "");
@@ -5070,23 +4070,15 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to update user details (${response.status})`;
+        const message = (await response.text()) || `Failed to update user details (${response.status})`;
         throw new Error(message);
       }
 
-      setCreateUserSuccess(
-        `Updated profile details for ${user.email || user.userId}.`,
-      );
+      setCreateUserSuccess(`Updated profile details for ${user.email || user.userId}.`);
       await loadUsers();
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_UPDATE_USER_DETAILS]", error);
-      setCreateUserError(
-        error instanceof Error
-          ? error.message
-          : "Unable to update user details.",
-      );
+      setCreateUserError(error instanceof Error ? error.message : "Unable to update user details.");
     } finally {
       setUpdatingUserDetailsId(null);
     }
@@ -5110,26 +4102,16 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to assign bots/apps role (${response.status})`;
+        const message = (await response.text()) || `Failed to assign bots/apps role (${response.status})`;
         throw new Error(message);
       }
 
-      const payload = (await response.json().catch(() => ({}))) as {
-        updatedCount?: number;
-      };
-      setCreateUserSuccess(
-        `Assigned ${payload.updatedCount ?? 0} bot/app account(s) to BOTS role.`,
-      );
+      const payload = (await response.json().catch(() => ({}))) as { updatedCount?: number };
+      setCreateUserSuccess(`Assigned ${payload.updatedCount ?? 0} bot/app account(s) to BOTS role.`);
       await loadUsers();
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_ASSIGN_BOTS_ROLE]", error);
-      setCreateUserError(
-        error instanceof Error
-          ? error.message
-          : "Unable to assign bot/app roles.",
-      );
+      setCreateUserError(error instanceof Error ? error.message : "Unable to assign bot/app roles.");
     } finally {
       setIsAssigningBotsRole(false);
     }
@@ -5139,13 +4121,10 @@ export const InAccordAdminModal = () => {
 
   const gridTemplateColumns = useMemo(
     () => columnWidths.map((width) => `${width}px`).join(" "),
-    [columnWidths],
+    [columnWidths]
   );
 
-  const startColumnResize = (
-    index: number,
-    event: ReactMouseEvent<HTMLButtonElement>,
-  ) => {
+  const startColumnResize = (index: number, event: ReactMouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
 
     const startX = event.clientX;
@@ -5154,10 +4133,7 @@ export const InAccordAdminModal = () => {
     const onMouseMove = (moveEvent: MouseEvent) => {
       const delta = moveEvent.clientX - startX;
       const nextWidths = [...startWidths];
-      nextWidths[index] = Math.max(
-        minColumnWidths[index],
-        startWidths[index] + delta,
-      );
+      nextWidths[index] = Math.max(minColumnWidths[index], startWidths[index] + delta);
       setColumnWidths(nextWidths);
     };
 
@@ -5178,13 +4154,10 @@ export const InAccordAdminModal = () => {
 
   const serverGridTemplateColumns = useMemo(
     () => serverColumnWidths.map((width) => `${width}px`).join(" "),
-    [serverColumnWidths],
+    [serverColumnWidths]
   );
 
-  const startServerColumnResize = (
-    index: number,
-    event: ReactMouseEvent<HTMLButtonElement>,
-  ) => {
+  const startServerColumnResize = (index: number, event: ReactMouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
 
     const startX = event.clientX;
@@ -5193,10 +4166,7 @@ export const InAccordAdminModal = () => {
     const onMouseMove = (moveEvent: MouseEvent) => {
       const delta = moveEvent.clientX - startX;
       const nextWidths = [...startWidths];
-      nextWidths[index] = Math.max(
-        minServerColumnWidths[index],
-        startWidths[index] + delta,
-      );
+      nextWidths[index] = Math.max(minServerColumnWidths[index], startWidths[index] + delta);
       setServerColumnWidths(nextWidths);
     };
 
@@ -5218,8 +4188,7 @@ export const InAccordAdminModal = () => {
 
     return users.filter((user) => {
       const roleMatches =
-        memberRoleFilter === "ALL" ||
-        normalizeAdminRoleForDisplay(user.role) === memberRoleFilter;
+        memberRoleFilter === "ALL" || normalizeAdminRoleForDisplay(user.role) === memberRoleFilter;
 
       if (!query) {
         return roleMatches;
@@ -5240,14 +4209,10 @@ export const InAccordAdminModal = () => {
     const usersOnly: AdminUser[] = [];
 
     const compareByUserId = (left: AdminUser, right: AdminUser) =>
-      String(left.userId ?? "").localeCompare(
-        String(right.userId ?? ""),
-        undefined,
-        {
-          numeric: true,
-          sensitivity: "base",
-        },
-      );
+      String(left.userId ?? "").localeCompare(String(right.userId ?? ""), undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
 
     filteredUsers.forEach((user) => {
       if (
@@ -5281,19 +4246,16 @@ export const InAccordAdminModal = () => {
       new Set([
         ...users.map((user) => normalizeAdminRoleForDisplay(user.role)),
         ...createUserRoleOptions,
-      ]),
+      ])
     );
     return ["ALL", ...uniqueRoles.sort()];
   }, [createUserRoleOptions, users]);
 
-  const hasActiveMemberFilters =
-    memberSearch.trim().length > 0 || memberRoleFilter !== "ALL";
+  const hasActiveMemberFilters = memberSearch.trim().length > 0 || memberRoleFilter !== "ALL";
 
   const ownerOptions = useMemo(() => {
     const uniqueOwners = Array.from(
-      new Set(
-        servers.map((server) => (server.ownerName || "Unknown Owner").trim()),
-      ),
+      new Set(servers.map((server) => (server.ownerName || "Unknown Owner").trim()))
     ).filter(Boolean);
     return ["ALL", ...uniqueOwners.sort((a, b) => a.localeCompare(b))];
   }, [servers]);
@@ -5303,8 +4265,7 @@ export const InAccordAdminModal = () => {
 
     return servers.filter((server) => {
       const ownerMatches =
-        serverOwnerFilter === "ALL" ||
-        (server.ownerName || "Unknown Owner") === serverOwnerFilter;
+        serverOwnerFilter === "ALL" || (server.ownerName || "Unknown Owner") === serverOwnerFilter;
 
       if (!query) {
         return ownerMatches;
@@ -5325,8 +4286,7 @@ export const InAccordAdminModal = () => {
     });
   }, [serverOwnerFilter, serverSearch, servers]);
 
-  const hasActiveServerFilters =
-    serverSearch.trim().length > 0 || serverOwnerFilter !== "ALL";
+  const hasActiveServerFilters = serverSearch.trim().length > 0 || serverOwnerFilter !== "ALL";
 
   const filteredOurBoardEntries = useMemo(() => {
     const query = ourBoardSearch.trim().toLowerCase();
@@ -5340,12 +4300,7 @@ export const InAccordAdminModal = () => {
         return listedMatches;
       }
 
-      const haystack = [
-        entry.serverId,
-        entry.serverName,
-        entry.ownerDisplayName,
-        entry.bumpChannelId,
-      ]
+      const haystack = [entry.serverId, entry.serverName, entry.ownerDisplayName, entry.bumpChannelId]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
@@ -5414,8 +4369,7 @@ export const InAccordAdminModal = () => {
           return true;
         }
 
-        const haystack =
-          `${row.signal} ${row.value} ${row.notes}`.toLowerCase();
+        const haystack = `${row.signal} ${row.value} ${row.notes}`.toLowerCase();
         return haystack.includes(query);
       });
 
@@ -5440,16 +4394,8 @@ export const InAccordAdminModal = () => {
         return now - lastLoginTime >= 30 * 24 * 60 * 60 * 1000;
       }
 
-      const normalizedRole = String(row.role ?? "")
-        .trim()
-        .toUpperCase();
-      return [
-        "MODERATOR",
-        "MOD",
-        "ADMIN",
-        "ADMINISTRATOR",
-        "DEVELOPER",
-      ].includes(normalizedRole);
+      const normalizedRole = String(row.role ?? "").trim().toUpperCase();
+      return ["MODERATOR", "MOD", "ADMIN", "ADMINISTRATOR", "DEVELOPER"].includes(normalizedRole);
     });
 
     const filteredUsers = users.filter((row) => {
@@ -5457,13 +4403,7 @@ export const InAccordAdminModal = () => {
         return true;
       }
 
-      const haystack = [
-        row.userId,
-        row.name,
-        row.email,
-        row.role,
-        row.lastLogin ?? "Never",
-      ]
+      const haystack = [row.userId, row.name, row.email, row.role, row.lastLogin ?? "Never"]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
@@ -5475,12 +4415,7 @@ export const InAccordAdminModal = () => {
       mode: "USERS" as const,
       rows: filteredUsers,
     };
-  }, [
-    moderationFocus,
-    moderationSearch,
-    securityRecentLogins,
-    securitySummary?.serversWithoutValidOwner,
-  ]);
+  }, [moderationFocus, moderationSearch, securityRecentLogins, securitySummary?.serversWithoutValidOwner]);
 
   const sectionReports = useMemo(() => {
     if (activeSection === "issuesBugs") {
@@ -5514,9 +4449,7 @@ export const InAccordAdminModal = () => {
   }, [managedRoles, users]);
 
   const inviteCoverage = useMemo(() => {
-    const withInvites = servers.filter(
-      (server) => server.inviteCode && server.inviteCode.trim().length > 0,
-    ).length;
+    const withInvites = servers.filter((server) => server.inviteCode && server.inviteCode.trim().length > 0).length;
     const withoutInvites = Math.max(0, servers.length - withInvites);
     return {
       withInvites,
@@ -5532,24 +4465,15 @@ export const InAccordAdminModal = () => {
 
     return {
       totalRecords: familyCenterEntries.length,
-      totalMembersTracked: familyCenterEntries.reduce(
-        (sum, entry) => sum + resolveMembersCount(entry),
-        0,
-      ),
-      pendingApplications: familyCenterEntries.filter((entry) =>
-        /pending/i.test(entry.applicationStatus),
-      ).length,
-      approvedApplications: familyCenterEntries.filter((entry) =>
-        /approved|aproved/i.test(entry.applicationStatus),
-      ).length,
+      totalMembersTracked: familyCenterEntries.reduce((sum, entry) => sum + resolveMembersCount(entry), 0),
+      pendingApplications: familyCenterEntries.filter((entry) => /pending/i.test(entry.applicationStatus)).length,
+      approvedApplications: familyCenterEntries.filter((entry) => /approved|aproved/i.test(entry.applicationStatus)).length,
     };
   }, [activeSection, familyCenterEntries]);
 
   const filteredFamilyCenterEntries = useMemo(() => {
     const query = familyCenterSearch.trim().toLowerCase();
-    const normalizedBusinessSectionFilter = businessSectionFilter
-      .trim()
-      .toLowerCase();
+    const normalizedBusinessSectionFilter = businessSectionFilter.trim().toLowerCase();
 
     return familyCenterEntries.filter((entry) => {
       const status = String(entry.applicationStatus || "").toLowerCase();
@@ -5569,9 +4493,7 @@ export const InAccordAdminModal = () => {
       const sectionMatches =
         activeSection !== "businessCenter" ||
         businessSectionFilter === "ALL" ||
-        String(entry.businessSection ?? "")
-          .trim()
-          .toLowerCase() === normalizedBusinessSectionFilter;
+        String(entry.businessSection ?? "").trim().toLowerCase() === normalizedBusinessSectionFilter;
 
       if (!sectionMatches) {
         return false;
@@ -5598,13 +4520,7 @@ export const InAccordAdminModal = () => {
 
       return haystack.includes(query);
     });
-  }, [
-    activeSection,
-    businessSectionFilter,
-    familyCenterEntries,
-    familyCenterSearch,
-    familyCenterStatusFilter,
-  ]);
+  }, [activeSection, businessSectionFilter, familyCenterEntries, familyCenterSearch, familyCenterStatusFilter]);
 
   const businessSectionFilterOptions = useMemo(() => {
     if (activeSection !== "businessCenter") {
@@ -5615,8 +4531,8 @@ export const InAccordAdminModal = () => {
       new Set(
         familyCenterEntries
           .map((entry) => String(entry.businessSection ?? "").trim())
-          .filter((section) => section.length > 0),
-      ),
+          .filter((section) => section.length > 0)
+      )
     ).sort((a, b) => a.localeCompare(b));
 
     return ["ALL", ...uniqueSections];
@@ -5634,7 +4550,7 @@ export const InAccordAdminModal = () => {
         : listRowDensity === "SPACIOUS"
           ? "py-3"
           : "py-2",
-    [listRowDensity],
+    [listRowDensity]
   );
 
   const listCardDensityClass = useMemo(
@@ -5644,12 +4560,12 @@ export const InAccordAdminModal = () => {
         : listRowDensity === "SPACIOUS"
           ? "p-4"
           : "p-3",
-    [listRowDensity],
+    [listRowDensity]
   );
 
   const emojiStickerServerOptions = useMemo(
     () => emojiStickerServers.map((item) => ({ id: item.id, name: item.name })),
-    [emojiStickerServers],
+    [emojiStickerServers]
   );
 
   const hasActiveEmojiStickerFilters =
@@ -5659,9 +4575,7 @@ export const InAccordAdminModal = () => {
 
   const serverTagOwnerOptions = useMemo(() => {
     const uniqueOwners = Array.from(
-      new Set(
-        serverTags.map((item) => (item.ownerName || "Unknown Owner").trim()),
-      ),
+      new Set(serverTags.map((item) => (item.ownerName || "Unknown Owner").trim()))
     ).filter(Boolean);
     return ["ALL", ...uniqueOwners.sort((a, b) => a.localeCompare(b))];
   }, [serverTags]);
@@ -5671,8 +4585,7 @@ export const InAccordAdminModal = () => {
 
     return serverTags.filter((item) => {
       const ownerMatches =
-        serverTagOwnerFilter === "ALL" ||
-        (item.ownerName || "Unknown Owner") === serverTagOwnerFilter;
+        serverTagOwnerFilter === "ALL" || (item.ownerName || "Unknown Owner") === serverTagOwnerFilter;
 
       if (!query) {
         return ownerMatches;
@@ -5720,8 +4633,7 @@ export const InAccordAdminModal = () => {
     }
   };
 
-  const OtherConfigKey = (row: AdminOtherConfig) =>
-    `${row.type}:${row.userId}:${row.id}`;
+  const OtherConfigKey = (row: AdminOtherConfig) => `${row.type}:${row.userId}:${row.id}`;
 
   const roleLabelLookup = useMemo(() => {
     const lookup: Record<string, string> = {};
@@ -5736,8 +4648,7 @@ export const InAccordAdminModal = () => {
     const query = OtherConfigQuery.trim().toLowerCase();
 
     const filtered = recentOtherConfigs.filter((row) => {
-      const typeMatches =
-        OtherConfigTypeFilter === "ALL" || row.type === OtherConfigTypeFilter;
+      const typeMatches = OtherConfigTypeFilter === "ALL" || row.type === OtherConfigTypeFilter;
       const statusMatches =
         OtherConfigStatusFilter === "ALL" ||
         (OtherConfigStatusFilter === "ENABLED" ? row.enabled : !row.enabled);
@@ -5795,7 +4706,7 @@ export const InAccordAdminModal = () => {
 
   const templateMeBotConfigs = useMemo(
     () => recentOtherConfigs.filter((row) => isTemplateMeBotConfig(row)),
-    [recentOtherConfigs],
+    [recentOtherConfigs]
   );
 
   const templateMeBotConfigConflict = templateMeBotConfigs.length > 1;
@@ -5829,9 +4740,7 @@ export const InAccordAdminModal = () => {
       return "";
     }
 
-    const configLabel =
-      String(primaryTemplateMeBotConfig.configName ?? "").trim() ||
-      "Template Me Bot";
+    const configLabel = String(primaryTemplateMeBotConfig.configName ?? "").trim() || "Template Me Bot";
     const ownerLabel =
       String(primaryTemplateMeBotConfig.name ?? "").trim() ||
       String(primaryTemplateMeBotConfig.userId ?? "").trim() ||
@@ -5846,24 +4755,15 @@ export const InAccordAdminModal = () => {
     }
 
     const candidateApplicationId = String(
-      templateMeRuntimeState?.applicationId ||
-        primaryTemplateMeBotConfig?.applicationId ||
-        "",
+      templateMeRuntimeState?.applicationId || primaryTemplateMeBotConfig?.applicationId || ""
     ).trim();
 
-    if (
-      !/^\d{17,20}$/.test(candidateApplicationId) ||
-      /^0+$/.test(candidateApplicationId)
-    ) {
+    if (!/^\d{17,20}$/.test(candidateApplicationId) || /^0+$/.test(candidateApplicationId)) {
       return null;
     }
 
     return `${getOtherApiOrigin()}/oauth2/authorize?client_id=${encodeURIComponent(candidateApplicationId)}&scope=bot%20applications.commands&permissions=8`;
-  }, [
-    primaryTemplateMeBotConfig?.applicationId,
-    templateMeRuntimeInviteUrl,
-    templateMeRuntimeState?.applicationId,
-  ]);
+  }, [primaryTemplateMeBotConfig?.applicationId, templateMeRuntimeInviteUrl, templateMeRuntimeState?.applicationId]);
 
   const separatedOtherConfigs = useMemo(() => {
     const inAccord: AdminOtherConfig[] = [];
@@ -5913,9 +4813,7 @@ export const InAccordAdminModal = () => {
 
   const onOtherConfigSort = (key: OtherConfigSortKey) => {
     if (OtherConfigSortKey === key) {
-      setOtherConfigSortDirection((current) =>
-        current === "asc" ? "desc" : "asc",
-      );
+      setOtherConfigSortDirection((current) => (current === "asc" ? "desc" : "asc"));
       return;
     }
 
@@ -5947,7 +4845,7 @@ export const InAccordAdminModal = () => {
 
   const onAdminOtherConfigAction = async (
     row: AdminOtherConfig,
-    action: "toggle" | "update" | "delete" | "purge",
+    action: "toggle" | "update" | "delete" | "purge"
   ) => {
     const key = OtherConfigKey(row);
     setOtherConfigActionError(null);
@@ -5955,7 +4853,7 @@ export const InAccordAdminModal = () => {
 
     if (action === "purge") {
       const confirmed = window.confirm(
-        `Permanently remove ${row.type === "BOT" ? "bot" : "app"} ${row.configName} (${row.applicationId}) from all users across the system?`,
+        `Permanently remove ${row.type === "BOT" ? "bot" : "app"} ${row.configName} (${row.applicationId}) from all users across the system?`
       );
 
       if (!confirmed) {
@@ -6014,9 +4912,7 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to update Other config (${response.status})`;
+        const message = (await response.text()) || `Failed to update Other config (${response.status})`;
         throw new Error(message);
       }
 
@@ -6029,13 +4925,12 @@ export const InAccordAdminModal = () => {
         action === "purge"
           ? `Removed ${responsePayload.removedCount ?? 0} item(s) across ${responsePayload.affectedUsers ?? 0} user(s).`
           : action === "delete"
-            ? "Other config deleted."
-            : action === "toggle"
-              ? `Other config ${row.enabled ? "disabled" : "enabled"}.`
-              : row.type === "BOT" &&
-                  OtherConfigDrafts[key]?.botToken.trim().length
-                ? "Other config and bot token updated."
-                : "Other config updated.",
+          ? "Other config deleted."
+          : action === "toggle"
+            ? `Other config ${row.enabled ? "disabled" : "enabled"}.`
+            : row.type === "BOT" && OtherConfigDrafts[key]?.botToken.trim().length
+              ? "Other config and bot token updated."
+              : "Other config updated."
       );
 
       if (action === "update") {
@@ -6051,9 +4946,7 @@ export const InAccordAdminModal = () => {
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_Other_CONFIG_ACTION]", error);
       setOtherConfigActionError(
-        error instanceof Error
-          ? error.message
-          : "Unable to update Other config.",
+        error instanceof Error ? error.message : "Unable to update Other config."
       );
     } finally {
       setOtherConfigActionPendingKey(null);
@@ -6069,9 +4962,7 @@ export const InAccordAdminModal = () => {
     const applicationId = newIntegrationApplicationId.trim();
 
     if (!userId || !configName || !applicationId) {
-      setOtherConfigActionError(
-        "User ID, Name, and Application ID are required.",
-      );
+      setOtherConfigActionError("User ID, Name, and Application ID are required.");
       return;
     }
 
@@ -6093,26 +4984,18 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to create integration config (${response.status})`;
+        const message = (await response.text()) || `Failed to create integration config (${response.status})`;
         throw new Error(message);
       }
 
-      setOtherConfigActionSuccess(
-        `${newIntegrationType} config created for ${userId}.`,
-      );
+      setOtherConfigActionSuccess(`${newIntegrationType} config created for ${userId}.`);
       setNewIntegrationName("");
       setNewIntegrationApplicationId("");
       setNewIntegrationEnabled(true);
       await loadIntegrations();
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_INTEGRATION_CONFIG_CREATE]", error);
-      setOtherConfigActionError(
-        error instanceof Error
-          ? error.message
-          : "Unable to create integration config.",
-      );
+      setOtherConfigActionError(error instanceof Error ? error.message : "Unable to create integration config.");
     } finally {
       setIsCreatingIntegrationConfig(false);
     }
@@ -6150,9 +5033,7 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to update bot token (${response.status})`;
+        const message = (await response.text()) || `Failed to update bot token (${response.status})`;
         throw new Error(message);
       }
 
@@ -6166,7 +5047,7 @@ export const InAccordAdminModal = () => {
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_Other_BOT_TOKEN_SAVE]", error);
       setOtherConfigActionError(
-        error instanceof Error ? error.message : "Unable to update bot token.",
+        error instanceof Error ? error.message : "Unable to update bot token."
       );
     } finally {
       setOtherBotTokenActionPendingKey(null);
@@ -6175,7 +5056,7 @@ export const InAccordAdminModal = () => {
 
   const setServerTagDraft = (
     serverId: string,
-    updates: Partial<{ tagCode: string; iconKey: string }>,
+    updates: Partial<{ tagCode: string; iconKey: string }>
   ) => {
     setServerTagDrafts((current) => {
       const existing = current[serverId] ?? {
@@ -6221,11 +5102,7 @@ export const InAccordAdminModal = () => {
     };
 
     const tagCode = remove ? "" : draft.tagCode.trim().toUpperCase();
-    const iconKey = (
-      draft.iconKey ||
-      serverTagIconOptions[0]?.key ||
-      ""
-    ).trim();
+    const iconKey = (draft.iconKey || serverTagIconOptions[0]?.key || "").trim();
 
     setServerTagsActionError(null);
     setServerTagsActionSuccess(null);
@@ -6246,9 +5123,7 @@ export const InAccordAdminModal = () => {
       });
 
       if (!response.ok) {
-        const message =
-          (await response.text()) ||
-          `Failed to save server tag (${response.status})`;
+        const message = (await response.text()) || `Failed to save server tag (${response.status})`;
         throw new Error(message);
       }
 
@@ -6258,14 +5133,10 @@ export const InAccordAdminModal = () => {
       };
 
       applyServerTagPayload(payload);
-      setServerTagsActionSuccess(
-        remove ? "Server tag removed." : "Server tag saved.",
-      );
+      setServerTagsActionSuccess(remove ? "Server tag removed." : "Server tag saved.");
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_SERVER_TAGS_SAVE]", error);
-      setServerTagsActionError(
-        error instanceof Error ? error.message : "Unable to save server tag.",
-      );
+      setServerTagsActionError(error instanceof Error ? error.message : "Unable to save server tag.");
     } finally {
       setSavingServerTagServerId(null);
     }
@@ -6276,7 +5147,7 @@ export const InAccordAdminModal = () => {
       "block w-full rounded-md px-3 py-2 text-left text-sm transition",
       activeSection === section
         ? "bg-indigo-500/15 font-medium text-indigo-700 hover:bg-indigo-500/20 dark:text-indigo-200"
-        : "text-zinc-700 hover:bg-zinc-200/70 dark:text-zinc-200 dark:hover:bg-zinc-800",
+        : "text-zinc-700 hover:bg-zinc-200/70 dark:text-zinc-200 dark:hover:bg-zinc-800"
     );
 
   const formatDateTime = (value: string | null) => {
@@ -6297,36 +5168,28 @@ export const InAccordAdminModal = () => {
     emptyMessage: string,
     options?: {
       mode?: "default" | "templateMe";
-    },
+    }
   ) => (
     <div className="overflow-hidden rounded-lg border border-zinc-300 dark:border-zinc-700">
       {options?.mode !== "templateMe" ? (
         <div className="border-b border-zinc-300/70 bg-white/70 px-3 py-2 dark:border-zinc-700/70 dark:bg-zinc-900/35">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-              Rows
-            </span>
-            {(["COMPACT", "COMFORTABLE", "SPACIOUS"] as const).map(
-              (density) => (
-                <button
-                  key={`Other-config-row-density-${density}`}
-                  type="button"
-                  onClick={() => setListRowDensity(density)}
-                  className={cn(
-                    "h-7 rounded-md border px-2.5 text-[11px] font-semibold transition",
-                    listRowDensity === density
-                      ? "border-indigo-500/45 bg-indigo-500/15 text-indigo-700 dark:text-indigo-200"
-                      : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800",
-                  )}
-                >
-                  {density === "COMPACT"
-                    ? "Compact"
-                    : density === "SPACIOUS"
-                      ? "Spacious"
-                      : "Comfortable"}
-                </button>
-              ),
-            )}
+            <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Rows</span>
+            {(["COMPACT", "COMFORTABLE", "SPACIOUS"] as const).map((density) => (
+              <button
+                key={`Other-config-row-density-${density}`}
+                type="button"
+                onClick={() => setListRowDensity(density)}
+                className={cn(
+                  "h-7 rounded-md border px-2.5 text-[11px] font-semibold transition",
+                  listRowDensity === density
+                    ? "border-indigo-500/45 bg-indigo-500/15 text-indigo-700 dark:text-indigo-200"
+                    : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                )}
+              >
+                {density === "COMPACT" ? "Compact" : density === "SPACIOUS" ? "Spacious" : "Comfortable"}
+              </button>
+            ))}
           </div>
         </div>
       ) : null}
@@ -6335,7 +5198,7 @@ export const InAccordAdminModal = () => {
           "grid gap-2 bg-zinc-200/80 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
           options?.mode === "templateMe"
             ? "grid-cols-1"
-            : "grid-cols-[1fr_1fr_0.55fr_1fr_1fr_0.8fr_1fr_1.3fr]",
+            : "grid-cols-[1fr_1fr_0.55fr_1fr_1fr_0.8fr_1fr_1.3fr]"
         )}
       >
         {options?.mode === "templateMe" ? (
@@ -6376,9 +5239,7 @@ export const InAccordAdminModal = () => {
       </div>
       <div className="max-h-80 overflow-y-auto bg-white/80 text-xs text-zinc-800 dark:bg-zinc-950/30 dark:text-zinc-200">
         {rows.length === 0 ? (
-          <p className="px-3 py-3 text-zinc-600 dark:text-zinc-300">
-            {emptyMessage}
-          </p>
+          <p className="px-3 py-3 text-zinc-600 dark:text-zinc-300">{emptyMessage}</p>
         ) : (
           rows.map((row, index) => {
             const key = OtherConfigKey(row);
@@ -6401,13 +5262,11 @@ export const InAccordAdminModal = () => {
                     "space-y-2 px-3 py-2",
                     index % 2 === 0
                       ? "bg-white/70 dark:bg-zinc-950/25"
-                      : "bg-zinc-100/70 dark:bg-zinc-900/35",
+                      : "bg-zinc-100/70 dark:bg-zinc-900/35"
                   )}
                 >
                   <div>
-                    <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                      Application ID
-                    </p>
+                    <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Application ID</p>
                     <div className="flex items-center justify-end gap-1.5">
                       <input
                         type="text"
@@ -6416,8 +5275,7 @@ export const InAccordAdminModal = () => {
                           setOtherConfigDrafts((current) => ({
                             ...current,
                             [key]: {
-                              configName:
-                                current[key]?.configName ?? row.configName,
+                              configName: current[key]?.configName ?? row.configName,
                               applicationId: event.target.value,
                               botToken: current[key]?.botToken ?? "",
                             },
@@ -6445,21 +5303,12 @@ export const InAccordAdminModal = () => {
 
                   {row.type === "BOT" ? (
                     <div>
-                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                        Token / Rotation
-                      </p>
-                      <p
-                        className="truncate text-[11px] text-zinc-500 dark:text-zinc-400"
-                        title={`Token hint: ${row.tokenHint || "Not set"}`}
-                      >
+                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Token / Rotation</p>
+                      <p className="truncate text-[11px] text-zinc-500 dark:text-zinc-400" title={`Token hint: ${row.tokenHint || "Not set"}`}>
                         {row.tokenHint || "Token not set"}
                       </p>
-                      <p
-                        className="truncate text-[10px] text-zinc-500 dark:text-zinc-400"
-                        title={`Token updated: ${formatDateTime(row.tokenUpdatedAt ?? null)}`}
-                      >
-                        Token updated:{" "}
-                        {formatDateTime(row.tokenUpdatedAt ?? null)}
+                      <p className="truncate text-[10px] text-zinc-500 dark:text-zinc-400" title={`Token updated: ${formatDateTime(row.tokenUpdatedAt ?? null)}`}>
+                        Token updated: {formatDateTime(row.tokenUpdatedAt ?? null)}
                       </p>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
                         <input
@@ -6477,11 +5326,7 @@ export const InAccordAdminModal = () => {
                         <button
                           type="button"
                           onClick={() => void onAdminOtherBotTokenSave(row)}
-                          disabled={
-                            isPending ||
-                            isTokenPending ||
-                            tokenDraft.trim().length === 0
-                          }
+                          disabled={isPending || isTokenPending || tokenDraft.trim().length === 0}
                           className="h-8 shrink-0 whitespace-nowrap rounded-md bg-indigo-600 px-2 text-[10px] font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {isTokenPending ? "Saving..." : "Save Token"}
@@ -6489,6 +5334,7 @@ export const InAccordAdminModal = () => {
                       </div>
                     </div>
                   ) : null}
+
                 </div>
               );
             }
@@ -6501,7 +5347,7 @@ export const InAccordAdminModal = () => {
                   listRowDensityClass,
                   index % 2 === 0
                     ? "bg-white/70 dark:bg-zinc-950/25"
-                    : "bg-zinc-100/70 dark:bg-zinc-900/35",
+                    : "bg-zinc-100/70 dark:bg-zinc-900/35"
                 )}
               >
                 {isEditing ? (
@@ -6512,8 +5358,7 @@ export const InAccordAdminModal = () => {
                       setOtherConfigDrafts((current) => ({
                         ...current,
                         [key]: {
-                          configName:
-                            current[key]?.configName ?? row.configName,
+                          configName: current[key]?.configName ?? row.configName,
                           applicationId: event.target.value,
                           botToken: current[key]?.botToken ?? "",
                         },
@@ -6522,25 +5367,16 @@ export const InAccordAdminModal = () => {
                     className="h-7 w-full rounded-md border border-zinc-300 bg-white px-2 font-mono text-xs text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                   />
                 ) : (
-                  <p className="truncate font-mono" title={row.applicationId}>
-                    {row.applicationId}
-                  </p>
+                  <p className="truncate font-mono" title={row.applicationId}>{row.applicationId}</p>
                 )}
 
                 {row.type === "BOT" ? (
                   <div className="space-y-1">
-                    <p
-                      className="truncate text-[11px] text-zinc-500 dark:text-zinc-400"
-                      title={`Token hint: ${row.tokenHint || "Not set"}`}
-                    >
+                    <p className="truncate text-[11px] text-zinc-500 dark:text-zinc-400" title={`Token hint: ${row.tokenHint || "Not set"}`}>
                       {row.tokenHint || "Token not set"}
                     </p>
-                    <p
-                      className="truncate text-[10px] text-zinc-500 dark:text-zinc-400"
-                      title={`Token updated: ${formatDateTime(row.tokenUpdatedAt ?? null)}`}
-                    >
-                      Token updated:{" "}
-                      {formatDateTime(row.tokenUpdatedAt ?? null)}
+                    <p className="truncate text-[10px] text-zinc-500 dark:text-zinc-400" title={`Token updated: ${formatDateTime(row.tokenUpdatedAt ?? null)}`}>
+                      Token updated: {formatDateTime(row.tokenUpdatedAt ?? null)}
                     </p>
                     <div className="flex items-center gap-1.5">
                       <input
@@ -6558,11 +5394,7 @@ export const InAccordAdminModal = () => {
                       <button
                         type="button"
                         onClick={() => void onAdminOtherBotTokenSave(row)}
-                        disabled={
-                          isPending ||
-                          isTokenPending ||
-                          tokenDraft.trim().length === 0
-                        }
+                        disabled={isPending || isTokenPending || tokenDraft.trim().length === 0}
                         className="h-7 shrink-0 whitespace-nowrap rounded-md bg-indigo-600 px-2 text-[10px] font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {isTokenPending ? "Saving..." : "Save Token"}
@@ -6571,28 +5403,18 @@ export const InAccordAdminModal = () => {
                   </div>
                 ) : null}
 
-                <p
-                  className={
-                    row.enabled
-                      ? "text-emerald-600 dark:text-emerald-300"
-                      : "text-zinc-500 dark:text-zinc-400"
-                  }
-                >
+                <p className={row.enabled ? "text-emerald-600 dark:text-emerald-300" : "text-zinc-500 dark:text-zinc-400"}>
                   {row.enabled ? "Enabled" : "Disabled"}
                 </p>
 
-                <p className="truncate" title={formatDateTime(row.createdAt)}>
-                  {formatDateTime(row.createdAt)}
-                </p>
+                <p className="truncate" title={formatDateTime(row.createdAt)}>{formatDateTime(row.createdAt)}</p>
 
                 <div className="flex flex-wrap items-center gap-1.5">
                   {isEditing ? (
                     <>
                       <button
                         type="button"
-                        onClick={() =>
-                          void onAdminOtherConfigAction(row, "update")
-                        }
+                        onClick={() => void onAdminOtherConfigAction(row, "update")}
                         disabled={isPending || !hasChanges}
                         className="h-7 rounded-md bg-indigo-600 px-2 text-[10px] font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
                       >
@@ -6628,15 +5450,13 @@ export const InAccordAdminModal = () => {
                   <>
                     <button
                       type="button"
-                      onClick={() =>
-                        void onAdminOtherConfigAction(row, "toggle")
-                      }
+                      onClick={() => void onAdminOtherConfigAction(row, "toggle")}
                       disabled={isPending}
                       className={cn(
                         "h-7 rounded-md px-2 text-[10px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-60",
                         row.enabled
                           ? "border border-zinc-500/35 bg-zinc-500/15 text-zinc-200 hover:bg-zinc-500/25"
-                          : "border border-emerald-500/35 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25",
+                          : "border border-emerald-500/35 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
                       )}
                     >
                       {row.enabled ? "Disable" : "Enable"}
@@ -6644,9 +5464,7 @@ export const InAccordAdminModal = () => {
 
                     <button
                       type="button"
-                      onClick={() =>
-                        void onAdminOtherConfigAction(row, "delete")
-                      }
+                      onClick={() => void onAdminOtherConfigAction(row, "delete")}
                       disabled={isPending}
                       className="h-7 rounded-md border border-rose-500/35 bg-rose-500/15 px-2 text-[10px] font-semibold text-rose-200 transition hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60"
                     >
@@ -6654,9 +5472,7 @@ export const InAccordAdminModal = () => {
                     </button>
                     <button
                       type="button"
-                      onClick={() =>
-                        void onAdminOtherConfigAction(row, "purge")
-                      }
+                      onClick={() => void onAdminOtherConfigAction(row, "purge")}
                       disabled={isPending}
                       className="h-7 rounded-md border border-rose-500/55 bg-rose-600/20 px-2 text-[10px] font-semibold text-rose-100 transition hover:bg-rose-600/30 disabled:cursor-not-allowed disabled:opacity-60"
                       title="Remove this app/bot from all users in the system"
@@ -6673,9 +5489,7 @@ export const InAccordAdminModal = () => {
     </div>
   );
 
-  const parseReportSeverity = (
-    reason: string | null | undefined,
-  ): "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" | null => {
+  const parseReportSeverity = (reason: string | null | undefined): "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" | null => {
     const source = String(reason ?? "").trim();
     const matched = source.match(/^\[(LOW|MEDIUM|HIGH|CRITICAL)\]/i)?.[1];
     if (!matched) {
@@ -6683,21 +5497,14 @@ export const InAccordAdminModal = () => {
     }
 
     const normalized = matched.toUpperCase();
-    if (
-      normalized === "LOW" ||
-      normalized === "MEDIUM" ||
-      normalized === "HIGH" ||
-      normalized === "CRITICAL"
-    ) {
+    if (normalized === "LOW" || normalized === "MEDIUM" || normalized === "HIGH" || normalized === "CRITICAL") {
       return normalized;
     }
 
     return null;
   };
 
-  const getSeverityClassName = (
-    severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
-  ) => {
+  const getSeverityClassName = (severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL") => {
     if (severity === "LOW") {
       return "border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-200";
     }
@@ -6713,9 +5520,7 @@ export const InAccordAdminModal = () => {
     return "border-rose-500/45 bg-rose-500/15 text-rose-700 dark:text-rose-200";
   };
 
-  const getSeverityTextClassName = (
-    severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
-  ) => {
+  const getSeverityTextClassName = (severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL") => {
     if (severity === "LOW") {
       return "text-emerald-700 dark:text-emerald-300";
     }
@@ -6736,11 +5541,7 @@ export const InAccordAdminModal = () => {
     return `"${raw.replace(/"/g, '""')}"`;
   };
 
-  const downloadCsv = (
-    filename: string,
-    headers: string[],
-    rows: Array<Array<string | number | null>>,
-  ) => {
+  const downloadCsv = (filename: string, headers: string[], rows: Array<Array<string | number | null>>) => {
     const content = [
       headers.map((header) => toCsvCell(header)).join(","),
       ...rows.map((row) => row.map((cell) => toCsvCell(cell)).join(",")),
@@ -6769,7 +5570,7 @@ export const InAccordAdminModal = () => {
     downloadCsv(
       `admin-security-recent-logins-${new Date().toISOString().slice(0, 10)}.csv`,
       ["user_id", "name", "email", "role", "last_login"],
-      rows,
+      rows
     );
   };
 
@@ -6783,19 +5584,31 @@ export const InAccordAdminModal = () => {
     downloadCsv(
       `admin-integrations-users-${new Date().toISOString().slice(0, 10)}.csv`,
       ["user_id", "providers", "count"],
-      rows,
+      rows
     );
   };
 
   const normalizedNewUserRole = normalizeAdminRoleForDisplay(newUserRole);
   const canEditUsersDateOfBirth = isInAccordAdministrator(data.profileRole);
   const recentMainCommits = metaInfo?.githubMainCommits ?? [];
+  const githubCompareUrl = useMemo(() => {
+    if (!metaInfo?.github.repositoryUrl) {
+      return null;
+    }
+
+    const appVersion = String(metaInfo.build.appVersion ?? "").trim();
+    const branch = String(metaInfo.build.branch ?? "main").trim() || "main";
+
+    if (!appVersion) {
+      return `${metaInfo.github.repositoryUrl}/commits/${encodeURIComponent(branch)}`;
+    }
+
+    return `${metaInfo.github.repositoryUrl}/compare/${encodeURIComponent(`v${appVersion}`)}...${encodeURIComponent(branch)}`;
+  }, [metaInfo]);
   const renderMembersRows = (rows: AdminUser[]) =>
-    rows.map((user, index) =>
+    rows.map((user, index) => (
       (() => {
-        const normalizedPresenceStatus = normalizePresenceStatus(
-          user.presenceStatus,
-        );
+        const normalizedPresenceStatus = normalizePresenceStatus(user.presenceStatus);
         const hasAdminCrown = isInAccordAdministrator(user.role);
         const hasDeveloperWrench = isInAccordDeveloper(user.role);
         const hasModeratorShield = isInAccordModerator(user.role);
@@ -6811,10 +5624,8 @@ export const InAccordAdminModal = () => {
           email: user.email,
           createdAt: user.joinedAt,
         });
-        const phoneNumberDraft =
-          userPhoneDrafts[user.userId] ?? user.phoneNumber ?? "";
-        const dateOfBirthDraft =
-          userDateOfBirthDrafts[user.userId] ?? user.dateOfBirth ?? "";
+        const phoneNumberDraft = userPhoneDrafts[user.userId] ?? user.phoneNumber ?? "";
+        const dateOfBirthDraft = userDateOfBirthDrafts[user.userId] ?? user.dateOfBirth ?? "";
         const hasDetailsChanges =
           phoneNumberDraft.trim() !== (user.phoneNumber ?? "") ||
           dateOfBirthDraft.trim() !== (user.dateOfBirth ?? "");
@@ -6828,7 +5639,7 @@ export const InAccordAdminModal = () => {
               listRowDensityClass,
               index % 2 === 0
                 ? "bg-white/70 dark:bg-zinc-950/25"
-                : "bg-zinc-100/70 dark:bg-zinc-900/35",
+                : "bg-zinc-100/70 dark:bg-zinc-900/35"
             )}
             style={{ gridTemplateColumns }}
           >
@@ -6839,6 +5650,10 @@ export const InAccordAdminModal = () => {
                   name: user.profileName || user.name,
                   email: user.email,
                 });
+                const canForceBotDelete =
+                  isBotAccount && user.ownedServerCount === 0 && user.joinedServerCount > 0;
+                const deleteBlockedByLinks =
+                  user.ownedServerCount > 0 || (user.joinedServerCount > 0 && !canForceBotDelete);
 
                 return (
                   <>
@@ -6870,10 +5685,7 @@ export const InAccordAdminModal = () => {
 
                         <div className="relative p-3 pt-9">
                           <div className="absolute -top-10 left-3 rounded-full border-4 border-[#111214]">
-                            <UserAvatar
-                              src={user.imageUrl}
-                              className="h-20 w-20"
-                            />
+                            <UserAvatar src={user.imageUrl} className="h-20 w-20" />
                           </div>
 
                           <ProfileIconRow icons={profileIcons} />
@@ -6883,44 +5695,20 @@ export const InAccordAdminModal = () => {
                               profileId={user.userId}
                               nameClassName="text-base font-bold text-white"
                             />
-                            {showBotBadge ? (
-                              <BotAppBadge className="h-4 px-1 text-[9px]" />
-                            ) : null}
+                            {showBotBadge ? <BotAppBadge className="h-4 px-1 text-[9px]" /> : null}
                             {hasAdminCrown ? (
-                              hasDeveloperWrench ? (
-                                <Wrench
-                                  className="h-4 w-4 shrink-0 text-cyan-400"
-                                  aria-label={
-                                    inAccordStaffRoleLabel ?? "In-Accord Staff"
-                                  }
-                                />
-                              ) : (
-                                <Crown
-                                  className="h-4 w-4 shrink-0 text-rose-500"
-                                  aria-label={
-                                    inAccordStaffRoleLabel ?? "In-Accord Staff"
-                                  }
-                                />
-                              )
+                              hasDeveloperWrench
+                                ? <Wrench className="h-4 w-4 shrink-0 text-cyan-400" aria-label={inAccordStaffRoleLabel ?? "In-Accord Staff"} />
+                                : <Crown className="h-4 w-4 shrink-0 text-rose-500" aria-label={inAccordStaffRoleLabel ?? "In-Accord Staff"} />
                             ) : hasModeratorShield ? (
-                              <ModeratorLineIcon
-                                className="h-4 w-4 shrink-0 text-indigo-500"
-                                aria-label={
-                                  inAccordStaffRoleLabel ?? "Moderator"
-                                }
-                              />
+                              <ModeratorLineIcon className="h-4 w-4 shrink-0 text-indigo-500" aria-label={inAccordStaffRoleLabel ?? "Moderator"} />
                             ) : null}
                           </div>
-                          <p className="mt-0.5 text-[11px] text-[#949ba4]">
-                            {user.pronouns?.trim() || "Pronouns not set"}
-                          </p>
+                          <p className="mt-0.5 text-[11px] text-[#949ba4]">{user.pronouns?.trim() || "Pronouns not set"}</p>
                           <div className="mt-2 min-h-36 w-full max-w-55 resize-y overflow-auto rounded-md border border-white/10 bg-[#1a1b1e] px-2.5 py-2">
                             <p
                               className="whitespace-pre-wrap wrap-break-word align-top text-[11px] text-[#dbdee1]"
-                              style={{
-                                overflowWrap: "anywhere",
-                                wordBreak: "break-word",
-                              }}
+                              style={{ overflowWrap: "anywhere", wordBreak: "break-word" }}
                             >
                               {user.comment?.trim() || "No comment set"}
                             </p>
@@ -6929,29 +5717,12 @@ export const InAccordAdminModal = () => {
                           <div className="mt-3 rounded-lg border border-white/10 bg-[#1a1b1e] p-3 text-xs">
                             <div className="space-y-1 text-[#dbdee1]">
                               <p>Name: {user.name}</p>
-                              <p>
-                                Profile Name: {user.profileName || "Not set"}
-                              </p>
-                              <p>
-                                Status:{" "}
-                                {formatPresenceStatusLabel(
-                                  normalizedPresenceStatus,
-                                  {
-                                    showGameIcon: Boolean(
-                                      user.currentGame?.trim(),
-                                    ),
-                                  },
-                                )}
-                              </p>
-                              <p>
-                                Current Game:{" "}
-                                {user.currentGame?.trim() || "Not in game"}
-                              </p>
+                              <p>Profile Name: {user.profileName || "Not set"}</p>
+                              <p>Status: {formatPresenceStatusLabel(normalizedPresenceStatus, { showGameIcon: Boolean(user.currentGame?.trim()) })}</p>
+                              <p>Current Game: {user.currentGame?.trim() || "Not in game"}</p>
                               <p>Role: {user.role || "USER"}</p>
                               <p>Joined: {formatDateTime(user.joinedAt)}</p>
-                              <p>
-                                Last Login: {formatDateTime(user.lastLogin)}
-                              </p>
+                              <p>Last Login: {formatDateTime(user.lastLogin)}</p>
                               <p>Owned Servers: {user.ownedServerCount}</p>
                               <p>Joined Servers: {user.joinedServerCount}</p>
                             </div>
@@ -6959,18 +5730,14 @@ export const InAccordAdminModal = () => {
                         </div>
                       </PopoverContent>
                     </Popover>
-                    <p
-                      className="truncate text-[12pt] leading-none"
-                      title={user.userId}
-                    >
-                      {user.userId}
-                    </p>
+                    <p className="truncate text-[12pt] leading-none" title={user.userId}>{user.userId}</p>
                     <button
                       type="button"
                       onClick={() => void onDeleteUser(user)}
                       disabled={
                         deletingUserId === user.userId ||
                         user.userId === IMMUTABLE_ACCOUNT_USER_ID ||
+                        deleteBlockedByLinks ||
                         user.userId === data.profileId
                       }
                       className="ml-auto rounded p-1 text-rose-500 transition hover:bg-rose-500/10 hover:text-rose-400 disabled:cursor-not-allowed disabled:opacity-50"
@@ -6980,10 +5747,13 @@ export const InAccordAdminModal = () => {
                           ? "Protected core account cannot be deleted"
                           : user.userId === data.profileId
                             ? "You cannot delete your own account"
-                            : user.ownedServerCount > 0 ||
-                                user.joinedServerCount > 0
-                              ? "Delete user, memberships, and owned servers"
-                              : "Delete user"
+                            : user.ownedServerCount > 0
+                              ? "Cannot delete user that owns servers"
+                              : user.joinedServerCount > 0 && canForceBotDelete
+                                ? "Delete bot/app and auto-remove memberships"
+                                : user.joinedServerCount > 0
+                                  ? "Cannot delete user linked to memberships"
+                                  : "Delete user"
                       }
                     >
                       <Trash2 className="h-4 w-4" />
@@ -6998,39 +5768,25 @@ export const InAccordAdminModal = () => {
                 profileId={user.userId}
                 nameClassName=""
               />
-              {isBotUser({
-                role: user.role,
-                name: user.name,
-                email: user.email,
-              }) ? (
+              {isBotUser({ role: user.role, name: user.name, email: user.email }) ? (
                 <BotAppBadge className="h-4 px-1 text-[9px]" />
               ) : null}
             </div>
             <div className="flex min-w-0 items-center gap-1.5">
-              {getAdminRoleIcon(
-                userRoleDrafts[user.userId] ?? user.role,
-                "h-4 w-4",
-              )}
+              {getAdminRoleIcon(userRoleDrafts[user.userId] ?? user.role, "h-4 w-4")}
               <select
-                value={normalizeAdminRoleForDisplay(
-                  userRoleDrafts[user.userId] ?? user.role,
-                )}
-                onChange={(event) =>
-                  onChangeUserRoleDraft(user.userId, event.target.value)
-                }
+                value={normalizeAdminRoleForDisplay(userRoleDrafts[user.userId] ?? user.role)}
+                onChange={(event) => onChangeUserRoleDraft(user.userId, event.target.value)}
                 disabled={
                   updatingUserRoleId === user.userId ||
                   deletingUserId === user.userId ||
-                  normalizeAdminRoleForDisplay(user.role) ===
-                    ADMINISTRATOR_ROLE_KEY
+                  normalizeAdminRoleForDisplay(user.role) === ADMINISTRATOR_ROLE_KEY
                 }
                 className="h-7 min-w-0 flex-1 rounded-md border border-zinc-300 bg-white px-2 text-[10px] font-semibold text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
               >
                 {createUserRoleOptions.map((role) => (
                   <option key={`${user.userId}-${role}`} value={role}>
-                    {roleLabelLookup[role]
-                      ? `${roleLabelLookup[role]} (${role})`
-                      : role}
+                    {roleLabelLookup[role] ? `${roleLabelLookup[role]} (${role})` : role}
                   </option>
                 ))}
               </select>
@@ -7041,11 +5797,8 @@ export const InAccordAdminModal = () => {
                   isSavingRole ||
                   isSavingDetails ||
                   deletingUserId === user.userId ||
-                  normalizeAdminRoleForDisplay(user.role) ===
-                    ADMINISTRATOR_ROLE_KEY ||
-                  normalizeAdminRoleForDisplay(
-                    userRoleDrafts[user.userId] ?? user.role,
-                  ) === normalizeAdminRoleForDisplay(user.role)
+                  normalizeAdminRoleForDisplay(user.role) === ADMINISTRATOR_ROLE_KEY ||
+                  normalizeAdminRoleForDisplay(userRoleDrafts[user.userId] ?? user.role) === normalizeAdminRoleForDisplay(user.role)
                 }
                 className="h-7 rounded-md bg-indigo-600 px-2 text-[10px] font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
               >
@@ -7053,30 +5806,20 @@ export const InAccordAdminModal = () => {
               </button>
             </div>
             <div className="space-y-1 text-[10px] leading-tight">
-              <p className="truncate" title={formatDateTime(user.joinedAt)}>
-                {formatDateTime(user.joinedAt)}
-              </p>
+              <p className="truncate" title={formatDateTime(user.joinedAt)}>{formatDateTime(user.joinedAt)}</p>
               <input
                 type="text"
                 value={phoneNumberDraft}
-                onChange={(event) =>
-                  onChangeUserPhoneDraft(user.userId, event.target.value)
-                }
+                onChange={(event) => onChangeUserPhoneDraft(user.userId, event.target.value)}
                 maxLength={32}
                 placeholder="Phone"
-                disabled={
-                  isSavingRole ||
-                  isSavingDetails ||
-                  deletingUserId === user.userId
-                }
+                disabled={isSavingRole || isSavingDetails || deletingUserId === user.userId}
                 className="h-6 w-full rounded-md border border-zinc-300 bg-white px-2 text-[10px] text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
               />
               <input
                 type="date"
                 value={dateOfBirthDraft}
-                onChange={(event) =>
-                  onChangeUserDateOfBirthDraft(user.userId, event.target.value)
-                }
+                onChange={(event) => onChangeUserDateOfBirthDraft(user.userId, event.target.value)}
                 disabled={
                   isSavingRole ||
                   isSavingDetails ||
@@ -7099,33 +5842,31 @@ export const InAccordAdminModal = () => {
                 {isSavingDetails ? "Saving..." : "Save"}
               </button>
               {!canEditUsersDateOfBirth ? (
-                <p className="text-[9px] text-amber-500">
-                  DOB edit: Administrator only
-                </p>
+                <p className="text-[9px] text-amber-500">DOB edit: Administrator only</p>
               ) : null}
             </div>
             <p>{user.ownedServerCount}</p>
             <p>{user.joinedServerCount}</p>
           </div>
         );
-      })(),
-    );
+      })()
+    ));
 
   const renderMemberSectionTable = (
     sectionLabel: string,
     rows: AdminUser[],
-    accent?: "indigo",
+    accent?: "indigo"
   ) => (
     <div
       className={cn(
         "overflow-hidden rounded-lg border border-zinc-300 dark:border-zinc-700",
-        accent === "indigo" ? "border-indigo-400/55 bg-indigo-500/[0.04]" : "",
+        accent === "indigo" ? "border-indigo-400/55 bg-indigo-500/[0.04]" : ""
       )}
     >
       <div
         className={cn(
           "border-b border-zinc-300/70 bg-zinc-100/90 px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-700 dark:border-zinc-700/70 dark:bg-zinc-900/55 dark:text-zinc-300",
-          accent === "indigo" ? "text-indigo-700 dark:text-indigo-300" : "",
+          accent === "indigo" ? "text-indigo-700 dark:text-indigo-300" : ""
         )}
       >
         {sectionLabel} ({rows.length})
@@ -7186,9 +5927,7 @@ export const InAccordAdminModal = () => {
 
           <div className="max-h-70 overflow-y-auto bg-white/70 font-mono text-[12pt] leading-none text-zinc-800 dark:bg-zinc-950/30 dark:text-zinc-200">
             {rows.length === 0 ? (
-              <p className="px-3 py-2 text-xs text-zinc-500 dark:text-zinc-400">
-                No {sectionLabel.toLowerCase()} found for current filters.
-              </p>
+              <p className="px-3 py-2 text-xs text-zinc-500 dark:text-zinc-400">No {sectionLabel.toLowerCase()} found for current filters.</p>
             ) : (
               renderMembersRows(rows)
             )}
@@ -7197,8 +5936,7 @@ export const InAccordAdminModal = () => {
       </div>
     </div>
   );
-  const selectedSectionMeta =
-    adminSectionMeta[activeSection] ?? adminSectionMeta.general;
+  const selectedSectionMeta = adminSectionMeta[activeSection] ?? adminSectionMeta.general;
   return (
     <Dialog open={isModalOpen} onOpenChange={onClose}>
       <DialogContent className="flex h-[85vh] max-h-[85vh] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] flex-col overflow-hidden bg-white p-0 text-black dark:bg-[#313338] dark:text-white [&_input]:max-w-full [&_input]:min-w-0 [&_textarea]:max-w-full [&_textarea]:min-w-0 [&_button]:max-w-full [&_button]:min-w-0">
@@ -7208,23 +5946,13 @@ export const InAccordAdminModal = () => {
             In-Accord Staff Panel
           </DialogTitle>
           <DialogDescription className="text-zinc-600 dark:text-zinc-300">
-            <span className="block text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-              {selectedSectionMeta.label}
-            </span>
-            <span className="mt-1 block text-xs text-zinc-600 dark:text-zinc-300">
-              {selectedSectionMeta.description}
-            </span>
+            <span className="block text-sm font-semibold text-zinc-800 dark:text-zinc-100">{selectedSectionMeta.label}</span>
+            <span className="mt-1 block text-xs text-zinc-600 dark:text-zinc-300">{selectedSectionMeta.description}</span>
           </DialogDescription>
         </DialogHeader>
 
-        <div
-          dir="ltr"
-          className="grid min-h-0 flex-1 grid-cols-[220px_minmax(0,1fr)]"
-        >
-          <aside
-            dir="ltr"
-            className="order-1 flex min-h-0 flex-col border-r border-zinc-200 bg-zinc-50/80 p-4 dark:border-zinc-700 dark:bg-zinc-900/50"
-          >
+        <div dir="ltr" className="grid min-h-0 flex-1 grid-cols-[220px_minmax(0,1fr)]">
+          <aside dir="ltr" className="order-1 flex min-h-0 flex-col border-r border-zinc-200 bg-zinc-50/80 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
             <p className="px-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
               Admin Menu
             </p>
@@ -7233,10 +5961,7 @@ export const InAccordAdminModal = () => {
                 const isCollapsed = collapsedMenuGroups[group.id];
 
                 return (
-                  <div
-                    key={group.id}
-                    className="rounded-md border border-zinc-200/70 bg-white/70 p-1 dark:border-zinc-700/70 dark:bg-zinc-900/35"
-                  >
+                  <div key={group.id} className="rounded-md border border-zinc-200/70 bg-white/70 p-1 dark:border-zinc-700/70 dark:bg-zinc-900/35">
                     <button
                       type="button"
                       onClick={() =>
@@ -7248,11 +5973,7 @@ export const InAccordAdminModal = () => {
                       className="flex h-8 w-full items-center justify-between rounded-md px-2 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 transition hover:bg-zinc-200/70 dark:text-zinc-300 dark:hover:bg-zinc-800"
                     >
                       <span>{group.label}</span>
-                      {isCollapsed ? (
-                        <ChevronRight className="h-3.5 w-3.5" />
-                      ) : (
-                        <ChevronDown className="h-3.5 w-3.5" />
-                      )}
+                      {isCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                     </button>
 
                     {!isCollapsed ? (
@@ -7288,32 +6009,16 @@ export const InAccordAdminModal = () => {
               <div className="flex h-full min-h-0 flex-col gap-4">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-amber-300">
-                      Access Status
-                    </p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-amber-300">Access Status</p>
                     <div className="mt-2 flex items-center gap-2 text-sm text-amber-200">
                       <ShieldCheck className="h-4 w-4" />
                       Staff access confirmed for
                       <span className="inline-flex items-center gap-1.5">
                         <span>{data.profileName || "current user"}</span>
                         {isInAccordAdministrator(data.profileRole) ? (
-                          isInAccordDeveloper(data.profileRole) ? (
-                            <Wrench
-                              className="h-4 w-4 shrink-0 text-cyan-400"
-                              aria-label={
-                                getInAccordStaffLabel(data.profileRole) ??
-                                "In-Accord Staff"
-                              }
-                            />
-                          ) : (
-                            <Crown
-                              className="h-4 w-4 shrink-0 text-rose-500"
-                              aria-label={
-                                getInAccordStaffLabel(data.profileRole) ??
-                                "In-Accord Staff"
-                              }
-                            />
-                          )
+                          isInAccordDeveloper(data.profileRole)
+                            ? <Wrench className="h-4 w-4 shrink-0 text-cyan-400" aria-label={getInAccordStaffLabel(data.profileRole) ?? "In-Accord Staff"} />
+                            : <Crown className="h-4 w-4 shrink-0 text-rose-500" aria-label={getInAccordStaffLabel(data.profileRole) ?? "In-Accord Staff"} />
                         ) : null}
                       </span>
                     </div>
@@ -7331,22 +6036,25 @@ export const InAccordAdminModal = () => {
                   <p className="font-semibold">Build Information</p>
 
                   {isLoadingMetaInfo ? (
-                    <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-                      Loading build and GitHub details...
-                    </p>
+                    <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">Loading build and GitHub details...</p>
                   ) : metaInfoError ? (
-                    <p className="mt-2 text-xs text-rose-500">
-                      {metaInfoError}
-                    </p>
+                    <p className="mt-2 text-xs text-rose-500">{metaInfoError}</p>
                   ) : metaInfo ? (
                     <div className="mt-2 flex min-h-0 flex-1 flex-col gap-3">
                       <div className="grid gap-3 md:grid-cols-2">
                         <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
                           <div className="mb-1 flex items-center justify-between gap-2">
-                            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                              Build
-                            </p>
+                            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Build</p>
                             <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => void onDesktopBuildPublish()}
+                                disabled={isDesktopBuilding}
+                                className="h-7 rounded-md border border-sky-500/45 bg-sky-500/15 px-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-sky-700 transition hover:bg-sky-500/25 disabled:cursor-not-allowed disabled:opacity-60 dark:text-sky-200"
+                                title="Build and publish the desktop updater"
+                              >
+                                {isDesktopBuilding ? "Building..." : "BUILD"}
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => void onForcePushMain()}
@@ -7356,31 +6064,14 @@ export const InAccordAdminModal = () => {
                               >
                                 {isForcePushingMain ? "Pushing..." : "PUSH"}
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => void onBuildAndPublishDesktop()}
-                                disabled={isBuildingAndPublishingDesktop}
-                                className="h-7 rounded-md border border-sky-500/45 bg-sky-500/15 px-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-sky-700 transition hover:bg-sky-500/25 disabled:cursor-not-allowed disabled:opacity-60 dark:text-sky-200"
-                                title="Build the desktop app and publish it to the updater feed"
-                              >
-                                {isBuildingAndPublishingDesktop
-                                  ? "Building..."
-                                  : "BUILD+PUSH"}
-                              </button>
                             </div>
                           </div>
                           <p>App: {metaInfo.build.appName}</p>
                           <p>Version: {metaInfo.build.appVersion}</p>
-                          <p>
-                            In-Accord SDK:{" "}
-                            {metaInfo.build.sdkVersion || "1.0.0.1"}
-                          </p>
+                          <p>In-Accord SDK: {metaInfo.build.sdkVersion || "1.0.0.1"}</p>
                           <p>Next.js: {metaInfo.build.nextVersion}</p>
                           <p>Environment: {metaInfo.build.nodeEnv}</p>
-                          <p>
-                            Built:{" "}
-                            {formatDateTime(metaInfo.build.buildTimestamp)}
-                          </p>
+                          <p>Built: {formatDateTime(metaInfo.build.buildTimestamp)}</p>
                           <p>Branch: {metaInfo.build.branch || "N/A"}</p>
                           <div className="mt-2 flex flex-wrap items-center gap-2">
                             <span className="text-xs">Document Storage:</span>
@@ -7389,7 +6080,7 @@ export const InAccordAdminModal = () => {
                                 "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]",
                                 metaInfo.storage?.documentStorageConfigured
                                   ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-200"
-                                  : "border-rose-500/45 bg-rose-500/15 text-rose-700 dark:text-rose-200",
+                                  : "border-rose-500/45 bg-rose-500/15 text-rose-700 dark:text-rose-200"
                               )}
                               title={
                                 metaInfo.storage?.documentStorageConfigured
@@ -7397,82 +6088,52 @@ export const InAccordAdminModal = () => {
                                   : "Cloud storage is not configured"
                               }
                             >
-                              {metaInfo.storage?.documentStorageConfigured
-                                ? "Configured"
-                                : "Not Configured"}
+                              {metaInfo.storage?.documentStorageConfigured ? "Configured" : "Not Configured"}
                             </span>
                           </div>
                           <p>
                             Commit:{" "}
-                            {recentMainCommits.length > 0
-                              ? recentMainCommits.map((entry, index) => (
-                                  <span key={`build-commit-main-${entry.sha}`}>
-                                    {index > 0 ? ", " : ""}
-                                    <a
-                                      href={entry.url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="font-mono text-indigo-600 hover:underline dark:text-indigo-300"
-                                      title={entry.message || entry.sha}
-                                    >
-                                      {entry.shortSha || entry.sha.slice(0, 7)}
-                                    </a>
+                            {recentMainCommits.length > 0 ? (
+                              recentMainCommits.map((entry, index) => (
+                                <span key={`build-commit-main-${entry.sha}`}>
+                                  {index > 0 ? ", " : ""}
+                                  <span
+                                    className="font-mono text-indigo-600 dark:text-indigo-300"
+                                    title={entry.message || entry.sha}
+                                  >
+                                    {entry.shortSha || entry.sha.slice(0, 7)}
                                   </span>
-                                ))
-                              : "N/A"}
+                                </span>
+                              ))
+                            ) : (
+                              "N/A"
+                            )}
                           </p>
                           {forcePushMainError ? (
-                            <p className="mt-2 text-xs text-rose-500">
-                              {forcePushMainError}
-                            </p>
+                            <p className="mt-2 text-xs text-rose-500">{forcePushMainError}</p>
                           ) : null}
                           {forcePushMainSuccess ? (
-                            <p className="mt-2 text-xs text-emerald-600 dark:text-emerald-300">
-                              {forcePushMainSuccess}
-                            </p>
+                            <p className="mt-2 text-xs text-emerald-600 dark:text-emerald-300">{forcePushMainSuccess}</p>
                           ) : null}
-                          {buildAndPublishDesktopError ? (
-                            <p className="mt-2 text-xs text-rose-500">
-                              {buildAndPublishDesktopError}
-                            </p>
+                          {desktopBuildError ? (
+                            <p className="mt-2 text-xs text-rose-500">{desktopBuildError}</p>
                           ) : null}
-                          {buildAndPublishDesktopSuccess ? (
-                            <p className="mt-2 text-xs text-emerald-600 dark:text-emerald-300">
-                              {buildAndPublishDesktopSuccess}
-                            </p>
+                          {desktopBuildSuccess ? (
+                            <p className="mt-2 text-xs text-sky-600 dark:text-sky-300">{desktopBuildSuccess}</p>
                           ) : null}
                         </div>
 
                         <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                          <p className="mb-1 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                            GitHub
-                          </p>
-                          <p
-                            className="truncate"
-                            title={metaInfo.github.repositoryUrl || "N/A"}
-                          >
-                            Repository: {metaInfo.github.repositoryUrl || "N/A"}
-                          </p>
-                          <p
-                            className="truncate"
-                            title={metaInfo.github.homepageUrl || "N/A"}
-                          >
-                            Homepage: {metaInfo.github.homepageUrl || "N/A"}
-                          </p>
-                          <p
-                            className="truncate"
-                            title={metaInfo.github.issuesUrl || "N/A"}
-                          >
-                            Issues: {metaInfo.github.issuesUrl || "N/A"}
-                          </p>
+                          <p className="mb-1 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">GitHub</p>
+                          <p className="truncate" title={metaInfo.github.repositoryUrl || "N/A"}>Repository: {metaInfo.github.repositoryUrl || "N/A"}</p>
+                          <p className="truncate" title={metaInfo.github.homepageUrl || "N/A"}>Homepage: {metaInfo.github.homepageUrl || "N/A"}</p>
+                          <p className="truncate" title={metaInfo.github.issuesUrl || "N/A"}>Issues: {metaInfo.github.issuesUrl || "N/A"}</p>
                         </div>
                       </div>
 
                       <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
                         <div className="mb-1 flex items-center justify-between gap-2">
-                          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                            Running Commit Log
-                          </p>
+                          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Running Commit Log</p>
                           <button
                             type="button"
                             onClick={() => void loadMetaInfo()}
@@ -7483,9 +6144,33 @@ export const InAccordAdminModal = () => {
                           </button>
                         </div>
                         {(metaInfo.commits ?? []).length === 0 ? (
-                          <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                            No local git history available.
-                          </p>
+                          <div className="space-y-2 text-xs text-zinc-500 dark:text-zinc-400">
+                            {githubCompareUrl ? (
+                              <p className="break-all text-[11px] text-zinc-600 dark:text-zinc-300">
+                                Compare: {githubCompareUrl}
+                              </p>
+                            ) : null}
+                            {recentMainCommits.length > 0 ? (
+                              <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1 text-xs">
+                                {recentMainCommits.map((entry) => (
+                                  <div
+                                    key={`general-meta-github-commit-${entry.sha}`}
+                                    className="rounded border border-zinc-200 bg-zinc-50/70 px-2 py-1.5 dark:border-zinc-700 dark:bg-zinc-900/30"
+                                  >
+                                    <p className="truncate font-semibold text-zinc-800 dark:text-zinc-100" title={entry.message}>
+                                      {entry.message}
+                                    </p>
+                                    <p className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">
+                                      {formatDateTime(entry.committedAt)}
+                                    </p>
+                                    <p className="mt-0.5 break-all font-mono text-[11px] text-indigo-600 dark:text-indigo-300">
+                                      {entry.shortSha} - {entry.message}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
                         ) : (
                           <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1 text-xs">
                             {(metaInfo.commits ?? []).map((entry) => {
@@ -7498,15 +6183,9 @@ export const InAccordAdminModal = () => {
                                   key={`general-meta-commit-${entry.sha}`}
                                   className="rounded border border-zinc-200 bg-zinc-50/70 px-2 py-1.5 dark:border-zinc-700 dark:bg-zinc-900/30"
                                 >
-                                  <p
-                                    className="truncate font-semibold text-zinc-800 dark:text-zinc-100"
-                                    title={entry.message}
-                                  >
-                                    {entry.message}
-                                  </p>
+                                  <p className="truncate font-semibold text-zinc-800 dark:text-zinc-100" title={entry.message}>{entry.message}</p>
                                   <p className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">
-                                    {entry.author} •{" "}
-                                    {formatDateTime(entry.committedAt)}
+                                    {entry.author} • {formatDateTime(entry.committedAt)}
                                   </p>
                                   {commitHref ? (
                                     <a
@@ -7518,9 +6197,7 @@ export const InAccordAdminModal = () => {
                                       {entry.shortSha}
                                     </a>
                                   ) : (
-                                    <p className="mt-0.5 font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
-                                      {entry.shortSha}
-                                    </p>
+                                    <p className="mt-0.5 font-mono text-[11px] text-zinc-500 dark:text-zinc-400">{entry.shortSha}</p>
                                   )}
                                 </div>
                               );
@@ -7530,9 +6207,7 @@ export const InAccordAdminModal = () => {
                       </div>
                     </div>
                   ) : (
-                    <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-                      No build metadata available.
-                    </p>
+                    <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">No build metadata available.</p>
                   )}
                 </div>
               </div>
@@ -7541,9 +6216,7 @@ export const InAccordAdminModal = () => {
             {activeSection === "members" && (
               <div className="flex h-full min-h-0 flex-col rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
                 <div className="mb-4 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-600 dark:bg-zinc-900/40">
-                  <p className="mb-3 text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                    Create New User
-                  </p>
+                  <p className="mb-3 text-sm font-semibold text-zinc-800 dark:text-zinc-100">Create New User</p>
                   <div className="grid gap-2 md:grid-cols-2">
                     <input
                       type="text"
@@ -7563,34 +6236,18 @@ export const InAccordAdminModal = () => {
                       <input
                         type={showNewUserPassword ? "text" : "password"}
                         value={newUserPassword}
-                        onChange={(event) =>
-                          setNewUserPassword(event.target.value)
-                        }
+                        onChange={(event) => setNewUserPassword(event.target.value)}
                         placeholder="Password"
                         className="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 pr-10 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                       />
                       <button
                         type="button"
-                        onClick={() =>
-                          setShowNewUserPassword((current) => !current)
-                        }
+                        onClick={() => setShowNewUserPassword((current) => !current)}
                         className="absolute inset-y-0 right-0 inline-flex w-10 items-center justify-center text-zinc-500 transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-                        aria-label={
-                          showNewUserPassword
-                            ? "Hide password"
-                            : "Show password"
-                        }
-                        title={
-                          showNewUserPassword
-                            ? "Hide password"
-                            : "Show password"
-                        }
+                        aria-label={showNewUserPassword ? "Hide password" : "Show password"}
+                        title={showNewUserPassword ? "Hide password" : "Show password"}
                       >
-                        {showNewUserPassword ? (
-                          <EyeOff className="h-4 w-4" />
-                        ) : (
-                          <Eye className="h-4 w-4" />
-                        )}
+                        {showNewUserPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
                     </div>
                     <select
@@ -7600,9 +6257,7 @@ export const InAccordAdminModal = () => {
                     >
                       {createUserRoleOptions.map((role) => (
                         <option key={role} value={role}>
-                          {roleLabelLookup[role]
-                            ? `${roleLabelLookup[role]} (${role})`
-                            : role}
+                          {roleLabelLookup[role] ? `${roleLabelLookup[role]} (${role})` : role}
                         </option>
                       ))}
                     </select>
@@ -7620,22 +6275,14 @@ export const InAccordAdminModal = () => {
                     >
                       {isCreatingUser ? "Creating..." : "Create user"}
                     </button>
-                    {createUserError ? (
-                      <p className="text-xs text-rose-500">{createUserError}</p>
-                    ) : null}
-                    {createUserSuccess ? (
-                      <p className="text-xs text-emerald-500">
-                        {createUserSuccess}
-                      </p>
-                    ) : null}
+                    {createUserError ? <p className="text-xs text-rose-500">{createUserError}</p> : null}
+                    {createUserSuccess ? <p className="text-xs text-emerald-500">{createUserSuccess}</p> : null}
                   </div>
                 </div>
 
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                      Users
-                    </p>
+                    <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Users</p>
                     <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-xs font-medium text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200">
                       {filteredUsers.length}
                     </span>
@@ -7649,16 +6296,11 @@ export const InAccordAdminModal = () => {
                   <button
                     type="button"
                     onClick={() => void onAssignAllBotsToBotsRole()}
-                    disabled={
-                      isAssigningBotsRole ||
-                      separatedFilteredUsers.botsAndApps.length === 0
-                    }
+                    disabled={isAssigningBotsRole || separatedFilteredUsers.botsAndApps.length === 0}
                     className="h-8 rounded-md bg-indigo-600 px-3 text-xs font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
                     title="Assign all bot/app accounts to BOTS role"
                   >
-                    {isAssigningBotsRole
-                      ? "Assigning..."
-                      : "Assign Bots/Apps to BOTS"}
+                    {isAssigningBotsRole ? "Assigning..." : "Assign Bots/Apps to BOTS"}
                   </button>
                 </div>
 
@@ -7672,18 +6314,12 @@ export const InAccordAdminModal = () => {
                   />
                   <select
                     value={memberRoleFilter}
-                    onChange={(event) =>
-                      setMemberRoleFilter(event.target.value)
-                    }
+                    onChange={(event) => setMemberRoleFilter(event.target.value)}
                     className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                   >
                     {roleOptions.map((role) => (
                       <option key={role} value={role}>
-                        {role === "ALL"
-                          ? "All roles"
-                          : roleLabelLookup[role]
-                            ? `${roleLabelLookup[role]} (${role})`
-                            : role}
+                        {role === "ALL" ? "All roles" : (roleLabelLookup[role] ? `${roleLabelLookup[role]} (${role})` : role)}
                       </option>
                     ))}
                   </select>
@@ -7702,60 +6338,38 @@ export const InAccordAdminModal = () => {
                 </div>
 
                 <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                    Rows
-                  </span>
-                  {(["COMPACT", "COMFORTABLE", "SPACIOUS"] as const).map(
-                    (density) => (
-                      <button
-                        key={`members-row-density-${density}`}
-                        type="button"
-                        onClick={() => setListRowDensity(density)}
-                        className={cn(
-                          "h-7 rounded-md border px-2.5 text-[11px] font-semibold transition",
-                          listRowDensity === density
-                            ? "border-indigo-500/45 bg-indigo-500/15 text-indigo-700 dark:text-indigo-200"
-                            : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800",
-                        )}
-                      >
-                        {density === "COMPACT"
-                          ? "Compact"
-                          : density === "SPACIOUS"
-                            ? "Spacious"
-                            : "Comfortable"}
-                      </button>
-                    ),
-                  )}
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Rows</span>
+                  {(["COMPACT", "COMFORTABLE", "SPACIOUS"] as const).map((density) => (
+                    <button
+                      key={`members-row-density-${density}`}
+                      type="button"
+                      onClick={() => setListRowDensity(density)}
+                      className={cn(
+                        "h-7 rounded-md border px-2.5 text-[11px] font-semibold transition",
+                        listRowDensity === density
+                          ? "border-indigo-500/45 bg-indigo-500/15 text-indigo-700 dark:text-indigo-200"
+                          : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                      )}
+                    >
+                      {density === "COMPACT" ? "Compact" : density === "SPACIOUS" ? "Spacious" : "Comfortable"}
+                    </button>
+                  ))}
                 </div>
 
                 <div className="min-h-0 flex-1">
                   {isLoadingUsers ? (
-                    <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                      Loading users...
-                    </p>
+                    <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading users...</p>
                   ) : usersError ? (
                     <p className="text-sm text-rose-500">{usersError}</p>
                   ) : filteredUsers.length === 0 ? (
                     <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                      No users found
-                      {hasActiveMemberFilters ? " for the current filters" : ""}
-                      .
+                      No users found{hasActiveMemberFilters ? " for the current filters" : ""}.
                     </p>
                   ) : (
                     <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
-                      {renderMemberSectionTable(
-                        "Users",
-                        separatedFilteredUsers.usersOnly,
-                      )}
-                      {renderMemberSectionTable(
-                        "Bots & Apps",
-                        separatedFilteredUsers.botsAndApps,
-                        "indigo",
-                      )}
-                      {renderMemberSectionTable(
-                        "Staff (Admin / Dev / Mod)",
-                        separatedFilteredUsers.staff,
-                      )}
+                      {renderMemberSectionTable("Users", separatedFilteredUsers.usersOnly)}
+                      {renderMemberSectionTable("Bots & Apps", separatedFilteredUsers.botsAndApps, "indigo")}
+                      {renderMemberSectionTable("Staff (Admin / Dev / Mod)", separatedFilteredUsers.staff)}
                     </div>
                   )}
                 </div>
@@ -7765,16 +6379,13 @@ export const InAccordAdminModal = () => {
             {activeSection === "iaServerMenu" && (
               <div className="rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                    In-Accord Server Control Panel
-                  </p>
+                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">In-Accord URL Runtime Editor</p>
                   <button
                     type="button"
                     onClick={() => {
                       void loadSiteUrlSetup();
                       void loadServerPerformance();
                       void loadManagedFiles();
-                      void loadCloudflare();
                     }}
                     className="h-8 rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
                   >
@@ -7784,203 +6395,50 @@ export const InAccordAdminModal = () => {
 
                 <div className="mb-3 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
                   <div className="mb-2 flex items-center justify-between gap-2">
-                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                      Server Performance
-                    </p>
-                    <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                      Updated:{" "}
-                      {formatDateTime(serverPerformance?.updatedAt ?? null)}
-                    </span>
+                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Server Performance</p>
+                    <span className="text-[11px] text-zinc-500 dark:text-zinc-400">Updated: {formatDateTime(serverPerformance?.updatedAt ?? null)}</span>
                   </div>
 
                   {isLoadingServerPerformance ? (
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                      Loading server performance...
-                    </p>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">Loading server performance...</p>
                   ) : serverPerformanceError ? (
-                    <p className="text-xs text-rose-500">
-                      {serverPerformanceError}
-                    </p>
+                    <p className="text-xs text-rose-500">{serverPerformanceError}</p>
                   ) : serverPerformance ? (
                     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
                       <div className="rounded-md border border-zinc-300 bg-zinc-50/80 p-2 dark:border-zinc-700 dark:bg-zinc-800/45">
-                        <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          DB Ping
-                        </p>
-                        <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                          {serverPerformance.databasePingMs} ms
-                        </p>
+                        <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">DB Ping</p>
+                        <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">{serverPerformance.databasePingMs} ms</p>
                       </div>
                       <div className="rounded-md border border-zinc-300 bg-zinc-50/80 p-2 dark:border-zinc-700 dark:bg-zinc-800/45">
-                        <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Uptime
-                        </p>
-                        <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                          {Math.floor(serverPerformance.uptimeSeconds / 3600)}h{" "}
-                          {Math.floor(
-                            (serverPerformance.uptimeSeconds % 3600) / 60,
-                          )}
-                          m
-                        </p>
+                        <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Uptime</p>
+                        <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">{Math.floor(serverPerformance.uptimeSeconds / 3600)}h {Math.floor((serverPerformance.uptimeSeconds % 3600) / 60)}m</p>
                       </div>
                       <div className="rounded-md border border-zinc-300 bg-zinc-50/80 p-2 dark:border-zinc-700 dark:bg-zinc-800/45">
-                        <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Memory RSS
-                        </p>
-                        <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                          {serverPerformance.memoryRssMb} MB
-                        </p>
+                        <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Memory RSS</p>
+                        <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">{serverPerformance.memoryRssMb} MB</p>
                       </div>
                       <div className="rounded-md border border-zinc-300 bg-zinc-50/80 p-2 dark:border-zinc-700 dark:bg-zinc-800/45">
-                        <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Servers / Channels
-                        </p>
-                        <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                          {serverPerformance.totalServers} /{" "}
-                          {serverPerformance.totalChannels}
-                        </p>
+                        <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Servers / Channels</p>
+                        <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">{serverPerformance.totalServers} / {serverPerformance.totalChannels}</p>
                       </div>
                       <div className="rounded-md border border-zinc-300 bg-zinc-50/80 p-2 dark:border-zinc-700 dark:bg-zinc-800/45">
-                        <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Members / Messages
-                        </p>
-                        <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                          {serverPerformance.totalMembers} /{" "}
-                          {serverPerformance.totalMessages}
-                        </p>
+                        <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Members / Messages</p>
+                        <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">{serverPerformance.totalMembers} / {serverPerformance.totalMessages}</p>
                       </div>
                     </div>
                   ) : (
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                      No server performance data available.
-                    </p>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">No server performance data available.</p>
                   )}
 
                   {serverPerformance?.nodeVersion ? (
-                    <p className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
-                      Runtime: {serverPerformance.nodeVersion}
-                    </p>
+                    <p className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">Runtime: {serverPerformance.nodeVersion}</p>
                   ) : null}
                 </div>
 
                 <div className="mb-3 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
                   <div className="mb-2 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Cloud className="h-4 w-4 text-sky-500" />
-                      <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                        Cloudflare Control Panel
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => void loadCloudflare()}
-                        className="h-7 rounded-md border border-zinc-300 bg-white px-2 text-[11px] font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                      >
-                        Refresh
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setActiveSection("cloudflareManagement")}
-                        className="h-7 rounded-md bg-indigo-600 px-2.5 text-[11px] font-semibold text-white transition hover:bg-indigo-500"
-                      >
-                        Open Panel
-                      </button>
-                    </div>
-                  </div>
-
-                  {isLoadingCloudflare ? (
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                      Loading Cloudflare status...
-                    </p>
-                  ) : (
-                    <>
-                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                        <div className="rounded-md border border-zinc-300 bg-zinc-50/80 p-2 dark:border-zinc-700 dark:bg-zinc-800/45">
-                          <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                            API Token
-                          </p>
-                          <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                            {cloudflareSetup?.hasApiToken ? "Configured" : "Missing"}
-                          </p>
-                        </div>
-                        <div className="rounded-md border border-zinc-300 bg-zinc-50/80 p-2 dark:border-zinc-700 dark:bg-zinc-800/45">
-                          <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                            Zone
-                          </p>
-                          <p
-                            className="mt-1 truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100"
-                            title={cloudflareSetup?.zoneName ?? cloudflareSelectedZoneName ?? "Not selected"}
-                          >
-                            {cloudflareSetup?.zoneName ??
-                              cloudflareSelectedZoneName ??
-                              "Not selected"}
-                          </p>
-                        </div>
-                        <div className="rounded-md border border-zinc-300 bg-zinc-50/80 p-2 dark:border-zinc-700 dark:bg-zinc-800/45">
-                          <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                            DNS Records
-                          </p>
-                          <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                            {cloudflareDnsRecords.length}
-                          </p>
-                        </div>
-                        <div className="rounded-md border border-zinc-300 bg-zinc-50/80 p-2 dark:border-zinc-700 dark:bg-zinc-800/45">
-                          <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                            Updated
-                          </p>
-                          <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                            {formatDateTime(cloudflareSetup?.updatedAt ?? null)}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => void onPurgeCloudflareCache()}
-                          disabled={
-                            isCloudflareActionPending ||
-                            !(
-                              cloudflareSelectedZoneId ||
-                              cloudflareSetup?.zoneId
-                            )
-                          }
-                          className="h-8 rounded-md border border-amber-500/35 bg-amber-500/15 px-3 text-xs font-semibold text-amber-700 transition hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-60 dark:text-amber-200"
-                        >
-                          {isCloudflareActionPending ? "Working..." : "Purge Cache"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setActiveSection("cloudflareManagement")}
-                          className="h-8 rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                        >
-                          Manage DNS
-                        </button>
-                      </div>
-
-                      {cloudflareError ? (
-                        <p className="mt-2 text-xs text-rose-500">
-                          {cloudflareError}
-                        </p>
-                      ) : null}
-                      {cloudflareSuccess ? (
-                        <p className="mt-2 text-xs text-emerald-500">
-                          {cloudflareSuccess}
-                        </p>
-                      ) : null}
-                    </>
-                  )}
-                </div>
-
-                <div className="mb-3 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                      File Manager
-                    </p>
-                    <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                      Scope: Repository Root
-                    </span>
+                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">File Manager</p>
+                    <span className="text-[11px] text-zinc-500 dark:text-zinc-400">Scope: Repository Root</span>
                     <button
                       type="button"
                       onClick={() => void loadManagedFiles()}
@@ -7994,9 +6452,7 @@ export const InAccordAdminModal = () => {
                     <input
                       type="text"
                       value={managedFilesFolderDraft}
-                      onChange={(event) =>
-                        setManagedFilesFolderDraft(event.target.value)
-                      }
+                      onChange={(event) => setManagedFilesFolderDraft(event.target.value)}
                       placeholder="Folder inside repository root (leave blank for root)"
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                     />
@@ -8012,9 +6468,7 @@ export const InAccordAdminModal = () => {
                   <div className="mb-2 grid gap-2 sm:grid-cols-[1fr_auto]">
                     <input
                       type="file"
-                      onChange={(event) =>
-                        setManagedFileUpload(event.target.files?.[0] ?? null)
-                      }
+                      onChange={(event) => setManagedFileUpload(event.target.files?.[0] ?? null)}
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs text-zinc-900 outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                     />
                     <button
@@ -8027,41 +6481,23 @@ export const InAccordAdminModal = () => {
                     </button>
                   </div>
 
-                  {managedFilesError ? (
-                    <p className="mb-2 text-xs text-rose-500">
-                      {managedFilesError}
-                    </p>
-                  ) : null}
-                  {managedFilesSuccess ? (
-                    <p className="mb-2 text-xs text-emerald-500">
-                      {managedFilesSuccess}
-                    </p>
-                  ) : null}
+                  {managedFilesError ? <p className="mb-2 text-xs text-rose-500">{managedFilesError}</p> : null}
+                  {managedFilesSuccess ? <p className="mb-2 text-xs text-emerald-500">{managedFilesSuccess}</p> : null}
 
                   {isLoadingManagedFiles ? (
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                      Loading files...
-                    </p>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">Loading files...</p>
                   ) : managedFiles.length === 0 ? (
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                      No files in this folder.
-                    </p>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">No files in this folder.</p>
                   ) : (
                     <div className="max-h-52 overflow-y-auto rounded-md border border-zinc-300 dark:border-zinc-700">
                       <div className="grid grid-cols-[0.35fr_1.6fr_0.6fr_0.8fr_0.8fr] gap-2 bg-zinc-200/80 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
                         <label className="inline-flex items-center gap-1">
                           <input
                             type="checkbox"
-                            checked={
-                              managedFiles.length > 0 &&
-                              selectedManagedFilePaths.length ===
-                                managedFiles.length
-                            }
+                            checked={managedFiles.length > 0 && selectedManagedFilePaths.length === managedFiles.length}
                             onChange={(event) =>
                               setSelectedManagedFilePaths(
-                                event.target.checked
-                                  ? managedFiles.map((entry) => entry.path)
-                                  : [],
+                                event.target.checked ? managedFiles.map((entry) => entry.path) : []
                               )
                             }
                           />
@@ -8080,40 +6516,23 @@ export const InAccordAdminModal = () => {
                               "grid grid-cols-[0.35fr_1.6fr_0.6fr_0.8fr_0.8fr] items-center gap-2 px-3 py-2",
                               index % 2 === 0
                                 ? "bg-white/70 dark:bg-zinc-950/25"
-                                : "bg-zinc-100/70 dark:bg-zinc-900/35",
+                                : "bg-zinc-100/70 dark:bg-zinc-900/35"
                             )}
                           >
                             <input
                               type="checkbox"
-                              checked={selectedManagedFilePaths.includes(
-                                file.path,
-                              )}
+                              checked={selectedManagedFilePaths.includes(file.path)}
                               onChange={(event) =>
                                 setSelectedManagedFilePaths((current) =>
                                   event.target.checked
-                                    ? Array.from(
-                                        new Set([...current, file.path]),
-                                      )
-                                    : current.filter(
-                                        (entry) => entry !== file.path,
-                                      ),
+                                    ? Array.from(new Set([...current, file.path]))
+                                    : current.filter((entry) => entry !== file.path)
                                 )
                               }
                             />
-                            <p className="truncate font-mono" title={file.path}>
-                              {file.path}
-                            </p>
-                            <p>
-                              {file.isDirectory
-                                ? "-"
-                                : `${Math.max(1, Math.round(file.sizeBytes / 1024))} KB`}
-                            </p>
-                            <p
-                              className="truncate"
-                              title={formatDateTime(file.updatedAt)}
-                            >
-                              {formatDateTime(file.updatedAt)}
-                            </p>
+                            <p className="truncate font-mono" title={file.path}>{file.path}</p>
+                            <p>{file.isDirectory ? "-" : `${Math.max(1, Math.round(file.sizeBytes / 1024))} KB`}</p>
+                            <p className="truncate" title={formatDateTime(file.updatedAt)}>{formatDateTime(file.updatedAt)}</p>
                             <div className="flex items-center gap-1.5">
                               {file.url ? (
                                 <a
@@ -8125,22 +6544,16 @@ export const InAccordAdminModal = () => {
                                   Open
                                 </a>
                               ) : (
-                                <span className="text-[10px] text-zinc-500 dark:text-zinc-400">
-                                  Folder
-                                </span>
+                                <span className="text-[10px] text-zinc-500 dark:text-zinc-400">Folder</span>
                               )}
                               {!file.isDirectory ? (
                                 <button
                                   type="button"
                                   onClick={() => void onDeleteManagedFile(file)}
-                                  disabled={
-                                    deletingManagedFilePath === file.path
-                                  }
+                                  disabled={deletingManagedFilePath === file.path}
                                   className="h-7 rounded-md border border-rose-500/35 bg-rose-500/15 px-2 text-[10px] font-semibold text-rose-200 transition hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
-                                  {deletingManagedFilePath === file.path
-                                    ? "Deleting..."
-                                    : "Delete"}
+                                  {deletingManagedFilePath === file.path ? "Deleting..." : "Delete"}
                                 </button>
                               ) : null}
                             </div>
@@ -8152,9 +6565,7 @@ export const InAccordAdminModal = () => {
                 </div>
 
                 <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                  <p className="mb-2 text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                    App Base URL (used for generated links)
-                  </p>
+                  <p className="mb-2 text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">App Base URL (used for generated links)</p>
                   <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
                     <input
                       type="url"
@@ -8165,13 +6576,7 @@ export const InAccordAdminModal = () => {
                     />
                     <button
                       type="button"
-                      onClick={() =>
-                        setSiteUrlDraft(
-                          typeof window !== "undefined"
-                            ? window.location.origin
-                            : siteUrlDraft,
-                        )
-                      }
+                      onClick={() => setSiteUrlDraft(typeof window !== "undefined" ? window.location.origin : siteUrlDraft)}
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
                     >
                       Use Current
@@ -8186,92 +6591,66 @@ export const InAccordAdminModal = () => {
                     </button>
                   </div>
                   <p className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
-                    Leave blank to fall back to NEXT_PUBLIC_SITE_URL. This
-                    updates server-generated URLs for applications, uploads, and
-                    payment redirects.
+                    Leave blank to fall back to NEXT_PUBLIC_SITE_URL. This updates server-generated URLs for applications, uploads, and payment redirects.
                   </p>
                 </div>
 
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                      Effective URL
-                    </p>
-                    <p className="mt-1 break-all text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                      {siteUrlSetup?.effectiveAppBaseUrl ?? "N/A"}
-                    </p>
+                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Effective URL</p>
+                    <p className="mt-1 break-all text-sm font-semibold text-zinc-900 dark:text-zinc-100">{siteUrlSetup?.effectiveAppBaseUrl ?? "N/A"}</p>
                   </div>
                   <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                      Source
-                    </p>
+                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Source</p>
                     <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                      {siteUrlSetup?.usesOverride
-                        ? "Runtime override"
-                        : "Environment fallback"}
+                      {siteUrlSetup?.usesOverride ? "Runtime override" : "Environment fallback"}
                     </p>
-                    <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                      Updated: {formatDateTime(siteUrlSetup?.updatedAt ?? null)}
-                    </p>
+                    <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">Updated: {formatDateTime(siteUrlSetup?.updatedAt ?? null)}</p>
                   </div>
                 </div>
 
                 <div className="mt-3 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                  <p className="mb-2 text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                    Hosting Service Information
-                  </p>
+                  <p className="mb-2 text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Hosting Service Information</p>
                   <div className="grid gap-2 md:grid-cols-2">
                     <input
                       type="text"
                       value={hostingServiceNameDraft}
-                      onChange={(event) =>
-                        setHostingServiceNameDraft(event.target.value)
-                      }
+                      onChange={(event) => setHostingServiceNameDraft(event.target.value)}
                       placeholder="Hosting Service"
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                     />
                     <input
                       type="text"
                       value={hostingHostNameDraft}
-                      onChange={(event) =>
-                        setHostingHostNameDraft(event.target.value)
-                      }
+                      onChange={(event) => setHostingHostNameDraft(event.target.value)}
                       placeholder="Host Name"
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                     />
                     <input
                       type="url"
                       value={hostingHostUrlDraft}
-                      onChange={(event) =>
-                        setHostingHostUrlDraft(event.target.value)
-                      }
+                      onChange={(event) => setHostingHostUrlDraft(event.target.value)}
                       placeholder="Host URL (https://...)"
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                     />
                     <input
                       type="text"
                       value={hostingLoginDraft}
-                      onChange={(event) =>
-                        setHostingLoginDraft(event.target.value)
-                      }
+                      onChange={(event) => setHostingLoginDraft(event.target.value)}
                       placeholder="Login"
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                     />
                     <input
                       type="password"
                       value={hostingPasswordDraft}
-                      onChange={(event) =>
-                        setHostingPasswordDraft(event.target.value)
-                      }
+                      onChange={(event) => setHostingPasswordDraft(event.target.value)}
                       placeholder="Password"
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                     />
                     <input
                       type="text"
                       value={hostingCostDraft}
-                      onChange={(event) =>
-                        setHostingCostDraft(event.target.value)
-                      }
+                      onChange={(event) => setHostingCostDraft(event.target.value)}
                       placeholder="Cost"
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                     />
@@ -8279,31 +6658,20 @@ export const InAccordAdminModal = () => {
                 </div>
 
                 {isLoadingSiteUrlSetup ? (
-                  <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
-                    Loading URL setup...
-                  </p>
+                  <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">Loading URL setup...</p>
                 ) : null}
-                {siteUrlError ? (
-                  <p className="mt-3 text-xs text-rose-500">{siteUrlError}</p>
-                ) : null}
-                {siteUrlSuccess ? (
-                  <p className="mt-3 text-xs text-emerald-500">
-                    {siteUrlSuccess}
-                  </p>
-                ) : null}
+                {siteUrlError ? <p className="mt-3 text-xs text-rose-500">{siteUrlError}</p> : null}
+                {siteUrlSuccess ? <p className="mt-3 text-xs text-emerald-500">{siteUrlSuccess}</p> : null}
               </div>
             )}
 
             {activeSection === "databaseManagement" && (
               <div className="rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                    Database Information
-                  </p>
+                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Database Information</p>
                   <button
                     type="button"
                     onClick={() => {
-                      void loadDatabaseRuntime();
                       void loadSiteUrlSetup();
                       void loadDatabaseManager(selectedDatabaseManagerTable);
                     }}
@@ -8313,361 +6681,48 @@ export const InAccordAdminModal = () => {
                   </button>
                 </div>
 
-                <div className="mb-4 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                        Runtime Control
-                      </p>
-                      <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                        In-Accord runs on Cloudflare D1.
-                        This panel manages the live D1 target the app uses.
-                      </p>
-                    </div>
-                    {databaseRuntimeSetup?.d1.managementUrl ? (
-                      <a
-                        href={databaseRuntimeSetup.d1.managementUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex h-8 items-center rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                      >
-                        Open D1
-                      </a>
-                    ) : null}
-                  </div>
-
-                  <div className="grid gap-2 md:grid-cols-4">
-                    <div className="rounded-lg border border-zinc-300 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-800/45">
-                      <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                        Runtime
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                        {databaseRuntimeSetup?.runtime === "d1"
-                          ? "Cloudflare D1"
-                          : "Unknown"}
-                      </p>
-                      <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                        Updated:{" "}
-                        {formatDateTime(databaseRuntimeSetup?.updatedAt ?? null)}
-                      </p>
-                    </div>
-
-                    <div className="rounded-lg border border-zinc-300 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-800/45">
-                      <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                        Database Name
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                        {databaseRuntimeSetup?.d1.databaseName ?? "Missing"}
-                      </p>
-                      <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                        ID: {databaseRuntimeSetup?.d1.databaseId ?? "Missing"}
-                      </p>
-                    </div>
-
-                    <div className="rounded-lg border border-zinc-300 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-800/45">
-                      <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                        Account
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                        {databaseRuntimeSetup?.d1.accountId
-                          ? "Configured"
-                          : "Missing"}
-                      </p>
-                      <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                        {databaseRuntimeSetup?.d1.accountId ?? "No account"}
-                      </p>
-                    </div>
-
-                    <div className="rounded-lg border border-zinc-300 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-800/45">
-                      <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                        Last Import
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                        {formatDateTime(
-                          databaseRuntimeSetup?.d1.lastImportedAt ?? null,
-                        ) || "Never"}
-                      </p>
-                      <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                        Source:{" "}
-                        {databaseRuntimeSetup?.d1.lastImportSource
-                          ? databaseRuntimeSetup.d1.lastImportSource === "local"
-                            ? "Legacy local PostgreSQL"
-                            : databaseRuntimeSetup.d1.lastImportSource === "live"
-                              ? "Legacy live PostgreSQL"
-                              : databaseRuntimeSetup.d1.lastImportSource
-                          : "Current D1"}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="hidden mt-3 grid gap-2 lg:grid-cols-2">
-                    {([databaseRuntimeSetup?.local, databaseRuntimeSetup?.live]
-                      .filter(Boolean) as AdminDatabaseRuntimeEndpoint[]).map(
-                      (entry) => (
-                        <div
-                          key={`database-runtime-endpoint-${entry.target}`}
-                          className="rounded-lg border border-zinc-300 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-800/45"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
-                              {entry.label}
-                            </p>
-                            <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                              {entry.envName}
-                            </span>
-                          </div>
-                          <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-300">
-                            Host: {entry.host ?? "Not configured"}
-                          </p>
-                          <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">
-                            Database: {entry.database ?? "Not configured"}
-                          </p>
-                          <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">
-                            Port: {entry.port ?? "Default"}
-                            {entry.ssl === null
-                              ? ""
-                              : ` · SSL ${entry.ssl ? "on" : "off"}`}
-                          </p>
-                        </div>
-                      ),
-                    )}
-                  </div>
-
-                  <div className="hidden mt-3 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void onSwitchDatabaseRuntime("live")}
-                      disabled={
-                        isSwitchingDatabaseRuntime ||
-                        !databaseRuntimeSetup?.live.configured
-                      }
-                      className="h-8 rounded-md bg-indigo-600 px-3 text-xs font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {isSwitchingDatabaseRuntime &&
-                      databaseRuntimeSetup?.effectiveTarget === "live"
-                        ? "Switching..."
-                        : "Use Live DB"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void onSwitchDatabaseRuntime("local")}
-                      disabled={
-                        isSwitchingDatabaseRuntime ||
-                        !databaseRuntimeSetup?.local.configured
-                      }
-                      className="h-8 rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                    >
-                      {isSwitchingDatabaseRuntime &&
-                      databaseRuntimeSetup?.effectiveTarget === "local"
-                        ? "Switching..."
-                        : "Use Local DB"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void onSyncDatabaseD1()}
-                      disabled={
-                        isSyncingDatabaseD1 ||
-                        !databaseRuntimeSetup?.d1.databaseName
-                      }
-                      className="h-8 rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                    >
-                      {isSyncingDatabaseD1 ? "Syncing D1..." : "Sync Current DB to D1"}
-                    </button>
-                  </div>
-
-                  {isLoadingDatabaseRuntime ? (
-                    <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
-                      Loading D1 runtime details...
-                    </p>
-                  ) : null}
-                  {databaseRuntimeError ? (
-                    <p className="mt-3 text-xs text-rose-500">
-                      {databaseRuntimeError}
-                    </p>
-                  ) : null}
-                  {databaseRuntimeSuccess ? (
-                    <p className="mt-3 text-xs text-emerald-500">
-                      {databaseRuntimeSuccess}
-                    </p>
-                  ) : null}
-                  <p className="mt-3 text-[11px] text-zinc-500 dark:text-zinc-400">
-                    The live app now uses Cloudflare D1 directly.
-                    There is no PostgreSQL runtime switch here anymore.
-                  </p>
-                </div>
-
-                <div className="mb-4 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                        Cloudflare D1 Live Database
-                      </p>
-                      <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                        Save the live D1 target used by the app and admin tools.
-                      </p>
-                    </div>
-                    <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                      Last import:{" "}
-                      {formatDateTime(
-                        databaseRuntimeSetup?.d1.lastImportedAt ?? null,
-                      )}
-                    </span>
-                  </div>
-
-                  <div className="grid gap-2 md:grid-cols-2">
-                    <input
-                      type="text"
-                      value={databaseD1AccountIdDraft}
-                      onChange={(event) =>
-                        setDatabaseD1AccountIdDraft(event.target.value)
-                      }
-                      placeholder="Cloudflare Account ID"
-                      className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
-                    />
-                    <input
-                      type="text"
-                      value={databaseD1DatabaseIdDraft}
-                      onChange={(event) =>
-                        setDatabaseD1DatabaseIdDraft(event.target.value)
-                      }
-                      placeholder="D1 Database ID"
-                      className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
-                    />
-                    <input
-                      type="text"
-                      value={databaseD1DatabaseNameDraft}
-                      onChange={(event) =>
-                        setDatabaseD1DatabaseNameDraft(event.target.value)
-                      }
-                      placeholder="D1 Database Name"
-                      className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
-                    />
-                    <input
-                      type="url"
-                      value={databaseD1ManagementUrlDraft}
-                      onChange={(event) =>
-                        setDatabaseD1ManagementUrlDraft(event.target.value)
-                      }
-                      placeholder="D1 Dashboard URL"
-                      className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
-                    />
-                  </div>
-
-                  <div className="mt-3 grid gap-2 md:grid-cols-4">
-                    <div className="rounded-lg border border-zinc-300 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-800/45">
-                      <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                        Configured
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                        {databaseRuntimeSetup?.d1.configured ? "Yes" : "No"}
-                      </p>
-                    </div>
-                    <div className="rounded-lg border border-zinc-300 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-800/45">
-                      <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                        Last Source
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                        {databaseRuntimeSetup?.d1.lastImportSource
-                          ? databaseRuntimeSetup.d1.lastImportSource === "local"
-                            ? "Legacy local PostgreSQL"
-                            : databaseRuntimeSetup.d1.lastImportSource === "live"
-                              ? "Legacy live PostgreSQL"
-                              : databaseRuntimeSetup.d1.lastImportSource
-                          : "Current D1"}
-                      </p>
-                    </div>
-                    <div className="rounded-lg border border-zinc-300 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-800/45">
-                      <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                        Tables
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                        {databaseRuntimeSetup?.d1.lastImportTables ?? 0}
-                      </p>
-                    </div>
-                    <div className="rounded-lg border border-zinc-300 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-800/45">
-                      <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                        Rows Written
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                        {databaseRuntimeSetup?.d1.lastImportRowsWritten ?? 0}
-                      </p>
-                    </div>
-                  </div>
-
-                  {databaseRuntimeSetup?.d1.lastImportNote ? (
-                    <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
-                      {databaseRuntimeSetup.d1.lastImportNote}
-                    </p>
-                  ) : null}
-
-                  <div className="mt-3 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => void onSaveDatabaseRuntimeSetup()}
-                      disabled={isSavingDatabaseRuntime}
-                      className="h-9 rounded-md bg-indigo-600 px-3 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {isSavingDatabaseRuntime ? "Saving..." : "Save D1 Target"}
-                    </button>
-                  </div>
-                </div>
-
                 <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                  <p className="mb-2 text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                    Database Service
-                  </p>
+                  <p className="mb-2 text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Database Service</p>
                   <div className="grid gap-2 md:grid-cols-2">
                     <input
                       type="text"
                       value={databaseServiceNameDraft}
-                      onChange={(event) =>
-                        setDatabaseServiceNameDraft(event.target.value)
-                      }
+                      onChange={(event) => setDatabaseServiceNameDraft(event.target.value)}
                       placeholder="Database Service"
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                     />
                     <input
                       type="text"
                       value={databaseHostNameDraft}
-                      onChange={(event) =>
-                        setDatabaseHostNameDraft(event.target.value)
-                      }
+                      onChange={(event) => setDatabaseHostNameDraft(event.target.value)}
                       placeholder="Host Name"
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                     />
                     <input
                       type="url"
                       value={databaseHostUrlDraft}
-                      onChange={(event) =>
-                        setDatabaseHostUrlDraft(event.target.value)
-                      }
+                      onChange={(event) => setDatabaseHostUrlDraft(event.target.value)}
                       placeholder="Host URL (https://...)"
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                     />
                     <input
                       type="text"
                       value={databaseLoginDraft}
-                      onChange={(event) =>
-                        setDatabaseLoginDraft(event.target.value)
-                      }
+                      onChange={(event) => setDatabaseLoginDraft(event.target.value)}
                       placeholder="Login"
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                     />
                     <input
                       type="password"
                       value={databasePasswordDraft}
-                      onChange={(event) =>
-                        setDatabasePasswordDraft(event.target.value)
-                      }
+                      onChange={(event) => setDatabasePasswordDraft(event.target.value)}
                       placeholder="Password"
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                     />
                     <input
                       type="text"
                       value={databaseCostDraft}
-                      onChange={(event) =>
-                        setDatabaseCostDraft(event.target.value)
-                      }
+                      onChange={(event) => setDatabaseCostDraft(event.target.value)}
                       placeholder="Cost"
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                     />
@@ -8680,35 +6735,21 @@ export const InAccordAdminModal = () => {
                       disabled={isSavingSiteUrlSetup}
                       className="h-9 rounded-md bg-indigo-600 px-3 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {isSavingSiteUrlSetup
-                        ? "Saving..."
-                        : "Save Database Info"}
+                      {isSavingSiteUrlSetup ? "Saving..." : "Save Database Info"}
                     </button>
                   </div>
                 </div>
 
                 {isLoadingSiteUrlSetup ? (
-                  <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
-                    Loading database setup...
-                  </p>
+                  <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">Loading database setup...</p>
                 ) : null}
-                {siteUrlError ? (
-                  <p className="mt-3 text-xs text-rose-500">{siteUrlError}</p>
-                ) : null}
-                {siteUrlSuccess ? (
-                  <p className="mt-3 text-xs text-emerald-500">
-                    {siteUrlSuccess}
-                  </p>
-                ) : null}
+                {siteUrlError ? <p className="mt-3 text-xs text-rose-500">{siteUrlError}</p> : null}
+                {siteUrlSuccess ? <p className="mt-3 text-xs text-emerald-500">{siteUrlSuccess}</p> : null}
 
                 <div className="mt-4 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                      Database Manager
-                    </p>
-                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                      Preview limit: 100 rows
-                    </p>
+                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Database Manager</p>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Preview limit: 100 rows</p>
                   </div>
 
                   <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
@@ -8731,9 +6772,7 @@ export const InAccordAdminModal = () => {
 
                     <button
                       type="button"
-                      onClick={() =>
-                        void loadDatabaseManager(selectedDatabaseManagerTable)
-                      }
+                      onClick={() => void loadDatabaseManager(selectedDatabaseManagerTable)}
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
                     >
                       Refresh Table
@@ -8741,28 +6780,18 @@ export const InAccordAdminModal = () => {
                   </div>
 
                   {isLoadingDatabaseManager ? (
-                    <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
-                      Loading database manager...
-                    </p>
+                    <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">Loading database manager...</p>
                   ) : null}
-                  {databaseManagerError ? (
-                    <p className="mt-3 text-xs text-rose-500">
-                      {databaseManagerError}
-                    </p>
-                  ) : null}
+                  {databaseManagerError ? <p className="mt-3 text-xs text-rose-500">{databaseManagerError}</p> : null}
 
-                  {selectedDatabaseManagerTable &&
-                  databaseManagerColumns.length > 0 ? (
+                  {selectedDatabaseManagerTable && databaseManagerColumns.length > 0 ? (
                     <div className="mt-3 overflow-hidden rounded-lg border border-zinc-300 dark:border-zinc-700">
                       <div className="overflow-x-auto">
                         <table className="min-w-full border-collapse text-left text-xs">
                           <thead className="bg-zinc-200/80 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
                             <tr>
                               {databaseManagerColumns.map((column) => (
-                                <th
-                                  key={`${selectedDatabaseManagerTable}-head-${column}`}
-                                  className="px-2 py-2 font-semibold uppercase tracking-[0.05em]"
-                                >
+                                <th key={`${selectedDatabaseManagerTable}-head-${column}`} className="px-2 py-2 font-semibold uppercase tracking-[0.05em]">
                                   {column}
                                 </th>
                               ))}
@@ -8771,10 +6800,7 @@ export const InAccordAdminModal = () => {
                           <tbody>
                             {databaseManagerRows.length === 0 ? (
                               <tr>
-                                <td
-                                  className="px-2 py-3 text-zinc-500 dark:text-zinc-400"
-                                  colSpan={databaseManagerColumns.length}
-                                >
+                                <td className="px-2 py-3 text-zinc-500 dark:text-zinc-400" colSpan={databaseManagerColumns.length}>
                                   No rows found.
                                 </td>
                               </tr>
@@ -8782,11 +6808,7 @@ export const InAccordAdminModal = () => {
                               databaseManagerRows.map((row, rowIndex) => (
                                 <tr
                                   key={`${selectedDatabaseManagerTable}-row-${rowIndex}`}
-                                  className={
-                                    rowIndex % 2 === 0
-                                      ? "bg-white/80 dark:bg-zinc-950/35"
-                                      : "bg-zinc-100/70 dark:bg-zinc-900/35"
-                                  }
+                                  className={rowIndex % 2 === 0 ? "bg-white/80 dark:bg-zinc-950/35" : "bg-zinc-100/70 dark:bg-zinc-900/35"}
                                 >
                                   {databaseManagerColumns.map((column) => {
                                     const value = row[column];
@@ -8826,9 +6848,7 @@ export const InAccordAdminModal = () => {
             {activeSection === "cloudflareManagement" && (
               <div className="rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                    Cloudflare Management
-                  </p>
+                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Cloudflare Management</p>
                   <button
                     type="button"
                     onClick={() => void loadCloudflare()}
@@ -8839,29 +6859,19 @@ export const InAccordAdminModal = () => {
                 </div>
 
                 <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                  <p className="mb-2 text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                    Connection Setup
-                  </p>
+                  <p className="mb-2 text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Connection Setup</p>
                   <div className="grid gap-2 md:grid-cols-2">
                     <input
                       type="password"
                       value={cloudflareApiTokenDraft}
-                      onChange={(event) =>
-                        setCloudflareApiTokenDraft(event.target.value)
-                      }
-                      placeholder={
-                        cloudflareSetup?.hasApiToken
-                          ? "Cloudflare API Token (leave blank to keep current)"
-                          : "Cloudflare API Token"
-                      }
+                      onChange={(event) => setCloudflareApiTokenDraft(event.target.value)}
+                      placeholder={cloudflareSetup?.hasApiToken ? "Cloudflare API Token (leave blank to keep current)" : "Cloudflare API Token"}
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                     />
                     <input
                       type="text"
                       value={cloudflareAccountIdDraft}
-                      onChange={(event) =>
-                        setCloudflareAccountIdDraft(event.target.value)
-                      }
+                      onChange={(event) => setCloudflareAccountIdDraft(event.target.value)}
                       placeholder="Cloudflare Account ID"
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                     />
@@ -8869,10 +6879,7 @@ export const InAccordAdminModal = () => {
 
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                     <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                      Token:{" "}
-                      {cloudflareSetup?.hasApiToken
-                        ? cloudflareSetup.apiTokenPreview
-                        : "Not configured"}
+                      Token: {cloudflareSetup?.hasApiToken ? cloudflareSetup.apiTokenPreview : "Not configured"}
                     </p>
                     <button
                       type="button"
@@ -8886,18 +6893,14 @@ export const InAccordAdminModal = () => {
                 </div>
 
                 <div className="mt-4 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                  <p className="mb-2 text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                    Zone Selection
-                  </p>
+                  <p className="mb-2 text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Zone Selection</p>
 
                   <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
                     <select
                       value={cloudflareSelectedZoneId}
                       onChange={(event) => {
                         const nextId = event.target.value;
-                        const zone = cloudflareZones.find(
-                          (entry) => entry.id === nextId,
-                        );
+                        const zone = cloudflareZones.find((entry) => entry.id === nextId);
                         setCloudflareSelectedZoneId(nextId);
                         setCloudflareSelectedZoneName(zone?.name ?? "");
                       }}
@@ -8906,8 +6909,7 @@ export const InAccordAdminModal = () => {
                       <option value="">Select zone</option>
                       {cloudflareZones.map((zone) => (
                         <option key={zone.id} value={zone.id}>
-                          {zone.name}
-                          {zone.status ? ` (${zone.status})` : ""}
+                          {zone.name}{zone.status ? ` (${zone.status})` : ""}
                         </option>
                       ))}
                     </select>
@@ -8924,9 +6926,7 @@ export const InAccordAdminModal = () => {
                     <button
                       type="button"
                       onClick={() => void onPurgeCloudflareCache()}
-                      disabled={
-                        isCloudflareActionPending || !cloudflareSelectedZoneId
-                      }
+                      disabled={isCloudflareActionPending || !cloudflareSelectedZoneId}
                       className="h-9 rounded-md border border-amber-400/50 bg-amber-500/15 px-3 text-sm font-medium text-amber-300 transition hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Purge Cache
@@ -8934,30 +6934,21 @@ export const InAccordAdminModal = () => {
                   </div>
 
                   <p className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
-                    Selected:{" "}
-                    {(cloudflareSetup?.zoneName ??
-                      cloudflareSelectedZoneName) ||
-                      "None"}{" "}
-                    · Updated:{" "}
-                    {formatDateTime(cloudflareSetup?.updatedAt ?? null)}
+                    Selected: {(cloudflareSetup?.zoneName ?? cloudflareSelectedZoneName) || "None"} · Updated: {formatDateTime(cloudflareSetup?.updatedAt ?? null)}
                   </p>
 
                   <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
                     <input
                       type="url"
                       value={cloudflarePurgeUrlDraft}
-                      onChange={(event) =>
-                        setCloudflarePurgeUrlDraft(event.target.value)
-                      }
+                      onChange={(event) => setCloudflarePurgeUrlDraft(event.target.value)}
                       placeholder="https://yourdomain.com/path/to/purge"
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                     />
                     <button
                       type="button"
                       onClick={() => void onPurgeCloudflareUrl()}
-                      disabled={
-                        isCloudflareActionPending || !cloudflareSelectedZoneId
-                      }
+                      disabled={isCloudflareActionPending || !cloudflareSelectedZoneId}
                       className="h-9 rounded-md border border-amber-400/50 bg-amber-500/15 px-3 text-sm font-medium text-amber-300 transition hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Purge URL
@@ -8966,50 +6957,36 @@ export const InAccordAdminModal = () => {
                 </div>
 
                 <div className="mt-4 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                  <p className="mb-2 text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                    DNS Manager
-                  </p>
+                  <p className="mb-2 text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">DNS Manager</p>
 
                   <div className="grid gap-2 md:grid-cols-6">
                     <select
                       value={cloudflareDnsTypeDraft}
-                      onChange={(event) =>
-                        setCloudflareDnsTypeDraft(event.target.value)
-                      }
+                      onChange={(event) => setCloudflareDnsTypeDraft(event.target.value)}
                       className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                     >
-                      {["A", "AAAA", "CNAME", "TXT", "MX", "NS"].map(
-                        (dnsType) => (
-                          <option key={dnsType} value={dnsType}>
-                            {dnsType}
-                          </option>
-                        ),
-                      )}
+                      {["A", "AAAA", "CNAME", "TXT", "MX", "NS"].map((dnsType) => (
+                        <option key={dnsType} value={dnsType}>{dnsType}</option>
+                      ))}
                     </select>
                     <input
                       type="text"
                       value={cloudflareDnsNameDraft}
-                      onChange={(event) =>
-                        setCloudflareDnsNameDraft(event.target.value)
-                      }
+                      onChange={(event) => setCloudflareDnsNameDraft(event.target.value)}
                       placeholder="Name"
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400 md:col-span-2"
                     />
                     <input
                       type="text"
                       value={cloudflareDnsContentDraft}
-                      onChange={(event) =>
-                        setCloudflareDnsContentDraft(event.target.value)
-                      }
+                      onChange={(event) => setCloudflareDnsContentDraft(event.target.value)}
                       placeholder="Content"
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400 md:col-span-2"
                     />
                     <input
                       type="number"
                       value={cloudflareDnsTtlDraft}
-                      onChange={(event) =>
-                        setCloudflareDnsTtlDraft(event.target.value)
-                      }
+                      onChange={(event) => setCloudflareDnsTtlDraft(event.target.value)}
                       min={1}
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                     />
@@ -9020,9 +6997,7 @@ export const InAccordAdminModal = () => {
                       <input
                         type="checkbox"
                         checked={cloudflareDnsProxiedDraft}
-                        onChange={(event) =>
-                          setCloudflareDnsProxiedDraft(event.target.checked)
-                        }
+                        onChange={(event) => setCloudflareDnsProxiedDraft(event.target.checked)}
                       />
                       Proxied
                     </label>
@@ -9062,9 +7037,7 @@ export const InAccordAdminModal = () => {
                     </div>
                     <div className="max-h-72 overflow-y-auto bg-white/80 text-xs text-zinc-800 dark:bg-zinc-950/30 dark:text-zinc-200">
                       {cloudflareDnsRecords.length === 0 ? (
-                        <p className="px-3 py-3 text-zinc-500 dark:text-zinc-400">
-                          No DNS records loaded.
-                        </p>
+                        <p className="px-3 py-3 text-zinc-500 dark:text-zinc-400">No DNS records loaded.</p>
                       ) : (
                         cloudflareDnsRecords.map((record, index) => (
                           <div
@@ -9073,16 +7046,12 @@ export const InAccordAdminModal = () => {
                               "grid grid-cols-[90px_1.2fr_1.2fr_90px_160px] items-center gap-2 px-3 py-2",
                               index % 2 === 0
                                 ? "bg-white/70 dark:bg-zinc-950/25"
-                                : "bg-zinc-100/70 dark:bg-zinc-900/35",
+                                : "bg-zinc-100/70 dark:bg-zinc-900/35"
                             )}
                           >
                             <p className="font-semibold">{record.type}</p>
-                            <p className="truncate" title={record.name}>
-                              {record.name}
-                            </p>
-                            <p className="truncate" title={record.content}>
-                              {record.content}
-                            </p>
+                            <p className="truncate" title={record.name}>{record.name}</p>
+                            <p className="truncate" title={record.content}>{record.content}</p>
                             <p>{record.ttl ?? "auto"}</p>
                             <div className="flex items-center gap-1.5">
                               <button
@@ -9095,17 +7064,11 @@ export const InAccordAdminModal = () => {
                               </button>
                               <button
                                 type="button"
-                                onClick={() =>
-                                  void onDeleteCloudflareDns(record)
-                                }
-                                disabled={
-                                  cloudflareActionPendingRecordId === record.id
-                                }
+                                onClick={() => void onDeleteCloudflareDns(record)}
+                                disabled={cloudflareActionPendingRecordId === record.id}
                                 className="h-7 rounded-md border border-rose-500/35 bg-rose-500/15 px-2 text-[10px] font-semibold text-rose-200 transition hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60"
                               >
-                                {cloudflareActionPendingRecordId === record.id
-                                  ? "Deleting..."
-                                  : "Delete"}
+                                {cloudflareActionPendingRecordId === record.id ? "Deleting..." : "Delete"}
                               </button>
                             </div>
                           </div>
@@ -9115,30 +7078,16 @@ export const InAccordAdminModal = () => {
                   </div>
                 </div>
 
-                {isLoadingCloudflare ? (
-                  <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
-                    Loading Cloudflare manager...
-                  </p>
-                ) : null}
-                {cloudflareError ? (
-                  <p className="mt-3 text-xs text-rose-500">
-                    {cloudflareError}
-                  </p>
-                ) : null}
-                {cloudflareSuccess ? (
-                  <p className="mt-3 text-xs text-emerald-500">
-                    {cloudflareSuccess}
-                  </p>
-                ) : null}
+                {isLoadingCloudflare ? <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">Loading Cloudflare manager...</p> : null}
+                {cloudflareError ? <p className="mt-3 text-xs text-rose-500">{cloudflareError}</p> : null}
+                {cloudflareSuccess ? <p className="mt-3 text-xs text-emerald-500">{cloudflareSuccess}</p> : null}
               </div>
             )}
 
             {activeSection === "servers" && (
               <div className="rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                    Servers
-                  </p>
+                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Servers</p>
                   <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-xs font-medium text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200">
                     {filteredServers.length}
                   </span>
@@ -9155,9 +7104,7 @@ export const InAccordAdminModal = () => {
 
                   <select
                     value={serverOwnerFilter}
-                    onChange={(event) =>
-                      setServerOwnerFilter(event.target.value)
-                    }
+                    onChange={(event) => setServerOwnerFilter(event.target.value)}
                     className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                   >
                     {ownerOptions.map((owner) => (
@@ -9181,42 +7128,31 @@ export const InAccordAdminModal = () => {
                 </div>
 
                 <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                    Rows
-                  </span>
-                  {(["COMPACT", "COMFORTABLE", "SPACIOUS"] as const).map(
-                    (density) => (
-                      <button
-                        key={`servers-row-density-${density}`}
-                        type="button"
-                        onClick={() => setListRowDensity(density)}
-                        className={cn(
-                          "h-7 rounded-md border px-2.5 text-[11px] font-semibold transition",
-                          listRowDensity === density
-                            ? "border-indigo-500/45 bg-indigo-500/15 text-indigo-700 dark:text-indigo-200"
-                            : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800",
-                        )}
-                      >
-                        {density === "COMPACT"
-                          ? "Compact"
-                          : density === "SPACIOUS"
-                            ? "Spacious"
-                            : "Comfortable"}
-                      </button>
-                    ),
-                  )}
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Rows</span>
+                  {(["COMPACT", "COMFORTABLE", "SPACIOUS"] as const).map((density) => (
+                    <button
+                      key={`servers-row-density-${density}`}
+                      type="button"
+                      onClick={() => setListRowDensity(density)}
+                      className={cn(
+                        "h-7 rounded-md border px-2.5 text-[11px] font-semibold transition",
+                        listRowDensity === density
+                          ? "border-indigo-500/45 bg-indigo-500/15 text-indigo-700 dark:text-indigo-200"
+                          : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                      )}
+                    >
+                      {density === "COMPACT" ? "Compact" : density === "SPACIOUS" ? "Spacious" : "Comfortable"}
+                    </button>
+                  ))}
                 </div>
 
                 {isLoadingServers ? (
-                  <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                    Loading servers...
-                  </p>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading servers...</p>
                 ) : serversError ? (
                   <p className="text-sm text-rose-500">{serversError}</p>
                 ) : filteredServers.length === 0 ? (
                   <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                    No servers found
-                    {hasActiveServerFilters ? " for the current filters" : ""}.
+                    No servers found{hasActiveServerFilters ? " for the current filters" : ""}.
                   </p>
                 ) : (
                   <div className="overflow-hidden rounded-lg border border-zinc-300 dark:border-zinc-700">
@@ -9224,18 +7160,14 @@ export const InAccordAdminModal = () => {
                       <div className="min-w-max">
                         <div
                           className="grid gap-2 bg-zinc-200/80 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
-                          style={{
-                            gridTemplateColumns: serverGridTemplateColumns,
-                          }}
+                          style={{ gridTemplateColumns: serverGridTemplateColumns }}
                         >
                           <div className="relative pr-2">
                             <p>server_id</p>
                             <button
                               type="button"
                               aria-label="Resize server_id column"
-                              onMouseDown={(event) =>
-                                startServerColumnResize(0, event)
-                              }
+                              onMouseDown={(event) => startServerColumnResize(0, event)}
                               className="absolute -right-1 top-0 h-full w-2 cursor-col-resize"
                             />
                           </div>
@@ -9244,9 +7176,7 @@ export const InAccordAdminModal = () => {
                             <button
                               type="button"
                               aria-label="Resize name column"
-                              onMouseDown={(event) =>
-                                startServerColumnResize(1, event)
-                              }
+                              onMouseDown={(event) => startServerColumnResize(1, event)}
                               className="absolute -right-1 top-0 h-full w-2 cursor-col-resize"
                             />
                           </div>
@@ -9255,9 +7185,7 @@ export const InAccordAdminModal = () => {
                             <button
                               type="button"
                               aria-label="Resize owner column"
-                              onMouseDown={(event) =>
-                                startServerColumnResize(2, event)
-                              }
+                              onMouseDown={(event) => startServerColumnResize(2, event)}
                               className="absolute -right-1 top-0 h-full w-2 cursor-col-resize"
                             />
                           </div>
@@ -9266,9 +7194,7 @@ export const InAccordAdminModal = () => {
                             <button
                               type="button"
                               aria-label="Resize created_at column"
-                              onMouseDown={(event) =>
-                                startServerColumnResize(3, event)
-                              }
+                              onMouseDown={(event) => startServerColumnResize(3, event)}
                               className="absolute -right-1 top-0 h-full w-2 cursor-col-resize"
                             />
                           </div>
@@ -9277,9 +7203,7 @@ export const InAccordAdminModal = () => {
                             <button
                               type="button"
                               aria-label="Resize members column"
-                              onMouseDown={(event) =>
-                                startServerColumnResize(4, event)
-                              }
+                              onMouseDown={(event) => startServerColumnResize(4, event)}
                               className="absolute -right-1 top-0 h-full w-2 cursor-col-resize"
                             />
                           </div>
@@ -9292,36 +7216,19 @@ export const InAccordAdminModal = () => {
                               key={serverItem.id}
                               className={cn(
                                 "grid gap-2 border-b border-zinc-200/80 bg-white/85 px-3 text-zinc-900 transition-colors hover:bg-indigo-50/70 last:border-b-0 dark:border-zinc-800 dark:bg-zinc-950/35 dark:text-zinc-100 dark:hover:bg-zinc-800/55",
-                                listRowDensityClass,
+                                listRowDensityClass
                               )}
-                              style={{
-                                gridTemplateColumns: serverGridTemplateColumns,
-                              }}
+                              style={{ gridTemplateColumns: serverGridTemplateColumns }}
                             >
                               <div className="flex min-w-0 items-center gap-2">
                                 <ServerProfilePopover server={serverItem} />
-                                <p
-                                  className="truncate text-[12pt] leading-none"
-                                  title={serverItem.id}
-                                >
-                                  {serverItem.id}
-                                </p>
+                                <p className="truncate text-[12pt] leading-none" title={serverItem.id}>{serverItem.id}</p>
                               </div>
-                              <p className="truncate" title={serverItem.name}>
-                                {serverItem.name}
-                              </p>
-                              <p
-                                className="truncate"
-                                title={`${serverItem.ownerName}${serverItem.ownerEmail ? ` (${serverItem.ownerEmail})` : ""}`}
-                              >
+                              <p className="truncate" title={serverItem.name}>{serverItem.name}</p>
+                              <p className="truncate" title={`${serverItem.ownerName}${serverItem.ownerEmail ? ` (${serverItem.ownerEmail})` : ""}`}>
                                 {serverItem.ownerName}
                               </p>
-                              <p
-                                className="truncate"
-                                title={formatDateTime(serverItem.createdAt)}
-                              >
-                                {formatDateTime(serverItem.createdAt)}
-                              </p>
+                              <p className="truncate" title={formatDateTime(serverItem.createdAt)}>{formatDateTime(serverItem.createdAt)}</p>
                               <p>{serverItem.memberCount}</p>
                               <p>{serverItem.channelCount}</p>
                             </div>
@@ -9337,9 +7244,7 @@ export const InAccordAdminModal = () => {
             {activeSection === "ourBoard" && (
               <div className="rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                    In-Aboard
-                  </p>
+                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">In-Aboard</p>
                   <button
                     type="button"
                     onClick={() => void loadOurBoard()}
@@ -9351,30 +7256,16 @@ export const InAccordAdminModal = () => {
 
                 <div className="mb-4 grid gap-3 sm:grid-cols-3">
                   <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                      Total Listings
-                    </p>
-                    <p className="mt-1 text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-                      {ourBoardSummary?.total ?? ourBoardEntries.length}
-                    </p>
+                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Total Listings</p>
+                    <p className="mt-1 text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{ourBoardSummary?.total ?? ourBoardEntries.length}</p>
                   </div>
                   <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                      Public
-                    </p>
-                    <p className="mt-1 text-2xl font-semibold text-emerald-600 dark:text-emerald-300">
-                      {ourBoardSummary?.listed ??
-                        ourBoardEntries.filter((entry) => entry.listed).length}
-                    </p>
+                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Public</p>
+                    <p className="mt-1 text-2xl font-semibold text-emerald-600 dark:text-emerald-300">{ourBoardSummary?.listed ?? ourBoardEntries.filter((entry) => entry.listed).length}</p>
                   </div>
                   <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                      Hidden
-                    </p>
-                    <p className="mt-1 text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-                      {ourBoardSummary?.unlisted ??
-                        ourBoardEntries.filter((entry) => !entry.listed).length}
-                    </p>
+                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Hidden</p>
+                    <p className="mt-1 text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{ourBoardSummary?.unlisted ?? ourBoardEntries.filter((entry) => !entry.listed).length}</p>
                   </div>
                 </div>
 
@@ -9388,11 +7279,7 @@ export const InAccordAdminModal = () => {
                   />
                   <select
                     value={ourBoardListedFilter}
-                    onChange={(event) =>
-                      setOurBoardListedFilter(
-                        event.target.value as "ALL" | "LISTED" | "UNLISTED",
-                      )
-                    }
+                    onChange={(event) => setOurBoardListedFilter(event.target.value as "ALL" | "LISTED" | "UNLISTED")}
                     className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                   >
                     <option value="ALL">All listings</option>
@@ -9413,15 +7300,11 @@ export const InAccordAdminModal = () => {
                 </div>
 
                 {isLoadingOurBoard ? (
-                  <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                    Loading In-Aboard entries...
-                  </p>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading In-Aboard entries...</p>
                 ) : ourBoardError ? (
                   <p className="text-sm text-rose-500">{ourBoardError}</p>
                 ) : filteredOurBoardEntries.length === 0 ? (
-                  <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                    No In-Aboard entries found for current filters.
-                  </p>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300">No In-Aboard entries found for current filters.</p>
                 ) : (
                   <div className="overflow-hidden rounded-lg border border-zinc-300 dark:border-zinc-700">
                     <div className="grid grid-cols-[1.1fr_1fr_0.7fr_0.7fr_1fr_1fr] gap-2 bg-zinc-200/80 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
@@ -9441,54 +7324,27 @@ export const InAccordAdminModal = () => {
                             listRowDensityClass,
                             index % 2 === 0
                               ? "bg-white/70 dark:bg-zinc-950/25"
-                              : "bg-zinc-100/70 dark:bg-zinc-900/35",
+                              : "bg-zinc-100/70 dark:bg-zinc-900/35"
                           )}
                         >
                           <div className="min-w-0">
-                            <p
-                              className="truncate font-semibold"
-                              title={entry.serverName}
-                            >
-                              {entry.serverName}
-                            </p>
-                            <p
-                              className="truncate font-mono text-[10px] text-zinc-500 dark:text-zinc-400"
-                              title={entry.serverId}
-                            >
-                              {entry.serverId}
-                            </p>
+                            <p className="truncate font-semibold" title={entry.serverName}>{entry.serverName}</p>
+                            <p className="truncate font-mono text-[10px] text-zinc-500 dark:text-zinc-400" title={entry.serverId}>{entry.serverId}</p>
                           </div>
-                          <p
-                            className="truncate"
-                            title={entry.ownerDisplayName}
-                          >
-                            {entry.ownerDisplayName}
-                          </p>
+                          <p className="truncate" title={entry.ownerDisplayName}>{entry.ownerDisplayName}</p>
                           <p>
-                            <span
-                              className={cn(
-                                "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]",
-                                entry.listed
-                                  ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-700 dark:text-emerald-200"
-                                  : "border-zinc-500/35 bg-zinc-500/15 text-zinc-600 dark:text-zinc-300",
-                              )}
-                            >
+                            <span className={cn(
+                              "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]",
+                              entry.listed
+                                ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-700 dark:text-emerald-200"
+                                : "border-zinc-500/35 bg-zinc-500/15 text-zinc-600 dark:text-zinc-300"
+                            )}>
                               {entry.listed ? "Public" : "Hidden"}
                             </span>
                           </p>
                           <p>{entry.bumpCount}</p>
-                          <p
-                            className="truncate"
-                            title={entry.bumpChannelId ?? "Any channel"}
-                          >
-                            {entry.bumpChannelId || "Any channel"}
-                          </p>
-                          <p
-                            className="truncate"
-                            title={formatDateTime(entry.updatedAt)}
-                          >
-                            {formatDateTime(entry.updatedAt)}
-                          </p>
+                          <p className="truncate" title={entry.bumpChannelId ?? "Any channel"}>{entry.bumpChannelId || "Any channel"}</p>
+                          <p className="truncate" title={formatDateTime(entry.updatedAt)}>{formatDateTime(entry.updatedAt)}</p>
                         </div>
                       ))}
                     </div>
@@ -9500,17 +7356,15 @@ export const InAccordAdminModal = () => {
             {activeSection === "serverTags" && (
               <div className="flex h-full min-h-0 flex-col rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                    Server Tags
-                  </p>
+                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Server Tags</p>
                   <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-xs font-medium text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200">
                     {filteredServerTags.length}
                   </span>
                 </div>
 
                 <p className="mb-4 text-xs text-zinc-600 dark:text-zinc-300">
-                  Configure the 3–4 letter tag and icon for any server. Removing
-                  a tag clears selected profile tags for that server.
+                  Configure the 3–4 letter tag and icon for any server. Removing a tag clears selected profile tags for that
+                  server.
                 </p>
 
                 <div className="mb-4 grid gap-2 sm:grid-cols-[1fr_220px_auto]">
@@ -9524,9 +7378,7 @@ export const InAccordAdminModal = () => {
 
                   <select
                     value={serverTagOwnerFilter}
-                    onChange={(event) =>
-                      setServerTagOwnerFilter(event.target.value)
-                    }
+                    onChange={(event) => setServerTagOwnerFilter(event.target.value)}
                     className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                   >
                     {serverTagOwnerOptions.map((owner) => (
@@ -9550,174 +7402,131 @@ export const InAccordAdminModal = () => {
                 </div>
 
                 <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                    Rows
-                  </span>
-                  {(["COMPACT", "COMFORTABLE", "SPACIOUS"] as const).map(
-                    (density) => (
-                      <button
-                        key={`server-tags-row-density-${density}`}
-                        type="button"
-                        onClick={() => setListRowDensity(density)}
-                        className={cn(
-                          "h-7 rounded-md border px-2.5 text-[11px] font-semibold transition",
-                          listRowDensity === density
-                            ? "border-indigo-500/45 bg-indigo-500/15 text-indigo-700 dark:text-indigo-200"
-                            : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800",
-                        )}
-                      >
-                        {density === "COMPACT"
-                          ? "Compact"
-                          : density === "SPACIOUS"
-                            ? "Spacious"
-                            : "Comfortable"}
-                      </button>
-                    ),
-                  )}
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Rows</span>
+                  {(["COMPACT", "COMFORTABLE", "SPACIOUS"] as const).map((density) => (
+                    <button
+                      key={`server-tags-row-density-${density}`}
+                      type="button"
+                      onClick={() => setListRowDensity(density)}
+                      className={cn(
+                        "h-7 rounded-md border px-2.5 text-[11px] font-semibold transition",
+                        listRowDensity === density
+                          ? "border-indigo-500/45 bg-indigo-500/15 text-indigo-700 dark:text-indigo-200"
+                          : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                      )}
+                    >
+                      {density === "COMPACT" ? "Compact" : density === "SPACIOUS" ? "Spacious" : "Comfortable"}
+                    </button>
+                  ))}
                 </div>
 
                 {serverTagsActionError ? (
-                  <p className="mb-3 text-xs text-rose-500">
-                    {serverTagsActionError}
-                  </p>
+                  <p className="mb-3 text-xs text-rose-500">{serverTagsActionError}</p>
                 ) : null}
                 {serverTagsActionSuccess ? (
-                  <p className="mb-3 text-xs text-emerald-500">
-                    {serverTagsActionSuccess}
-                  </p>
+                  <p className="mb-3 text-xs text-emerald-500">{serverTagsActionSuccess}</p>
                 ) : null}
 
                 <div className="min-h-0 flex-1">
                   {isLoadingServerTags ? (
-                    <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                      Loading server tags...
-                    </p>
+                    <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading server tags...</p>
                   ) : serverTagsError ? (
                     <p className="text-sm text-rose-500">{serverTagsError}</p>
                   ) : filteredServerTags.length === 0 ? (
                     <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                      No server tags found
-                      {hasActiveServerTagFilters
-                        ? " for the current filters"
-                        : ""}
-                      .
+                      No server tags found{hasActiveServerTagFilters ? " for the current filters" : ""}.
                     </p>
                   ) : (
                     <div className="h-full min-h-0 space-y-2 overflow-y-auto pr-1">
                       {filteredServerTags.map((item) => {
-                        const draft = serverTagDrafts[item.serverId] ?? {
-                          tagCode: item.tagCode ?? "",
-                          iconKey:
-                            item.iconKey ?? serverTagIconOptions[0]?.key ?? "",
-                        };
-                        const isSaving =
-                          savingServerTagServerId === item.serverId;
+                      const draft = serverTagDrafts[item.serverId] ?? {
+                        tagCode: item.tagCode ?? "",
+                        iconKey: item.iconKey ?? serverTagIconOptions[0]?.key ?? "",
+                      };
+                      const isSaving = savingServerTagServerId === item.serverId;
 
-                        return (
-                          <div
-                            key={item.serverId}
-                            className={cn(
-                              "rounded-lg border border-zinc-300 bg-white/85 dark:border-zinc-700 dark:bg-zinc-900/45",
-                              listCardDensityClass,
-                            )}
-                          >
-                            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                              <div>
-                                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                                  {item.serverName}
-                                </p>
-                                <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
-                                  {item.serverId}
-                                </p>
-                              </div>
-                              <div className="text-right text-xs text-zinc-600 dark:text-zinc-300">
-                                <p>{item.ownerName}</p>
-                                {item.ownerEmail ? (
-                                  <p>{item.ownerEmail}</p>
-                                ) : null}
-                              </div>
+                      return (
+                        <div
+                          key={item.serverId}
+                          className={cn(
+                            "rounded-lg border border-zinc-300 bg-white/85 dark:border-zinc-700 dark:bg-zinc-900/45",
+                            listCardDensityClass
+                          )}
+                        >
+                          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{item.serverName}</p>
+                              <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400">{item.serverId}</p>
                             </div>
+                            <div className="text-right text-xs text-zinc-600 dark:text-zinc-300">
+                              <p>{item.ownerName}</p>
+                              {item.ownerEmail ? <p>{item.ownerEmail}</p> : null}
+                            </div>
+                          </div>
 
-                            <div className="grid gap-2 md:grid-cols-[120px_1fr_auto]">
-                              <input
-                                type="text"
-                                value={draft.tagCode}
+                          <div className="grid gap-2 md:grid-cols-[120px_1fr_auto]">
+                            <input
+                              type="text"
+                              value={draft.tagCode}
+                              onChange={(event) =>
+                                setServerTagDraft(item.serverId, {
+                                  tagCode: event.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4),
+                                })
+                              }
+                              placeholder="TAG"
+                              maxLength={4}
+                              className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm font-semibold uppercase tracking-wider text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-400 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                            />
+
+                            <div className="flex items-center gap-2">
+                              <select
+                                value={draft.iconKey}
                                 onChange={(event) =>
                                   setServerTagDraft(item.serverId, {
-                                    tagCode: event.target.value
-                                      .toUpperCase()
-                                      .replace(/[^A-Z]/g, "")
-                                      .slice(0, 4),
+                                    iconKey: event.target.value,
                                   })
                                 }
-                                placeholder="TAG"
-                                maxLength={4}
-                                className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm font-semibold uppercase tracking-wider text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-400 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-                              />
+                                className="h-9 w-full rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                              >
+                                {serverTagIconOptions.map((option) => (
+                                  <option key={option.key} value={option.key}>
+                                    {option.emoji} {option.label}
+                                  </option>
+                                ))}
+                              </select>
 
-                              <div className="flex items-center gap-2">
-                                <select
-                                  value={draft.iconKey}
-                                  onChange={(event) =>
-                                    setServerTagDraft(item.serverId, {
-                                      iconKey: event.target.value,
-                                    })
-                                  }
-                                  className="h-9 w-full rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-                                >
-                                  {serverTagIconOptions.map((option) => (
-                                    <option key={option.key} value={option.key}>
-                                      {option.emoji} {option.label}
-                                    </option>
-                                  ))}
-                                </select>
-
-                                <span className="inline-flex h-9 min-w-18 items-center justify-center gap-1 rounded-md border border-zinc-300 bg-zinc-100 px-2 text-sm font-semibold dark:border-zinc-600 dark:bg-zinc-800">
-                                  {serverTagIconOptions.find(
-                                    (option) => option.key === draft.iconKey,
-                                  )?.emoji ?? "🏷️"}
-                                  {(
-                                    draft.tagCode ||
-                                    item.tagCode ||
-                                    "TAG"
-                                  ).slice(0, 4)}
-                                </span>
-                              </div>
-
-                              <div className="flex items-center justify-end gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    void onSaveServerTag(item.serverId)
-                                  }
-                                  disabled={isSaving}
-                                  className="h-9 rounded-md bg-indigo-600 px-3 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                  {isSaving ? "Saving..." : "Save"}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    void onSaveServerTag(item.serverId, true)
-                                  }
-                                  disabled={isSaving}
-                                  className="h-9 rounded-md border border-rose-300 bg-rose-50 px-3 text-sm font-medium text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-900/40"
-                                >
-                                  Remove
-                                </button>
-                              </div>
+                              <span className="inline-flex h-9 min-w-18 items-center justify-center gap-1 rounded-md border border-zinc-300 bg-zinc-100 px-2 text-sm font-semibold dark:border-zinc-600 dark:bg-zinc-800">
+                                {serverTagIconOptions.find((option) => option.key === draft.iconKey)?.emoji ?? "🏷️"}
+                                {(draft.tagCode || item.tagCode || "TAG").slice(0, 4)}
+                              </span>
                             </div>
 
-                            <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-300">
-                              Selected by{" "}
-                              <span className="font-semibold">
-                                {item.selectedProfileCount}
-                              </span>{" "}
-                              profile
-                              {item.selectedProfileCount === 1 ? "" : "s"}.
-                            </p>
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => void onSaveServerTag(item.serverId)}
+                                disabled={isSaving}
+                                className="h-9 rounded-md bg-indigo-600 px-3 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {isSaving ? "Saving..." : "Save"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void onSaveServerTag(item.serverId, true)}
+                                disabled={isSaving}
+                                className="h-9 rounded-md border border-rose-300 bg-rose-50 px-3 text-sm font-medium text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-900/40"
+                              >
+                                Remove
+                              </button>
+                            </div>
                           </div>
-                        );
+
+                          <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-300">
+                            Selected by <span className="font-semibold">{item.selectedProfileCount}</span> profile
+                            {item.selectedProfileCount === 1 ? "" : "s"}.
+                          </p>
+                        </div>
+                      );
                       })}
                     </div>
                   )}
@@ -9725,15 +7534,12 @@ export const InAccordAdminModal = () => {
               </div>
             )}
 
-            {(activeSection === "reported" ||
-              activeSection === "issuesBugs") && (
+            {(activeSection === "reported" || activeSection === "issuesBugs") && (
               <div className="rounded-xl border border-zinc-200 bg-zinc-100/65 p-5 dark:border-zinc-700 dark:bg-zinc-800/35">
                 <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-[13px] font-bold uppercase tracking-[0.08em] text-zinc-800 dark:text-zinc-100">
-                      {activeSection === "issuesBugs"
-                        ? "Issues & Bugs Queue"
-                        : "Reports Queue"}
+                      {activeSection === "issuesBugs" ? "Issues & Bugs Queue" : "Reports Queue"}
                     </p>
                     <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
                       Review, assign, and resolve incoming tickets.
@@ -9751,11 +7557,7 @@ export const InAccordAdminModal = () => {
                 <div className="mb-5 grid gap-2 rounded-lg border border-zinc-200/80 bg-white/65 p-3 dark:border-zinc-700/70 dark:bg-zinc-900/30 sm:grid-cols-[180px_180px_auto_auto]">
                   <select
                     value={reportStatusFilter}
-                    onChange={(event) =>
-                      setReportStatusFilter(
-                        event.target.value as typeof reportStatusFilter,
-                      )
-                    }
+                    onChange={(event) => setReportStatusFilter(event.target.value as typeof reportStatusFilter)}
                     className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                   >
                     <option value="ALL">All statuses</option>
@@ -9767,16 +7569,8 @@ export const InAccordAdminModal = () => {
 
                   {activeSection === "reported" ? (
                     <select
-                      value={
-                        reportTargetTypeFilter === "BUG"
-                          ? "ALL"
-                          : reportTargetTypeFilter
-                      }
-                      onChange={(event) =>
-                        setReportTargetTypeFilter(
-                          event.target.value as typeof reportTargetTypeFilter,
-                        )
-                      }
+                      value={reportTargetTypeFilter === "BUG" ? "ALL" : reportTargetTypeFilter}
+                      onChange={(event) => setReportTargetTypeFilter(event.target.value as typeof reportTargetTypeFilter)}
                       className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                     >
                       <option value="ALL">All report targets</option>
@@ -9808,9 +7602,7 @@ export const InAccordAdminModal = () => {
                     type="button"
                     onClick={() => {
                       setReportStatusFilter("ALL");
-                      setReportTargetTypeFilter(
-                        activeSection === "issuesBugs" ? "BUG" : "ALL",
-                      );
+                      setReportTargetTypeFilter(activeSection === "issuesBugs" ? "BUG" : "ALL");
                     }}
                     className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
                   >
@@ -9819,48 +7611,34 @@ export const InAccordAdminModal = () => {
                 </div>
 
                 <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                    Rows
-                  </span>
-                  {(["COMPACT", "COMFORTABLE", "SPACIOUS"] as const).map(
-                    (density) => (
-                      <button
-                        key={`reports-row-density-${density}`}
-                        type="button"
-                        onClick={() => setListRowDensity(density)}
-                        className={cn(
-                          "h-7 rounded-md border px-2.5 text-[11px] font-semibold transition",
-                          listRowDensity === density
-                            ? "border-indigo-500/45 bg-indigo-500/15 text-indigo-700 dark:text-indigo-200"
-                            : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800",
-                        )}
-                      >
-                        {density === "COMPACT"
-                          ? "Compact"
-                          : density === "SPACIOUS"
-                            ? "Spacious"
-                            : "Comfortable"}
-                      </button>
-                    ),
-                  )}
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Rows</span>
+                  {(["COMPACT", "COMFORTABLE", "SPACIOUS"] as const).map((density) => (
+                    <button
+                      key={`reports-row-density-${density}`}
+                      type="button"
+                      onClick={() => setListRowDensity(density)}
+                      className={cn(
+                        "h-7 rounded-md border px-2.5 text-[11px] font-semibold transition",
+                        listRowDensity === density
+                          ? "border-indigo-500/45 bg-indigo-500/15 text-indigo-700 dark:text-indigo-200"
+                          : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                      )}
+                    >
+                      {density === "COMPACT" ? "Compact" : density === "SPACIOUS" ? "Spacious" : "Comfortable"}
+                    </button>
+                  ))}
                 </div>
 
                 {isLoadingReports ? (
-                  <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                    Loading reports...
-                  </p>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading reports...</p>
                 ) : reportsError ? (
                   <p className="text-sm text-rose-500">{reportsError}</p>
                 ) : sectionReports.length === 0 ? (
-                  <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                    No reports found for current filters.
-                  </p>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300">No reports found for current filters.</p>
                 ) : (
                   <div className="overflow-hidden rounded-lg border border-zinc-300 dark:border-zinc-700">
                     <div className="grid grid-cols-[1.1fr_0.8fr_0.7fr_1fr_1.4fr_auto] gap-2 bg-zinc-200/80 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                      <p>
-                        {activeSection === "issuesBugs" ? "Issue" : "Report"}
-                      </p>
+                      <p>{activeSection === "issuesBugs" ? "Issue" : "Report"}</p>
                       <p>Status</p>
                       <p>Severity</p>
                       <p>Reporter</p>
@@ -9887,50 +7665,28 @@ export const InAccordAdminModal = () => {
                               listRowDensityClass,
                               index % 2 === 0
                                 ? "bg-white/70 dark:bg-zinc-950/25"
-                                : "bg-zinc-100/70 dark:bg-zinc-900/35",
+                                : "bg-zinc-100/70 dark:bg-zinc-900/35"
                             )}
                           >
-                            <p
-                              className="truncate font-semibold"
-                              title={report.targetName}
-                            >
-                              {report.targetName}
-                            </p>
+                            <p className="truncate font-semibold" title={report.targetName}>{report.targetName}</p>
                             <div>
-                              <span
-                                className={cn(
-                                  "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]",
-                                  statusClassName,
-                                )}
-                              >
+                              <span className={cn("inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]", statusClassName)}>
                                 {report.status.replace("_", " ")}
                               </span>
                             </div>
                             <p
                               className={cn(
                                 "truncate uppercase font-semibold",
-                                severity
-                                  ? getSeverityTextClassName(severity)
-                                  : "text-zinc-500 dark:text-zinc-400",
+                                severity ? getSeverityTextClassName(severity) : "text-zinc-500 dark:text-zinc-400"
                               )}
                               title={severity ?? "Not specified"}
                             >
-                              {severity
-                                ? String(severity).toLowerCase()
-                                : "n/a"}
+                              {severity ? String(severity).toLowerCase() : "n/a"}
                             </p>
-                            <p
-                              className="truncate"
-                              title={`${report.reporterName}${report.reporterEmail ? ` (${report.reporterEmail})` : ""}`}
-                            >
+                            <p className="truncate" title={`${report.reporterName}${report.reporterEmail ? ` (${report.reporterEmail})` : ""}`}>
                               {report.reporterName}
                             </p>
-                            <p
-                              className="truncate"
-                              title={formatDateTime(report.createdAt)}
-                            >
-                              {formatDateTime(report.createdAt)}
-                            </p>
+                            <p className="truncate" title={formatDateTime(report.createdAt)}>{formatDateTime(report.createdAt)}</p>
                             <div className="flex justify-end">
                               <button
                                 type="button"
@@ -9961,9 +7717,7 @@ export const InAccordAdminModal = () => {
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2">
                     <Bug className="h-4 w-4" />
-                    {viewingIssueReport?.targetType === "BUG"
-                      ? "Issue & Bug Review Panel"
-                      : "Report Review Panel"}
+                    {viewingIssueReport?.targetType === "BUG" ? "Issue & Bug Review Panel" : "Report Review Panel"}
                   </DialogTitle>
                   <DialogDescription className="text-zinc-600 dark:text-zinc-300">
                     {viewingIssueReport?.targetType === "BUG"
@@ -9972,427 +7726,295 @@ export const InAccordAdminModal = () => {
                   </DialogDescription>
                 </DialogHeader>
 
-                {viewingIssueReport
-                  ? (() => {
-                      const report =
-                        reports.find(
-                          (item) => item.id === viewingIssueReport.id,
-                        ) ?? viewingIssueReport;
-                      const severity = parseReportSeverity(report.reason);
-                      const reporterUser = users.find(
-                        (user) =>
-                          user.userId === report.reporterProfileId ||
-                          user.id === report.reporterProfileId,
-                      );
-                      const postedAdminNotes = String(report.adminNote ?? "")
-                        .split(/\n---\n/g)
-                        .map((item) => item.trim())
-                        .filter(Boolean);
-                      const statusClassName =
-                        report.status === "OPEN"
-                          ? "border-amber-500/30 bg-amber-500/15 text-amber-200"
-                          : report.status === "IN_REVIEW"
-                            ? "border-indigo-500/30 bg-indigo-500/15 text-indigo-200"
-                            : report.status === "RESOLVED"
-                              ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-200"
-                              : "border-zinc-500/30 bg-zinc-500/15 text-zinc-200";
+                {viewingIssueReport ? (
+                  (() => {
+                    const report = reports.find((item) => item.id === viewingIssueReport.id) ?? viewingIssueReport;
+                    const severity = parseReportSeverity(report.reason);
+                    const reporterUser = users.find((user) => user.userId === report.reporterProfileId || user.id === report.reporterProfileId);
+                    const postedAdminNotes = String(report.adminNote ?? "")
+                      .split(/\n---\n/g)
+                      .map((item) => item.trim())
+                      .filter(Boolean);
+                    const statusClassName =
+                      report.status === "OPEN"
+                        ? "border-amber-500/30 bg-amber-500/15 text-amber-200"
+                        : report.status === "IN_REVIEW"
+                          ? "border-indigo-500/30 bg-indigo-500/15 text-indigo-200"
+                          : report.status === "RESOLVED"
+                            ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-200"
+                            : "border-zinc-500/30 bg-zinc-500/15 text-zinc-200";
 
-                      return (
-                        <div className="admin-wrap-text space-y-3">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <p className="text-sm font-bold uppercase tracking-[0.08em] text-zinc-900 dark:text-zinc-100">
-                              {report.targetName}
-                            </p>
-                            <div className="flex items-center gap-2">
-                              <span
-                                className={cn(
-                                  "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]",
-                                  statusClassName,
-                                )}
-                              >
-                                {report.status.replace("_", " ")}
-                              </span>
-                              <span
-                                className={cn(
-                                  "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]",
-                                  severity
-                                    ? getSeverityClassName(severity)
-                                    : "border-zinc-500/30 bg-zinc-500/15 text-zinc-200",
-                                )}
-                              >
-                                {severity
-                                  ? String(severity).toLowerCase()
-                                  : "n/a"}
-                              </span>
-                            </div>
+                    return (
+                      <div className="admin-wrap-text space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-sm font-bold uppercase tracking-[0.08em] text-zinc-900 dark:text-zinc-100">
+                            {report.targetName}
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]", statusClassName)}>
+                              {report.status.replace("_", " ")}
+                            </span>
+                            <span
+                              className={cn(
+                                "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]",
+                                severity ? getSeverityClassName(severity) : "border-zinc-500/30 bg-zinc-500/15 text-zinc-200"
+                              )}
+                            >
+                              {severity ? String(severity).toLowerCase() : "n/a"}
+                            </span>
                           </div>
+                        </div>
 
-                          <div className="grid gap-2 md:grid-cols-3">
-                            <div className="rounded-md border border-zinc-200 bg-zinc-50/80 p-3 text-xs dark:border-zinc-700 dark:bg-zinc-900/45">
-                              <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                                Reporter
-                              </p>
-                              <Popover>
-                                <PopoverTrigger asChild>
-                                  <button
-                                    type="button"
-                                    className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-zinc-300/70 bg-white/70 px-2 py-1 text-left font-semibold text-zinc-800 transition hover:bg-zinc-100/80 dark:border-zinc-700/70 dark:bg-zinc-900/55 dark:text-zinc-100 dark:hover:bg-zinc-800/70"
-                                    title={`View profile for ${report.reporterName}`}
-                                  >
-                                    <UserAvatar
-                                      src={reporterUser?.imageUrl}
-                                      className="h-5 w-5"
-                                    />
-                                    <span className="wrap-break-word">
-                                      {report.reporterName}
-                                      {report.reporterEmail
-                                        ? ` (${report.reporterEmail})`
-                                        : ""}
-                                    </span>
-                                  </button>
-                                </PopoverTrigger>
-                                <PopoverContent
-                                  side="top"
-                                  align="start"
-                                  className="w-80 rounded-xl border border-zinc-300 bg-white p-3 text-zinc-900 shadow-xl dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-                                >
-                                  <div className="flex items-center gap-2">
-                                    <UserAvatar
-                                      src={reporterUser?.imageUrl}
-                                      className="h-10 w-10"
-                                    />
-                                    <div className="min-w-0">
-                                      <p className="wrap-break-word text-sm font-semibold">
-                                        {report.reporterName}
-                                      </p>
-                                      <p className="wrap-break-word text-xs text-zinc-500 dark:text-zinc-400">
-                                        {report.reporterEmail ||
-                                          "No email available"}
-                                      </p>
-                                    </div>
-                                  </div>
-
-                                  <div className="mt-3 space-y-1 rounded-md border border-zinc-200 bg-zinc-50/80 p-2 text-xs dark:border-zinc-700 dark:bg-zinc-800/50">
-                                    <p>
-                                      <span className="font-semibold">
-                                        Profile ID:
-                                      </span>{" "}
-                                      {report.reporterProfileId}
-                                    </p>
-                                    {reporterUser?.role ? (
-                                      <p>
-                                        <span className="font-semibold">
-                                          Role:
-                                        </span>{" "}
-                                        {reporterUser.role}
-                                      </p>
-                                    ) : null}
-                                    {reporterUser?.profileName ? (
-                                      <p>
-                                        <span className="font-semibold">
-                                          Profile Name:
-                                        </span>{" "}
-                                        {reporterUser.profileName}
-                                      </p>
-                                    ) : null}
-                                    {reporterUser?.joinedAt ? (
-                                      <p>
-                                        <span className="font-semibold">
-                                          Joined:
-                                        </span>{" "}
-                                        {formatDateTime(reporterUser.joinedAt)}
-                                      </p>
-                                    ) : null}
-                                    {reporterUser?.lastLogin ? (
-                                      <p>
-                                        <span className="font-semibold">
-                                          Last Login:
-                                        </span>{" "}
-                                        {formatDateTime(reporterUser.lastLogin)}
-                                      </p>
-                                    ) : null}
-                                  </div>
-
-                                  <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-2 dark:border-zinc-700">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        const dmQuery =
-                                          report.reporterEmail ||
-                                          report.reporterName ||
-                                          report.reporterProfileId;
-                                        router.push(
-                                          `/users?view=friends&filter=all&q=${encodeURIComponent(dmQuery)}&source=admin-reports`,
-                                        );
-                                      }}
-                                      className="inline-flex h-8 items-center gap-1.5 rounded-md border border-indigo-300 bg-indigo-50 px-2.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100 dark:border-indigo-700 dark:bg-indigo-950/35 dark:text-indigo-200 dark:hover:bg-indigo-900/45"
-                                      title="Open DM view"
-                                      aria-label="Open direct message view"
-                                    >
-                                      <MessageCircle className="h-3.5 w-3.5" />
-                                      DM
-                                    </button>
-
-                                    <a
-                                      href={
-                                        report.reporterEmail
-                                          ? `mailto:${report.reporterEmail}`
-                                          : undefined
-                                      }
-                                      className={cn(
-                                        "inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-semibold transition",
-                                        report.reporterEmail
-                                          ? "border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-950/35 dark:text-emerald-200 dark:hover:bg-emerald-900/45"
-                                          : "pointer-events-none border-zinc-300 bg-zinc-100 text-zinc-400 dark:border-zinc-700 dark:bg-zinc-800/40 dark:text-zinc-500",
-                                      )}
-                                      title={
-                                        report.reporterEmail
-                                          ? "Email reporter"
-                                          : "No email available"
-                                      }
-                                      aria-label="Email reporter"
-                                    >
-                                      <Mail className="h-3.5 w-3.5" />
-                                      Email
-                                    </a>
-
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setViewingIssueReport(null);
-                                        setActiveSection("members");
-                                        setMemberSearch(
-                                          report.reporterProfileId ||
-                                            report.reporterName ||
-                                            report.reporterEmail ||
-                                            "",
-                                        );
-                                        if (users.length === 0) {
-                                          void loadUsers();
-                                        }
-                                      }}
-                                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-300 bg-white text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                                      title="Open full profile in Members"
-                                      aria-label="Open full profile"
-                                    >
-                                      <ExternalLink className="h-3.5 w-3.5" />
-                                    </button>
-                                  </div>
-                                </PopoverContent>
-                              </Popover>
-                            </div>
-                            <div className="rounded-md border border-zinc-200 bg-zinc-50/80 p-3 text-xs dark:border-zinc-700 dark:bg-zinc-900/45">
-                              <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                                Created
-                              </p>
-                              <p className="font-semibold wrap-break-word">
-                                {formatDateTime(report.createdAt)}
-                              </p>
-                            </div>
-
-                            <div className="rounded-md border border-zinc-200 bg-zinc-50/80 p-3 text-xs dark:border-zinc-700 dark:bg-zinc-900/45">
-                              <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                                Severity
-                              </p>
-                              <div className="flex items-center gap-2">
-                                <select
-                                  value={
-                                    reportSeverityDrafts[report.id] ??
-                                    severity ??
-                                    "LOW"
-                                  }
-                                  onChange={(event) =>
-                                    setReportSeverityDrafts((current) => ({
-                                      ...current,
-                                      [report.id]: event.target.value as
-                                        | "LOW"
-                                        | "MEDIUM"
-                                        | "HIGH"
-                                        | "CRITICAL",
-                                    }))
-                                  }
-                                  className={cn(
-                                    "h-8 min-w-30 rounded-md border bg-white px-2 text-xs font-semibold uppercase outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:bg-zinc-900",
-                                    (reportSeverityDrafts[report.id] ??
-                                      severity)
-                                      ? getSeverityClassName(
-                                          (reportSeverityDrafts[report.id] ??
-                                            severity) as
-                                            | "LOW"
-                                            | "MEDIUM"
-                                            | "HIGH"
-                                            | "CRITICAL",
-                                        )
-                                      : "border-zinc-300 text-zinc-700 dark:border-zinc-600 dark:text-zinc-200",
-                                  )}
-                                >
-                                  <option value="LOW">LOW</option>
-                                  <option value="MEDIUM">MEDIUM</option>
-                                  <option value="HIGH">HIGH</option>
-                                  <option value="CRITICAL">CRITICAL</option>
-                                </select>
+                        <div className="grid gap-2 md:grid-cols-3">
+                          <div className="rounded-md border border-zinc-200 bg-zinc-50/80 p-3 text-xs dark:border-zinc-700 dark:bg-zinc-900/45">
+                            <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Reporter</p>
+                            <Popover>
+                              <PopoverTrigger asChild>
                                 <button
                                   type="button"
-                                  onClick={() =>
-                                    void onSaveReportSeverity(report.id)
-                                  }
-                                  disabled={updatingReportId === report.id}
-                                  className="h-8 rounded-md border border-emerald-500/35 bg-emerald-500/15 px-2.5 text-[11px] font-medium text-emerald-200 transition hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                                  className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-zinc-300/70 bg-white/70 px-2 py-1 text-left font-semibold text-zinc-800 transition hover:bg-zinc-100/80 dark:border-zinc-700/70 dark:bg-zinc-900/55 dark:text-zinc-100 dark:hover:bg-zinc-800/70"
+                                  title={`View profile for ${report.reporterName}`}
                                 >
-                                  Save
+                                  <UserAvatar src={reporterUser?.imageUrl} className="h-5 w-5" />
+                                  <span className="wrap-break-word">
+                                    {report.reporterName}
+                                    {report.reporterEmail ? ` (${report.reporterEmail})` : ""}
+                                  </span>
                                 </button>
-                              </div>
-                            </div>
+                              </PopoverTrigger>
+                              <PopoverContent
+                                side="top"
+                                align="start"
+                                className="w-80 rounded-xl border border-zinc-300 bg-white p-3 text-zinc-900 shadow-xl dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <UserAvatar src={reporterUser?.imageUrl} className="h-10 w-10" />
+                                  <div className="min-w-0">
+                                    <p className="wrap-break-word text-sm font-semibold">{report.reporterName}</p>
+                                    <p className="wrap-break-word text-xs text-zinc-500 dark:text-zinc-400">{report.reporterEmail || "No email available"}</p>
+                                  </div>
+                                </div>
 
-                            <div className="rounded-md border border-zinc-200 bg-zinc-50/80 p-3 text-xs dark:border-zinc-700 dark:bg-zinc-900/45 md:col-span-3">
-                              <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                                Reason
-                              </p>
-                              <p className="font-semibold wrap-break-word">
-                                {report.reason || "No reason provided"}
-                              </p>
-                            </div>
+                                <div className="mt-3 space-y-1 rounded-md border border-zinc-200 bg-zinc-50/80 p-2 text-xs dark:border-zinc-700 dark:bg-zinc-800/50">
+                                  <p><span className="font-semibold">Profile ID:</span> {report.reporterProfileId}</p>
+                                  {reporterUser?.role ? <p><span className="font-semibold">Role:</span> {reporterUser.role}</p> : null}
+                                  {reporterUser?.profileName ? <p><span className="font-semibold">Profile Name:</span> {reporterUser.profileName}</p> : null}
+                                  {reporterUser?.joinedAt ? <p><span className="font-semibold">Joined:</span> {formatDateTime(reporterUser.joinedAt)}</p> : null}
+                                  {reporterUser?.lastLogin ? <p><span className="font-semibold">Last Login:</span> {formatDateTime(reporterUser.lastLogin)}</p> : null}
+                                </div>
 
-                            {report.details ? (
-                              <div className="rounded-md border border-zinc-200 bg-zinc-50/80 p-3 text-xs dark:border-zinc-700 dark:bg-zinc-900/45 md:col-span-3">
-                                <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                                  Details
-                                </p>
-                                <p className="whitespace-pre-wrap wrap-break-word">
-                                  {report.details}
-                                </p>
-                              </div>
-                            ) : null}
+                                <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-2 dark:border-zinc-700">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const dmQuery = report.reporterEmail || report.reporterName || report.reporterProfileId;
+                                      router.push(`/users?view=friends&filter=all&q=${encodeURIComponent(dmQuery)}&source=admin-reports`);
+                                    }}
+                                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-indigo-300 bg-indigo-50 px-2.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100 dark:border-indigo-700 dark:bg-indigo-950/35 dark:text-indigo-200 dark:hover:bg-indigo-900/45"
+                                    title="Open DM view"
+                                    aria-label="Open direct message view"
+                                  >
+                                    <MessageCircle className="h-3.5 w-3.5" />
+                                    DM
+                                  </button>
 
-                            <div className="rounded-md border border-zinc-200 bg-zinc-50/80 p-3 text-xs dark:border-zinc-700 dark:bg-zinc-900/45 md:col-span-3">
-                              <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                                Assigned
-                              </p>
-                              <p className="font-semibold wrap-break-word">
-                                {report.assignedAdminName
-                                  ? `${report.assignedAdminName}${report.assignedAdminEmail ? ` (${report.assignedAdminEmail})` : ""}`
-                                  : "Unassigned"}
-                              </p>
-                            </div>
+                                  <a
+                                    href={report.reporterEmail ? `mailto:${report.reporterEmail}` : undefined}
+                                    className={cn(
+                                      "inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-semibold transition",
+                                      report.reporterEmail
+                                        ? "border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-950/35 dark:text-emerald-200 dark:hover:bg-emerald-900/45"
+                                        : "pointer-events-none border-zinc-300 bg-zinc-100 text-zinc-400 dark:border-zinc-700 dark:bg-zinc-800/40 dark:text-zinc-500"
+                                    )}
+                                    title={report.reporterEmail ? "Email reporter" : "No email available"}
+                                    aria-label="Email reporter"
+                                  >
+                                    <Mail className="h-3.5 w-3.5" />
+                                    Email
+                                  </a>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setViewingIssueReport(null);
+                                      setActiveSection("members");
+                                      setMemberSearch(report.reporterProfileId || report.reporterName || report.reporterEmail || "");
+                                      if (users.length === 0) {
+                                        void loadUsers();
+                                      }
+                                    }}
+                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-300 bg-white text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                                    title="Open full profile in Members"
+                                    aria-label="Open full profile"
+                                  >
+                                    <ExternalLink className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          </div>
+                          <div className="rounded-md border border-zinc-200 bg-zinc-50/80 p-3 text-xs dark:border-zinc-700 dark:bg-zinc-900/45">
+                            <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Created</p>
+                            <p className="font-semibold wrap-break-word">{formatDateTime(report.createdAt)}</p>
                           </div>
 
-                          <div className="space-y-2 rounded-md border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                            <label className="block text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                              Admin notes
-                            </label>
-
-                            {postedAdminNotes.length === 0 ? (
-                              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                                No posted notes yet.
-                              </p>
-                            ) : (
-                              <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border border-zinc-200 bg-white/80 p-2 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
-                                {[...postedAdminNotes]
-                                  .reverse()
-                                  .map((note, index) => (
-                                    <div
-                                      key={`issue-admin-note-${report.id}-${index}`}
-                                      className="rounded-md border border-zinc-200/80 bg-zinc-50/80 px-2 py-1.5 text-zinc-700 dark:border-zinc-700/70 dark:bg-zinc-800/45 dark:text-zinc-200"
-                                    >
-                                      <div className="flex items-start justify-between gap-2">
-                                        <p className="whitespace-pre-wrap wrap-break-word">
-                                          {note}
-                                        </p>
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setViewingReportNotes(report);
-                                            setViewingReportNoteEntry(note);
-                                          }}
-                                          className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-zinc-300 bg-white px-2 text-[11px] font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                                        >
-                                          <Eye className="h-3 w-3" />
-                                          View
-                                        </button>
-                                      </div>
-                                    </div>
-                                  ))}
-                              </div>
-                            )}
-
-                            <textarea
-                              value={reportPostNoteDrafts[report.id] ?? ""}
-                              onChange={(event) =>
-                                setReportPostNoteDrafts((current) => ({
-                                  ...current,
-                                  [report.id]: event.target.value,
-                                }))
-                              }
-                              rows={3}
-                              className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-xs leading-5 text-zinc-800 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-                              placeholder="Write a new admin note to post..."
-                            />
-
-                            <div className="flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-700">
-                              <button
-                                type="button"
-                                onClick={() => void onPostReportNote(report.id)}
-                                disabled={updatingReportId === report.id}
-                                className="h-8 rounded-md border border-zinc-400/35 bg-zinc-500/15 px-3 text-xs font-medium text-zinc-200 transition hover:bg-zinc-500/25 disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                Post note
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  void onAssignReportToSelf(report.id)
-                                }
-                                disabled={updatingReportId === report.id}
-                                className="h-8 rounded-md border border-indigo-500/35 bg-indigo-500/15 px-3 text-xs font-medium text-indigo-200 transition hover:bg-indigo-500/25 disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                Assign to me
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void onUnassignReport(report.id)}
-                                disabled={
-                                  updatingReportId === report.id ||
-                                  !report.assignedAdminProfileId
-                                }
-                                className="h-8 rounded-md border border-zinc-500/35 bg-zinc-500/15 px-3 text-xs font-medium text-zinc-200 transition hover:bg-zinc-500/25 disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                Unassign
-                              </button>
-
+                          <div className="rounded-md border border-zinc-200 bg-zinc-50/80 p-3 text-xs dark:border-zinc-700 dark:bg-zinc-900/45">
+                            <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Severity</p>
+                            <div className="flex items-center gap-2">
                               <select
-                                value={
-                                  reportStatusDrafts[report.id] ?? report.status
-                                }
+                                value={reportSeverityDrafts[report.id] ?? severity ?? "LOW"}
                                 onChange={(event) =>
-                                  setReportStatusDrafts((current) => ({
+                                  setReportSeverityDrafts((current) => ({
                                     ...current,
-                                    [report.id]: event.target
-                                      .value as AdminReport["status"],
+                                    [report.id]: event.target.value as "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
                                   }))
                                 }
-                                className="h-8 rounded-md border border-zinc-300 bg-white px-2 text-xs text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                                className={cn(
+                                  "h-8 min-w-30 rounded-md border bg-white px-2 text-xs font-semibold uppercase outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:bg-zinc-900",
+                                  (reportSeverityDrafts[report.id] ?? severity)
+                                    ? getSeverityClassName((reportSeverityDrafts[report.id] ?? severity) as "LOW" | "MEDIUM" | "HIGH" | "CRITICAL")
+                                    : "border-zinc-300 text-zinc-700 dark:border-zinc-600 dark:text-zinc-200"
+                                )}
                               >
-                                <option value="OPEN">Open</option>
-                                <option value="IN_REVIEW">In review</option>
-                                <option value="RESOLVED">Resolved</option>
-                                <option value="DISMISSED">Dismissed</option>
+                                <option value="LOW">LOW</option>
+                                <option value="MEDIUM">MEDIUM</option>
+                                <option value="HIGH">HIGH</option>
+                                <option value="CRITICAL">CRITICAL</option>
                               </select>
                               <button
                                 type="button"
-                                onClick={() =>
-                                  void onSaveReportStatus(report.id)
-                                }
+                                onClick={() => void onSaveReportSeverity(report.id)}
                                 disabled={updatingReportId === report.id}
-                                className="h-8 rounded-md border border-emerald-500/35 bg-emerald-500/15 px-3 text-xs font-medium text-emerald-200 transition hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                                className="h-8 rounded-md border border-emerald-500/35 bg-emerald-500/15 px-2.5 text-[11px] font-medium text-emerald-200 transition hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-60"
                               >
-                                Save status
+                                Save
                               </button>
                             </div>
                           </div>
+
+                          <div className="rounded-md border border-zinc-200 bg-zinc-50/80 p-3 text-xs dark:border-zinc-700 dark:bg-zinc-900/45 md:col-span-3">
+                            <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Reason</p>
+                            <p className="font-semibold wrap-break-word">{report.reason || "No reason provided"}</p>
+                          </div>
+
+                          {report.details ? (
+                            <div className="rounded-md border border-zinc-200 bg-zinc-50/80 p-3 text-xs dark:border-zinc-700 dark:bg-zinc-900/45 md:col-span-3">
+                              <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Details</p>
+                              <p className="whitespace-pre-wrap wrap-break-word">{report.details}</p>
+                            </div>
+                          ) : null}
+
+                          <div className="rounded-md border border-zinc-200 bg-zinc-50/80 p-3 text-xs dark:border-zinc-700 dark:bg-zinc-900/45 md:col-span-3">
+                            <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Assigned</p>
+                            <p className="font-semibold wrap-break-word">
+                              {report.assignedAdminName
+                                ? `${report.assignedAdminName}${report.assignedAdminEmail ? ` (${report.assignedAdminEmail})` : ""}`
+                                : "Unassigned"}
+                            </p>
+                          </div>
                         </div>
-                      );
-                    })()
-                  : null}
+
+                        <div className="space-y-2 rounded-md border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                          <label className="block text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
+                            Admin notes
+                          </label>
+
+                          {postedAdminNotes.length === 0 ? (
+                            <p className="text-xs text-zinc-500 dark:text-zinc-400">No posted notes yet.</p>
+                          ) : (
+                            <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border border-zinc-200 bg-white/80 p-2 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
+                              {[...postedAdminNotes].reverse().map((note, index) => (
+                                <div
+                                  key={`issue-admin-note-${report.id}-${index}`}
+                                  className="rounded-md border border-zinc-200/80 bg-zinc-50/80 px-2 py-1.5 text-zinc-700 dark:border-zinc-700/70 dark:bg-zinc-800/45 dark:text-zinc-200"
+                                >
+                                  <div className="flex items-start justify-between gap-2">
+                                    <p className="whitespace-pre-wrap wrap-break-word">{note}</p>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setViewingReportNotes(report);
+                                        setViewingReportNoteEntry(note);
+                                      }}
+                                      className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-zinc-300 bg-white px-2 text-[11px] font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                                    >
+                                      <Eye className="h-3 w-3" />
+                                      View
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          <textarea
+                            value={reportPostNoteDrafts[report.id] ?? ""}
+                            onChange={(event) =>
+                              setReportPostNoteDrafts((current) => ({
+                                ...current,
+                                [report.id]: event.target.value,
+                              }))
+                            }
+                            rows={3}
+                            className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-xs leading-5 text-zinc-800 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                            placeholder="Write a new admin note to post..."
+                          />
+
+                          <div className="flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-700">
+                            <button
+                              type="button"
+                              onClick={() => void onPostReportNote(report.id)}
+                              disabled={updatingReportId === report.id}
+                              className="h-8 rounded-md border border-zinc-400/35 bg-zinc-500/15 px-3 text-xs font-medium text-zinc-200 transition hover:bg-zinc-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Post note
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void onAssignReportToSelf(report.id)}
+                              disabled={updatingReportId === report.id}
+                              className="h-8 rounded-md border border-indigo-500/35 bg-indigo-500/15 px-3 text-xs font-medium text-indigo-200 transition hover:bg-indigo-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Assign to me
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void onUnassignReport(report.id)}
+                              disabled={updatingReportId === report.id || !report.assignedAdminProfileId}
+                              className="h-8 rounded-md border border-zinc-500/35 bg-zinc-500/15 px-3 text-xs font-medium text-zinc-200 transition hover:bg-zinc-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Unassign
+                            </button>
+
+                            <select
+                              value={reportStatusDrafts[report.id] ?? report.status}
+                              onChange={(event) =>
+                                setReportStatusDrafts((current) => ({
+                                  ...current,
+                                  [report.id]: event.target.value as AdminReport["status"],
+                                }))
+                              }
+                              className="h-8 rounded-md border border-zinc-300 bg-white px-2 text-xs text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                            >
+                              <option value="OPEN">Open</option>
+                              <option value="IN_REVIEW">In review</option>
+                              <option value="RESOLVED">Resolved</option>
+                              <option value="DISMISSED">Dismissed</option>
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => void onSaveReportStatus(report.id)}
+                              disabled={updatingReportId === report.id}
+                              className="h-8 rounded-md border border-emerald-500/35 bg-emerald-500/15 px-3 text-xs font-medium text-emerald-200 transition hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Save status
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()
+                ) : null}
               </DialogContent>
             </Dialog>
 
@@ -10412,57 +8034,42 @@ export const InAccordAdminModal = () => {
                     Admin Notes
                   </DialogTitle>
                   <DialogDescription className="text-zinc-600 dark:text-zinc-300">
-                    Posted notes history for this{" "}
-                    {viewingReportNotes?.targetType === "BUG"
-                      ? "issue"
-                      : "report"}
-                    .
+                    Posted notes history for this {viewingReportNotes?.targetType === "BUG" ? "issue" : "report"}.
                   </DialogDescription>
                 </DialogHeader>
 
-                {viewingReportNotes
-                  ? (() => {
-                      const report =
-                        reports.find(
-                          (item) => item.id === viewingReportNotes.id,
-                        ) ?? viewingReportNotes;
-                      const postedAdminNotes = String(report.adminNote ?? "")
-                        .split(/\n---\n/g)
-                        .map((item) => item.trim())
-                        .filter(Boolean);
+                {viewingReportNotes ? (
+                  (() => {
+                    const report = reports.find((item) => item.id === viewingReportNotes.id) ?? viewingReportNotes;
+                    const postedAdminNotes = String(report.adminNote ?? "")
+                      .split(/\n---\n/g)
+                      .map((item) => item.trim())
+                      .filter(Boolean);
 
-                      if (viewingReportNoteEntry) {
-                        return (
-                          <div className="rounded-md border border-zinc-300 bg-zinc-50/90 p-3 text-xs text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800/45 dark:text-zinc-200">
-                            <p className="whitespace-pre-wrap wrap-break-word">
-                              {viewingReportNoteEntry}
-                            </p>
-                          </div>
-                        );
-                      }
-
-                      return postedAdminNotes.length === 0 ? (
-                        <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                          No posted notes yet.
-                        </p>
-                      ) : (
-                        <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
-                          {[...postedAdminNotes]
-                            .reverse()
-                            .map((note, index) => (
-                              <div
-                                key={`admin-note-popup-${report.id}-${index}`}
-                                className="rounded-md border border-zinc-300 bg-zinc-50/90 p-3 text-xs text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800/45 dark:text-zinc-200"
-                              >
-                                <p className="whitespace-pre-wrap wrap-break-word">
-                                  {note}
-                                </p>
-                              </div>
-                            ))}
+                    if (viewingReportNoteEntry) {
+                      return (
+                        <div className="rounded-md border border-zinc-300 bg-zinc-50/90 p-3 text-xs text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800/45 dark:text-zinc-200">
+                          <p className="whitespace-pre-wrap wrap-break-word">{viewingReportNoteEntry}</p>
                         </div>
                       );
-                    })()
-                  : null}
+                    }
+
+                    return postedAdminNotes.length === 0 ? (
+                      <p className="text-sm text-zinc-600 dark:text-zinc-300">No posted notes yet.</p>
+                    ) : (
+                      <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
+                        {[...postedAdminNotes].reverse().map((note, index) => (
+                          <div
+                            key={`admin-note-popup-${report.id}-${index}`}
+                            className="rounded-md border border-zinc-300 bg-zinc-50/90 p-3 text-xs text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800/45 dark:text-zinc-200"
+                          >
+                            <p className="whitespace-pre-wrap wrap-break-word">{note}</p>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()
+                ) : null}
               </DialogContent>
             </Dialog>
 
@@ -10470,9 +8077,7 @@ export const InAccordAdminModal = () => {
               <div className="rounded-xl border border-zinc-200 bg-zinc-100/65 p-5 dark:border-zinc-700 dark:bg-zinc-800/35">
                 <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="text-[13px] font-bold uppercase tracking-[0.08em] text-zinc-800 dark:text-zinc-100">
-                      Moderation
-                    </p>
+                    <p className="text-[13px] font-bold uppercase tracking-[0.08em] text-zinc-800 dark:text-zinc-100">Moderation</p>
                     <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
                       Review moderation signals and account health trends.
                     </p>
@@ -10487,9 +8092,7 @@ export const InAccordAdminModal = () => {
                 </div>
 
                 {isLoadingSecurity ? (
-                  <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                    Loading moderation insights...
-                  </p>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading moderation insights...</p>
                 ) : securityError ? (
                   <p className="text-sm text-rose-500">{securityError}</p>
                 ) : (
@@ -10502,19 +8105,12 @@ export const InAccordAdminModal = () => {
                           "rounded-lg border bg-white/80 p-3 text-left transition dark:bg-zinc-900/45",
                           moderationFocus === "REVIEW_QUEUE"
                             ? "border-indigo-500/50 ring-1 ring-indigo-400/45 dark:border-indigo-400/60"
-                            : "border-zinc-300 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900/60",
+                            : "border-zinc-300 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900/60"
                         )}
                       >
-                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Potential Review Queue
-                        </p>
-                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                          {(securitySummary?.inactive30d ?? 0) +
-                            (securitySummary?.neverLoggedIn ?? 0)}
-                        </p>
-                        <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                          inactive or never-logged accounts to review
-                        </p>
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Potential Review Queue</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{(securitySummary?.inactive30d ?? 0) + (securitySummary?.neverLoggedIn ?? 0)}</p>
+                        <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">inactive or never-logged accounts to review</p>
                       </button>
                       <button
                         type="button"
@@ -10523,18 +8119,12 @@ export const InAccordAdminModal = () => {
                           "rounded-lg border bg-white/80 p-3 text-left transition dark:bg-zinc-900/45",
                           moderationFocus === "ADMIN_COVERAGE"
                             ? "border-indigo-500/50 ring-1 ring-indigo-400/45 dark:border-indigo-400/60"
-                            : "border-zinc-300 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900/60",
+                            : "border-zinc-300 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900/60"
                         )}
                       >
-                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Admin Coverage
-                        </p>
-                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                          {securitySummary?.adminUsers ?? 0}
-                        </p>
-                        <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                          users with elevated role permissions
-                        </p>
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Admin Coverage</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{securitySummary?.adminUsers ?? 0}</p>
+                        <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">users with elevated role permissions</p>
                       </button>
                       <button
                         type="button"
@@ -10543,18 +8133,12 @@ export const InAccordAdminModal = () => {
                           "rounded-lg border bg-white/80 p-3 text-left transition dark:bg-zinc-900/45",
                           moderationFocus === "OWNER_ISSUES"
                             ? "border-indigo-500/50 ring-1 ring-indigo-400/45 dark:border-indigo-400/60"
-                            : "border-zinc-300 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900/60",
+                            : "border-zinc-300 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900/60"
                         )}
                       >
-                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Owner Issues
-                        </p>
-                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                          {securitySummary?.serversWithoutValidOwner ?? 0}
-                        </p>
-                        <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                          servers with missing/invalid owner linkage
-                        </p>
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Owner Issues</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{securitySummary?.serversWithoutValidOwner ?? 0}</p>
+                        <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">servers with missing/invalid owner linkage</p>
                       </button>
                     </div>
 
@@ -10568,46 +8152,35 @@ export const InAccordAdminModal = () => {
                               : "Owner Issues"}
                         </p>
                         <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                          {moderationListData.rows.length} item
-                          {moderationListData.rows.length === 1 ? "" : "s"}
+                          {moderationListData.rows.length} item{moderationListData.rows.length === 1 ? "" : "s"}
                         </p>
                       </div>
                       <input
                         type="text"
                         value={moderationSearch}
-                        onChange={(event) =>
-                          setModerationSearch(event.target.value)
-                        }
+                        onChange={(event) => setModerationSearch(event.target.value)}
                         placeholder="Search selected moderation list"
                         className="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                       />
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                        Rows
-                      </span>
-                      {(["COMPACT", "COMFORTABLE", "SPACIOUS"] as const).map(
-                        (density) => (
-                          <button
-                            key={`moderation-row-density-${density}`}
-                            type="button"
-                            onClick={() => setListRowDensity(density)}
-                            className={cn(
-                              "h-7 rounded-md border px-2.5 text-[11px] font-semibold transition",
-                              listRowDensity === density
-                                ? "border-indigo-500/45 bg-indigo-500/15 text-indigo-700 dark:text-indigo-200"
-                                : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800",
-                            )}
-                          >
-                            {density === "COMPACT"
-                              ? "Compact"
-                              : density === "SPACIOUS"
-                                ? "Spacious"
-                                : "Comfortable"}
-                          </button>
-                        ),
-                      )}
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Rows</span>
+                      {(["COMPACT", "COMFORTABLE", "SPACIOUS"] as const).map((density) => (
+                        <button
+                          key={`moderation-row-density-${density}`}
+                          type="button"
+                          onClick={() => setListRowDensity(density)}
+                          className={cn(
+                            "h-7 rounded-md border px-2.5 text-[11px] font-semibold transition",
+                            listRowDensity === density
+                              ? "border-indigo-500/45 bg-indigo-500/15 text-indigo-700 dark:text-indigo-200"
+                              : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                          )}
+                        >
+                          {density === "COMPACT" ? "Compact" : density === "SPACIOUS" ? "Spacious" : "Comfortable"}
+                        </button>
+                      ))}
                     </div>
 
                     <div className="overflow-hidden rounded-lg border border-zinc-300 dark:border-zinc-700">
@@ -10632,82 +8205,43 @@ export const InAccordAdminModal = () => {
                               ? "No missing or blank owner-related fields found."
                               : "No items found for this moderation list."}
                           </p>
-                        ) : moderationListData.mode === "USERS" ? (
-                          (moderationListData.rows as AdminRecentLogin[]).map(
-                            (row, index) => (
-                              <div
-                                key={`moderation-login-${row.userId}-${index}`}
-                                className={cn(
-                                  "grid grid-cols-[1fr_1fr_1fr_1fr] gap-2 px-3",
-                                  listRowDensityClass,
-                                  index % 2 === 0
-                                    ? "bg-white/70 dark:bg-zinc-950/25"
-                                    : "bg-zinc-100/70 dark:bg-zinc-900/35",
-                                )}
-                              >
-                                <p
-                                  className="truncate"
-                                  title={`${row.name} (${row.userId})`}
-                                >
-                                  {row.name || row.userId}
-                                </p>
-                                <p
-                                  className="truncate"
-                                  title={row.email || "N/A"}
-                                >
-                                  {row.email || "N/A"}
-                                </p>
-                                <p
-                                  className="truncate"
-                                  title={row.role || "USER"}
-                                >
-                                  {row.role || "USER"}
-                                </p>
-                                <p
-                                  className="truncate"
-                                  title={
-                                    row.lastLogin
-                                      ? formatDateTime(row.lastLogin)
-                                      : "Never"
-                                  }
-                                >
-                                  {row.lastLogin
-                                    ? formatDateTime(row.lastLogin)
-                                    : "Never"}
-                                </p>
-                              </div>
-                            ),
-                          )
                         ) : (
-                          (
-                            moderationListData.rows as Array<{
-                              key: string;
-                              signal: string;
-                              value: string | number;
-                              notes: string;
-                            }>
-                          ).map((row, index) => (
-                            <div
-                              key={`moderation-owner-issue-${row.key}-${index}`}
-                              className={cn(
-                                "grid grid-cols-[1.4fr_0.7fr_1fr] gap-2 px-3",
-                                listRowDensityClass,
-                                index % 2 === 0
-                                  ? "bg-white/70 dark:bg-zinc-950/25"
-                                  : "bg-zinc-100/70 dark:bg-zinc-900/35",
-                              )}
-                            >
-                              <p className="truncate" title={row.signal}>
-                                {row.signal}
-                              </p>
-                              <p className="truncate" title={String(row.value)}>
-                                {row.value}
-                              </p>
-                              <p className="truncate" title={row.notes}>
-                                {row.notes}
-                              </p>
-                            </div>
-                          ))
+                          moderationListData.mode === "USERS"
+                            ? (moderationListData.rows as AdminRecentLogin[]).map((row, index) => (
+                                <div
+                                  key={`moderation-login-${row.userId}-${index}`}
+                                  className={cn(
+                                    "grid grid-cols-[1fr_1fr_1fr_1fr] gap-2 px-3",
+                                    listRowDensityClass,
+                                    index % 2 === 0
+                                      ? "bg-white/70 dark:bg-zinc-950/25"
+                                      : "bg-zinc-100/70 dark:bg-zinc-900/35"
+                                  )}
+                                >
+                                  <p className="truncate" title={`${row.name} (${row.userId})`}>{row.name || row.userId}</p>
+                                  <p className="truncate" title={row.email || "N/A"}>{row.email || "N/A"}</p>
+                                  <p className="truncate" title={row.role || "USER"}>{row.role || "USER"}</p>
+                                  <p className="truncate" title={row.lastLogin ? formatDateTime(row.lastLogin) : "Never"}>
+                                    {row.lastLogin ? formatDateTime(row.lastLogin) : "Never"}
+                                  </p>
+                                </div>
+                              ))
+                            : (moderationListData.rows as Array<{ key: string; signal: string; value: string | number; notes: string }>).map((row, index) => (
+                                <div
+                                  key={`moderation-owner-issue-${row.key}-${index}`}
+                                  className={cn(
+                                    "grid grid-cols-[1.4fr_0.7fr_1fr] gap-2 px-3",
+                                    listRowDensityClass,
+                                    index % 2 === 0
+                                      ? "bg-white/70 dark:bg-zinc-950/25"
+                                      : "bg-zinc-100/70 dark:bg-zinc-900/35"
+                                  )}
+                                >
+                                  <p className="truncate" title={row.signal}>{row.signal}</p>
+                                  <p className="truncate" title={String(row.value)}>{row.value}</p>
+                                  <p className="truncate" title={row.notes}>{row.notes}</p>
+                                </div>
+                              ))
                         )}
                       </div>
                     </div>
@@ -10719,9 +8253,7 @@ export const InAccordAdminModal = () => {
             {activeSection === "roles" && (
               <div className="rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                    Roles
-                  </p>
+                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Roles</p>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -10737,16 +8269,12 @@ export const InAccordAdminModal = () => {
                 </div>
 
                 <div className="mb-4 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                  <p className="mb-3 text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                    Add role
-                  </p>
+                  <p className="mb-3 text-sm font-semibold text-zinc-800 dark:text-zinc-100">Add role</p>
                   <div className="grid gap-2 md:grid-cols-[220px_1fr_auto]">
                     <input
                       type="text"
                       value={newRoleKey}
-                      onChange={(event) =>
-                        setNewRoleKey(event.target.value.toUpperCase())
-                      }
+                      onChange={(event) => setNewRoleKey(event.target.value.toUpperCase())}
                       placeholder="Role key (e.g. HELPER)"
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm font-semibold uppercase tracking-wide text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                     />
@@ -10771,29 +8299,17 @@ export const InAccordAdminModal = () => {
                   </p>
                 </div>
 
-                {managedRolesActionError ? (
-                  <p className="mb-3 text-xs text-rose-500">
-                    {managedRolesActionError}
-                  </p>
-                ) : null}
-                {managedRolesActionSuccess ? (
-                  <p className="mb-3 text-xs text-emerald-500">
-                    {managedRolesActionSuccess}
-                  </p>
-                ) : null}
+                {managedRolesActionError ? <p className="mb-3 text-xs text-rose-500">{managedRolesActionError}</p> : null}
+                {managedRolesActionSuccess ? <p className="mb-3 text-xs text-emerald-500">{managedRolesActionSuccess}</p> : null}
 
-                {isLoadingUsers || isLoadingManagedRoles ? (
-                  <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                    Loading role management...
-                  </p>
+                {(isLoadingUsers || isLoadingManagedRoles) ? (
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading role management...</p>
                 ) : usersError ? (
                   <p className="text-sm text-rose-500">{usersError}</p>
                 ) : managedRolesError ? (
                   <p className="text-sm text-rose-500">{managedRolesError}</p>
                 ) : roleDistribution.length === 0 ? (
-                  <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                    No role data available.
-                  </p>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300">No role data available.</p>
                 ) : (
                   <div className="space-y-3">
                     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -10806,12 +8322,8 @@ export const InAccordAdminModal = () => {
                             {getAdminRoleIcon(entry.role, "h-4 w-4")}
                             {entry.role}
                           </p>
-                          <p className="mt-1 text-lg font-bold text-zinc-900 dark:text-zinc-100">
-                            {entry.count}
-                          </p>
-                          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                            members assigned this role
-                          </p>
+                          <p className="mt-1 text-lg font-bold text-zinc-900 dark:text-zinc-100">{entry.count}</p>
+                          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">members assigned this role</p>
                         </div>
                       ))}
                     </div>
@@ -10819,12 +8331,8 @@ export const InAccordAdminModal = () => {
                     <div className="overflow-hidden rounded-lg border border-zinc-300 dark:border-zinc-700">
                       <div className="border-b border-zinc-300/70 bg-white/70 px-3 py-2 dark:border-zinc-700/70 dark:bg-zinc-900/35">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                            Rows
-                          </span>
-                          {(
-                            ["COMPACT", "COMFORTABLE", "SPACIOUS"] as const
-                          ).map((density) => (
+                          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Rows</span>
+                          {(["COMPACT", "COMFORTABLE", "SPACIOUS"] as const).map((density) => (
                             <button
                               key={`roles-row-density-${density}`}
                               type="button"
@@ -10833,14 +8341,10 @@ export const InAccordAdminModal = () => {
                                 "h-7 rounded-md border px-2.5 text-[11px] font-semibold transition",
                                 listRowDensity === density
                                   ? "border-indigo-500/45 bg-indigo-500/15 text-indigo-700 dark:text-indigo-200"
-                                  : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800",
+                                  : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
                               )}
                             >
-                              {density === "COMPACT"
-                                ? "Compact"
-                                : density === "SPACIOUS"
-                                  ? "Spacious"
-                                  : "Comfortable"}
+                              {density === "COMPACT" ? "Compact" : density === "SPACIOUS" ? "Spacious" : "Comfortable"}
                             </button>
                           ))}
                         </div>
@@ -10853,19 +8357,11 @@ export const InAccordAdminModal = () => {
                       </div>
                       <div className="max-h-85 overflow-y-auto bg-white/80 text-xs text-zinc-800 dark:bg-zinc-950/30 dark:text-zinc-200">
                         {managedRoles.map((role, index) => {
-                          const memberCount =
-                            roleDistribution.find(
-                              (entry) => entry.role === role.roleKey,
-                            )?.count ??
-                            role.memberCount ??
-                            0;
+                          const memberCount = roleDistribution.find((entry) => entry.role === role.roleKey)?.count ?? role.memberCount ?? 0;
                           const isUpdating = updatingRoleKey === role.roleKey;
                           const isDeleting = deletingRoleKey === role.roleKey;
                           const isBusy = isUpdating || isDeleting;
-                          const draftLabel =
-                            roleLabelDrafts[role.roleKey] ??
-                            role.roleLabel ??
-                            formatManagedRoleLabelFromKey(role.roleKey);
+                          const draftLabel = roleLabelDrafts[role.roleKey] ?? role.roleLabel ?? formatManagedRoleLabelFromKey(role.roleKey);
 
                           return (
                             <div
@@ -10875,15 +8371,10 @@ export const InAccordAdminModal = () => {
                                 listRowDensityClass,
                                 index % 2 === 0
                                   ? "bg-white/70 dark:bg-zinc-950/25"
-                                  : "bg-zinc-100/70 dark:bg-zinc-900/35",
+                                  : "bg-zinc-100/70 dark:bg-zinc-900/35"
                               )}
                             >
-                              <p
-                                className="truncate font-mono text-[11px]"
-                                title={role.roleKey}
-                              >
-                                {role.roleKey}
-                              </p>
+                              <p className="truncate font-mono text-[11px]" title={role.roleKey}>{role.roleKey}</p>
 
                               <input
                                 type="text"
@@ -10898,16 +8389,12 @@ export const InAccordAdminModal = () => {
                                 className="h-7 rounded-md border border-zinc-300 bg-white px-2 text-xs text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                               />
 
-                              <p className="text-sm font-semibold">
-                                {memberCount}
-                              </p>
+                              <p className="text-sm font-semibold">{memberCount}</p>
 
                               <div className="flex items-center justify-end gap-1.5">
                                 <button
                                   type="button"
-                                  onClick={() =>
-                                    void onSaveManagedRoleLabel(role.roleKey)
-                                  }
+                                  onClick={() => void onSaveManagedRoleLabel(role.roleKey)}
                                   disabled={isBusy}
                                   className="h-7 rounded-md bg-indigo-600 px-2 text-[10px] font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
@@ -10916,9 +8403,7 @@ export const InAccordAdminModal = () => {
                                 {!role.isSystem ? (
                                   <button
                                     type="button"
-                                    onClick={() =>
-                                      void onDeleteManagedRole(role.roleKey)
-                                    }
+                                    onClick={() => void onDeleteManagedRole(role.roleKey)}
                                     disabled={isBusy}
                                     className="h-7 rounded-md border border-rose-500/35 bg-rose-500/15 px-2 text-[10px] font-semibold text-rose-200 transition hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60"
                                   >
@@ -10936,24 +8421,12 @@ export const InAccordAdminModal = () => {
               </div>
             )}
 
-            {(activeSection === "familyCenter" ||
-              activeSection === "businessCenter" ||
-              activeSection === "schoolCenter") && (
+            {(activeSection === "familyCenter" || activeSection === "businessCenter" || activeSection === "schoolCenter") && (
               <div className="rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                    {activeSection === "businessCenter" ? (
-                      <Briefcase className="h-4 w-4" />
-                    ) : activeSection === "schoolCenter" ? (
-                      <School className="h-4 w-4" />
-                    ) : (
-                      <Baby className="h-4 w-4" />
-                    )}
-                    {activeSection === "businessCenter"
-                      ? "Business Center"
-                      : activeSection === "schoolCenter"
-                        ? "School Center"
-                        : "Family Center"}
+                    {activeSection === "businessCenter" ? <Briefcase className="h-4 w-4" /> : activeSection === "schoolCenter" ? <School className="h-4 w-4" /> : <Baby className="h-4 w-4" />}
+                    {activeSection === "businessCenter" ? "Business Center" : activeSection === "schoolCenter" ? "School Center" : "Family Center"}
                   </div>
                   <button
                     type="button"
@@ -10965,61 +8438,33 @@ export const InAccordAdminModal = () => {
                 </div>
 
                 {isLoadingFamilyCenter ? (
-                  <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                    Loading{" "}
-                    {activeSection === "businessCenter"
-                      ? "Business Center"
-                      : activeSection === "schoolCenter"
-                        ? "School Center"
-                        : "Family Center"}{" "}
-                    records...
-                  </p>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading {activeSection === "businessCenter" ? "Business Center" : activeSection === "schoolCenter" ? "School Center" : "Family Center"} records...</p>
                 ) : familyCenterError ? (
                   <p className="text-sm text-rose-500">{familyCenterError}</p>
                 ) : (
                   <>
                     {familyCenterSuccess ? (
-                      <p className="mb-3 text-xs text-emerald-600 dark:text-emerald-300">
-                        {familyCenterSuccess}
-                      </p>
+                      <p className="mb-3 text-xs text-emerald-600 dark:text-emerald-300">{familyCenterSuccess}</p>
                     ) : null}
 
                     <div className="mb-4 grid gap-2 md:grid-cols-4">
                       <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Applications
-                        </p>
-                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                          {familyCenterSummary.totalRecords}
-                        </p>
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Applications</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{familyCenterSummary.totalRecords}</p>
+                      </div>
+                      <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Pending</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{familyCenterSummary.pendingApplications}</p>
+                      </div>
+                      <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Approved</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{familyCenterSummary.approvedApplications}</p>
                       </div>
                       <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
                         <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Pending
+                          {activeSection === "businessCenter" ? "Business Members Tracked" : activeSection === "schoolCenter" ? "School Members Tracked" : "Family Members Tracked"}
                         </p>
-                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                          {familyCenterSummary.pendingApplications}
-                        </p>
-                      </div>
-                      <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Approved
-                        </p>
-                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                          {familyCenterSummary.approvedApplications}
-                        </p>
-                      </div>
-                      <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          {activeSection === "businessCenter"
-                            ? "Business Members Tracked"
-                            : activeSection === "schoolCenter"
-                              ? "School Members Tracked"
-                              : "Family Members Tracked"}
-                        </p>
-                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                          {familyCenterSummary.totalMembersTracked}
-                        </p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{familyCenterSummary.totalMembersTracked}</p>
                       </div>
                     </div>
 
@@ -11028,15 +8473,13 @@ export const InAccordAdminModal = () => {
                         "mb-4 grid gap-2",
                         activeSection === "businessCenter"
                           ? "sm:grid-cols-[1fr_180px_200px_auto]"
-                          : "sm:grid-cols-[1fr_180px_auto]",
+                          : "sm:grid-cols-[1fr_180px_auto]"
                       )}
                     >
                       <input
                         type="text"
                         value={familyCenterSearch}
-                        onChange={(event) =>
-                          setFamilyCenterSearch(event.target.value)
-                        }
+                        onChange={(event) => setFamilyCenterSearch(event.target.value)}
                         placeholder="Search by application ID, submitted by, user, or email"
                         className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                       />
@@ -11044,13 +8487,7 @@ export const InAccordAdminModal = () => {
                       <select
                         value={familyCenterStatusFilter}
                         onChange={(event) =>
-                          setFamilyCenterStatusFilter(
-                            event.target.value as
-                              | "ALL"
-                              | "SUBMITTED"
-                              | "APROVED"
-                              | "DENIED",
-                          )
+                          setFamilyCenterStatusFilter(event.target.value as "ALL" | "SUBMITTED" | "APROVED" | "DENIED")
                         }
                         className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                       >
@@ -11063,16 +8500,11 @@ export const InAccordAdminModal = () => {
                       {activeSection === "businessCenter" ? (
                         <select
                           value={businessSectionFilter}
-                          onChange={(event) =>
-                            setBusinessSectionFilter(event.target.value)
-                          }
+                          onChange={(event) => setBusinessSectionFilter(event.target.value)}
                           className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                         >
                           {businessSectionFilterOptions.map((section) => (
-                            <option
-                              key={`business-section-filter-${section}`}
-                              value={section}
-                            >
+                            <option key={`business-section-filter-${section}`} value={section}>
                               {section === "ALL" ? "All sections" : section}
                             </option>
                           ))}
@@ -11096,45 +8528,27 @@ export const InAccordAdminModal = () => {
                     </div>
 
                     <div className="mb-3 flex flex-wrap items-center gap-2">
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                        Rows
-                      </span>
-                      {(["COMPACT", "COMFORTABLE", "SPACIOUS"] as const).map(
-                        (density) => (
-                          <button
-                            key={`family-row-density-${density}`}
-                            type="button"
-                            onClick={() => setFamilyCenterRowDensity(density)}
-                            className={cn(
-                              "h-7 rounded-md border px-2.5 text-[11px] font-semibold transition",
-                              familyCenterRowDensity === density
-                                ? "border-indigo-500/45 bg-indigo-500/15 text-indigo-700 dark:text-indigo-200"
-                                : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800",
-                            )}
-                          >
-                            {density === "COMPACT"
-                              ? "Compact"
-                              : density === "SPACIOUS"
-                                ? "Spacious"
-                                : "Comfortable"}
-                          </button>
-                        ),
-                      )}
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Rows</span>
+                      {(["COMPACT", "COMFORTABLE", "SPACIOUS"] as const).map((density) => (
+                        <button
+                          key={`family-row-density-${density}`}
+                          type="button"
+                          onClick={() => setFamilyCenterRowDensity(density)}
+                          className={cn(
+                            "h-7 rounded-md border px-2.5 text-[11px] font-semibold transition",
+                            familyCenterRowDensity === density
+                              ? "border-indigo-500/45 bg-indigo-500/15 text-indigo-700 dark:text-indigo-200"
+                              : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                          )}
+                        >
+                          {density === "COMPACT" ? "Compact" : density === "SPACIOUS" ? "Spacious" : "Comfortable"}
+                        </button>
+                      ))}
                     </div>
 
                     {filteredFamilyCenterEntries.length === 0 ? (
                       <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                        No{" "}
-                        {activeSection === "businessCenter"
-                          ? "Business Center"
-                          : activeSection === "schoolCenter"
-                            ? "School Center"
-                            : "Family Center"}{" "}
-                        applications found
-                        {hasActiveFamilyCenterFilters
-                          ? " for the current filters"
-                          : " yet"}
-                        .
+                        No {activeSection === "businessCenter" ? "Business Center" : activeSection === "schoolCenter" ? "School Center" : "Family Center"} applications found{hasActiveFamilyCenterFilters ? " for the current filters" : " yet"}.
                       </p>
                     ) : (
                       <div className="overflow-hidden rounded-lg border border-zinc-300 dark:border-zinc-700">
@@ -11143,7 +8557,7 @@ export const InAccordAdminModal = () => {
                             "grid gap-2 bg-zinc-200/80 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
                             activeSection === "businessCenter"
                               ? "grid-cols-[1.1fr_1fr_1fr_1fr_0.7fr_0.9fr_0.9fr_1fr_0.8fr]"
-                              : "grid-cols-[1.1fr_1fr_1fr_1fr_0.7fr_0.9fr_1fr_0.8fr]",
+                              : "grid-cols-[1.1fr_1fr_1fr_1fr_0.7fr_0.9fr_1fr_0.8fr]"
                           )}
                         >
                           <p>Application ID</p>
@@ -11151,16 +8565,8 @@ export const InAccordAdminModal = () => {
                           <p>User</p>
                           <p>Email</p>
                           <p>Members</p>
-                          <p>
-                            {activeSection === "businessCenter"
-                              ? "Business Role"
-                              : activeSection === "schoolCenter"
-                                ? "School Designation"
-                                : "Family Designation"}
-                          </p>
-                          {activeSection === "businessCenter" ? (
-                            <p>Business Section</p>
-                          ) : null}
+                          <p>{activeSection === "businessCenter" ? "Business Role" : activeSection === "schoolCenter" ? "School Designation" : "Family Designation"}</p>
+                          {activeSection === "businessCenter" ? <p>Business Section</p> : null}
                           <p>Status</p>
                           <p>Actions</p>
                         </div>
@@ -11179,15 +8585,10 @@ export const InAccordAdminModal = () => {
                                     : "py-2",
                                 index % 2 === 0
                                   ? "bg-white/70 dark:bg-zinc-950/25"
-                                  : "bg-zinc-100/70 dark:bg-zinc-900/35",
+                                  : "bg-zinc-100/70 dark:bg-zinc-900/35"
                               )}
                             >
-                              <p
-                                className="truncate font-mono text-[11px]"
-                                title={entry.applicationId}
-                              >
-                                {entry.applicationId}
-                              </p>
+                              <p className="truncate font-mono text-[11px]" title={entry.applicationId}>{entry.applicationId}</p>
                               <div className="min-w-0">
                                 <Popover>
                                   <PopoverTrigger asChild>
@@ -11196,13 +8597,8 @@ export const InAccordAdminModal = () => {
                                       className="inline-flex min-w-0 items-center gap-1.5 rounded-md px-1 py-0.5 text-left hover:bg-zinc-200/70 dark:hover:bg-zinc-800/70"
                                       title={`View profile for ${entry.submittedBy}`}
                                     >
-                                      <UserAvatar
-                                        src={entry.imageUrl}
-                                        className="h-5 w-5"
-                                      />
-                                      <span className="truncate">
-                                        {entry.submittedBy}
-                                      </span>
+                                      <UserAvatar src={entry.imageUrl} className="h-5 w-5" />
+                                      <span className="truncate">{entry.submittedBy}</span>
                                     </button>
                                   </PopoverTrigger>
                                   <PopoverContent
@@ -11211,83 +8607,33 @@ export const InAccordAdminModal = () => {
                                     className="w-[280px] rounded-xl border border-zinc-300 bg-white p-3 text-zinc-900 shadow-xl dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
                                   >
                                     <div className="flex items-center gap-2">
-                                      <UserAvatar
-                                        src={entry.imageUrl}
-                                        className="h-10 w-10"
-                                      />
+                                      <UserAvatar src={entry.imageUrl} className="h-10 w-10" />
                                       <div className="min-w-0">
-                                        <p className="truncate text-sm font-semibold">
-                                          {entry.displayName}
-                                        </p>
-                                        <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
-                                          {entry.email || "N/A"}
-                                        </p>
+                                        <p className="truncate text-sm font-semibold">{entry.displayName}</p>
+                                        <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{entry.email || "N/A"}</p>
                                       </div>
                                     </div>
                                     <div className="mt-3 space-y-1 rounded-md border border-zinc-200 bg-zinc-50/80 p-2 text-xs dark:border-zinc-700 dark:bg-zinc-800/50">
-                                      <p>
-                                        <span className="font-semibold">
-                                          User ID:
-                                        </span>{" "}
-                                        {entry.userId}
-                                      </p>
-                                      <p>
-                                        <span className="font-semibold">
-                                          Role:
-                                        </span>{" "}
-                                        {entry.role}
-                                      </p>
-                                      <p>
-                                        <span className="font-semibold">
-                                          Submitted By:
-                                        </span>{" "}
-                                        {entry.submittedBy}
-                                      </p>
+                                      <p><span className="font-semibold">User ID:</span> {entry.userId}</p>
+                                      <p><span className="font-semibold">Role:</span> {entry.role}</p>
+                                      <p><span className="font-semibold">Submitted By:</span> {entry.submittedBy}</p>
                                     </div>
                                   </PopoverContent>
                                 </Popover>
                               </div>
-                              <p
-                                className="truncate"
-                                title={`${entry.displayName} (${entry.userId})`}
-                              >
+                              <p className="truncate" title={`${entry.displayName} (${entry.userId})`}>
                                 <span className="inline-flex items-center gap-1.5">
-                                  <span className="truncate">
-                                    {entry.displayName}
-                                  </span>
-                                  {activeSection === "businessCenter" ? (
-                                    <BusinessMemberIcon className="h-4 px-1 text-[9px]" />
-                                  ) : null}
+                                  <span className="truncate">{entry.displayName}</span>
+                                  {activeSection === "businessCenter" ? <BusinessMemberIcon className="h-4 px-1 text-[9px]" /> : null}
                                 </span>
                               </p>
-                              <p
-                                className="truncate"
-                                title={entry.email || "N/A"}
-                              >
-                                {entry.email || "N/A"}
-                              </p>
-                              <p>
-                                {activeSection === "businessCenter"
-                                  ? (entry.businessMembersCount ?? 0)
-                                  : entry.familyMembersCount}
-                              </p>
-                              <p
-                                className="truncate"
-                                title={
-                                  (activeSection === "businessCenter"
-                                    ? entry.businessDesignation
-                                    : entry.familyDesignation) || "Not set"
-                                }
-                              >
-                                {(activeSection === "businessCenter"
-                                  ? entry.businessDesignation
-                                  : entry.familyDesignation) || "Not set"}
+                              <p className="truncate" title={entry.email || "N/A"}>{entry.email || "N/A"}</p>
+                              <p>{activeSection === "businessCenter" ? (entry.businessMembersCount ?? 0) : entry.familyMembersCount}</p>
+                              <p className="truncate" title={(activeSection === "businessCenter" ? entry.businessDesignation : entry.familyDesignation) || "Not set"}>
+                                {(activeSection === "businessCenter" ? entry.businessDesignation : entry.familyDesignation) || "Not set"}
                               </p>
                               {activeSection === "businessCenter" ? (
-                                <p
-                                  className="truncate"
-                                  title={entry.businessSection || "Not set"}
-                                >
+                                <p className="truncate" title={entry.businessSection || "Not set"}>
                                   {entry.businessSection || "Not set"}
                                 </p>
                               ) : null}
@@ -11297,17 +8643,11 @@ export const InAccordAdminModal = () => {
                                     "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold",
                                     /pending/i.test(entry.applicationStatus)
                                       ? "border-amber-500/35 bg-amber-500/15 text-amber-700 dark:text-amber-200"
-                                      : /approved|aproved/i.test(
-                                            entry.applicationStatus,
-                                          )
+                                      : /approved|aproved/i.test(entry.applicationStatus)
                                         ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-700 dark:text-emerald-200"
-                                        : "border-zinc-500/35 bg-zinc-500/15 text-zinc-700 dark:text-zinc-200",
+                                        : "border-zinc-500/35 bg-zinc-500/15 text-zinc-700 dark:text-zinc-200"
                                   )}
-                                  title={
-                                    entry.applicationSubmittedAt
-                                      ? `Submitted: ${formatDateTime(entry.applicationSubmittedAt)}`
-                                      : "No submission date"
-                                  }
+                                  title={entry.applicationSubmittedAt ? `Submitted: ${formatDateTime(entry.applicationSubmittedAt)}` : "No submission date"}
                                 >
                                   {entry.applicationStatus || "No status"}
                                 </span>
@@ -11315,9 +8655,7 @@ export const InAccordAdminModal = () => {
                               <div className="flex items-center gap-1.5 whitespace-nowrap">
                                 <button
                                   type="button"
-                                  onClick={() =>
-                                    setReviewingFamilyApplication(entry)
-                                  }
+                                  onClick={() => setReviewingFamilyApplication(entry)}
                                   className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-indigo-300 bg-indigo-50 text-indigo-700 transition hover:bg-indigo-100 dark:border-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-200 dark:hover:bg-indigo-900/50"
                                   aria-label="View application"
                                   title="View application"
@@ -11326,19 +8664,13 @@ export const InAccordAdminModal = () => {
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() =>
-                                    void onDeleteFamilyApplication(entry)
-                                  }
-                                  disabled={
-                                    deletingFamilyApplicationUserId ===
-                                    entry.userId
-                                  }
+                                  onClick={() => void onDeleteFamilyApplication(entry)}
+                                  disabled={deletingFamilyApplicationUserId === entry.userId}
                                   className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-rose-300 bg-rose-50 text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-700 dark:bg-rose-950/35 dark:text-rose-200 dark:hover:bg-rose-900/45"
                                   aria-label="Delete application"
                                   title="Delete application"
                                 >
-                                  {deletingFamilyApplicationUserId ===
-                                  entry.userId ? (
+                                  {deletingFamilyApplicationUserId === entry.userId ? (
                                     <span className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
                                   ) : (
                                     <Trash2 className="h-3.5 w-3.5" />
@@ -11355,6 +8687,8 @@ export const InAccordAdminModal = () => {
               </div>
             )}
 
+
+
             <Dialog
               open={Boolean(reviewingFamilyApplication)}
               onOpenChange={(open) => {
@@ -11368,98 +8702,59 @@ export const InAccordAdminModal = () => {
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2">
                     <ScrollText className="h-4 w-4" />
-                    {activeSection === "businessCenter"
-                      ? "Business Application Review"
-                      : activeSection === "schoolCenter"
-                        ? "School Application Review"
-                        : "Family Application Review"}
+                    {activeSection === "businessCenter" ? "Business Application Review" : activeSection === "schoolCenter" ? "School Application Review" : "Family Application Review"}
                   </DialogTitle>
                   <DialogDescription className="text-zinc-600 dark:text-zinc-300">
-                    Review the selected{" "}
-                    {activeSection === "businessCenter"
-                      ? "Business Center"
-                      : activeSection === "schoolCenter"
-                        ? "School Center"
-                        : "Family Center"}{" "}
-                    application details.
+                    Review the selected {activeSection === "businessCenter" ? "Business Center" : activeSection === "schoolCenter" ? "School Center" : "Family Center"} application details.
                   </DialogDescription>
                 </DialogHeader>
 
                 {reviewingFamilyApplication ? (
                   <div className="grid gap-3 text-sm md:grid-cols-2">
                     <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45 md:col-span-2">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                        Application ID
-                      </p>
-                      <p className="mt-1 font-mono text-[12px] text-zinc-900 dark:text-zinc-100">
-                        {reviewingFamilyApplication.applicationId}
-                      </p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Application ID</p>
+                      <p className="mt-1 font-mono text-[12px] text-zinc-900 dark:text-zinc-100">{reviewingFamilyApplication.applicationId}</p>
                     </div>
 
                     <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                        Submitted By
-                      </p>
-                      <p className="mt-1 text-zinc-900 dark:text-zinc-100">
-                        {reviewingFamilyApplication.submittedBy}
-                      </p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Submitted By</p>
+                      <p className="mt-1 text-zinc-900 dark:text-zinc-100">{reviewingFamilyApplication.submittedBy}</p>
                     </div>
 
                     <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                        User
-                      </p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">User</p>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                        <p
-                          className="text-zinc-900 dark:text-zinc-100"
-                          title={reviewingFamilyApplication.userId}
-                        >
+                        <p className="text-zinc-900 dark:text-zinc-100" title={reviewingFamilyApplication.userId}>
                           {reviewingFamilyApplication.displayName}
                         </p>
-                        {activeSection === "businessCenter" ? (
-                          <BusinessMemberIcon />
-                        ) : null}
+                        {activeSection === "businessCenter" ? <BusinessMemberIcon /> : null}
                       </div>
                     </div>
 
                     <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                        Email
-                      </p>
-                      <p className="mt-1 text-zinc-900 dark:text-zinc-100">
-                        {reviewingFamilyApplication.email || "N/A"}
-                      </p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Email</p>
+                      <p className="mt-1 text-zinc-900 dark:text-zinc-100">{reviewingFamilyApplication.email || "N/A"}</p>
                     </div>
 
                     <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                        {activeSection === "businessCenter"
-                          ? "Business Members Tracked"
-                          : activeSection === "schoolCenter"
-                            ? "School Members Tracked"
-                            : "Family Members Tracked"}
+                        {activeSection === "businessCenter" ? "Business Members Tracked" : activeSection === "schoolCenter" ? "School Members Tracked" : "Family Members Tracked"}
                       </p>
                       <p className="mt-1 text-zinc-900 dark:text-zinc-100">
                         {activeSection === "businessCenter"
-                          ? (reviewingFamilyApplication.businessMembersCount ??
-                            0)
+                          ? (reviewingFamilyApplication.businessMembersCount ?? 0)
                           : reviewingFamilyApplication.familyMembersCount}
                       </p>
                     </div>
 
                     <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                        {activeSection === "businessCenter"
-                          ? "Business Role"
-                          : activeSection === "schoolCenter"
-                            ? "School Designation"
-                            : "Family Designation"}
+                        {activeSection === "businessCenter" ? "Business Role" : activeSection === "schoolCenter" ? "School Designation" : "Family Designation"}
                       </p>
                       <p className="mt-1 text-zinc-900 dark:text-zinc-100">
                         {(activeSection === "businessCenter"
                           ? reviewingFamilyApplication.businessDesignation
-                          : reviewingFamilyApplication.familyDesignation) ||
-                          "Not set"}
+                          : reviewingFamilyApplication.familyDesignation) || "Not set"}
                       </p>
                     </div>
 
@@ -11469,108 +8764,71 @@ export const InAccordAdminModal = () => {
                           Business Section
                         </p>
                         <p className="mt-1 text-zinc-900 dark:text-zinc-100">
-                          {reviewingFamilyApplication.businessSection ||
-                            "Not set"}
+                          {reviewingFamilyApplication.businessSection || "Not set"}
                         </p>
                       </div>
                     ) : null}
 
                     <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                        Application Status
-                      </p>
-                      <p className="mt-1 text-zinc-900 dark:text-zinc-100">
-                        {reviewingFamilyApplication.applicationStatus ||
-                          "No status"}
-                      </p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Application Status</p>
+                      <p className="mt-1 text-zinc-900 dark:text-zinc-100">{reviewingFamilyApplication.applicationStatus || "No status"}</p>
                     </div>
 
                     <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                        Submitted At
-                      </p>
-                      <p className="mt-1 text-zinc-900 dark:text-zinc-100">
-                        {formatDateTime(
-                          reviewingFamilyApplication.applicationSubmittedAt,
-                        )}
-                      </p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Submitted At</p>
+                      <p className="mt-1 text-zinc-900 dark:text-zinc-100">{formatDateTime(reviewingFamilyApplication.applicationSubmittedAt)}</p>
                     </div>
 
                     <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45 md:col-span-2">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                        Preference Updated
-                      </p>
-                      <p className="mt-1 text-zinc-900 dark:text-zinc-100">
-                        {formatDateTime(
-                          reviewingFamilyApplication.preferenceUpdatedAt,
-                        )}
-                      </p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Preference Updated</p>
+                      <p className="mt-1 text-zinc-900 dark:text-zinc-100">{formatDateTime(reviewingFamilyApplication.preferenceUpdatedAt)}</p>
                     </div>
 
                     <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45 md:col-span-2">
                       <div className="mb-2 flex items-center justify-between gap-2">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Application Files (
-                          {reviewingFamilyApplication.applicationFiles.length})
+                          Application Files ({reviewingFamilyApplication.applicationFiles.length})
                         </p>
                       </div>
 
-                      {reviewingFamilyApplication.applicationFiles.length ===
-                      0 ? (
-                        <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                          No files attached to this application.
-                        </p>
+                      {reviewingFamilyApplication.applicationFiles.length === 0 ? (
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400">No files attached to this application.</p>
                       ) : (
                         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-                          {reviewingFamilyApplication.applicationFiles.map(
-                            (file, index) => {
-                              const isImage = /^image\//i.test(
-                                file.mimeType || "",
-                              );
-                              const isPdf =
-                                /pdf/i.test(file.mimeType || "") ||
-                                /\.pdf($|\?)/i.test(file.url);
+                          {reviewingFamilyApplication.applicationFiles.map((file, index) => {
+                            const isImage = /^image\//i.test(file.mimeType || "");
+                            const isPdf = /pdf/i.test(file.mimeType || "") || /\.pdf($|\?)/i.test(file.url);
 
-                              return (
-                                <button
-                                  key={`family-application-file-${file.url}-${index}`}
-                                  type="button"
-                                  onClick={() =>
-                                    setPreviewingFamilyApplicationFile({
-                                      name: file.name,
-                                      url: file.url,
-                                      mimeType: file.mimeType,
-                                    })
-                                  }
-                                  className="group overflow-hidden rounded-md border border-zinc-300 bg-white text-left transition hover:border-indigo-400 hover:bg-indigo-50/40 dark:border-zinc-700 dark:bg-zinc-900/40 dark:hover:border-indigo-600 dark:hover:bg-indigo-950/20"
-                                  title={`View ${file.name}`}
-                                >
-                                  <div className="flex h-20 items-center justify-center bg-zinc-100 dark:bg-zinc-800/70">
-                                    {isImage ? (
-                                      <img
-                                        src={file.url}
-                                        alt={file.name}
-                                        className="h-full w-full object-cover"
-                                        loading="lazy"
-                                      />
-                                    ) : (
-                                      <div className="flex flex-col items-center justify-center gap-1 text-zinc-600 dark:text-zinc-300">
-                                        <ScrollText className="h-5 w-5" />
-                                        <span className="text-[10px] font-semibold uppercase">
-                                          {isPdf ? "PDF" : "File"}
-                                        </span>
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div className="px-2 py-1.5">
-                                    <p className="truncate text-[10px] font-medium text-zinc-800 dark:text-zinc-100">
-                                      {file.name}
-                                    </p>
-                                  </div>
-                                </button>
-                              );
-                            },
-                          )}
+                            return (
+                              <button
+                                key={`family-application-file-${file.url}-${index}`}
+                                type="button"
+                                onClick={() =>
+                                  setPreviewingFamilyApplicationFile({
+                                    name: file.name,
+                                    url: file.url,
+                                    mimeType: file.mimeType,
+                                  })
+                                }
+                                className="group overflow-hidden rounded-md border border-zinc-300 bg-white text-left transition hover:border-indigo-400 hover:bg-indigo-50/40 dark:border-zinc-700 dark:bg-zinc-900/40 dark:hover:border-indigo-600 dark:hover:bg-indigo-950/20"
+                                title={`View ${file.name}`}
+                              >
+                                <div className="flex h-20 items-center justify-center bg-zinc-100 dark:bg-zinc-800/70">
+                                  {isImage ? (
+                                    <img src={file.url} alt={file.name} className="h-full w-full object-cover" loading="lazy" />
+                                  ) : (
+                                    <div className="flex flex-col items-center justify-center gap-1 text-zinc-600 dark:text-zinc-300">
+                                      <ScrollText className="h-5 w-5" />
+                                      <span className="text-[10px] font-semibold uppercase">{isPdf ? "PDF" : "File"}</span>
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="px-2 py-1.5">
+                                  <p className="truncate text-[10px] font-medium text-zinc-800 dark:text-zinc-100">{file.name}</p>
+                                </div>
+                              </button>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -11578,45 +8836,27 @@ export const InAccordAdminModal = () => {
                     <div className="md:col-span-2 flex items-center justify-end gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-700">
                       <button
                         type="button"
-                        onClick={() =>
-                          void onReviewFamilyApplicationDecision(
-                            reviewingFamilyApplication,
-                            "DECLINE",
-                          )
-                        }
+                        onClick={() => void onReviewFamilyApplicationDecision(reviewingFamilyApplication, "DECLINE")}
                         disabled={
-                          reviewingFamilyApplicationActionUserId ===
-                            reviewingFamilyApplication.userId ||
-                          /declined|denied/i.test(
-                            reviewingFamilyApplication.applicationStatus,
-                          )
+                          reviewingFamilyApplicationActionUserId === reviewingFamilyApplication.userId ||
+                          /declined|denied/i.test(reviewingFamilyApplication.applicationStatus)
                         }
                         className="h-8 rounded-md border border-rose-300 bg-rose-50 px-3 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-700 dark:bg-rose-950/35 dark:text-rose-200 dark:hover:bg-rose-900/45"
                       >
-                        {reviewingFamilyApplicationActionUserId ===
-                        reviewingFamilyApplication.userId
+                        {reviewingFamilyApplicationActionUserId === reviewingFamilyApplication.userId
                           ? "Saving..."
                           : "Decline"}
                       </button>
                       <button
                         type="button"
-                        onClick={() =>
-                          void onReviewFamilyApplicationDecision(
-                            reviewingFamilyApplication,
-                            "ACCEPT",
-                          )
-                        }
+                        onClick={() => void onReviewFamilyApplicationDecision(reviewingFamilyApplication, "ACCEPT")}
                         disabled={
-                          reviewingFamilyApplicationActionUserId ===
-                            reviewingFamilyApplication.userId ||
-                          /approved|aproved/i.test(
-                            reviewingFamilyApplication.applicationStatus,
-                          )
+                          reviewingFamilyApplicationActionUserId === reviewingFamilyApplication.userId ||
+                          /approved|aproved/i.test(reviewingFamilyApplication.applicationStatus)
                         }
                         className="h-8 rounded-md border border-emerald-300 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-emerald-700 dark:bg-emerald-950/35 dark:text-emerald-200 dark:hover:bg-emerald-900/45"
                       >
-                        {reviewingFamilyApplicationActionUserId ===
-                        reviewingFamilyApplication.userId
+                        {reviewingFamilyApplicationActionUserId === reviewingFamilyApplication.userId
                           ? "Saving..."
                           : "Accept"}
                       </button>
@@ -11637,8 +8877,7 @@ export const InAccordAdminModal = () => {
               <DialogContent className="max-w-4xl bg-white text-black dark:bg-[#313338] dark:text-white">
                 <DialogHeader>
                   <DialogTitle className="truncate text-base">
-                    {previewingFamilyApplicationFile?.name ||
-                      "Application file"}
+                    {previewingFamilyApplicationFile?.name || "Application file"}
                   </DialogTitle>
                   <DialogDescription className="text-zinc-600 dark:text-zinc-300">
                     Click the link below if the preview is limited.
@@ -11648,20 +8887,13 @@ export const InAccordAdminModal = () => {
                 {previewingFamilyApplicationFile ? (
                   <div className="space-y-3">
                     <div className="max-h-[65vh] overflow-auto rounded-md border border-zinc-300 bg-zinc-50 p-2 dark:border-zinc-700 dark:bg-zinc-900/40">
-                      {/^image\//i.test(
-                        previewingFamilyApplicationFile.mimeType || "",
-                      ) ? (
+                      {/^image\//i.test(previewingFamilyApplicationFile.mimeType || "") ? (
                         <img
                           src={previewingFamilyApplicationFile.url}
                           alt={previewingFamilyApplicationFile.name}
                           className="mx-auto h-auto max-h-[60vh] w-auto max-w-full rounded"
                         />
-                      ) : /pdf/i.test(
-                          previewingFamilyApplicationFile.mimeType || "",
-                        ) ||
-                        /\.pdf($|\?)/i.test(
-                          previewingFamilyApplicationFile.url,
-                        ) ? (
+                      ) : /pdf/i.test(previewingFamilyApplicationFile.mimeType || "") || /\.pdf($|\?)/i.test(previewingFamilyApplicationFile.url) ? (
                         <iframe
                           src={previewingFamilyApplicationFile.url}
                           title={previewingFamilyApplicationFile.name}
@@ -11690,9 +8922,7 @@ export const InAccordAdminModal = () => {
             {activeSection === "auditLog" && (
               <div className="rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                    Audit Log
-                  </p>
+                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Audit Log</p>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -11713,56 +8943,40 @@ export const InAccordAdminModal = () => {
                 </div>
 
                 {isLoadingSecurity ? (
-                  <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                    Loading audit entries...
-                  </p>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading audit entries...</p>
                 ) : securityError ? (
                   <p className="text-sm text-rose-500">{securityError}</p>
                 ) : (
                   <div className="overflow-hidden rounded-lg border border-zinc-300 dark:border-zinc-700">
                     <div className="border-b border-zinc-300/70 bg-white/70 px-3 py-2 dark:border-zinc-700/70 dark:bg-zinc-900/35">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Rows
-                        </span>
-                        {(["COMPACT", "COMFORTABLE", "SPACIOUS"] as const).map(
-                          (density) => (
-                            <button
-                              key={`audit-row-density-${density}`}
-                              type="button"
-                              onClick={() => setListRowDensity(density)}
-                              className={cn(
-                                "h-7 rounded-md border px-2.5 text-[11px] font-semibold transition",
-                                listRowDensity === density
-                                  ? "border-indigo-500/45 bg-indigo-500/15 text-indigo-700 dark:text-indigo-200"
-                                  : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800",
-                              )}
-                            >
-                              {density === "COMPACT"
-                                ? "Compact"
-                                : density === "SPACIOUS"
-                                  ? "Spacious"
-                                  : "Comfortable"}
-                            </button>
-                          ),
-                        )}
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Rows</span>
+                        {(["COMPACT", "COMFORTABLE", "SPACIOUS"] as const).map((density) => (
+                          <button
+                            key={`audit-row-density-${density}`}
+                            type="button"
+                            onClick={() => setListRowDensity(density)}
+                            className={cn(
+                              "h-7 rounded-md border px-2.5 text-[11px] font-semibold transition",
+                              listRowDensity === density
+                                ? "border-indigo-500/45 bg-indigo-500/15 text-indigo-700 dark:text-indigo-200"
+                                : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                            )}
+                          >
+                            {density === "COMPACT" ? "Compact" : density === "SPACIOUS" ? "Spacious" : "Comfortable"}
+                          </button>
+                        ))}
                       </div>
                     </div>
                     <div className="grid grid-cols-[1.2fr_1fr_0.8fr_1fr] gap-2 bg-zinc-200/80 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                      <p>
-                        <span className="inline-flex items-center gap-1">
-                          <ScrollText className="h-3.5 w-3.5" /> User
-                        </span>
-                      </p>
+                      <p><span className="inline-flex items-center gap-1"><ScrollText className="h-3.5 w-3.5" /> User</span></p>
                       <p>Email</p>
                       <p>Role</p>
                       <p>Last Login</p>
                     </div>
                     <div className="max-h-80 overflow-y-auto bg-white/80 text-xs text-zinc-800 dark:bg-zinc-950/30 dark:text-zinc-200">
                       {securityRecentLogins.length === 0 ? (
-                        <p className="px-3 py-3 text-zinc-600 dark:text-zinc-300">
-                          No audit-like activity found.
-                        </p>
+                        <p className="px-3 py-3 text-zinc-600 dark:text-zinc-300">No audit-like activity found.</p>
                       ) : (
                         securityRecentLogins.map((row, index) => (
                           <div
@@ -11772,27 +8986,13 @@ export const InAccordAdminModal = () => {
                               listRowDensityClass,
                               index % 2 === 0
                                 ? "bg-white/70 dark:bg-zinc-950/25"
-                                : "bg-zinc-100/70 dark:bg-zinc-900/35",
+                                : "bg-zinc-100/70 dark:bg-zinc-900/35"
                             )}
                           >
-                            <p
-                              className="truncate"
-                              title={`${row.name} (${row.userId})`}
-                            >
-                              {row.name}
-                            </p>
-                            <p className="truncate" title={row.email || "N/A"}>
-                              {row.email || "N/A"}
-                            </p>
-                            <p className="truncate" title={row.role}>
-                              {row.role}
-                            </p>
-                            <p
-                              className="truncate"
-                              title={formatDateTime(row.lastLogin)}
-                            >
-                              {formatDateTime(row.lastLogin)}
-                            </p>
+                            <p className="truncate" title={`${row.name} (${row.userId})`}>{row.name}</p>
+                            <p className="truncate" title={row.email || "N/A"}>{row.email || "N/A"}</p>
+                            <p className="truncate" title={row.role}>{row.role}</p>
+                            <p className="truncate" title={formatDateTime(row.lastLogin)}>{formatDateTime(row.lastLogin)}</p>
                           </div>
                         ))
                       )}
@@ -11805,9 +9005,7 @@ export const InAccordAdminModal = () => {
             {activeSection === "invites" && (
               <div className="rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                    Invites
-                  </p>
+                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Invites</p>
                   <button
                     type="button"
                     onClick={() => void loadServers()}
@@ -11818,41 +9016,27 @@ export const InAccordAdminModal = () => {
                 </div>
 
                 {isLoadingServers ? (
-                  <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                    Loading invites overview...
-                  </p>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading invites overview...</p>
                 ) : serversError ? (
                   <p className="text-sm text-rose-500">{serversError}</p>
                 ) : (
                   <>
                     <div className="mb-4 grid gap-2 md:grid-cols-2">
                       <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Servers with Invite
-                        </p>
-                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                          {inviteCoverage.withInvites}
-                        </p>
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Servers with Invite</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{inviteCoverage.withInvites}</p>
                       </div>
                       <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Servers without Invite
-                        </p>
-                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                          {inviteCoverage.withoutInvites}
-                        </p>
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Servers without Invite</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{inviteCoverage.withoutInvites}</p>
                       </div>
                     </div>
 
                     <div className="overflow-hidden rounded-lg border border-zinc-300 dark:border-zinc-700">
                       <div className="border-b border-zinc-300/70 bg-white/70 px-3 py-2 dark:border-zinc-700/70 dark:bg-zinc-900/35">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                            Rows
-                          </span>
-                          {(
-                            ["COMPACT", "COMFORTABLE", "SPACIOUS"] as const
-                          ).map((density) => (
+                          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Rows</span>
+                          {(["COMPACT", "COMFORTABLE", "SPACIOUS"] as const).map((density) => (
                             <button
                               key={`invites-row-density-${density}`}
                               type="button"
@@ -11861,32 +9045,22 @@ export const InAccordAdminModal = () => {
                                 "h-7 rounded-md border px-2.5 text-[11px] font-semibold transition",
                                 listRowDensity === density
                                   ? "border-indigo-500/45 bg-indigo-500/15 text-indigo-700 dark:text-indigo-200"
-                                  : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800",
+                                  : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
                               )}
                             >
-                              {density === "COMPACT"
-                                ? "Compact"
-                                : density === "SPACIOUS"
-                                  ? "Spacious"
-                                  : "Comfortable"}
+                              {density === "COMPACT" ? "Compact" : density === "SPACIOUS" ? "Spacious" : "Comfortable"}
                             </button>
                           ))}
                         </div>
                       </div>
                       <div className="grid grid-cols-[1fr_0.8fr_1fr] gap-2 bg-zinc-200/80 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
                         <p>Server</p>
-                        <p>
-                          <span className="inline-flex items-center gap-1">
-                            <Link2 className="h-3.5 w-3.5" /> Invite
-                          </span>
-                        </p>
+                        <p><span className="inline-flex items-center gap-1"><Link2 className="h-3.5 w-3.5" /> Invite</span></p>
                         <p>Owner</p>
                       </div>
                       <div className="max-h-80 overflow-y-auto bg-white/80 text-xs text-zinc-800 dark:bg-zinc-950/30 dark:text-zinc-200">
                         {servers.length === 0 ? (
-                          <p className="px-3 py-3 text-zinc-600 dark:text-zinc-300">
-                            No servers available.
-                          </p>
+                          <p className="px-3 py-3 text-zinc-600 dark:text-zinc-300">No servers available.</p>
                         ) : (
                           servers.map((row, index) => (
                             <div
@@ -11896,21 +9070,12 @@ export const InAccordAdminModal = () => {
                                 listRowDensityClass,
                                 index % 2 === 0
                                   ? "bg-white/70 dark:bg-zinc-950/25"
-                                  : "bg-zinc-100/70 dark:bg-zinc-900/35",
+                                  : "bg-zinc-100/70 dark:bg-zinc-900/35"
                               )}
                             >
-                              <p className="truncate" title={row.name}>
-                                {row.name}
-                              </p>
-                              <p
-                                className="truncate font-mono"
-                                title={row.inviteCode || "N/A"}
-                              >
-                                {row.inviteCode || "N/A"}
-                              </p>
-                              <p className="truncate" title={row.ownerName}>
-                                {row.ownerName}
-                              </p>
+                              <p className="truncate" title={row.name}>{row.name}</p>
+                              <p className="truncate font-mono" title={row.inviteCode || "N/A"}>{row.inviteCode || "N/A"}</p>
+                              <p className="truncate" title={row.ownerName}>{row.ownerName}</p>
                             </div>
                           ))
                         )}
@@ -11918,17 +9083,13 @@ export const InAccordAdminModal = () => {
                     </div>
 
                     <div className="mt-4 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                      <p className="mb-3 text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                        Integration Setup & Management
-                      </p>
+                      <p className="mb-3 text-sm font-semibold text-zinc-800 dark:text-zinc-100">Integration Setup & Management</p>
 
                       <div className="mb-3 grid gap-2 md:grid-cols-[1fr_140px_1fr_1fr_auto]">
                         <input
                           type="text"
                           value={newIntegrationUserId}
-                          onChange={(event) =>
-                            setNewIntegrationUserId(event.target.value)
-                          }
+                          onChange={(event) => setNewIntegrationUserId(event.target.value)}
                           list="integration-user-id-list"
                           placeholder="User ID (pick from list or type)"
                           className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
@@ -11944,11 +9105,7 @@ export const InAccordAdminModal = () => {
                         </datalist>
                         <select
                           value={newIntegrationType}
-                          onChange={(event) =>
-                            setNewIntegrationType(
-                              event.target.value as "APP" | "BOT",
-                            )
-                          }
+                          onChange={(event) => setNewIntegrationType(event.target.value as "APP" | "BOT")}
                           className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                         >
                           <option value="APP">APP</option>
@@ -11957,18 +9114,14 @@ export const InAccordAdminModal = () => {
                         <input
                           type="text"
                           value={newIntegrationName}
-                          onChange={(event) =>
-                            setNewIntegrationName(event.target.value)
-                          }
+                          onChange={(event) => setNewIntegrationName(event.target.value)}
                           placeholder="Config Name"
                           className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                         />
                         <input
                           type="text"
                           value={newIntegrationApplicationId}
-                          onChange={(event) =>
-                            setNewIntegrationApplicationId(event.target.value)
-                          }
+                          onChange={(event) => setNewIntegrationApplicationId(event.target.value)}
                           placeholder="Application ID"
                           className="h-9 rounded-md border border-zinc-300 bg-white px-3 font-mono text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                         />
@@ -11986,53 +9139,31 @@ export const InAccordAdminModal = () => {
                         <input
                           type="checkbox"
                           checked={newIntegrationEnabled}
-                          onChange={(event) =>
-                            setNewIntegrationEnabled(event.target.checked)
-                          }
+                          onChange={(event) => setNewIntegrationEnabled(event.target.checked)}
                         />
                         Enabled on create
                       </label>
 
                       <div className="mb-3 grid gap-2 md:grid-cols-5">
                         <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                          <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                            Users w/ Configs
-                          </p>
-                          <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                            {integrationsSummary?.usersWithOtherConfigs ?? 0}
-                          </p>
+                          <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Users w/ Configs</p>
+                          <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{integrationsSummary?.usersWithOtherConfigs ?? 0}</p>
                         </div>
                         <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                          <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                            Apps
-                          </p>
-                          <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                            {integrationsSummary?.appsTotal ?? 0}
-                          </p>
+                          <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Apps</p>
+                          <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{integrationsSummary?.appsTotal ?? 0}</p>
                         </div>
                         <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                          <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                            Bots
-                          </p>
-                          <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                            {integrationsSummary?.botsTotal ?? 0}
-                          </p>
+                          <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Bots</p>
+                          <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{integrationsSummary?.botsTotal ?? 0}</p>
                         </div>
                         <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                          <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                            Enabled Apps
-                          </p>
-                          <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                            {integrationsSummary?.enabledApps ?? 0}
-                          </p>
+                          <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Enabled Apps</p>
+                          <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{integrationsSummary?.enabledApps ?? 0}</p>
                         </div>
                         <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                          <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                            Enabled Bots
-                          </p>
-                          <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                            {integrationsSummary?.enabledBots ?? 0}
-                          </p>
+                          <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Enabled Bots</p>
+                          <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{integrationsSummary?.enabledBots ?? 0}</p>
                         </div>
                       </div>
 
@@ -12040,21 +9171,14 @@ export const InAccordAdminModal = () => {
                         <input
                           type="text"
                           value={OtherConfigQuery}
-                          onChange={(event) =>
-                            setOtherConfigQuery(event.target.value)
-                          }
+                          onChange={(event) => setOtherConfigQuery(event.target.value)}
                           placeholder="Search by user, email, name, app ID"
                           className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                         />
 
                         <select
                           value={OtherConfigTypeFilter}
-                          onChange={(event) =>
-                            setOtherConfigTypeFilter(
-                              event.target
-                                .value as typeof OtherConfigTypeFilter,
-                            )
-                          }
+                          onChange={(event) => setOtherConfigTypeFilter(event.target.value as typeof OtherConfigTypeFilter)}
                           className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                         >
                           <option value="ALL">All types</option>
@@ -12064,12 +9188,7 @@ export const InAccordAdminModal = () => {
 
                         <select
                           value={OtherConfigStatusFilter}
-                          onChange={(event) =>
-                            setOtherConfigStatusFilter(
-                              event.target
-                                .value as typeof OtherConfigStatusFilter,
-                            )
-                          }
+                          onChange={(event) => setOtherConfigStatusFilter(event.target.value as typeof OtherConfigStatusFilter)}
                           className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                         >
                           <option value="ALL">All status</option>
@@ -12097,11 +9216,7 @@ export const InAccordAdminModal = () => {
                         </span>
                         <select
                           value={OtherConfigSortKey}
-                          onChange={(event) =>
-                            onOtherConfigSort(
-                              event.target.value as OtherConfigSortKey,
-                            )
-                          }
+                          onChange={(event) => onOtherConfigSort(event.target.value as OtherConfigSortKey)}
                           className="h-8 rounded-md border border-zinc-300 bg-white px-2 text-xs text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                         >
                           <option value="createdAt">Created date</option>
@@ -12111,9 +9226,7 @@ export const InAccordAdminModal = () => {
                         <select
                           value={OtherConfigSortDirection}
                           onChange={(event) =>
-                            setOtherConfigSortDirection(
-                              event.target.value as OtherSortDirection,
-                            )
+                            setOtherConfigSortDirection(event.target.value as OtherSortDirection)
                           }
                           className="h-8 rounded-md border border-zinc-300 bg-white px-2 text-xs text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                         >
@@ -12121,25 +9234,20 @@ export const InAccordAdminModal = () => {
                           <option value="desc">Descending</option>
                         </select>
                         <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                          Tip: click Type / Status / Created headers to toggle
-                          sorting.
+                          Tip: click Type / Status / Created headers to toggle sorting.
                         </p>
                       </div>
 
                       {OtherConfigActionError ? (
-                        <p className="mb-3 text-xs text-rose-500">
-                          {OtherConfigActionError}
-                        </p>
+                        <p className="mb-3 text-xs text-rose-500">{OtherConfigActionError}</p>
                       ) : null}
                       {OtherConfigActionSuccess ? (
-                        <p className="mb-3 text-xs text-emerald-500">
-                          {OtherConfigActionSuccess}
-                        </p>
+                        <p className="mb-3 text-xs text-emerald-500">{OtherConfigActionSuccess}</p>
                       ) : null}
 
                       {renderOtherConfigTable(
                         filteredRecentOtherConfigs,
-                        `No app or bot configs found${hasActiveOtherConfigFilters ? " for current filters" : ""}.`,
+                        `No app or bot configs found${hasActiveOtherConfigFilters ? " for current filters" : ""}.`
                       )}
                     </div>
                   </>
@@ -12165,58 +9273,35 @@ export const InAccordAdminModal = () => {
 
                 <div className="mb-4 grid gap-2 md:grid-cols-4">
                   <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                      Visible Assets
-                    </p>
-                    <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                      {emojiStickerSummary?.totalAssets ?? 0}
-                    </p>
+                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Visible Assets</p>
+                    <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{emojiStickerSummary?.totalAssets ?? 0}</p>
                   </div>
                   <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                      Emoji
-                    </p>
-                    <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                      {emojiStickerSummary?.emojiAssets ?? 0}
-                    </p>
+                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Emoji</p>
+                    <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{emojiStickerSummary?.emojiAssets ?? 0}</p>
                   </div>
                   <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                      Stickers
-                    </p>
-                    <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                      {emojiStickerSummary?.stickerAssets ?? 0}
-                    </p>
+                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Stickers</p>
+                    <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{emojiStickerSummary?.stickerAssets ?? 0}</p>
                   </div>
                   <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                      Active
-                    </p>
-                    <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                      {emojiStickerSummary?.activeAssets ?? 0}
-                    </p>
+                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Active</p>
+                    <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{emojiStickerSummary?.activeAssets ?? 0}</p>
                   </div>
                 </div>
 
                 <div className="mb-4 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                  <p className="mb-3 text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                    Add Asset
-                  </p>
+                  <p className="mb-3 text-sm font-semibold text-zinc-800 dark:text-zinc-100">Add Asset</p>
 
                   <div className="grid gap-2 md:grid-cols-[1fr_130px_180px_1fr_auto]">
                     <select
                       value={newEmojiStickerServerId}
-                      onChange={(event) =>
-                        setNewEmojiStickerServerId(event.target.value)
-                      }
+                      onChange={(event) => setNewEmojiStickerServerId(event.target.value)}
                       className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                     >
                       <option value="">Select server</option>
                       {emojiStickerServerOptions.map((serverOption) => (
-                        <option
-                          key={`new-emoji-server-${serverOption.id}`}
-                          value={serverOption.id}
-                        >
+                        <option key={`new-emoji-server-${serverOption.id}`} value={serverOption.id}>
                           {serverOption.name}
                         </option>
                       ))}
@@ -12224,11 +9309,7 @@ export const InAccordAdminModal = () => {
 
                     <select
                       value={newEmojiStickerType}
-                      onChange={(event) =>
-                        setNewEmojiStickerType(
-                          event.target.value as typeof newEmojiStickerType,
-                        )
-                      }
+                      onChange={(event) => setNewEmojiStickerType(event.target.value as typeof newEmojiStickerType)}
                       className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                     >
                       <option value="EMOJI">Emoji</option>
@@ -12238,9 +9319,7 @@ export const InAccordAdminModal = () => {
                     <input
                       type="text"
                       value={newEmojiStickerName}
-                      onChange={(event) =>
-                        setNewEmojiStickerName(event.target.value.toLowerCase())
-                      }
+                      onChange={(event) => setNewEmojiStickerName(event.target.value.toLowerCase())}
                       placeholder="name (e.g. party_blob)"
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                     />
@@ -12248,14 +9327,8 @@ export const InAccordAdminModal = () => {
                     <input
                       type="text"
                       value={newEmojiStickerValue}
-                      onChange={(event) =>
-                        setNewEmojiStickerValue(event.target.value)
-                      }
-                      placeholder={
-                        newEmojiStickerType === "EMOJI"
-                          ? "emoji character"
-                          : "sticker URL or /uploads/..."
-                      }
+                      onChange={(event) => setNewEmojiStickerValue(event.target.value)}
+                      placeholder={newEmojiStickerType === "EMOJI" ? "emoji character" : "sticker URL or /uploads/..."}
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                     />
 
@@ -12270,25 +9343,19 @@ export const InAccordAdminModal = () => {
                   </div>
 
                   <p className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
-                    Sticker tip: upload through your media flow first, then
-                    paste the URL here to track and moderate it per server.
+                    Sticker tip: upload through your media flow first, then paste the URL here to track and moderate it per server.
                   </p>
                 </div>
 
                 <div className="mb-4 grid gap-2 sm:grid-cols-[1fr_160px_160px_auto]">
                   <select
                     value={emojiStickerServerFilter}
-                    onChange={(event) =>
-                      setEmojiStickerServerFilter(event.target.value)
-                    }
+                    onChange={(event) => setEmojiStickerServerFilter(event.target.value)}
                     className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                   >
                     <option value="ALL">All servers</option>
                     {emojiStickerServerOptions.map((serverOption) => (
-                      <option
-                        key={`emoji-filter-server-${serverOption.id}`}
-                        value={serverOption.id}
-                      >
+                      <option key={`emoji-filter-server-${serverOption.id}`} value={serverOption.id}>
                         {serverOption.name}
                       </option>
                     ))}
@@ -12296,11 +9363,7 @@ export const InAccordAdminModal = () => {
 
                   <select
                     value={emojiStickerTypeFilter}
-                    onChange={(event) =>
-                      setEmojiStickerTypeFilter(
-                        event.target.value as typeof emojiStickerTypeFilter,
-                      )
-                    }
+                    onChange={(event) => setEmojiStickerTypeFilter(event.target.value as typeof emojiStickerTypeFilter)}
                     className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                   >
                     <option value="ALL">All types</option>
@@ -12310,11 +9373,7 @@ export const InAccordAdminModal = () => {
 
                   <select
                     value={emojiStickerStatusFilter}
-                    onChange={(event) =>
-                      setEmojiStickerStatusFilter(
-                        event.target.value as typeof emojiStickerStatusFilter,
-                      )
-                    }
+                    onChange={(event) => setEmojiStickerStatusFilter(event.target.value as typeof emojiStickerStatusFilter)}
                     className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                   >
                     <option value="ALL">All status</option>
@@ -12337,76 +9396,55 @@ export const InAccordAdminModal = () => {
                 </div>
 
                 <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                    Rows
-                  </span>
-                  {(["COMPACT", "COMFORTABLE", "SPACIOUS"] as const).map(
-                    (density) => (
-                      <button
-                        key={`emoji-stickers-row-density-${density}`}
-                        type="button"
-                        onClick={() => setListRowDensity(density)}
-                        className={cn(
-                          "h-7 rounded-md border px-2.5 text-[11px] font-semibold transition",
-                          listRowDensity === density
-                            ? "border-indigo-500/45 bg-indigo-500/15 text-indigo-700 dark:text-indigo-200"
-                            : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800",
-                        )}
-                      >
-                        {density === "COMPACT"
-                          ? "Compact"
-                          : density === "SPACIOUS"
-                            ? "Spacious"
-                            : "Comfortable"}
-                      </button>
-                    ),
-                  )}
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Rows</span>
+                  {(["COMPACT", "COMFORTABLE", "SPACIOUS"] as const).map((density) => (
+                    <button
+                      key={`emoji-stickers-row-density-${density}`}
+                      type="button"
+                      onClick={() => setListRowDensity(density)}
+                      className={cn(
+                        "h-7 rounded-md border px-2.5 text-[11px] font-semibold transition",
+                        listRowDensity === density
+                          ? "border-indigo-500/45 bg-indigo-500/15 text-indigo-700 dark:text-indigo-200"
+                          : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                      )}
+                    >
+                      {density === "COMPACT" ? "Compact" : density === "SPACIOUS" ? "Spacious" : "Comfortable"}
+                    </button>
+                  ))}
                 </div>
 
                 {emojiStickersError ? (
-                  <p className="mb-3 text-xs text-rose-500">
-                    {emojiStickersError}
-                  </p>
+                  <p className="mb-3 text-xs text-rose-500">{emojiStickersError}</p>
                 ) : null}
                 {emojiStickerActionSuccess ? (
-                  <p className="mb-3 text-xs text-emerald-500">
-                    {emojiStickerActionSuccess}
-                  </p>
+                  <p className="mb-3 text-xs text-emerald-500">{emojiStickerActionSuccess}</p>
                 ) : null}
 
                 {isLoadingEmojiStickers ? (
-                  <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                    Loading emoji/sticker inventory...
-                  </p>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading emoji/sticker inventory...</p>
                 ) : emojiStickerAssets.length === 0 ? (
-                  <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                    No assets found for current filters.
-                  </p>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300">No assets found for current filters.</p>
                 ) : (
                   <div className="space-y-2">
                     {emojiStickerAssets.map((asset) => {
-                      const isActionPending =
-                        emojiStickerActionItemId === asset.id;
+                      const isActionPending = emojiStickerActionItemId === asset.id;
 
                       return (
                         <div
                           key={asset.id}
                           className={cn(
                             "rounded-lg border border-zinc-300 bg-white/85 dark:border-zinc-700 dark:bg-zinc-900/45",
-                            listCardDensityClass,
+                            listCardDensityClass
                           )}
                         >
                           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                             <div className="min-w-0">
                               <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                                {asset.assetType === "EMOJI"
-                                  ? "Emoji"
-                                  : "Sticker"}{" "}
-                                • {asset.name}
+                                {asset.assetType === "EMOJI" ? "Emoji" : "Sticker"} • {asset.name}
                               </p>
                               <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                                {asset.serverName} · added by{" "}
-                                {asset.createdByName}
+                                {asset.serverName} · added by {asset.createdByName}
                               </p>
                             </div>
                             <span
@@ -12414,7 +9452,7 @@ export const InAccordAdminModal = () => {
                                 "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]",
                                 asset.isEnabled
                                   ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-200"
-                                  : "border-zinc-500/35 bg-zinc-500/15 text-zinc-200",
+                                  : "border-zinc-500/35 bg-zinc-500/15 text-zinc-200"
                               )}
                             >
                               {asset.isEnabled ? "ACTIVE" : "DISABLED"}
@@ -12423,9 +9461,7 @@ export const InAccordAdminModal = () => {
 
                           <div className="grid gap-2 text-xs text-zinc-700 dark:text-zinc-300 md:grid-cols-[auto_1fr]">
                             {asset.assetType === "EMOJI" ? (
-                              <p className="text-2xl leading-none">
-                                {asset.emoji || "🙂"}
-                              </p>
+                              <p className="text-2xl leading-none">{asset.emoji || "🙂"}</p>
                             ) : asset.imageUrl ? (
                               <a
                                 href={asset.imageUrl}
@@ -12443,17 +9479,12 @@ export const InAccordAdminModal = () => {
                                 />
                               </a>
                             ) : (
-                              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                                No preview
-                              </p>
+                              <p className="text-xs text-zinc-500 dark:text-zinc-400">No preview</p>
                             )}
 
                             <div className="min-w-0">
                               {asset.imageUrl ? (
-                                <p
-                                  className="truncate text-[11px] text-zinc-500 dark:text-zinc-400"
-                                  title={asset.imageUrl}
-                                >
+                                <p className="truncate text-[11px] text-zinc-500 dark:text-zinc-400" title={asset.imageUrl}>
                                   {asset.imageUrl}
                                 </p>
                               ) : null}
@@ -12466,36 +9497,27 @@ export const InAccordAdminModal = () => {
                           <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-zinc-300/70 pt-3 dark:border-zinc-700/70">
                             <button
                               type="button"
-                              onClick={() =>
-                                void onEmojiStickerAction(
-                                  asset.id,
-                                  asset.isEnabled ? "DISABLE" : "ENABLE",
-                                )
-                              }
+                              onClick={() => void onEmojiStickerAction(asset.id, asset.isEnabled ? "DISABLE" : "ENABLE")}
                               disabled={isActionPending}
                               className={cn(
                                 "h-8 rounded-md px-3 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60",
                                 asset.isEnabled
                                   ? "border border-zinc-500/35 bg-zinc-500/15 text-zinc-200 hover:bg-zinc-500/25"
-                                  : "border border-emerald-500/35 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25",
+                                  : "border border-emerald-500/35 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
                               )}
                             >
                               {asset.isEnabled ? "Disable" : "Enable"}
                             </button>
                             <button
                               type="button"
-                              onClick={() =>
-                                void onEmojiStickerAction(asset.id, "DELETE")
-                              }
+                              onClick={() => void onEmojiStickerAction(asset.id, "DELETE")}
                               disabled={isActionPending}
                               className="h-8 rounded-md border border-rose-500/35 bg-rose-500/15 px-3 text-xs font-medium text-rose-200 transition hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               Delete
                             </button>
                             {isActionPending ? (
-                              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                                Updating...
-                              </p>
+                              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Updating...</p>
                             ) : null}
                           </div>
                         </div>
@@ -12523,23 +9545,16 @@ export const InAccordAdminModal = () => {
                 </div>
 
                 <div className="mb-4 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                  <p className="mb-2 text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                    Create Webhook
-                  </p>
+                  <p className="mb-2 text-sm font-semibold text-zinc-800 dark:text-zinc-100">Create Webhook</p>
                   <div className="grid gap-2 md:grid-cols-[180px_180px_1fr_160px_auto]">
                     <select
                       value={newWebhookServerId}
-                      onChange={(event) =>
-                        setNewWebhookServerId(event.target.value)
-                      }
+                      onChange={(event) => setNewWebhookServerId(event.target.value)}
                       className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                     >
                       <option value="GLOBAL">Global webhook</option>
                       {servers.map((serverItem) => (
-                        <option
-                          key={`webhook-server-${serverItem.id}`}
-                          value={serverItem.id}
-                        >
+                        <option key={`webhook-server-${serverItem.id}`} value={serverItem.id}>
                           {serverItem.name}
                         </option>
                       ))}
@@ -12548,9 +9563,7 @@ export const InAccordAdminModal = () => {
                     <input
                       type="text"
                       value={newWebhookName}
-                      onChange={(event) =>
-                        setNewWebhookName(event.target.value)
-                      }
+                      onChange={(event) => setNewWebhookName(event.target.value)}
                       placeholder="Webhook name"
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                     />
@@ -12565,9 +9578,7 @@ export const InAccordAdminModal = () => {
 
                     <select
                       value={newWebhookEventType}
-                      onChange={(event) =>
-                        setNewWebhookEventType(event.target.value)
-                      }
+                      onChange={(event) => setNewWebhookEventType(event.target.value)}
                       className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                     >
                       <option value="MESSAGE_CREATE">MESSAGE_CREATE</option>
@@ -12587,55 +9598,35 @@ export const InAccordAdminModal = () => {
                   </div>
                 </div>
 
-                {webhooksActionError ? (
-                  <p className="mb-3 text-xs text-rose-500">
-                    {webhooksActionError}
-                  </p>
-                ) : null}
-                {webhooksActionSuccess ? (
-                  <p className="mb-3 text-xs text-emerald-500">
-                    {webhooksActionSuccess}
-                  </p>
-                ) : null}
+                {webhooksActionError ? <p className="mb-3 text-xs text-rose-500">{webhooksActionError}</p> : null}
+                {webhooksActionSuccess ? <p className="mb-3 text-xs text-emerald-500">{webhooksActionSuccess}</p> : null}
 
                 <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                    Rows
-                  </span>
-                  {(["COMPACT", "COMFORTABLE", "SPACIOUS"] as const).map(
-                    (density) => (
-                      <button
-                        key={`webhooks-row-density-${density}`}
-                        type="button"
-                        onClick={() => setListRowDensity(density)}
-                        className={cn(
-                          "h-7 rounded-md border px-2.5 text-[11px] font-semibold transition",
-                          listRowDensity === density
-                            ? "border-indigo-500/45 bg-indigo-500/15 text-indigo-700 dark:text-indigo-200"
-                            : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800",
-                        )}
-                      >
-                        {density === "COMPACT"
-                          ? "Compact"
-                          : density === "SPACIOUS"
-                            ? "Spacious"
-                            : "Comfortable"}
-                      </button>
-                    ),
-                  )}
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Rows</span>
+                  {(["COMPACT", "COMFORTABLE", "SPACIOUS"] as const).map((density) => (
+                    <button
+                      key={`webhooks-row-density-${density}`}
+                      type="button"
+                      onClick={() => setListRowDensity(density)}
+                      className={cn(
+                        "h-7 rounded-md border px-2.5 text-[11px] font-semibold transition",
+                        listRowDensity === density
+                          ? "border-indigo-500/45 bg-indigo-500/15 text-indigo-700 dark:text-indigo-200"
+                          : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                      )}
+                    >
+                      {density === "COMPACT" ? "Compact" : density === "SPACIOUS" ? "Spacious" : "Comfortable"}
+                    </button>
+                  ))}
                 </div>
 
                 <div className="min-h-0 flex-1">
                   {isLoadingWebhooks ? (
-                    <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                      Loading webhooks...
-                    </p>
+                    <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading webhooks...</p>
                   ) : webhooksError ? (
                     <p className="text-sm text-rose-500">{webhooksError}</p>
                   ) : webhooks.length === 0 ? (
-                    <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                      No webhooks configured yet.
-                    </p>
+                    <p className="text-sm text-zinc-600 dark:text-zinc-300">No webhooks configured yet.</p>
                   ) : (
                     <div className="h-full min-h-0 space-y-2 overflow-y-auto pr-1">
                       {webhooks.map((hook) => {
@@ -12646,19 +9637,17 @@ export const InAccordAdminModal = () => {
                             key={`admin-webhook-${hook.id}`}
                             className={cn(
                               "rounded-lg border border-zinc-300 bg-white/85 dark:border-zinc-700 dark:bg-zinc-900/45",
-                              listCardDensityClass,
+                              listCardDensityClass
                             )}
                           >
                             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                              <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                                {hook.name}
-                              </p>
+                              <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{hook.name}</p>
                               <span
                                 className={cn(
                                   "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]",
                                   hook.enabled
                                     ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-200"
-                                    : "border-zinc-500/35 bg-zinc-500/15 text-zinc-200",
+                                    : "border-zinc-500/35 bg-zinc-500/15 text-zinc-200"
                                 )}
                               >
                                 {hook.enabled ? "ENABLED" : "DISABLED"}
@@ -12666,43 +9655,30 @@ export const InAccordAdminModal = () => {
                             </div>
 
                             <div className="grid gap-1 text-xs text-zinc-600 dark:text-zinc-300">
-                              <p className="truncate" title={hook.endpointUrl}>
-                                Endpoint: {hook.endpointUrl}
-                              </p>
+                              <p className="truncate" title={hook.endpointUrl}>Endpoint: {hook.endpointUrl}</p>
                               <p>Event: {hook.eventType}</p>
                               <p>Scope: {hook.serverName || "Global"}</p>
-                              <p className="font-mono">
-                                Secret: {hook.secretPreview}
-                              </p>
-                              <p>
-                                Updated:{" "}
-                                {formatDateTime(
-                                  hook.updatedAt ?? hook.createdAt,
-                                )}
-                              </p>
+                              <p className="font-mono">Secret: {hook.secretPreview}</p>
+                              <p>Updated: {formatDateTime(hook.updatedAt ?? hook.createdAt)}</p>
                             </div>
 
                             <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-zinc-300/70 pt-3 dark:border-zinc-700/70">
                               <button
                                 type="button"
-                                onClick={() =>
-                                  void onWebhookAction(hook, "toggle")
-                                }
+                                onClick={() => void onWebhookAction(hook, "toggle")}
                                 disabled={isPending}
                                 className={cn(
                                   "h-8 rounded-md px-3 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60",
                                   hook.enabled
                                     ? "border border-zinc-500/35 bg-zinc-500/15 text-zinc-200 hover:bg-zinc-500/25"
-                                    : "border border-emerald-500/35 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25",
+                                    : "border border-emerald-500/35 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
                                 )}
                               >
                                 {hook.enabled ? "Disable" : "Enable"}
                               </button>
                               <button
                                 type="button"
-                                onClick={() =>
-                                  void onWebhookAction(hook, "rotate-secret")
-                                }
+                                onClick={() => void onWebhookAction(hook, "rotate-secret")}
                                 disabled={isPending}
                                 className="h-8 rounded-md border border-indigo-500/35 bg-indigo-500/15 px-3 text-xs font-medium text-indigo-200 transition hover:bg-indigo-500/25 disabled:cursor-not-allowed disabled:opacity-60"
                               >
@@ -12710,19 +9686,13 @@ export const InAccordAdminModal = () => {
                               </button>
                               <button
                                 type="button"
-                                onClick={() =>
-                                  void onWebhookAction(hook, "delete")
-                                }
+                                onClick={() => void onWebhookAction(hook, "delete")}
                                 disabled={isPending}
                                 className="h-8 rounded-md border border-rose-500/35 bg-rose-500/15 px-3 text-xs font-medium text-rose-200 transition hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60"
                               >
                                 Delete
                               </button>
-                              {isPending ? (
-                                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                                  Updating...
-                                </p>
-                              ) : null}
+                              {isPending ? <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Updating...</p> : null}
                             </div>
                           </div>
                         );
@@ -12736,9 +9706,7 @@ export const InAccordAdminModal = () => {
             {activeSection === "security" && (
               <div className="rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                    Security & Audit
-                  </p>
+                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Security & Audit</p>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -12759,65 +9727,39 @@ export const InAccordAdminModal = () => {
                 </div>
 
                 {isLoadingSecurity ? (
-                  <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                    Loading security insights...
-                  </p>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading security insights...</p>
                 ) : securityError ? (
                   <p className="text-sm text-rose-500">{securityError}</p>
                 ) : (
                   <>
                     <div className="grid gap-2 md:grid-cols-5">
                       <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Users
-                        </p>
-                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                          {securitySummary?.totalUsers ?? 0}
-                        </p>
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Users</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{securitySummary?.totalUsers ?? 0}</p>
                       </div>
                       <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Admins
-                        </p>
-                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                          {securitySummary?.adminUsers ?? 0}
-                        </p>
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Admins</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{securitySummary?.adminUsers ?? 0}</p>
                       </div>
                       <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Inactive 30d
-                        </p>
-                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                          {securitySummary?.inactive30d ?? 0}
-                        </p>
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Inactive 30d</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{securitySummary?.inactive30d ?? 0}</p>
                       </div>
                       <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Never Logged In
-                        </p>
-                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                          {securitySummary?.neverLoggedIn ?? 0}
-                        </p>
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Never Logged In</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{securitySummary?.neverLoggedIn ?? 0}</p>
                       </div>
                       <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Servers Missing Owner
-                        </p>
-                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                          {securitySummary?.serversWithoutValidOwner ?? 0}
-                        </p>
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Servers Missing Owner</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{securitySummary?.serversWithoutValidOwner ?? 0}</p>
                       </div>
                     </div>
 
                     <div className="mt-4 overflow-hidden rounded-lg border border-zinc-300 dark:border-zinc-700">
                       <div className="border-b border-zinc-300/70 bg-white/70 px-3 py-2 dark:border-zinc-700/70 dark:bg-zinc-900/35">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                            Rows
-                          </span>
-                          {(
-                            ["COMPACT", "COMFORTABLE", "SPACIOUS"] as const
-                          ).map((density) => (
+                          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Rows</span>
+                          {(["COMPACT", "COMFORTABLE", "SPACIOUS"] as const).map((density) => (
                             <button
                               key={`security-row-density-${density}`}
                               type="button"
@@ -12826,14 +9768,10 @@ export const InAccordAdminModal = () => {
                                 "h-7 rounded-md border px-2.5 text-[11px] font-semibold transition",
                                 listRowDensity === density
                                   ? "border-indigo-500/45 bg-indigo-500/15 text-indigo-700 dark:text-indigo-200"
-                                  : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800",
+                                  : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
                               )}
                             >
-                              {density === "COMPACT"
-                                ? "Compact"
-                                : density === "SPACIOUS"
-                                  ? "Spacious"
-                                  : "Comfortable"}
+                              {density === "COMPACT" ? "Compact" : density === "SPACIOUS" ? "Spacious" : "Comfortable"}
                             </button>
                           ))}
                         </div>
@@ -12846,9 +9784,7 @@ export const InAccordAdminModal = () => {
                       </div>
                       <div className="max-h-80 overflow-y-auto bg-white/80 text-xs text-zinc-800 dark:bg-zinc-950/30 dark:text-zinc-200">
                         {securityRecentLogins.length === 0 ? (
-                          <p className="px-3 py-3 text-zinc-600 dark:text-zinc-300">
-                            No login activity found.
-                          </p>
+                          <p className="px-3 py-3 text-zinc-600 dark:text-zinc-300">No login activity found.</p>
                         ) : (
                           securityRecentLogins.map((row, index) => (
                             <div
@@ -12858,30 +9794,13 @@ export const InAccordAdminModal = () => {
                                 listRowDensityClass,
                                 index % 2 === 0
                                   ? "bg-white/70 dark:bg-zinc-950/25"
-                                  : "bg-zinc-100/70 dark:bg-zinc-900/35",
+                                  : "bg-zinc-100/70 dark:bg-zinc-900/35"
                               )}
                             >
-                              <p
-                                className="truncate"
-                                title={`${row.name} (${row.userId})`}
-                              >
-                                {row.name}
-                              </p>
-                              <p
-                                className="truncate"
-                                title={row.email || "N/A"}
-                              >
-                                {row.email || "N/A"}
-                              </p>
-                              <p className="truncate" title={row.role}>
-                                {row.role}
-                              </p>
-                              <p
-                                className="truncate"
-                                title={formatDateTime(row.lastLogin)}
-                              >
-                                {formatDateTime(row.lastLogin)}
-                              </p>
+                              <p className="truncate" title={`${row.name} (${row.userId})`}>{row.name}</p>
+                              <p className="truncate" title={row.email || "N/A"}>{row.email || "N/A"}</p>
+                              <p className="truncate" title={row.role}>{row.role}</p>
+                              <p className="truncate" title={formatDateTime(row.lastLogin)}>{formatDateTime(row.lastLogin)}</p>
                             </div>
                           ))
                         )}
@@ -12895,9 +9814,7 @@ export const InAccordAdminModal = () => {
             {activeSection === "integrations" && (
               <div className="rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                    Integrations
-                  </p>
+                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Integrations</p>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -12918,18 +9835,14 @@ export const InAccordAdminModal = () => {
                 </div>
 
                 {isLoadingIntegrations ? (
-                  <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                    Loading integration insights...
-                  </p>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading integration insights...</p>
                 ) : integrationsError ? (
                   <p className="text-sm text-rose-500">{integrationsError}</p>
                 ) : (
                   <>
                     <div className="mb-4 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
                       <div className="mb-3 flex items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                          Provider Setup
-                        </p>
+                        <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Provider Setup</p>
                         <button
                           type="button"
                           onClick={() => void loadIntegrationProviderSetup()}
@@ -12940,20 +9853,14 @@ export const InAccordAdminModal = () => {
                       </div>
 
                       {isLoadingIntegrationProviderSetup ? (
-                        <p className="text-xs text-zinc-600 dark:text-zinc-300">
-                          Loading provider setup...
-                        </p>
+                        <p className="text-xs text-zinc-600 dark:text-zinc-300">Loading provider setup...</p>
                       ) : (
                         <>
                           {integrationProviderSetupError ? (
-                            <p className="mb-2 text-xs text-rose-500">
-                              {integrationProviderSetupError}
-                            </p>
+                            <p className="mb-2 text-xs text-rose-500">{integrationProviderSetupError}</p>
                           ) : null}
                           {integrationProviderSetupSuccess ? (
-                            <p className="mb-2 text-xs text-emerald-500">
-                              {integrationProviderSetupSuccess}
-                            </p>
+                            <p className="mb-2 text-xs text-emerald-500">{integrationProviderSetupSuccess}</p>
                           ) : null}
 
                           <div className="space-y-3">
@@ -12965,17 +9872,10 @@ export const InAccordAdminModal = () => {
                               { key: "xbox", label: "Xbox" },
                               { key: "youtube", label: "YouTube" },
                             ].map((provider) => {
-                              const status =
-                                integrationProviderSetup?.providers?.[
-                                  provider.key
-                                ];
-                              const draft = integrationProviderDrafts[
-                                provider.key
-                              ] ?? { clientId: "", clientSecret: "" };
+                              const status = integrationProviderSetup?.providers?.[provider.key];
+                              const draft = integrationProviderDrafts[provider.key] ?? { clientId: "", clientSecret: "" };
                               const isSteam = provider.key === "steam";
-                              const isSavingProvider =
-                                isSavingIntegrationProviderSetup ===
-                                provider.key;
+                              const isSavingProvider = isSavingIntegrationProviderSetup === provider.key;
 
                               return (
                                 <div
@@ -12987,25 +9887,14 @@ export const InAccordAdminModal = () => {
                                       {provider.label}
                                     </p>
                                     <div className="flex items-center gap-2 text-[11px] text-zinc-500 dark:text-zinc-400">
-                                      <span>
-                                        ID:{" "}
-                                        {status?.hasClientId
-                                          ? "Configured"
-                                          : "Missing"}
-                                      </span>
-                                      <span>
-                                        Secret:{" "}
-                                        {status?.hasClientSecret
-                                          ? "Configured"
-                                          : "Missing"}
-                                      </span>
+                                      <span>ID: {status?.hasClientId ? "Configured" : "Missing"}</span>
+                                      <span>Secret: {status?.hasClientSecret ? "Configured" : "Missing"}</span>
                                     </div>
                                   </div>
 
                                   {isSteam ? (
                                     <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                                      Steam uses OpenID and does not require
-                                      client ID/secret setup.
+                                      Steam uses OpenID and does not require client ID/secret setup.
                                     </p>
                                   ) : (
                                     <>
@@ -13014,18 +9903,13 @@ export const InAccordAdminModal = () => {
                                           type="text"
                                           value={draft.clientId}
                                           onChange={(event) =>
-                                            setIntegrationProviderDrafts(
-                                              (current) => ({
-                                                ...current,
-                                                [provider.key]: {
-                                                  ...(current[provider.key] ?? {
-                                                    clientId: "",
-                                                    clientSecret: "",
-                                                  }),
-                                                  clientId: event.target.value,
-                                                },
-                                              }),
-                                            )
+                                            setIntegrationProviderDrafts((current) => ({
+                                              ...current,
+                                              [provider.key]: {
+                                                ...(current[provider.key] ?? { clientId: "", clientSecret: "" }),
+                                                clientId: event.target.value,
+                                              },
+                                            }))
                                           }
                                           placeholder={`Set ${provider.label} Client ID`}
                                           className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
@@ -13034,19 +9918,13 @@ export const InAccordAdminModal = () => {
                                           type="password"
                                           value={draft.clientSecret}
                                           onChange={(event) =>
-                                            setIntegrationProviderDrafts(
-                                              (current) => ({
-                                                ...current,
-                                                [provider.key]: {
-                                                  ...(current[provider.key] ?? {
-                                                    clientId: "",
-                                                    clientSecret: "",
-                                                  }),
-                                                  clientSecret:
-                                                    event.target.value,
-                                                },
-                                              }),
-                                            )
+                                            setIntegrationProviderDrafts((current) => ({
+                                              ...current,
+                                              [provider.key]: {
+                                                ...(current[provider.key] ?? { clientId: "", clientSecret: "" }),
+                                                clientSecret: event.target.value,
+                                              },
+                                            }))
                                           }
                                           placeholder={`Set ${provider.label} Client Secret`}
                                           className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
@@ -13055,27 +9933,15 @@ export const InAccordAdminModal = () => {
 
                                       <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                                         <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                                          Current ID:{" "}
-                                          {status?.clientIdPreview || "Not set"}{" "}
-                                          · Secret:{" "}
-                                          {status?.clientSecretPreview ||
-                                            "Not set"}
+                                          Current ID: {status?.clientIdPreview || "Not set"} · Secret: {status?.clientSecretPreview || "Not set"}
                                         </p>
                                         <button
                                           type="button"
-                                          onClick={() =>
-                                            void onSaveIntegrationProviderSetup(
-                                              provider.key,
-                                            )
-                                          }
-                                          disabled={Boolean(
-                                            isSavingIntegrationProviderSetup,
-                                          )}
+                                          onClick={() => void onSaveIntegrationProviderSetup(provider.key)}
+                                          disabled={Boolean(isSavingIntegrationProviderSetup)}
                                           className="h-8 rounded-md bg-indigo-600 px-3 text-xs font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
                                         >
-                                          {isSavingProvider
-                                            ? "Saving..."
-                                            : `Save ${provider.label}`}
+                                          {isSavingProvider ? "Saving..." : `Save ${provider.label}`}
                                         </button>
                                       </div>
                                     </>
@@ -13090,20 +9956,12 @@ export const InAccordAdminModal = () => {
 
                     <div className="mb-4 grid gap-2 md:grid-cols-2">
                       <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Users with Connections
-                        </p>
-                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                          {integrationsSummary?.usersWithConnections ?? 0}
-                        </p>
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Users with Connections</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{integrationsSummary?.usersWithConnections ?? 0}</p>
                       </div>
                       <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Total Linked Accounts
-                        </p>
-                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                          {integrationsSummary?.totalLinkedAccounts ?? 0}
-                        </p>
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Total Linked Accounts</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{integrationsSummary?.totalLinkedAccounts ?? 0}</p>
                       </div>
                     </div>
 
@@ -13113,15 +9971,9 @@ export const InAccordAdminModal = () => {
                           key={`integration-provider-${provider.key}`}
                           className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45"
                         >
-                          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                            {provider.key}
-                          </p>
-                          <p className="mt-1 text-lg font-bold text-zinc-900 dark:text-zinc-100">
-                            {provider.connectedUsers}
-                          </p>
-                          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                            connected users
-                          </p>
+                          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">{provider.key}</p>
+                          <p className="mt-1 text-lg font-bold text-zinc-900 dark:text-zinc-100">{provider.connectedUsers}</p>
+                          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">connected users</p>
                         </div>
                       ))}
                     </div>
@@ -13129,12 +9981,8 @@ export const InAccordAdminModal = () => {
                     <div className="overflow-hidden rounded-lg border border-zinc-300 dark:border-zinc-700">
                       <div className="border-b border-zinc-300/70 bg-white/70 px-3 py-2 dark:border-zinc-700/70 dark:bg-zinc-900/35">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                            Rows
-                          </span>
-                          {(
-                            ["COMPACT", "COMFORTABLE", "SPACIOUS"] as const
-                          ).map((density) => (
+                          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Rows</span>
+                          {(["COMPACT", "COMFORTABLE", "SPACIOUS"] as const).map((density) => (
                             <button
                               key={`integrations-row-density-${density}`}
                               type="button"
@@ -13143,14 +9991,10 @@ export const InAccordAdminModal = () => {
                                 "h-7 rounded-md border px-2.5 text-[11px] font-semibold transition",
                                 listRowDensity === density
                                   ? "border-indigo-500/45 bg-indigo-500/15 text-indigo-700 dark:text-indigo-200"
-                                  : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800",
+                                  : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
                               )}
                             >
-                              {density === "COMPACT"
-                                ? "Compact"
-                                : density === "SPACIOUS"
-                                  ? "Spacious"
-                                  : "Comfortable"}
+                              {density === "COMPACT" ? "Compact" : density === "SPACIOUS" ? "Spacious" : "Comfortable"}
                             </button>
                           ))}
                         </div>
@@ -13162,9 +10006,7 @@ export const InAccordAdminModal = () => {
                       </div>
                       <div className="max-h-80 overflow-y-auto bg-white/80 text-xs text-zinc-800 dark:bg-zinc-950/30 dark:text-zinc-200">
                         {topConnectedUsers.length === 0 ? (
-                          <p className="px-3 py-3 text-zinc-600 dark:text-zinc-300">
-                            No linked accounts found.
-                          </p>
+                          <p className="px-3 py-3 text-zinc-600 dark:text-zinc-300">No linked accounts found.</p>
                         ) : (
                           topConnectedUsers.map((row, index) => (
                             <div
@@ -13174,18 +10016,11 @@ export const InAccordAdminModal = () => {
                                 listRowDensityClass,
                                 index % 2 === 0
                                   ? "bg-white/70 dark:bg-zinc-950/25"
-                                  : "bg-zinc-100/70 dark:bg-zinc-900/35",
+                                  : "bg-zinc-100/70 dark:bg-zinc-900/35"
                               )}
                             >
-                              <p className="truncate" title={row.userId}>
-                                {row.userId}
-                              </p>
-                              <p
-                                className="truncate"
-                                title={row.providers.join(", ")}
-                              >
-                                {row.providers.join(", ")}
-                              </p>
+                              <p className="truncate" title={row.userId}>{row.userId}</p>
+                              <p className="truncate" title={row.providers.join(", ")}>{row.providers.join(", ")}</p>
                               <p>{row.count}</p>
                             </div>
                           ))
@@ -13200,9 +10035,7 @@ export const InAccordAdminModal = () => {
             {activeSection === "patronage" && (
               <div className="rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                    Patronage
-                  </p>
+                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Patronage</p>
                   <button
                     type="button"
                     onClick={() => {
@@ -13216,58 +10049,33 @@ export const InAccordAdminModal = () => {
                 </div>
 
                 <div className="mb-4 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                  <p className="mb-3 text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                    Payment Setup (Where money goes)
-                  </p>
+                  <p className="mb-3 text-sm font-semibold text-zinc-800 dark:text-zinc-100">Payment Setup (Where money goes)</p>
 
                   {isLoadingPatronageSetup ? (
-                    <p className="text-xs text-zinc-600 dark:text-zinc-300">
-                      Loading payment setup...
-                    </p>
+                    <p className="text-xs text-zinc-600 dark:text-zinc-300">Loading payment setup...</p>
                   ) : (
                     <>
                       <div className="mb-3 grid gap-2 md:grid-cols-3">
                         <div className="rounded-md border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-600 dark:bg-zinc-900">
-                          <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                            Secret Key
-                          </p>
+                          <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Secret Key</p>
                           <p className="mt-1 text-xs font-semibold text-zinc-900 dark:text-zinc-100">
-                            {patronageSetup?.hasStripeSecretKey
-                              ? "Configured"
-                              : "Missing"}
+                            {patronageSetup?.hasStripeSecretKey ? "Configured" : "Missing"}
                           </p>
-                          <p className="mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">
-                            {patronageSetup?.stripeSecretKeyPreview ||
-                              "Not set"}
-                          </p>
+                          <p className="mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">{patronageSetup?.stripeSecretKeyPreview || "Not set"}</p>
                         </div>
                         <div className="rounded-md border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-600 dark:bg-zinc-900">
-                          <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                            Publishable Key
-                          </p>
+                          <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Publishable Key</p>
                           <p className="mt-1 text-xs font-semibold text-zinc-900 dark:text-zinc-100">
-                            {patronageSetup?.hasStripePublishableKey
-                              ? "Configured"
-                              : "Missing"}
+                            {patronageSetup?.hasStripePublishableKey ? "Configured" : "Missing"}
                           </p>
-                          <p className="mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">
-                            {patronageSetup?.stripePublishableKeyPreview ||
-                              "Not set"}
-                          </p>
+                          <p className="mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">{patronageSetup?.stripePublishableKeyPreview || "Not set"}</p>
                         </div>
                         <div className="rounded-md border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-600 dark:bg-zinc-900">
-                          <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                            Webhook Secret
-                          </p>
+                          <p className="text-[10px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Webhook Secret</p>
                           <p className="mt-1 text-xs font-semibold text-zinc-900 dark:text-zinc-100">
-                            {patronageSetup?.hasStripeWebhookSecret
-                              ? "Configured"
-                              : "Missing"}
+                            {patronageSetup?.hasStripeWebhookSecret ? "Configured" : "Missing"}
                           </p>
-                          <p className="mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">
-                            {patronageSetup?.stripeWebhookSecretPreview ||
-                              "Not set"}
-                          </p>
+                          <p className="mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">{patronageSetup?.stripeWebhookSecretPreview || "Not set"}</p>
                         </div>
                       </div>
 
@@ -13275,29 +10083,21 @@ export const InAccordAdminModal = () => {
                         <input
                           type="password"
                           value={patronageSetupSecretDraft}
-                          onChange={(event) =>
-                            setPatronageSetupSecretDraft(event.target.value)
-                          }
+                          onChange={(event) => setPatronageSetupSecretDraft(event.target.value)}
                           placeholder="Set Stripe Secret Key (sk_...)"
                           className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                         />
                         <input
                           type="text"
                           value={patronageSetupPublishableDraft}
-                          onChange={(event) =>
-                            setPatronageSetupPublishableDraft(
-                              event.target.value,
-                            )
-                          }
+                          onChange={(event) => setPatronageSetupPublishableDraft(event.target.value)}
                           placeholder="Set Publishable Key (pk_...)"
                           className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                         />
                         <input
                           type="password"
                           value={patronageSetupWebhookDraft}
-                          onChange={(event) =>
-                            setPatronageSetupWebhookDraft(event.target.value)
-                          }
+                          onChange={(event) => setPatronageSetupWebhookDraft(event.target.value)}
                           placeholder="Set Webhook Secret (whsec_...)"
                           className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                         />
@@ -13307,20 +10107,14 @@ export const InAccordAdminModal = () => {
                         <input
                           type="text"
                           value={patronagePayoutLabelDraft}
-                          onChange={(event) =>
-                            setPatronagePayoutLabelDraft(event.target.value)
-                          }
+                          onChange={(event) => setPatronagePayoutLabelDraft(event.target.value)}
                           placeholder="Payout account label (e.g. In-Accord Stripe Live)"
                           className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                         />
                         <input
                           type="email"
                           value={patronagePayoutContactEmailDraft}
-                          onChange={(event) =>
-                            setPatronagePayoutContactEmailDraft(
-                              event.target.value,
-                            )
-                          }
+                          onChange={(event) => setPatronagePayoutContactEmailDraft(event.target.value)}
                           placeholder="Payout contact email"
                           className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                         />
@@ -13330,9 +10124,7 @@ export const InAccordAdminModal = () => {
                         <input
                           type="text"
                           value={patronagePayoutNoticeDraft}
-                          onChange={(event) =>
-                            setPatronagePayoutNoticeDraft(event.target.value)
-                          }
+                          onChange={(event) => setPatronagePayoutNoticeDraft(event.target.value)}
                           placeholder="Internal payout note (optional)"
                           className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                         />
@@ -13342,16 +10134,12 @@ export const InAccordAdminModal = () => {
                           disabled={isSavingPatronageSetup}
                           className="h-9 rounded-md bg-indigo-600 px-3 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {isSavingPatronageSetup
-                            ? "Saving..."
-                            : "Save Payment Setup"}
+                          {isSavingPatronageSetup ? "Saving..." : "Save Payment Setup"}
                         </button>
                       </div>
 
                       <p className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
-                        Tip: add your live Stripe keys here. User checkout,
-                        verification, and webhook reconciliation will use this
-                        setup automatically.
+                        Tip: add your live Stripe keys here. User checkout, verification, and webhook reconciliation will use this setup automatically.
                       </p>
                     </>
                   )}
@@ -13359,83 +10147,47 @@ export const InAccordAdminModal = () => {
 
                 <div className="mb-4 grid gap-2 md:grid-cols-5">
                   <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                      Total Records
-                    </p>
-                    <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                      {patronageSummary?.totalRecords ?? 0}
-                    </p>
+                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Total Records</p>
+                    <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{patronageSummary?.totalRecords ?? 0}</p>
                   </div>
                   <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                      One-Time
-                    </p>
-                    <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                      {patronageSummary?.oneTimeCount ?? 0}
-                    </p>
+                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">One-Time</p>
+                    <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{patronageSummary?.oneTimeCount ?? 0}</p>
                   </div>
                   <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                      Monthly
-                    </p>
-                    <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                      {patronageSummary?.monthlyCount ?? 0}
-                    </p>
+                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Monthly</p>
+                    <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{patronageSummary?.monthlyCount ?? 0}</p>
                   </div>
                   <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                      Successful Total
-                    </p>
-                    <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                      {formatCurrencyFromCents(
-                        patronageSummary?.successfulAmountCents ?? 0,
-                        "USD",
-                      )}
-                    </p>
+                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Successful Total</p>
+                    <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{formatCurrencyFromCents(patronageSummary?.successfulAmountCents ?? 0, "USD")}</p>
                   </div>
                   <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                      Monthly Recurring
-                    </p>
-                    <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                      {formatCurrencyFromCents(
-                        patronageSummary?.monthlyRecurringAmountCents ?? 0,
-                        "USD",
-                      )}
-                    </p>
+                    <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Monthly Recurring</p>
+                    <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{formatCurrencyFromCents(patronageSummary?.monthlyRecurringAmountCents ?? 0, "USD")}</p>
                   </div>
                 </div>
 
                 <div className="mb-4 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                  <p className="mb-3 text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                    Record Donation
-                  </p>
+                  <p className="mb-3 text-sm font-semibold text-zinc-800 dark:text-zinc-100">Record Donation</p>
                   <div className="grid gap-2 md:grid-cols-[1fr_1fr_130px_120px_110px_1fr]">
                     <input
                       type="text"
                       value={newPatronageDonorName}
-                      onChange={(event) =>
-                        setNewPatronageDonorName(event.target.value)
-                      }
+                      onChange={(event) => setNewPatronageDonorName(event.target.value)}
                       placeholder="Donor name"
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                     />
                     <input
                       type="email"
                       value={newPatronageDonorEmail}
-                      onChange={(event) =>
-                        setNewPatronageDonorEmail(event.target.value)
-                      }
+                      onChange={(event) => setNewPatronageDonorEmail(event.target.value)}
                       placeholder="Donor email"
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                     />
                     <select
                       value={newPatronageType}
-                      onChange={(event) =>
-                        setNewPatronageType(
-                          event.target.value as "ONE_TIME" | "MONTHLY",
-                        )
-                      }
+                      onChange={(event) => setNewPatronageType(event.target.value as "ONE_TIME" | "MONTHLY")}
                       className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                     >
                       <option value="ONE_TIME">One-time</option>
@@ -13446,20 +10198,14 @@ export const InAccordAdminModal = () => {
                       min="0"
                       step="0.01"
                       value={newPatronageAmount}
-                      onChange={(event) =>
-                        setNewPatronageAmount(event.target.value)
-                      }
+                      onChange={(event) => setNewPatronageAmount(event.target.value)}
                       placeholder="Amount"
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                     />
                     <input
                       type="text"
                       value={newPatronageCurrency}
-                      onChange={(event) =>
-                        setNewPatronageCurrency(
-                          event.target.value.toUpperCase(),
-                        )
-                      }
+                      onChange={(event) => setNewPatronageCurrency(event.target.value.toUpperCase())}
                       placeholder="USD"
                       maxLength={8}
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm uppercase text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
@@ -13467,9 +10213,7 @@ export const InAccordAdminModal = () => {
                     <input
                       type="text"
                       value={newPatronageProvider}
-                      onChange={(event) =>
-                        setNewPatronageProvider(event.target.value)
-                      }
+                      onChange={(event) => setNewPatronageProvider(event.target.value)}
                       placeholder="Provider (Stripe, PayPal...)"
                       className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                     />
@@ -13479,18 +10223,14 @@ export const InAccordAdminModal = () => {
                       <input
                         type="text"
                         value={newPatronageReference}
-                        onChange={(event) =>
-                          setNewPatronageReference(event.target.value)
-                        }
+                        onChange={(event) => setNewPatronageReference(event.target.value)}
                         placeholder="Provider reference / transaction id"
                         className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                       />
                       <input
                         type="text"
                         value={newPatronageNote}
-                        onChange={(event) =>
-                          setNewPatronageNote(event.target.value)
-                        }
+                        onChange={(event) => setNewPatronageNote(event.target.value)}
                         placeholder="Note (optional)"
                         className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                       />
@@ -13516,11 +10256,7 @@ export const InAccordAdminModal = () => {
                   />
                   <select
                     value={patronageTypeFilter}
-                    onChange={(event) =>
-                      setPatronageTypeFilter(
-                        event.target.value as typeof patronageTypeFilter,
-                      )
-                    }
+                    onChange={(event) => setPatronageTypeFilter(event.target.value as typeof patronageTypeFilter)}
                     className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                   >
                     <option value="ALL">All types</option>
@@ -13529,11 +10265,7 @@ export const InAccordAdminModal = () => {
                   </select>
                   <select
                     value={patronageStatusFilter}
-                    onChange={(event) =>
-                      setPatronageStatusFilter(
-                        event.target.value as typeof patronageStatusFilter,
-                      )
-                    }
+                    onChange={(event) => setPatronageStatusFilter(event.target.value as typeof patronageStatusFilter)}
                     className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                   >
                     <option value="ALL">All status</option>
@@ -13558,49 +10290,31 @@ export const InAccordAdminModal = () => {
                 </div>
 
                 <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                    Rows
-                  </span>
-                  {(["COMPACT", "COMFORTABLE", "SPACIOUS"] as const).map(
-                    (density) => (
-                      <button
-                        key={`patronage-row-density-${density}`}
-                        type="button"
-                        onClick={() => setListRowDensity(density)}
-                        className={cn(
-                          "h-7 rounded-md border px-2.5 text-[11px] font-semibold transition",
-                          listRowDensity === density
-                            ? "border-indigo-500/45 bg-indigo-500/15 text-indigo-700 dark:text-indigo-200"
-                            : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800",
-                        )}
-                      >
-                        {density === "COMPACT"
-                          ? "Compact"
-                          : density === "SPACIOUS"
-                            ? "Spacious"
-                            : "Comfortable"}
-                      </button>
-                    ),
-                  )}
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Rows</span>
+                  {(["COMPACT", "COMFORTABLE", "SPACIOUS"] as const).map((density) => (
+                    <button
+                      key={`patronage-row-density-${density}`}
+                      type="button"
+                      onClick={() => setListRowDensity(density)}
+                      className={cn(
+                        "h-7 rounded-md border px-2.5 text-[11px] font-semibold transition",
+                        listRowDensity === density
+                          ? "border-indigo-500/45 bg-indigo-500/15 text-indigo-700 dark:text-indigo-200"
+                          : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                      )}
+                    >
+                      {density === "COMPACT" ? "Compact" : density === "SPACIOUS" ? "Spacious" : "Comfortable"}
+                    </button>
+                  ))}
                 </div>
 
-                {patronageError ? (
-                  <p className="mb-3 text-xs text-rose-500">{patronageError}</p>
-                ) : null}
-                {patronageActionSuccess ? (
-                  <p className="mb-3 text-xs text-emerald-500">
-                    {patronageActionSuccess}
-                  </p>
-                ) : null}
+                {patronageError ? <p className="mb-3 text-xs text-rose-500">{patronageError}</p> : null}
+                {patronageActionSuccess ? <p className="mb-3 text-xs text-emerald-500">{patronageActionSuccess}</p> : null}
 
                 {isLoadingPatronage ? (
-                  <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                    Loading patronage records...
-                  </p>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading patronage records...</p>
                 ) : patronageEntries.length === 0 ? (
-                  <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                    No patronage records found for current filters.
-                  </p>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300">No patronage records found for current filters.</p>
                 ) : (
                   <div className="overflow-hidden rounded-lg border border-zinc-300 dark:border-zinc-700">
                     <div className="grid grid-cols-[1fr_0.8fr_0.8fr_0.9fr_0.8fr_1fr_1.2fr] gap-2 bg-zinc-200/80 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
@@ -13631,113 +10345,49 @@ export const InAccordAdminModal = () => {
                               listRowDensityClass,
                               index % 2 === 0
                                 ? "bg-white/70 dark:bg-zinc-950/25"
-                                : "bg-zinc-100/70 dark:bg-zinc-900/35",
+                                : "bg-zinc-100/70 dark:bg-zinc-900/35"
                             )}
                           >
                             <div className="min-w-0">
-                              <p
-                                className="truncate font-semibold"
-                                title={
-                                  entry.donorName ||
-                                  entry.donorEmail ||
-                                  entry.id
-                                }
-                              >
-                                {entry.donorName ||
-                                  entry.donorEmail ||
-                                  entry.id}
+                              <p className="truncate font-semibold" title={entry.donorName || entry.donorEmail || entry.id}>
+                                {entry.donorName || entry.donorEmail || entry.id}
                               </p>
-                              <p
-                                className="truncate text-[10px] text-zinc-500 dark:text-zinc-400"
-                                title={
-                                  entry.createdAt
-                                    ? formatDateTime(entry.createdAt)
-                                    : "N/A"
-                                }
-                              >
-                                {entry.createdAt
-                                  ? formatDateTime(entry.createdAt)
-                                  : "N/A"}
+                              <p className="truncate text-[10px] text-zinc-500 dark:text-zinc-400" title={entry.createdAt ? formatDateTime(entry.createdAt) : "N/A"}>
+                                {entry.createdAt ? formatDateTime(entry.createdAt) : "N/A"}
                               </p>
                             </div>
-                            <p>
-                              {entry.donationType === "ONE_TIME"
-                                ? "One-time"
-                                : "Monthly"}
-                            </p>
+                            <p>{entry.donationType === "ONE_TIME" ? "One-time" : "Monthly"}</p>
                             <div>
-                              <span
-                                className={cn(
-                                  "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]",
-                                  statusClassName,
-                                )}
-                              >
+                              <span className={cn("inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]", statusClassName)}>
                                 {entry.status}
                               </span>
                             </div>
-                            <p
-                              title={formatCurrencyFromCents(
-                                entry.amountCents,
-                                entry.currency,
-                              )}
-                            >
-                              {formatCurrencyFromCents(
-                                entry.amountCents,
-                                entry.currency,
-                              )}
+                            <p title={formatCurrencyFromCents(entry.amountCents, entry.currency)}>
+                              {formatCurrencyFromCents(entry.amountCents, entry.currency)}
                             </p>
                             <p>{entry.currency}</p>
-                            <p
-                              className="truncate"
-                              title={entry.provider || "N/A"}
-                            >
-                              {entry.provider || "N/A"}
-                            </p>
+                            <p className="truncate" title={entry.provider || "N/A"}>{entry.provider || "N/A"}</p>
                             <div className="flex flex-wrap items-center gap-1.5">
                               <button
                                 type="button"
-                                onClick={() =>
-                                  void onUpdatePatronageStatus(
-                                    entry.id,
-                                    "SUCCEEDED",
-                                  )
-                                }
-                                disabled={
-                                  updatingPatronageId === entry.id ||
-                                  entry.status === "SUCCEEDED"
-                                }
+                                onClick={() => void onUpdatePatronageStatus(entry.id, "SUCCEEDED")}
+                                disabled={updatingPatronageId === entry.id || entry.status === "SUCCEEDED"}
                                 className="h-7 rounded-md border border-emerald-500/35 bg-emerald-500/15 px-2 text-[10px] font-semibold text-emerald-700 transition hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-200"
                               >
                                 Success
                               </button>
                               <button
                                 type="button"
-                                onClick={() =>
-                                  void onUpdatePatronageStatus(
-                                    entry.id,
-                                    "FAILED",
-                                  )
-                                }
-                                disabled={
-                                  updatingPatronageId === entry.id ||
-                                  entry.status === "FAILED"
-                                }
+                                onClick={() => void onUpdatePatronageStatus(entry.id, "FAILED")}
+                                disabled={updatingPatronageId === entry.id || entry.status === "FAILED"}
                                 className="h-7 rounded-md border border-rose-500/35 bg-rose-500/15 px-2 text-[10px] font-semibold text-rose-700 transition hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-60 dark:text-rose-200"
                               >
                                 Fail
                               </button>
                               <button
                                 type="button"
-                                onClick={() =>
-                                  void onUpdatePatronageStatus(
-                                    entry.id,
-                                    "REFUNDED",
-                                  )
-                                }
-                                disabled={
-                                  updatingPatronageId === entry.id ||
-                                  entry.status === "REFUNDED"
-                                }
+                                onClick={() => void onUpdatePatronageStatus(entry.id, "REFUNDED")}
+                                disabled={updatingPatronageId === entry.id || entry.status === "REFUNDED"}
                                 className="h-7 rounded-md border border-indigo-500/35 bg-indigo-500/15 px-2 text-[10px] font-semibold text-indigo-700 transition hover:bg-indigo-500/25 disabled:cursor-not-allowed disabled:opacity-60 dark:text-indigo-200"
                               >
                                 Refund
@@ -13756,12 +10406,9 @@ export const InAccordAdminModal = () => {
               <div className="rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                      Template Me Bot
-                    </p>
+                    <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Template Me Bot</p>
                     <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                      Real bot configs only. No scaffolded or generated fallback
-                      data is used.
+                      Real bot configs only. No scaffolded or generated fallback data is used.
                     </p>
                   </div>
                   <button
@@ -13780,184 +10427,109 @@ export const InAccordAdminModal = () => {
                 </div>
 
                 {isLoadingIntegrations ? (
-                  <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                    Loading Template Me bot configs...
-                  </p>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading Template Me bot configs...</p>
                 ) : integrationsError ? (
                   <p className="text-sm text-rose-500">{integrationsError}</p>
                 ) : (
                   <>
                     <div className="mb-4 grid grid-cols-[35%_minmax(0,1fr)] items-stretch gap-3">
                       <div className="flex min-h-0 flex-col gap-3">
-                        <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                          <div className="mb-3 flex flex-wrap items-center gap-2">
-                            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-700 dark:text-zinc-200">
-                              Runtime Control
-                            </p>
-                            <span
-                              className={cn(
-                                "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]",
-                                templateMeRuntimeState?.status === "running"
-                                  ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-700 dark:text-emerald-200"
-                                  : templateMeRuntimeState?.status ===
-                                        "starting" ||
-                                      templateMeRuntimeState?.status ===
-                                        "stopping"
-                                    ? "border-amber-500/35 bg-amber-500/15 text-amber-700 dark:text-amber-200"
-                                    : templateMeRuntimeState?.status === "error"
-                                      ? "border-rose-500/35 bg-rose-500/15 text-rose-700 dark:text-rose-200"
-                                      : "border-zinc-500/35 bg-zinc-500/15 text-zinc-700 dark:text-zinc-200",
-                              )}
-                            >
-                              {templateMeRuntimeState?.status ?? "stopped"}
-                            </span>
-                          </div>
-
-                          <div className="mb-3 grid grid-cols-3 gap-1">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                void onTemplateMeRuntimeAction("start")
-                              }
-                              disabled={templateMeRuntimeActionPending !== null}
-                              className="h-7 rounded-md border border-emerald-500/35 bg-emerald-500/15 px-1.5 text-[11px] font-semibold text-emerald-700 transition hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-50 dark:text-emerald-200"
-                            >
-                              {templateMeRuntimeActionPending === "start"
-                                ? "Starting..."
-                                : "Start Bot"}
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                void onTemplateMeRuntimeAction("restart")
-                              }
-                              disabled={templateMeRuntimeActionPending !== null}
-                              className="h-7 rounded-md border border-amber-500/35 bg-amber-500/15 px-1.5 text-[11px] font-semibold text-amber-700 transition hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-50 dark:text-amber-200"
-                            >
-                              {templateMeRuntimeActionPending === "restart"
-                                ? "Restarting..."
-                                : "Restart Bot"}
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                void onTemplateMeRuntimeAction("stop")
-                              }
-                              disabled={
-                                templateMeRuntimeActionPending !== null ||
-                                templateMeRuntimeState?.status === "stopped"
-                              }
-                              className="h-7 rounded-md border border-rose-500/35 bg-rose-500/15 px-1.5 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-50 dark:text-rose-200"
-                            >
-                              {templateMeRuntimeActionPending === "stop"
-                                ? "Stopping..."
-                                : "Stop Bot"}
-                            </button>
-                          </div>
-
-                          <div className="grid gap-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                            <p>
-                              Bot:{" "}
-                              {templateMeRuntimeState?.botTag ||
-                                templateMeRuntimeState?.botName ||
-                                selectedTemplateMeRuntimeTargetLabel ||
-                                "Template Me Bot"}
-                            </p>
-                            <p>
-                              Application ID:{" "}
-                              {templateMeRuntimeState?.applicationId ||
-                                primaryTemplateMeBotConfig?.applicationId ||
-                                "Not set"}
-                            </p>
-                            <p>
-                              Guilds connected:{" "}
-                              {templateMeRuntimeState?.guildCount ?? 0}
-                            </p>
-                            <p>
-                              Control port:{" "}
-                              {templateMeRuntimeState?.controlPort ?? 3030}
-                            </p>
-                            <p>
-                              Control endpoint:{" "}
-                              {templateMeRuntimeState?.controlUrl ||
-                                "Not active"}
-                            </p>
-                            <p>
-                              Started:{" "}
-                              {formatDateTime(
-                                templateMeRuntimeState?.startedAt ?? null,
-                              )}
-                            </p>
-                            <p>
-                              Updated:{" "}
-                              {formatDateTime(
-                                templateMeRuntimeState?.updatedAt ?? null,
-                              )}
-                            </p>
-                          </div>
-
-                          {isLoadingTemplateMeRuntime ? (
-                            <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-                              Loading runtime status...
-                            </p>
-                          ) : null}
-                          {templateMeRuntimeError ? (
-                            <p className="mt-2 text-xs text-rose-500">
-                              {templateMeRuntimeError}
-                            </p>
-                          ) : null}
-                          {templateMeRuntimeState?.lastError ? (
-                            <p className="mt-2 text-xs text-rose-500">
-                              Runtime error: {templateMeRuntimeState.lastError}
-                            </p>
-                          ) : null}
-                          {templateMeRuntimeSuccess ? (
-                            <p className="mt-2 text-xs text-emerald-500">
-                              {templateMeRuntimeSuccess}
-                            </p>
-                          ) : null}
-                          {templateMeBotConfigConflict ? (
-                            <p className="mt-2 text-xs text-rose-500">
-                              Multiple "Template Me Bot" entries found. Keep
-                              exactly one.
-                            </p>
-                          ) : null}
-                        </div>
-
-                        {OtherConfigActionError ? (
-                          <p className="text-xs text-rose-500">
-                            {OtherConfigActionError}
-                          </p>
-                        ) : null}
-                        {OtherConfigActionSuccess ? (
-                          <p className="text-xs text-emerald-500">
-                            {OtherConfigActionSuccess}
-                          </p>
-                        ) : null}
-
-                        <div className="min-h-0 rounded-lg border border-zinc-300 bg-zinc-100/60 p-3 dark:border-zinc-700 dark:bg-zinc-900/35">
-                          <div className="mb-2 flex items-center justify-between gap-2">
-                            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-700 dark:text-zinc-200">
-                              In-Accord Template Bot Entry
-                            </p>
-                            <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                              {templateMeBotConfigConflict
-                                ? `${templateMeBotConfigs.length} items`
-                                : primaryTemplateMeBotConfig
-                                  ? "1 item"
-                                  : "0 items"}
-                            </span>
-                          </div>
-                          {renderOtherConfigTable(
-                            primaryTemplateMeBotConfig
-                              ? [primaryTemplateMeBotConfig]
-                              : templateMeBotConfigs,
-                            'No Template Me Bot entry found. Create one BOT entry named exactly "Template Me Bot" in Apps & Bots.',
-                            { mode: "templateMe" },
+                      <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                      <div className="mb-3 flex flex-wrap items-center gap-2">
+                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-700 dark:text-zinc-200">Runtime Control</p>
+                        <span
+                          className={cn(
+                            "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]",
+                            templateMeRuntimeState?.status === "running"
+                              ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-700 dark:text-emerald-200"
+                              : templateMeRuntimeState?.status === "starting" || templateMeRuntimeState?.status === "stopping"
+                                ? "border-amber-500/35 bg-amber-500/15 text-amber-700 dark:text-amber-200"
+                                : templateMeRuntimeState?.status === "error"
+                                  ? "border-rose-500/35 bg-rose-500/15 text-rose-700 dark:text-rose-200"
+                                  : "border-zinc-500/35 bg-zinc-500/15 text-zinc-700 dark:text-zinc-200"
                           )}
+                        >
+                          {templateMeRuntimeState?.status ?? "stopped"}
+                        </span>
+                      </div>
+
+                      <div className="mb-3 grid grid-cols-3 gap-1">
+
+                        <button
+                          type="button"
+                          onClick={() => void onTemplateMeRuntimeAction("start")}
+                          disabled={templateMeRuntimeActionPending !== null}
+                          className="h-7 rounded-md border border-emerald-500/35 bg-emerald-500/15 px-1.5 text-[11px] font-semibold text-emerald-700 transition hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-50 dark:text-emerald-200"
+                        >
+                          {templateMeRuntimeActionPending === "start" ? "Starting..." : "Start Bot"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => void onTemplateMeRuntimeAction("restart")}
+                          disabled={templateMeRuntimeActionPending !== null}
+                          className="h-7 rounded-md border border-amber-500/35 bg-amber-500/15 px-1.5 text-[11px] font-semibold text-amber-700 transition hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-50 dark:text-amber-200"
+                        >
+                          {templateMeRuntimeActionPending === "restart" ? "Restarting..." : "Restart Bot"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => void onTemplateMeRuntimeAction("stop")}
+                          disabled={templateMeRuntimeActionPending !== null || templateMeRuntimeState?.status === "stopped"}
+                          className="h-7 rounded-md border border-rose-500/35 bg-rose-500/15 px-1.5 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-50 dark:text-rose-200"
+                        >
+                          {templateMeRuntimeActionPending === "stop" ? "Stopping..." : "Stop Bot"}
+                        </button>
+                      </div>
+
+                      <div className="grid gap-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                        <p>Bot: {templateMeRuntimeState?.botTag || templateMeRuntimeState?.botName || selectedTemplateMeRuntimeTargetLabel || "Template Me Bot"}</p>
+                        <p>Application ID: {templateMeRuntimeState?.applicationId || primaryTemplateMeBotConfig?.applicationId || "Not set"}</p>
+                        <p>Guilds connected: {templateMeRuntimeState?.guildCount ?? 0}</p>
+                        <p>Control port: {templateMeRuntimeState?.controlPort ?? 3030}</p>
+                        <p>Control endpoint: {templateMeRuntimeState?.controlUrl || "Not active"}</p>
+                        <p>Started: {formatDateTime(templateMeRuntimeState?.startedAt ?? null)}</p>
+                        <p>Updated: {formatDateTime(templateMeRuntimeState?.updatedAt ?? null)}</p>
+                      </div>
+
+                      {isLoadingTemplateMeRuntime ? (
+                        <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">Loading runtime status...</p>
+                      ) : null}
+                      {templateMeRuntimeError ? (
+                        <p className="mt-2 text-xs text-rose-500">{templateMeRuntimeError}</p>
+                      ) : null}
+                      {templateMeRuntimeState?.lastError ? (
+                        <p className="mt-2 text-xs text-rose-500">Runtime error: {templateMeRuntimeState.lastError}</p>
+                      ) : null}
+                      {templateMeRuntimeSuccess ? (
+                        <p className="mt-2 text-xs text-emerald-500">{templateMeRuntimeSuccess}</p>
+                      ) : null}
+                      {templateMeBotConfigConflict ? (
+                        <p className="mt-2 text-xs text-rose-500">Multiple "Template Me Bot" entries found. Keep exactly one.</p>
+                      ) : null}
+                      </div>
+
+                      {OtherConfigActionError ? (
+                        <p className="text-xs text-rose-500">{OtherConfigActionError}</p>
+                      ) : null}
+                      {OtherConfigActionSuccess ? (
+                        <p className="text-xs text-emerald-500">{OtherConfigActionSuccess}</p>
+                      ) : null}
+
+                      <div className="min-h-0 rounded-lg border border-zinc-300 bg-zinc-100/60 p-3 dark:border-zinc-700 dark:bg-zinc-900/35">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-700 dark:text-zinc-200">In-Accord Template Bot Entry</p>
+                          <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                            {templateMeBotConfigConflict ? `${templateMeBotConfigs.length} items` : primaryTemplateMeBotConfig ? "1 item" : "0 items"}
+                          </span>
                         </div>
+                        {renderOtherConfigTable(
+                          primaryTemplateMeBotConfig ? [primaryTemplateMeBotConfig] : templateMeBotConfigs,
+                          "No Template Me Bot entry found. Create one BOT entry named exactly \"Template Me Bot\" in Apps & Bots.",
+                          { mode: "templateMe" }
+                        )}
+                      </div>
                       </div>
 
                       <div className="flex min-h-0 flex-col rounded-lg border border-zinc-300 bg-zinc-950 p-3 font-mono text-[11px] text-zinc-100 dark:border-zinc-700">
@@ -13975,188 +10547,112 @@ export const InAccordAdminModal = () => {
                             ref={templateMeTerminalScrollRef}
                             className="h-full overflow-auto whitespace-pre-wrap text-[10px] leading-relaxed text-zinc-100"
                           >
-                            {templateMeTerminalOutput ||
-                              (templateMeTerminalStatus === "disconnected" ||
-                              templateMeTerminalStatus === "connecting"
-                                ? "Connecting to live Template Me npm terminal stream..."
-                                : "Live Template Me npm stream connected. Waiting for output...")}
+                            {templateMeTerminalOutput || (templateMeTerminalStatus === "disconnected" || templateMeTerminalStatus === "connecting"
+                              ? "Connecting to live Template Me npm terminal stream..."
+                              : "Live Template Me npm stream connected. Waiting for output...")}
                           </pre>
                         </div>
 
                         <p className="mt-2 text-[10px] text-zinc-400">
-                          Stream:{" "}
-                          <span className="text-zinc-200">
-                            {templateMeTerminalStatus}
-                          </span>{" "}
-                          · Runtime:{" "}
-                          <span className="text-zinc-200">
-                            {templateMeRuntimeState?.status ?? "stopped"}
-                          </span>{" "}
-                          · Control port:{" "}
-                          <span className="text-zinc-200">
-                            {templateMeRuntimeState?.controlPort ?? 3030}
-                          </span>
+                          Stream: <span className="text-zinc-200">{templateMeTerminalStatus}</span> · Runtime: <span className="text-zinc-200">{templateMeRuntimeState?.status ?? "stopped"}</span> · Control port: <span className="text-zinc-200">{templateMeRuntimeState?.controlPort ?? 3030}</span>
                           {templateMeTerminalLastExitCode !== null ? (
                             <>
-                              {" "}
-                              · Exit:{" "}
-                              <span className="text-zinc-200">
-                                {templateMeTerminalLastExitCode}
-                              </span>
+                              {" "}· Exit: <span className="text-zinc-200">{templateMeTerminalLastExitCode}</span>
                             </>
                           ) : null}
                           {templateMeTerminalStartedAt ? (
                             <>
-                              {" "}
-                              · Started:{" "}
-                              <span className="text-zinc-200">
-                                {formatDateTime(templateMeTerminalStartedAt)}
-                              </span>
+                              {" "}· Started: <span className="text-zinc-200">{formatDateTime(templateMeTerminalStartedAt)}</span>
                             </>
                           ) : null}
                           {templateMeTerminalUpdatedAt ? (
                             <>
-                              {" "}
-                              · Updated:{" "}
-                              <span className="text-zinc-200">
-                                {formatDateTime(templateMeTerminalUpdatedAt)}
-                              </span>
+                              {" "}· Updated: <span className="text-zinc-200">{formatDateTime(templateMeTerminalUpdatedAt)}</span>
                             </>
                           ) : null}
                         </p>
                         {templateMeTerminalLastError ? (
-                          <p className="mt-1 text-[10px] text-rose-300">
-                            {templateMeTerminalLastError}
-                          </p>
+                          <p className="mt-1 text-[10px] text-rose-300">{templateMeTerminalLastError}</p>
                         ) : null}
                       </div>
                     </div>
 
                     <div className="mb-4 grid gap-2 md:grid-cols-5">
                       <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Template Me Bot
-                        </p>
-                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                          {primaryTemplateMeBotConfig ? 1 : 0}
-                        </p>
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Template Me Bot</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{primaryTemplateMeBotConfig ? 1 : 0}</p>
                       </div>
                       <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Enabled
-                        </p>
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Enabled</p>
                         <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
                           {primaryTemplateMeBotConfig?.enabled ? 1 : 0}
                         </p>
                       </div>
                       <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Imports Made
-                        </p>
-                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                          {templateMeStats?.importsMadeCount ?? 0}
-                        </p>
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Imports Made</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{templateMeStats?.importsMadeCount ?? 0}</p>
                       </div>
                       <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Templates Imported
-                        </p>
-                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                          {templateMeStats?.templatesImportedCount ?? 0}
-                        </p>
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Templates Imported</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{templateMeStats?.templatesImportedCount ?? 0}</p>
                       </div>
                       <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Servers Using Templates
-                        </p>
-                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                          {templateMeStats?.serversUsingTemplatesCount ?? 0}
-                        </p>
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Servers Using Templates</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{templateMeStats?.serversUsingTemplatesCount ?? 0}</p>
                       </div>
                     </div>
 
                     <div className="mb-4 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
                       <div className="mb-2 flex items-center justify-between gap-2">
-                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Servers Using Template Me Bot
-                        </p>
-                        <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                          Updated:{" "}
-                          {formatDateTime(
-                            templateMeStats?.statsUpdatedAt ?? null,
-                          )}
-                        </span>
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Servers Using Template Me Bot</p>
+                        <span className="text-[11px] text-zinc-500 dark:text-zinc-400">Updated: {formatDateTime(templateMeStats?.statsUpdatedAt ?? null)}</span>
                       </div>
 
                       {isLoadingTemplateMeStats ? (
-                        <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                          Loading bot template stats...
-                        </p>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400">Loading bot template stats...</p>
                       ) : templateMeStatsError ? (
-                        <p className="text-xs text-rose-500">
-                          {templateMeStatsError}
-                        </p>
-                      ) : (templateMeStats?.serversUsingTemplates?.length ??
-                          0) === 0 ? (
-                        <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                          No servers recorded yet.
-                        </p>
+                        <p className="text-xs text-rose-500">{templateMeStatsError}</p>
+                      ) : (templateMeStats?.serversUsingTemplates?.length ?? 0) === 0 ? (
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400">No servers recorded yet.</p>
                       ) : (
                         <div className="max-h-40 overflow-y-auto rounded-md border border-zinc-300 dark:border-zinc-700">
-                          {templateMeStats?.serversUsingTemplates.map(
-                            (entry, index) => (
-                              <div
-                                key={`template-me-server-${entry.id}-${index}`}
-                                className={cn(
-                                  "flex items-center justify-between px-3 py-2 text-xs",
-                                  index % 2 === 0
-                                    ? "bg-white/70 dark:bg-zinc-950/25"
-                                    : "bg-zinc-100/70 dark:bg-zinc-900/35",
-                                )}
-                              >
-                                <p
-                                  className="truncate text-zinc-900 dark:text-zinc-100"
-                                  title={entry.name}
-                                >
-                                  {entry.name}
-                                </p>
-                                <p
-                                  className="ml-3 truncate font-mono text-zinc-500 dark:text-zinc-400"
-                                  title={entry.id}
-                                >
-                                  {entry.id}
-                                </p>
-                              </div>
-                            ),
-                          )}
+                          {templateMeStats?.serversUsingTemplates.map((entry, index) => (
+                            <div
+                              key={`template-me-server-${entry.id}-${index}`}
+                              className={cn(
+                                "flex items-center justify-between px-3 py-2 text-xs",
+                                index % 2 === 0
+                                  ? "bg-white/70 dark:bg-zinc-950/25"
+                                  : "bg-zinc-100/70 dark:bg-zinc-900/35"
+                              )}
+                            >
+                              <p className="truncate text-zinc-900 dark:text-zinc-100" title={entry.name}>{entry.name}</p>
+                              <p className="ml-3 truncate font-mono text-zinc-500 dark:text-zinc-400" title={entry.id}>{entry.id}</p>
+                            </div>
+                          ))}
                         </div>
                       )}
 
                       {templateMeStats?.debug ? (
                         <details className="mt-3 rounded-md border border-zinc-300/80 bg-zinc-50/70 p-2 text-[11px] text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
-                          <summary className="cursor-pointer font-semibold uppercase tracking-[0.08em]">
-                            Template Me Debug
-                          </summary>
+                          <summary className="cursor-pointer font-semibold uppercase tracking-[0.08em]">Template Me Debug</summary>
                           <div className="mt-2 space-y-1 font-mono text-[10px] leading-relaxed">
-                            {Object.entries(templateMeStats.debug).map(
-                              ([key, value]) => {
-                                const displayValue = Array.isArray(value)
-                                  ? value.length > 0
-                                    ? value.join(", ")
-                                    : "[]"
-                                  : (value ?? "n/a");
+                            {Object.entries(templateMeStats.debug).map(([key, value]) => {
+                              const displayValue = Array.isArray(value)
+                                ? (value.length > 0 ? value.join(", ") : "[]")
+                                : (value ?? "n/a");
 
-                                return (
-                                  <p key={`template-me-debug-${key}`}>
-                                    {key}: {String(displayValue)}
-                                  </p>
-                                );
-                              },
-                            )}
+                              return (
+                                <p key={`template-me-debug-${key}`}>
+                                  {key}: {String(displayValue)}
+                                </p>
+                              );
+                            })}
                           </div>
                         </details>
                       ) : null}
                     </div>
+
                   </>
                 )}
               </div>
@@ -14165,9 +10661,7 @@ export const InAccordAdminModal = () => {
             {activeSection === "OtherAppsBots" && (
               <div className="rounded-xl border border-zinc-200 bg-zinc-100/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                    In-Accord Apps & Bots
-                  </p>
+                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">In-Accord Apps & Bots</p>
                   <button
                     type="button"
                     onClick={() => void loadIntegrations()}
@@ -14178,53 +10672,31 @@ export const InAccordAdminModal = () => {
                 </div>
 
                 {isLoadingIntegrations ? (
-                  <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                    Loading Other configuration insights...
-                  </p>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300">Loading Other configuration insights...</p>
                 ) : integrationsError ? (
                   <p className="text-sm text-rose-500">{integrationsError}</p>
                 ) : (
                   <>
                     <div className="mb-4 grid gap-2 md:grid-cols-5">
                       <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Users w/ Configs
-                        </p>
-                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                          {integrationsSummary?.usersWithOtherConfigs ?? 0}
-                        </p>
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Users w/ Configs</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{integrationsSummary?.usersWithOtherConfigs ?? 0}</p>
                       </div>
                       <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Apps
-                        </p>
-                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                          {integrationsSummary?.appsTotal ?? 0}
-                        </p>
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Apps</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{integrationsSummary?.appsTotal ?? 0}</p>
                       </div>
                       <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Bots
-                        </p>
-                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                          {integrationsSummary?.botsTotal ?? 0}
-                        </p>
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Bots</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{integrationsSummary?.botsTotal ?? 0}</p>
                       </div>
                       <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Enabled Apps
-                        </p>
-                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                          {integrationsSummary?.enabledApps ?? 0}
-                        </p>
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Enabled Apps</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{integrationsSummary?.enabledApps ?? 0}</p>
                       </div>
                       <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
-                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">
-                          Enabled Bots
-                        </p>
-                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                          {integrationsSummary?.enabledBots ?? 0}
-                        </p>
+                        <p className="text-[11px] uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-400">Enabled Bots</p>
+                        <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{integrationsSummary?.enabledBots ?? 0}</p>
                       </div>
                     </div>
 
@@ -14232,20 +10704,14 @@ export const InAccordAdminModal = () => {
                       <input
                         type="text"
                         value={OtherConfigQuery}
-                        onChange={(event) =>
-                          setOtherConfigQuery(event.target.value)
-                        }
+                        onChange={(event) => setOtherConfigQuery(event.target.value)}
                         placeholder="Search by user, email, name, app ID"
                         className="h-9 rounded-md border border-zinc-300 bg-white px-3 text-sm text-zinc-900 outline-none ring-offset-background placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-400"
                       />
 
                       <select
                         value={OtherConfigTypeFilter}
-                        onChange={(event) =>
-                          setOtherConfigTypeFilter(
-                            event.target.value as typeof OtherConfigTypeFilter,
-                          )
-                        }
+                        onChange={(event) => setOtherConfigTypeFilter(event.target.value as typeof OtherConfigTypeFilter)}
                         className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                       >
                         <option value="ALL">All types</option>
@@ -14255,12 +10721,7 @@ export const InAccordAdminModal = () => {
 
                       <select
                         value={OtherConfigStatusFilter}
-                        onChange={(event) =>
-                          setOtherConfigStatusFilter(
-                            event.target
-                              .value as typeof OtherConfigStatusFilter,
-                          )
-                        }
+                        onChange={(event) => setOtherConfigStatusFilter(event.target.value as typeof OtherConfigStatusFilter)}
                         className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                       >
                         <option value="ALL">All status</option>
@@ -14288,11 +10749,7 @@ export const InAccordAdminModal = () => {
                       </span>
                       <select
                         value={OtherConfigSortKey}
-                        onChange={(event) =>
-                          onOtherConfigSort(
-                            event.target.value as OtherConfigSortKey,
-                          )
-                        }
+                        onChange={(event) => onOtherConfigSort(event.target.value as OtherConfigSortKey)}
                         className="h-8 rounded-md border border-zinc-300 bg-white px-2 text-xs text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                       >
                         <option value="createdAt">Created date</option>
@@ -14302,9 +10759,7 @@ export const InAccordAdminModal = () => {
                       <select
                         value={OtherConfigSortDirection}
                         onChange={(event) =>
-                          setOtherConfigSortDirection(
-                            event.target.value as OtherSortDirection,
-                          )
+                          setOtherConfigSortDirection(event.target.value as OtherSortDirection)
                         }
                         className="h-8 rounded-md border border-zinc-300 bg-white px-2 text-xs text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                       >
@@ -14312,56 +10767,41 @@ export const InAccordAdminModal = () => {
                         <option value="desc">Descending</option>
                       </select>
                       <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                        Tip: click Type / Status / Created headers to toggle
-                        sorting.
+                        Tip: click Type / Status / Created headers to toggle sorting.
                       </p>
                     </div>
 
                     {OtherConfigActionError ? (
-                      <p className="mb-3 text-xs text-rose-500">
-                        {OtherConfigActionError}
-                      </p>
+                      <p className="mb-3 text-xs text-rose-500">{OtherConfigActionError}</p>
                     ) : null}
                     {OtherConfigActionSuccess ? (
-                      <p className="mb-3 text-xs text-emerald-500">
-                        {OtherConfigActionSuccess}
-                      </p>
+                      <p className="mb-3 text-xs text-emerald-500">{OtherConfigActionSuccess}</p>
                     ) : null}
 
                     <div className="space-y-4">
                       <div className="rounded-lg border border-zinc-300 bg-zinc-100/60 p-3 dark:border-zinc-700 dark:bg-zinc-900/35">
                         <div className="mb-2 flex items-center justify-between gap-2">
-                          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-700 dark:text-zinc-200">
-                            In-Accord Apps & Bots
-                          </p>
+                          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-700 dark:text-zinc-200">In-Accord Apps & Bots</p>
                           <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                            {separatedOtherConfigs.inAccord.length} item
-                            {separatedOtherConfigs.inAccord.length === 1
-                              ? ""
-                              : "s"}
+                            {separatedOtherConfigs.inAccord.length} item{separatedOtherConfigs.inAccord.length === 1 ? "" : "s"}
                           </span>
                         </div>
                         {renderOtherConfigTable(
                           separatedOtherConfigs.inAccord,
-                          `No In-Accord app or bot configs found${hasActiveOtherConfigFilters ? " for current filters" : ""}.`,
+                          `No In-Accord app or bot configs found${hasActiveOtherConfigFilters ? " for current filters" : ""}.`
                         )}
                       </div>
 
                       <div className="rounded-lg border border-zinc-300 bg-zinc-100/60 p-3 dark:border-zinc-700 dark:bg-zinc-900/35">
                         <div className="mb-2 flex items-center justify-between gap-2">
-                          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-700 dark:text-zinc-200">
-                            Imported Apps & Bots
-                          </p>
+                          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-700 dark:text-zinc-200">Imported Apps & Bots</p>
                           <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                            {separatedOtherConfigs.Other.length} item
-                            {separatedOtherConfigs.Other.length === 1
-                              ? ""
-                              : "s"}
+                            {separatedOtherConfigs.Other.length} item{separatedOtherConfigs.Other.length === 1 ? "" : "s"}
                           </span>
                         </div>
                         {renderOtherConfigTable(
                           separatedOtherConfigs.Other,
-                          `No imported app or bot configs found${hasActiveOtherConfigFilters ? " for current filters" : ""}.`,
+                          `No imported app or bot configs found${hasActiveOtherConfigFilters ? " for current filters" : ""}.`
                         )}
                       </div>
                     </div>

@@ -8,7 +8,7 @@ let cachedFsModule: FsModule | null = null;
 let cachedOsModule: OsModule | null = null;
 let cachedPathModule: PathModule | null = null;
 
-const getBuiltinModule = <T,>(id: string): T | null => {
+const getBuiltinModule = <T,>(id: string): T => {
   const builtinLoader = (process as typeof process & {
     getBuiltinModule?: (moduleName: string) => T | undefined;
   }).getBuiltinModule;
@@ -20,10 +20,10 @@ const getBuiltinModule = <T,>(id: string): T | null => {
     }
   }
 
-  return null;
+  throw new Error(`Builtin module '${id}' is unavailable in this runtime.`);
 };
 
-const getFsModule = (): FsModule | null => {
+const getFsModule = (): FsModule => {
   if (cachedFsModule) {
     return cachedFsModule;
   }
@@ -32,7 +32,7 @@ const getFsModule = (): FsModule | null => {
   return cachedFsModule;
 };
 
-const getOsModule = (): OsModule | null => {
+const getOsModule = (): OsModule => {
   if (cachedOsModule) {
     return cachedOsModule;
   }
@@ -41,7 +41,7 @@ const getOsModule = (): OsModule | null => {
   return cachedOsModule;
 };
 
-const getPathModule = (): PathModule | null => {
+const getPathModule = (): PathModule => {
   if (cachedPathModule) {
     return cachedPathModule;
   }
@@ -62,30 +62,16 @@ const maxLogSizeBytes = 10 * 1024 * 1024;
 const path = getPathModule();
 const fs = getFsModule();
 const os = getOsModule();
-const canWriteServerLog =
-  path !== null &&
-  fs !== null &&
-  os !== null;
-const workspaceRoot = canWriteServerLog ? path.resolve(process.cwd()) : "";
-const defaultServerLogDir = canWriteServerLog
-  ? path.join(os.tmpdir(), "in-accord", "logs")
-  : "";
+const workspaceRoot = path.resolve(process.cwd());
+const defaultServerLogDir = path.join(os.tmpdir(), "in-accord", "logs");
 const configuredServerLogFile = String(process.env.SERVER_LOG_FILE ?? "").trim();
 
 const isPathInsideWorkspace = (targetPath: string) => {
-  if (!canWriteServerLog || !path) {
-    return false;
-  }
-
   const relativePath = path.relative(workspaceRoot, targetPath);
   return relativePath !== "" && !relativePath.startsWith("..") && !path.isAbsolute(relativePath);
 };
 
 const resolveServerLogPath = () => {
-  if (!canWriteServerLog || !path) {
-    return null;
-  }
-
   const fallbackPath = path.join(defaultServerLogDir, "server.log");
 
   if (!configuredServerLogFile) {
@@ -105,69 +91,23 @@ const resolveServerLogPath = () => {
 
 const serverLogPath = resolveServerLogPath();
 
-const formatErrorForLog = (
-  error: Error,
-  seen = new WeakSet<object>(),
-): Record<string, unknown> => {
-  if (seen.has(error)) {
-    return { name: error.name, message: error.message, circular: true };
-  }
-
-  seen.add(error);
-
-  const next: Record<string, unknown> = {
-    name: error.name,
-    message: error.message,
-    stack: error.stack ?? null,
-  };
-
-  const cause = (error as Error & { cause?: unknown }).cause;
-  if (cause instanceof Error) {
-    next.cause = formatErrorForLog(cause, seen);
-  } else if (cause !== undefined) {
-    next.cause = String(cause);
-  }
-
-  for (const [key, value] of Object.entries(error)) {
-    if (key in next) {
-      continue;
-    }
-
-    next[key] = value;
-  }
-
-  return next;
-};
-
-const formatLogValue = (value: unknown) => {
-  if (typeof value === "string") {
-    return value;
-  }
-
-  if (value instanceof Error) {
-    try {
-      return JSON.stringify(formatErrorForLog(value));
-    } catch {
-      return `${value.name}: ${value.message}`;
-    }
-  }
-
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-};
-
 const formatLogMessage = (args: unknown[]) => {
-  return args.map((arg) => formatLogValue(arg)).join(" ");
+  return args
+    .map((arg) => {
+      if (typeof arg === "string") {
+        return arg;
+      }
+
+      try {
+        return JSON.stringify(arg);
+      } catch {
+        return String(arg);
+      }
+    })
+    .join(" ");
 };
 
 const deleteLogFileWhenTooLarge = () => {
-  if (!canWriteServerLog || !fs || !serverLogPath) {
-    return;
-  }
-
   try {
     if (!fs.existsSync(serverLogPath)) {
       return;
@@ -183,10 +123,6 @@ const deleteLogFileWhenTooLarge = () => {
 };
 
 const writeServerLog = (level: "LOG" | "INFO" | "WARN" | "ERROR", args: unknown[]) => {
-  if (!canWriteServerLog || !fs || !path || !serverLogPath) {
-    return;
-  }
-
   try {
     fs.mkdirSync(path.dirname(serverLogPath), { recursive: true });
     deleteLogFileWhenTooLarge();

@@ -12,6 +12,12 @@ try {
     env,
     stdio: "inherit",
   });
+
+  execSync("node scripts/sanitize-cloudflare-traces.cjs", {
+    cwd: process.cwd(),
+    env,
+    stdio: "inherit",
+  });
 } catch (error) {
   process.exit(typeof error?.status === "number" ? error.status : 1);
 }

@@ -1,4 +1,5 @@
 const { execFileSync } = require("node:child_process");
+const fs = require("node:fs");
 const path = require("node:path");
 
 const rootDir = process.cwd();
@@ -23,6 +24,14 @@ const env = {
   ...(shouldCompileOpenNext ? { NEXT_OUTPUT_MODE: "standalone" } : {}),
 };
 
+const generatedTypeDirsToClear = [
+  ".next-desktop/types",
+  ".next-desktop/dev/types",
+  ".next-win64/types",
+  ".n/types",
+  ".n/dev/types",
+];
+
 const runNode = (scriptPath, args = []) => {
   execFileSync(process.execPath, [scriptPath, ...args], {
     cwd: rootDir,
@@ -32,11 +41,17 @@ const runNode = (scriptPath, args = []) => {
 };
 
 try {
+  for (const relativePath of generatedTypeDirsToClear) {
+    fs.rmSync(path.join(rootDir, relativePath), { recursive: true, force: true });
+  }
+
   runNode(path.join(rootDir, "scripts", "repair-next-install.cjs"));
   runNode(nextCliPath, ["build", "--webpack"]);
   runNode(path.join(rootDir, "scripts", "sanitize-cloudflare-traces.cjs"));
 
   if (shouldCompileOpenNext) {
+    runNode(path.join(rootDir, "scripts", "patch-opennext-windows-output.cjs"));
+    runNode(path.join(rootDir, "scripts", "patch-opennext-env-files.cjs"));
     runNode(path.join(rootDir, "scripts", "patch-opennext-prefetch-hints.cjs"));
     runNode(openNextCliPath, ["build", "--skipBuild", "--config", "wrangler.jsonc", "--skipWranglerConfigCheck"]);
     runNode(path.join(rootDir, "scripts", "patch-opennext-prefetch-hints.cjs"));

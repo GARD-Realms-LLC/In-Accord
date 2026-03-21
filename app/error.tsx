@@ -2,6 +2,11 @@
 
 import { useEffect, useState } from "react";
 
+import {
+  hardReloadForStaleBuild,
+  isStaleBuildErrorMessage,
+} from "@/lib/stale-build-reload";
+
 export default function Error({
   error,
   reset,
@@ -10,10 +15,19 @@ export default function Error({
   reset: () => void;
 }) {
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
+  const isStaleBuildError = isStaleBuildErrorMessage(error?.message);
 
   useEffect(() => {
     console.error("[APP_ERROR_BOUNDARY]", error);
   }, [error]);
+
+  useEffect(() => {
+    if (!isStaleBuildError) {
+      return;
+    }
+
+    hardReloadForStaleBuild();
+  }, [isStaleBuildError]);
 
   const onCopyCrashReport = async () => {
     const report = [
@@ -59,10 +73,14 @@ export default function Error({
           </button>
           <button
             type="button"
-            onClick={() => window.location.reload()}
+            onClick={() => {
+              if (!hardReloadForStaleBuild()) {
+                window.location.reload();
+              }
+            }}
             className="rounded-md border border-white/15 px-3 py-2 text-sm font-semibold text-zinc-200 hover:bg-white/5"
           >
-            Refresh
+            {isStaleBuildError ? "Reload latest build" : "Refresh"}
           </button>
           <button
             type="button"

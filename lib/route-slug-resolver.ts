@@ -1,6 +1,6 @@
-import { and, eq } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
-import { channel, db, member, server } from "@/lib/db";
+import { db } from "@/lib/db";
 import { isInAccordAdministrator } from "@/lib/in-accord-admin";
 import { buildRouteSegment, matchesRouteParam } from "@/lib/route-slugs";
 
@@ -20,6 +20,9 @@ const safeDecode = (value: string) => {
   }
 };
 
+const getRows = <TRow extends Record<string, unknown>>(result: unknown) =>
+  ((result as { rows?: TRow[] }).rows ?? []) as TRow[];
+
 export async function resolveServerRouteContext(input: {
   profileId: string;
   serverParam: string;
@@ -31,21 +34,36 @@ export async function resolveServerRouteContext(input: {
     return null;
   }
 
-  const directServer = isGlobalAdministrator
-    ? await db
-        .select({ id: server.id, name: server.name })
-        .from(server)
-        .where(eq(server.id, normalizedParam))
-        .limit(1)
-    : await db
-        .select({ id: server.id, name: server.name })
-        .from(server)
-        .innerJoin(
-          member,
-          and(eq(member.serverId, server.id), eq(member.profileId, input.profileId))
-        )
-        .where(eq(server.id, normalizedParam))
-        .limit(1);
+  const directServerResult = await db.execute(
+    isGlobalAdministrator
+      ? sql`
+          select
+            s."id" as "id",
+            s."name" as "name"
+          from "Server" s
+          where trim(s."id") = trim(${normalizedParam})
+          limit 1
+        `
+      : sql`
+          select
+            s."id" as "id",
+            s."name" as "name"
+          from "Server" s
+          where trim(s."id") = trim(${normalizedParam})
+            and (
+              trim(s."profileId") = trim(${input.profileId})
+              or exists (
+                select 1
+                from "Member" m
+                where m."serverId" = s."id"
+                  and trim(m."profileId") = trim(${input.profileId})
+              )
+            )
+          limit 1
+        `
+  );
+
+  const directServer = getRows<{ id: string; name: string }>(directServerResult);
 
   if (directServer[0]) {
     return {
@@ -55,19 +73,32 @@ export async function resolveServerRouteContext(input: {
     };
   }
 
-  const candidates = isGlobalAdministrator
-    ? await db.select({ id: server.id, name: server.name }).from(server)
-    : await db
-        .select({ id: server.id, name: server.name })
-        .from(server)
-        .innerJoin(
-          member,
-          and(eq(member.serverId, server.id), eq(member.profileId, input.profileId))
-        );
-
-  const match = (candidates as ServerCandidate[]).find((item) =>
-    matchesRouteParam(normalizedParam, item)
+  const candidatesResult = await db.execute(
+    isGlobalAdministrator
+      ? sql`
+          select
+            s."id" as "id",
+            s."name" as "name"
+          from "Server" s
+        `
+      : sql`
+          select
+            s."id" as "id",
+            s."name" as "name"
+          from "Server" s
+          where trim(s."profileId") = trim(${input.profileId})
+             or exists (
+               select 1
+               from "Member" m
+               where m."serverId" = s."id"
+                 and trim(m."profileId") = trim(${input.profileId})
+             )
+        `
   );
+
+  const candidates = getRows<ServerCandidate>(candidatesResult);
+
+  const match = candidates.find((item) => matchesRouteParam(normalizedParam, item));
 
   if (!match) {
     return null;
@@ -89,11 +120,17 @@ export async function resolveChannelRouteContext(input: {
     return null;
   }
 
-  const directChannel = await db
-    .select({ id: channel.id, name: channel.name })
-    .from(channel)
-    .where(and(eq(channel.serverId, input.serverId), eq(channel.id, normalizedParam)))
-    .limit(1);
+  const directChannelResult = await db.execute(sql`
+    select
+      c."id" as "id",
+      c."name" as "name"
+    from "Channel" c
+    where c."serverId" = ${input.serverId}
+      and trim(c."id") = trim(${normalizedParam})
+    limit 1
+  `);
+
+  const directChannel = getRows<{ id: string; name: string }>(directChannelResult);
 
   if (directChannel[0]) {
     return {
@@ -103,14 +140,17 @@ export async function resolveChannelRouteContext(input: {
     };
   }
 
-  const candidates = await db
-    .select({ id: channel.id, name: channel.name })
-    .from(channel)
-    .where(eq(channel.serverId, input.serverId));
+  const candidatesResult = await db.execute(sql`
+    select
+      c."id" as "id",
+      c."name" as "name"
+    from "Channel" c
+    where c."serverId" = ${input.serverId}
+  `);
 
-  const match = (candidates as ChannelCandidate[]).find((item) =>
-    matchesRouteParam(normalizedParam, item)
-  );
+  const candidates = getRows<ChannelCandidate>(candidatesResult);
+
+  const match = candidates.find((item) => matchesRouteParam(normalizedParam, item));
 
   if (!match) {
     return null;
@@ -139,18 +179,28 @@ export async function resolveChannelRouteContextForProfile(input: {
     return null;
   }
 
-  const direct = await db
-    .select({
-      channelId: channel.id,
-      channelName: channel.name,
-      serverId: server.id,
-      serverName: server.name,
-    })
-    .from(channel)
-    .innerJoin(server, eq(server.id, channel.serverId))
-    .innerJoin(member, and(eq(member.serverId, channel.serverId), eq(member.profileId, input.profileId)))
-    .where(eq(channel.id, normalizedParam))
-    .limit(1);
+  const directResult = await db.execute(sql`
+    select
+      c."id" as "channelId",
+      c."name" as "channelName",
+      s."id" as "serverId",
+      s."name" as "serverName"
+    from "Channel" c
+    inner join "Server" s on s."id" = c."serverId"
+    where trim(c."id") = trim(${normalizedParam})
+      and (
+        trim(s."profileId") = trim(${input.profileId})
+        or exists (
+          select 1
+          from "Member" m
+          where m."serverId" = c."serverId"
+            and trim(m."profileId") = trim(${input.profileId})
+        )
+      )
+    limit 1
+  `);
+
+  const direct = getRows<ProfileChannelCandidate>(directResult);
 
   if (direct[0]) {
     return {
@@ -163,18 +213,26 @@ export async function resolveChannelRouteContextForProfile(input: {
     };
   }
 
-  const candidates = await db
-    .select({
-      channelId: channel.id,
-      channelName: channel.name,
-      serverId: server.id,
-      serverName: server.name,
-    })
-    .from(channel)
-    .innerJoin(server, eq(server.id, channel.serverId))
-    .innerJoin(member, and(eq(member.serverId, channel.serverId), eq(member.profileId, input.profileId)));
+  const candidatesResult = await db.execute(sql`
+    select
+      c."id" as "channelId",
+      c."name" as "channelName",
+      s."id" as "serverId",
+      s."name" as "serverName"
+    from "Channel" c
+    inner join "Server" s on s."id" = c."serverId"
+    where trim(s."profileId") = trim(${input.profileId})
+       or exists (
+         select 1
+         from "Member" m
+         where m."serverId" = c."serverId"
+           and trim(m."profileId") = trim(${input.profileId})
+       )
+  `);
 
-  const match = (candidates as ProfileChannelCandidate[]).find((item) =>
+  const candidates = getRows<ProfileChannelCandidate>(candidatesResult);
+
+  const match = candidates.find((item) =>
     matchesRouteParam(normalizedParam, {
       id: item.channelId,
       name: item.channelName,

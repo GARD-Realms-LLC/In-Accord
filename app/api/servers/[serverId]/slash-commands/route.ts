@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
-import { and, eq } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
-import { db, member } from "@/lib/db";
 import { resolveServerRouteContext } from "@/lib/route-slug-resolver";
-import { listServerSlashCommands } from "@/lib/slash-commands";
+import { hasServerMembership, listServerSlashCommands } from "@/lib/slash-commands";
 
 export async function GET(
   req: Request,
@@ -26,6 +24,7 @@ export async function GET(
     const resolvedServer = await resolveServerRouteContext({
       profileId: profile.id,
       serverParam,
+      profileRole: profile.role,
     });
 
     if (!resolvedServer) {
@@ -34,8 +33,9 @@ export async function GET(
 
     const normalizedServerId = resolvedServer.id;
 
-    const membership = await db.query.member.findFirst({
-      where: and(eq(member.serverId, normalizedServerId), eq(member.profileId, profile.id)),
+    const membership = await hasServerMembership({
+      serverId: normalizedServerId,
+      profileId: profile.id,
     });
 
     if (!membership) {

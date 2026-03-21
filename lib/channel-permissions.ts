@@ -1,6 +1,6 @@
-import { and, eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
-import { db, member, server } from "@/lib/db";
+import { db } from "@/lib/db";
 import { MemberRole } from "@/lib/db/types";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 import { ensureServerRolesSchema } from "@/lib/server-roles";
@@ -52,6 +52,67 @@ const defaultPermissions: ChannelPermissionSet = {
   allowConnect: true,
 };
 
+const normalizeMemberRole = (value: unknown): MemberRole => {
+  const normalized = String(value ?? "").trim().toUpperCase();
+  if (
+    normalized === MemberRole.ADMIN ||
+    normalized === "ADMINISTRATOR" ||
+    normalized === "ADMINS" ||
+    normalized === "ADMINISTRATORS"
+  ) {
+    return MemberRole.ADMIN;
+  }
+  if (
+    normalized === MemberRole.MODERATOR ||
+    normalized === "MOD" ||
+    normalized === "MODS" ||
+    normalized === "MODERATORS"
+  ) {
+    return MemberRole.MODERATOR;
+  }
+  return MemberRole.GUEST;
+};
+
+const normalizeServerRoleNameKey = (value: unknown) =>
+  String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+
+const implicitRoleNameKeysByMemberRole: Record<MemberRole, Set<string>> = {
+  [MemberRole.ADMIN]: new Set(["admin", "admins", "administrator", "administrators"]),
+  [MemberRole.MODERATOR]: new Set(["moderator", "moderators", "mod", "mods"]),
+  [MemberRole.GUEST]: new Set(["member", "members", "guest", "guests"]),
+};
+
+const resolveImplicitServerRoleIds = async ({
+  serverId,
+  role,
+}: {
+  serverId: string;
+  role: MemberRole;
+}) => {
+  const expectedKeys = implicitRoleNameKeysByMemberRole[role];
+  if (!expectedKeys || expectedKeys.size === 0) {
+    return [];
+  }
+
+  const result = await db.execute(sql`
+    select
+      r."id" as "id",
+      r."name" as "name"
+    from "ServerRole" r
+    where r."serverId" = ${serverId}
+  `);
+
+  return ((result as unknown as {
+    rows?: Array<{ id: string | null; name: string | null }>;
+  }).rows ?? [])
+    .filter((row) => expectedKeys.has(normalizeServerRoleNameKey(row.name)))
+    .map((row) => String(row.id ?? "").trim())
+    .filter(Boolean);
+};
+
 export const ensureChannelPermissionSchema = async () => {
   await db.execute(sql`
     create table if not exists "ChannelPermission" (
@@ -63,8 +124,8 @@ export const ensureChannelPermissionSchema = async () => {
       "allowView" boolean,
       "allowSend" boolean,
       "allowConnect" boolean,
-      "createdAt" timestamp not null default now(),
-      "updatedAt" timestamp not null default now()
+      "createdAt" timestamp not null default CURRENT_TIMESTAMP,
+      "updatedAt" timestamp not null default CURRENT_TIMESTAMP
     )
   `);
 
@@ -110,12 +171,12 @@ export const ensureChannelPermissionSchema = async () => {
 
   await db.execute(sql`
     alter table "ChannelPermission"
-    add column if not exists "createdAt" timestamp not null default now()
+    add column if not exists "createdAt" timestamp not null default CURRENT_TIMESTAMP
   `);
 
   await db.execute(sql`
     alter table "ChannelPermission"
-    add column if not exists "updatedAt" timestamp not null default now()
+    add column if not exists "updatedAt" timestamp not null default CURRENT_TIMESTAMP
   `);
 
   await db.execute(sql`
@@ -505,7 +566,7 @@ export const upsertChannelRolePermissions = async ({
 }) => {
   const now = new Date();
 
-  await db.transaction(async (tx) => {
+  await db.transaction(async (tx: any) => {
     for (const role of [MemberRole.ADMIN, MemberRole.MODERATOR, MemberRole.GUEST] as const) {
       const setting = permissions[role];
 
@@ -552,27 +613,69 @@ export const resolveMemberContext = async ({
   profileId: string;
   serverId: string;
 }) => {
-  await ensureServerRolesSchema();
+  const normalizedProfileId = String(profileId ?? "").trim();
+  const normalizedServerId = String(serverId ?? "").trim();
 
-  const membership = await db.query.member.findFirst({
-    where: and(eq(member.serverId, serverId), eq(member.profileId, profileId)),
-    columns: { id: true, role: true, profileId: true },
-  });
-
-  if (!membership) {
+  if (!normalizedProfileId || !normalizedServerId) {
     return null;
   }
 
-  const owner = await db.query.server.findFirst({
-    where: and(eq(server.id, serverId), eq(server.profileId, profileId)),
-    columns: { id: true },
-  });
+  await ensureServerRolesSchema();
+
+  const membershipResult = await db.execute(sql`
+    select
+      m."id" as "id",
+      m."role" as "role",
+      m."profileId" as "profileId"
+    from "Member" m
+    where m."serverId" = ${normalizedServerId}
+      and m."profileId" = ${normalizedProfileId}
+    order by m."createdAt" asc, m."id" asc
+    limit 1
+  `);
+
+  const membershipRow = (membershipResult as unknown as {
+    rows?: Array<{
+      id: string | null;
+      role: string | null;
+      profileId: string | null;
+    }>;
+  }).rows?.[0];
+
+  const normalizedMemberId = String(membershipRow?.id ?? "").trim();
+  const normalizedMembershipProfileId = String(membershipRow?.profileId ?? normalizedProfileId).trim();
+
+  if (!normalizedMemberId || !normalizedMembershipProfileId) {
+    return null;
+  }
+
+  const ownerResult = await db.execute(sql`
+    select s."id" as "id"
+    from "Server" s
+    where s."id" = ${normalizedServerId}
+      and s."profileId" = ${normalizedProfileId}
+    limit 1
+  `);
+
+  const isServerOwner = Boolean(
+    (ownerResult as unknown as {
+      rows?: Array<{ id: string | null }>;
+    }).rows?.[0]?.id,
+  );
+
+  const normalizedRole = normalizeMemberRole(membershipRow?.role);
 
   const assignmentRows = await db.execute(sql`
     select a."roleId" as "roleId"
     from "ServerRoleAssignment" a
-    where a."serverId" = ${serverId}
-      and a."memberId" = ${membership.id}
+    where a."serverId" = ${normalizedServerId}
+      and exists (
+        select 1
+        from "Member" m
+        where m."id" = a."memberId"
+          and m."serverId" = ${normalizedServerId}
+          and m."profileId" = ${normalizedMembershipProfileId}
+      )
   `);
 
   const assignedRoleIds = ((assignmentRows as unknown as {
@@ -581,11 +684,16 @@ export const resolveMemberContext = async ({
     .map((row) => String(row.roleId ?? "").trim())
     .filter(Boolean);
 
+  const implicitRoleIds = await resolveImplicitServerRoleIds({
+    serverId: normalizedServerId,
+    role: normalizedRole,
+  });
+
   return {
-    memberId: membership.id,
-    profileId: membership.profileId,
-    role: membership.role,
-    assignedRoleIds,
-    isServerOwner: !!owner,
+    memberId: normalizedMemberId,
+    profileId: normalizedMembershipProfileId,
+    role: normalizedRole,
+    assignedRoleIds: Array.from(new Set([...assignedRoleIds, ...implicitRoleIds])),
+    isServerOwner,
   };
 };

@@ -206,6 +206,36 @@ const createTempSqlPath = () =>
     `inaccord-d1-sync-${Date.now()}-${Math.random().toString(16).slice(2)}.sql`,
   );
 
+const getPostgresHost = (connectionString: string) => {
+  const normalized = String(connectionString ?? "").trim();
+  if (!normalized) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    if (
+      parsed.protocol !== "postgres:" &&
+      parsed.protocol !== "postgresql:"
+    ) {
+      return null;
+    }
+
+    return parsed.hostname.trim().toLowerCase() || null;
+  } catch {
+    return null;
+  }
+};
+
+const assertNonLocalPostgresSnapshotSource = (connectionString: string) => {
+  const host = getPostgresHost(connectionString);
+  if (host === "localhost" || host === "127.0.0.1" || host === "::1") {
+    throw new Error(
+      "Refusing to sync Cloudflare D1 from a localhost PostgreSQL source. Configure LIVE_DATABASE_URL to a shared non-local database first.",
+    );
+  }
+};
+
 const buildSnapshotSqlForPool = async (
   pool: Pool,
 ): Promise<D1SnapshotSqlBuildResult> => {
@@ -393,6 +423,7 @@ export const buildPostgresSnapshotSql = async ({
 }: {
   connectionString: string;
 }): Promise<D1SnapshotSqlBuildResult> => {
+  assertNonLocalPostgresSnapshotSource(connectionString);
   const pool = new Pool({ connectionString, max: 1 });
 
   try {
@@ -416,6 +447,7 @@ export const syncPostgresSnapshotToD1 = async ({
   connectionString: string;
   databaseName: string;
 }): Promise<D1SnapshotSyncResult> => {
+  assertNonLocalPostgresSnapshotSource(connectionString);
   const sqlFilePath = createTempSqlPath();
 
   try {

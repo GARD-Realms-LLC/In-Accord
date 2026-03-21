@@ -3,14 +3,12 @@ import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { isDatabaseRuntimeReady } from "@/lib/d1-runtime";
 
 export const SESSION_COOKIE_NAME = "inaccord_session_user_id";
 const PERSISTENT_SESSION_TTL_SECONDS = 60 * 60 * 24 * 5;
 const BROWSER_SESSION_TTL_SECONDS = 60 * 60 * 24;
 const MAX_SIGNED_TOKEN_AGE_SECONDS = PERSISTENT_SESSION_TTL_SECONDS;
-const SESSION_SECRET =
-  process.env.SESSION_SECRET || "replace_me_session_secret";
+const SESSION_SECRET = process.env.SESSION_SECRET || "replace_me_session_secret";
 
 type SessionRow = {
   sessionId: string;
@@ -48,9 +46,6 @@ export type UserSessionEntry = {
 
 let sessionSchemaReady = false;
 
-const readExistsFlag = (value: unknown) =>
-  value === true || value === 1 || value === "1";
-
 const resolveSessionCookieSecure = async (request?: Request) => {
   const requestUrl = String(request?.url || "").trim();
 
@@ -71,12 +66,8 @@ const resolveSessionCookieSecure = async (request?: Request) => {
 
   try {
     const headerStore = await headers();
-    const forwardedProto = String(headerStore.get("x-forwarded-proto") ?? "")
-      .trim()
-      .toLowerCase();
-    const host = String(
-      headerStore.get("x-forwarded-host") ?? headerStore.get("host") ?? "",
-    )
+    const forwardedProto = String(headerStore.get("x-forwarded-proto") ?? "").trim().toLowerCase();
+    const host = String(headerStore.get("x-forwarded-host") ?? headerStore.get("host") ?? "")
       .trim()
       .toLowerCase();
 
@@ -88,11 +79,7 @@ const resolveSessionCookieSecure = async (request?: Request) => {
       return false;
     }
 
-    if (
-      host.startsWith("localhost") ||
-      host.startsWith("127.0.0.1") ||
-      host.startsWith("[::1]")
-    ) {
+    if (host.startsWith("localhost") || host.startsWith("127.0.0.1") || host.startsWith("[::1]")) {
       return false;
     }
   } catch (_error) {
@@ -110,64 +97,21 @@ const getSessionCookieOptions = async (request?: Request, maxAge?: number) => ({
   ...(typeof maxAge === "number" ? { maxAge } : {}),
 });
 
-const isImmutableCookieWriteContextError = (error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error ?? "");
-  return /Cookies can only be modified in a Server Action or Route Handler/i.test(
-    message,
-  );
-};
-
 const expireSessionCookie = async (request?: Request) => {
   const cookieStore = await cookies();
   const cookieOptions = await getSessionCookieOptions(request);
-
-  try {
-    cookieStore.set(SESSION_COOKIE_NAME, "", {
-      ...cookieOptions,
-      maxAge: 0,
-    });
-  } catch (error) {
-    if (isImmutableCookieWriteContextError(error)) {
-      return false;
-    }
-
-    throw error;
-  }
-
-  return true;
+  cookieStore.set(SESSION_COOKIE_NAME, "", {
+    ...cookieOptions,
+    maxAge: 0,
+  });
 };
 
 const signPayload = (payload: string) => {
-  return createHmac("sha256", SESSION_SECRET)
-    .update(payload)
-    .digest("base64url");
-};
-
-const hasSessionSchema = async () => {
-  const result = await db.execute(sql`
-    select
-      exists (
-        select 1
-        from sqlite_master
-        where type = 'table'
-          and name = 'InAccordSession'
-      ) as "exists"
-  `);
-
-  const rows = (result as unknown as {
-    rows?: Array<{ exists?: boolean | null }>;
-  }).rows;
-
-  return readExistsFlag(rows?.[0]?.exists);
+  return createHmac("sha256", SESSION_SECRET).update(payload).digest("base64url");
 };
 
 const ensureSessionSchema = async () => {
   if (sessionSchemaReady) {
-    return;
-  }
-
-  if (await hasSessionSchema()) {
-    sessionSchemaReady = true;
     return;
   }
 
@@ -197,11 +141,7 @@ const ensureSessionSchema = async () => {
   sessionSchemaReady = true;
 };
 
-const createSessionToken = (
-  userId: string,
-  sessionId: string,
-  issuedAt = Math.floor(Date.now() / 1000),
-) => {
+const createSessionToken = (userId: string, sessionId: string, issuedAt = Math.floor(Date.now() / 1000)) => {
   const payload = `${userId}.${issuedAt}.${sessionId}`;
   return `${payload}.${signPayload(payload)}`;
 };
@@ -256,12 +196,9 @@ const resolveRequestMetadata = (request?: Request) => {
     };
   }
 
-  const userAgent =
-    String(request.headers.get("user-agent") ?? "").trim() || null;
+  const userAgent = String(request.headers.get("user-agent") ?? "").trim() || null;
   const forwarded = String(request.headers.get("x-forwarded-for") ?? "").trim();
-  const ipAddress = forwarded
-    ? forwarded.split(",")[0].trim().slice(0, 191) || null
-    : null;
+  const ipAddress = forwarded ? forwarded.split(",")[0].trim().slice(0, 191) || null : null;
 
   return {
     userAgent,
@@ -272,7 +209,7 @@ const resolveRequestMetadata = (request?: Request) => {
 const createSessionRecord = async (
   userId: string,
   request?: Request,
-  ttlSeconds: number = BROWSER_SESSION_TTL_SECONDS,
+  ttlSeconds: number = BROWSER_SESSION_TTL_SECONDS
 ) => {
   await ensureSessionSchema();
 
@@ -309,11 +246,6 @@ export const getCurrentSessionContext = async () => {
     return null;
   }
 
-  if (!(await isDatabaseRuntimeReady())) {
-    await expireSessionCookie();
-    return null;
-  }
-
   const parsed = parseSessionToken(token);
   if (!parsed) {
     await expireSessionCookie();
@@ -335,11 +267,7 @@ export const getCurrentSessionContext = async () => {
       limit 1
     `);
 
-    const row = ((
-      result as unknown as {
-        rows?: Array<{ sessionId: string; userId: string }>;
-      }
-    ).rows ?? [])[0];
+    const row = ((result as unknown as { rows?: Array<{ sessionId: string; userId: string }> }).rows ?? [])[0];
     if (!row) {
       await expireSessionCookie();
       return null;
@@ -373,15 +301,12 @@ const isDatabaseUnavailableError = (error: unknown) => {
       ? String(
           (error as { code?: unknown; cause?: { code?: unknown } }).code ??
             (error as { cause?: { code?: unknown } }).cause?.code ??
-            "",
+            ""
         )
       : "";
 
-  return (
-    /No D1 database binding configured|Database unavailable|Failed to execute D1 query|relation .* does not exist|42P01/i.test(
-      message,
-    ) || /SQLITE_|D1_|ETIMEDOUT|ECONNREFUSED|ENOTFOUND|57P01|08006|08001/i.test(maybeCode)
-  );
+  return /No D1 database binding configured|Database unavailable|Failed to execute D1 query|no such table|no such column|SQLITE_ERROR/i.test(message) ||
+    /SQLITE_|D1_|ETIMEDOUT|ECONNREFUSED|ENOTFOUND/i.test(maybeCode);
 };
 
 const resolveCurrentSessionState = async () => {
@@ -399,25 +324,12 @@ const resolveCurrentSessionState = async () => {
     };
   }
 
-  if (!(await isDatabaseRuntimeReady())) {
-    return {
-      ok: false,
-      code: "database-unavailable" as const,
-      message:
-        "Database unavailable. Configure Cloudflare D1.",
-      userId: null,
-      sessionId: null,
-      shouldExpireCookie: false,
-    };
-  }
-
   const parsed = parseSessionToken(token);
   if (!parsed) {
     return {
       ok: false,
       code: "invalid-session-cookie" as const,
-      message:
-        "Desktop session cookie is invalid or corrupted. Please sign in again.",
+      message: "Desktop session cookie is invalid or corrupted. Please sign in again.",
       userId: null,
       sessionId: null,
       shouldExpireCookie: true,
@@ -439,17 +351,12 @@ const resolveCurrentSessionState = async () => {
       limit 1
     `);
 
-    const row = ((
-      result as unknown as {
-        rows?: Array<{ sessionId: string; userId: string }>;
-      }
-    ).rows ?? [])[0];
+    const row = ((result as unknown as { rows?: Array<{ sessionId: string; userId: string }> }).rows ?? [])[0];
     if (!row) {
       return {
         ok: false,
         code: "session-not-found" as const,
-        message:
-          "Desktop session was not found or has expired. Please sign in again.",
+        message: "Desktop session was not found or has expired. Please sign in again.",
         userId: parsed.userId,
         sessionId: parsed.sessionId,
         shouldExpireCookie: true,
@@ -469,11 +376,9 @@ const resolveCurrentSessionState = async () => {
 
     return {
       ok: false,
-      code: isDatabaseUnavailableError(error)
-        ? ("database-unavailable" as const)
-        : ("session-validation-failed" as const),
+      code: isDatabaseUnavailableError(error) ? "database-unavailable" as const : "session-validation-failed" as const,
       message: isDatabaseUnavailableError(error)
-        ? "Desktop session validation failed because the database is unavailable."
+        ? "Desktop session validation failed because the D1 database is unavailable."
         : "Desktop session validation failed because of an internal error.",
       userId: parsed.userId,
       sessionId: parsed.sessionId,
@@ -488,11 +393,9 @@ export const setSessionUserId = async (
     sessionId?: string;
     request?: Request;
     persistent?: boolean;
-  },
+  }
 ) => {
-  const ttlSeconds = options?.persistent
-    ? PERSISTENT_SESSION_TTL_SECONDS
-    : BROWSER_SESSION_TTL_SECONDS;
+  const ttlSeconds = options?.persistent ? PERSISTENT_SESSION_TTL_SECONDS : BROWSER_SESSION_TTL_SECONDS;
   const sessionDetails = options?.sessionId
     ? { sessionId: options.sessionId, issuedAt: Math.floor(Date.now() / 1000) }
     : await createSessionRecord(userId, options?.request, ttlSeconds);
@@ -500,42 +403,32 @@ export const setSessionUserId = async (
   const cookieStore = await cookies();
   const cookieOptions = await getSessionCookieOptions(
     options?.request,
-    options?.persistent ? PERSISTENT_SESSION_TTL_SECONDS : undefined,
+    options?.persistent ? PERSISTENT_SESSION_TTL_SECONDS : undefined
   );
   cookieStore.set(
     SESSION_COOKIE_NAME,
-    createSessionToken(
-      userId,
-      sessionDetails.sessionId,
-      sessionDetails.issuedAt,
-    ),
-    cookieOptions,
+    createSessionToken(userId, sessionDetails.sessionId, sessionDetails.issuedAt),
+    cookieOptions
   );
 };
 
-export const getCurrentSessionDiagnostics =
-  async (): Promise<SessionDiagnostics> => {
-    const state = await resolveCurrentSessionState();
+export const getCurrentSessionDiagnostics = async (): Promise<SessionDiagnostics> => {
+  const state = await resolveCurrentSessionState();
 
-    if (
-      !state.ok &&
-      (state as { shouldExpireCookie?: boolean }).shouldExpireCookie
-    ) {
-      await expireSessionCookie();
-    }
+  if (!state.ok && (state as { shouldExpireCookie?: boolean }).shouldExpireCookie) {
+    await expireSessionCookie();
+  }
 
-    return {
-      ok: state.ok,
-      code: state.code,
-      message: state.message,
-      userId: state.userId,
-      sessionId: state.sessionId,
-    };
+  return {
+    ok: state.ok,
+    code: state.code,
+    message: state.message,
+    userId: state.userId,
+    sessionId: state.sessionId,
   };
+};
 
-export const listActiveSessionsForUser = async (
-  userId: string,
-): Promise<UserSessionEntry[]> => {
+export const listActiveSessionsForUser = async (userId: string): Promise<UserSessionEntry[]> => {
   await ensureSessionSchema();
 
   const result = await db.execute(sql`
@@ -555,7 +448,7 @@ export const listActiveSessionsForUser = async (
     order by "createdAt" desc
   `);
 
-  const rows = (result as unknown as { rows?: SessionRow[] }).rows ?? [];
+  const rows = ((result as unknown as { rows?: SessionRow[] }).rows ?? []);
 
   return rows.map((row) => ({
     sessionId: row.sessionId,
@@ -579,10 +472,7 @@ export const revokeSessionById = async (userId: string, sessionId: string) => {
   `);
 };
 
-export const revokeOtherSessionsForUser = async (
-  userId: string,
-  currentSessionId?: string | null,
-) => {
+export const revokeOtherSessionsForUser = async (userId: string, currentSessionId?: string | null) => {
   await ensureSessionSchema();
 
   if (currentSessionId) {

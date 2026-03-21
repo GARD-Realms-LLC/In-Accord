@@ -47,7 +47,7 @@ export async function GET(_req: Request, { params }: Params) {
         r."showInOnlineMembers",
         r."position",
         r."isManaged",
-        count(a."memberId")::int as "memberCount"
+        count(a."memberId") as "memberCount"
       from "ServerRole" r
       left join "ServerRoleAssignment" a
         on a."roleId" = r."id"
@@ -57,7 +57,7 @@ export async function GET(_req: Request, { params }: Params) {
     `);
 
     const totalMembersResult = await db.execute(sql`
-      select count(*)::int as "totalMembers"
+      select count(*) as "totalMembers"
       from "Member"
       where "serverId" = ${serverId}
     `);
@@ -150,7 +150,7 @@ export async function POST(req: Request, { params }: Params) {
     }
 
     const nextPositionResult = await db.execute(sql`
-      select coalesce(max("position"), 0)::int + 1 as "nextPosition"
+      select coalesce(max("position"), 0) + 1 as "nextPosition"
       from "ServerRole"
       where "serverId" = ${serverId}
     `);

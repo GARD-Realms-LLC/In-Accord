@@ -19,7 +19,7 @@ import {
   Video,
 } from "lucide-react";
 import axios from "axios";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { ServerWithMembersWithProfiles } from "@/types";
@@ -51,6 +51,8 @@ type ChannelGroupMenuItem = {
 };
 
 interface ServerHeaderProps {
+  serverId: string;
+  serverName: string;
   server: ServerWithMembersWithProfiles & {
     bannerUrl?: string | null;
     bannerFit?: "cover" | "contain" | "scale" | null;
@@ -62,9 +64,12 @@ interface ServerHeaderProps {
   isServerOwner?: boolean;
   channelGroups?: ChannelGroupMenuItem[];
   hasHiddenChannels?: boolean;
+  showBackgroundMedia?: boolean;
 }
 
 export const ServerHeader = ({
+  serverId,
+  serverName,
   server,
   viewerProfileId = null,
   viewerMemberId = null,
@@ -72,19 +77,85 @@ export const ServerHeader = ({
   isServerOwner = false,
   channelGroups = [],
   hasHiddenChannels = false,
+  showBackgroundMedia = true,
 }: ServerHeaderProps) => {
   const { onOpen } = useModal();
   const router = useRouter();
   const [isUpdatingChannelsVisibility, setIsUpdatingChannelsVisibility] = useState(false);
+  const stableServer = {
+    ...server,
+    id: serverId,
+    name: serverName,
+  };
+  const [liveBannerUrl, setLiveBannerUrl] = useState<string | null>(server.bannerUrl ?? null);
+  const [liveBannerFit, setLiveBannerFit] = useState<"cover" | "contain" | "scale" | null>(
+    server.bannerFit ?? "cover"
+  );
+  const [liveBannerScale, setLiveBannerScale] = useState<number | null>(server.bannerScale ?? 1);
+
+  useEffect(() => {
+    setLiveBannerUrl(server.bannerUrl ?? null);
+    setLiveBannerFit(server.bannerFit ?? "cover");
+    setLiveBannerScale(server.bannerScale ?? 1);
+  }, [server.bannerFit, server.bannerScale, server.bannerUrl, serverId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadLiveBanner = async () => {
+      try {
+        const response = await fetch(`/api/servers/${encodeURIComponent(serverId)}`, {
+          method: "GET",
+          cache: "no-store",
+          credentials: "include",
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = (await response.json().catch(() => null)) as
+          | {
+              bannerUrl?: string | null;
+              bannerFit?: "cover" | "contain" | "scale" | null;
+              bannerScale?: number | null;
+            }
+          | null;
+
+        if (cancelled || !payload) {
+          return;
+        }
+
+        setLiveBannerUrl(typeof payload.bannerUrl === "string" ? payload.bannerUrl : null);
+        setLiveBannerFit(
+          payload.bannerFit === "contain" || payload.bannerFit === "scale" ? payload.bannerFit : "cover"
+        );
+        setLiveBannerScale(
+          typeof payload.bannerScale === "number" && !Number.isNaN(payload.bannerScale)
+            ? payload.bannerScale
+            : 1
+        );
+      } catch {
+        // Keep the current banner state if the live refresh fails.
+      }
+    };
+
+    void loadLiveBanner();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [serverId]);
+
   const normalizedBannerUrl =
-    resolveBannerUrl(server.bannerUrl) ?? "";
+    resolveBannerUrl(liveBannerUrl) ?? "";
   const bannerFit =
-    server.bannerFit === "contain" || server.bannerFit === "scale"
-      ? server.bannerFit
+    liveBannerFit === "contain" || liveBannerFit === "scale"
+      ? liveBannerFit
       : "cover";
   const bannerScale =
-    typeof server.bannerScale === "number" && !Number.isNaN(server.bannerScale)
-      ? Math.min(2, Math.max(0.25, server.bannerScale))
+    typeof liveBannerScale === "number" && !Number.isNaN(liveBannerScale)
+      ? Math.min(2, Math.max(0.25, liveBannerScale))
       : 1;
 
   const isAdmin = isServerOwner || role === MemberRole.ADMIN;
@@ -114,7 +185,7 @@ export const ServerHeader = ({
     try {
       setIsUpdatingChannelsVisibility(true);
 
-      await axios.patch(`/api/servers/${server.id}/channel-visibility`, {
+      await axios.patch(`/api/servers/${serverId}/channel-visibility`, {
         action: "unhideAll",
       });
 
@@ -150,7 +221,7 @@ export const ServerHeader = ({
   const onSelectChannel = (channel: ChannelGroupMenuItem["channels"][number]) => {
     router.push(
       buildChannelPath({
-        server: { id: server.id, name: server.name },
+        server: { id: serverId, name: serverName },
         channel: { id: channel.id, name: channel.name },
       })
     );
@@ -160,7 +231,7 @@ export const ServerHeader = ({
     try {
       await axios.post("/api/reports", {
         targetType: "SERVER",
-        targetId: server.id,
+        targetId: serverId,
         reason: "Reported from server header menu",
       });
       window.alert("Server report submitted.");
@@ -174,11 +245,11 @@ export const ServerHeader = ({
 
   return (
     <div className="relative h-40 border-b-2 border-neutral-200 dark:border-neutral-800 overflow-hidden">
-      {normalizedBannerUrl ? (
+      {showBackgroundMedia && normalizedBannerUrl ? (
         <>
           <img
             src={normalizedBannerUrl}
-            alt={`${server.name} banner`}
+            alt={`${serverName} banner`}
             className={`absolute inset-0 h-full w-full ${
               bannerFit === "contain" ? "object-contain" : "object-cover"
             }`}
@@ -190,9 +261,9 @@ export const ServerHeader = ({
           />
           <div className="absolute inset-0 bg-black/15" />
         </>
-      ) : (
+      ) : showBackgroundMedia ? (
         <div className="absolute inset-0 bg-[#1f2023]" />
-      )}
+      ) : null}
 
       <div className="absolute left-0 right-0 top-0 z-10 flex h-11 items-center gap-1 bg-transparent px-1.5 text-white">
         <div className="relative z-10 flex h-5 w-5 shrink-0 items-center justify-center">
@@ -205,7 +276,7 @@ export const ServerHeader = ({
             <button
               className="z-10 flex h-8 w-full items-center justify-between gap-1 rounded-md bg-black/20 px-2 py-1 text-sm font-semibold transition hover:bg-black/35"
             >
-              <span className="min-w-0 flex-1 truncate text-left">{server.name}</span>
+              <span className="min-w-0 flex-1 truncate text-left">{serverName}</span>
               <ChevronDown className="h-4 w-4 shrink-0" />
             </button>
           </DropdownMenuTrigger>
@@ -215,7 +286,7 @@ export const ServerHeader = ({
           >
             {isModerator && (
               <DropdownMenuItem
-                onClick={() => onOpen("invite", { server })}
+                onClick={() => onOpen("invite", { server: stableServer })}
                 className="text-indigo-600 dark:text-indigo-400 
                 px-3 py-2 text-sm cursor-pointer"
               >
@@ -224,7 +295,7 @@ export const ServerHeader = ({
               </DropdownMenuItem>
             )}
             <DropdownMenuItem
-              onClick={() => onOpen("editServer", { server, viewerProfileId, viewerMemberId })}
+              onClick={() => onOpen("editServer", { server: stableServer, viewerProfileId, viewerMemberId })}
               className="px-3 py-2 text-sm cursor-pointer"
             >
               Server Settings
@@ -297,60 +368,60 @@ export const ServerHeader = ({
                 )}
               </DropdownMenuSubContent>
             </DropdownMenuSub>
-            {isModerator && (
-              <>
-              <DropdownMenuItem
-                onClick={() => onOpen("createChannel", { server })}
-                className="px-3 py-2 text-sm cursor-pointer"
-              >
+                {isModerator && (
+                  <>
+                    <DropdownMenuItem
+                      onClick={() => onOpen("createChannel", { server: stableServer })}
+                      className="px-3 py-2 text-sm cursor-pointer"
+                    >
                 Create Channel
                 <PlusCircle className="h-4 w-4 ml-auto" />
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => onOpen("createChannel", { server, channelType: ChannelType.ANNOUNCEMENT })}
-                className="px-3 py-2 text-sm cursor-pointer"
-              >
+                    <DropdownMenuItem
+                      onClick={() => onOpen("createChannel", { server: stableServer, channelType: ChannelType.ANNOUNCEMENT })}
+                      className="px-3 py-2 text-sm cursor-pointer"
+                    >
                 Add Announcement Channel
                 <Bell className="h-4 w-4 ml-auto" />
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => onOpen("createChannel", { server, channelType: ChannelType.AUDIO })}
-                className="px-3 py-2 text-sm cursor-pointer"
-              >
+                    <DropdownMenuItem
+                      onClick={() => onOpen("createChannel", { server: stableServer, channelType: ChannelType.AUDIO })}
+                      className="px-3 py-2 text-sm cursor-pointer"
+                    >
                 Add Voice Channel
                 <Mic className="h-4 w-4 ml-auto" />
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => onOpen("createChannelGroup", { server })}
-                className="px-3 py-2 text-sm cursor-pointer"
-              >
+                    <DropdownMenuItem
+                      onClick={() => onOpen("createChannelGroup", { server: stableServer })}
+                      className="px-3 py-2 text-sm cursor-pointer"
+                    >
                 Add Group
                 <FolderPlus className="h-4 w-4 ml-auto" />
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => onOpen("createEvent", { server })}
-                className="px-3 py-2 text-sm cursor-pointer"
-              >
+                    <DropdownMenuItem
+                      onClick={() => onOpen("createEvent", { server: stableServer })}
+                      className="px-3 py-2 text-sm cursor-pointer"
+                    >
                 Create Event
                 <CalendarPlus className="h-4 w-4 ml-auto" />
               </DropdownMenuItem>
               </>
             )}
-            {isAdmin && (
-              <DropdownMenuItem
-                onClick={() => onOpen("members", { server, viewerProfileId, viewerMemberId })}
-                className="px-3 py-2 text-sm cursor-pointer"
-              >
+                {isAdmin && (
+                  <DropdownMenuItem
+                    onClick={() => onOpen("members", { server: stableServer, viewerProfileId, viewerMemberId })}
+                    className="px-3 py-2 text-sm cursor-pointer"
+                  >
                 Manage members
                 <Users className="h-4 w-4 ml-auto" />
               </DropdownMenuItem>
             )}
             {isModerator && <DropdownMenuSeparator />}
-            {isAdmin && (
-              <DropdownMenuItem
-                onClick={() => onOpen("deleteServer", { server })}
-                className="text-rose-500 px-3 py-2 text-sm cursor-pointer"
-              >
+                {isAdmin && (
+                  <DropdownMenuItem
+                    onClick={() => onOpen("deleteServer", { server: stableServer })}
+                    className="text-rose-500 px-3 py-2 text-sm cursor-pointer"
+                  >
                 Delete Server
                 <Trash className="h-4 w-4 ml-auto" />
               </DropdownMenuItem>
@@ -364,11 +435,11 @@ export const ServerHeader = ({
                 <Flag className="h-4 w-4 ml-auto" />
               </DropdownMenuItem>
             )}
-            {!isAdmin && (
-              <DropdownMenuItem
-                onClick={() => onOpen("leaveServer", { server })}
-                className="text-rose-500 px-3 py-2 text-sm cursor-pointer"
-              >
+                {!isAdmin && (
+                  <DropdownMenuItem
+                    onClick={() => onOpen("leaveServer", { server: stableServer })}
+                    className="text-rose-500 px-3 py-2 text-sm cursor-pointer"
+                  >
                 Leave Server
                 <LogOut className="h-4 w-4 ml-auto" />
               </DropdownMenuItem>
@@ -377,12 +448,12 @@ export const ServerHeader = ({
         </DropdownMenu>
         </div>
 
-        {isModerator && (
-          <button
-            type="button"
-            onClick={() => onOpen("invite", { server })}
-            className="relative z-10 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-black/20 text-zinc-100 transition hover:bg-black/35"
-            title="Invite People"
+          {isModerator && (
+            <button
+              type="button"
+              onClick={() => onOpen("invite", { server: stableServer })}
+              className="relative z-10 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-black/20 text-zinc-100 transition hover:bg-black/35"
+              title="Invite People"
             aria-label="Invite People"
           >
             <UserPlus className="h-4 w-4" />
