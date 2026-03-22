@@ -1,91 +1,91 @@
 {
-  "buildTimestamp": "2026-03-22T04:40:53.709Z",
+  "buildTimestamp": "2026-03-22T04:53:45.365Z",
   "branch": "main",
-  "commitSha": "037bf325efc626ad9e573f7ab5473cfe0096d474",
+  "commitSha": "7da472ed19c57e88506f990aad644260f8bf7024",
   "commits": [
     {
+      "sha": "7da472ed19c57e88506f990aad644260f8bf7024",
+      "shortSha": "7da472e",
+      "message": "fix: restore updater toolchain and live build numbers",
+      "author": "Doc Cowles",
+      "committedAt": "2026-03-21T22:48:06-06:00"
+    },
+    {
       "sha": "037bf325efc626ad9e573f7ab5473cfe0096d474",
-      "shortSha": "037bf325",
+      "shortSha": "037bf32",
       "message": "fix: rebuild and reload stale cloudflare chunks",
       "author": "Doc Cowles",
       "committedAt": "2026-03-21T22:36:28-06:00"
     },
     {
       "sha": "262752ccff1aaa57a97ec791c94701b445799829",
-      "shortSha": "262752cc",
+      "shortSha": "262752c",
       "message": "fix: auto-reload stale chunk failures",
       "author": "Doc Cowles",
       "committedAt": "2026-03-21T22:31:57-06:00"
     },
     {
       "sha": "f6a03b176ea41794a6c618dbbfa292a105222b17",
-      "shortSha": "f6a03b17",
+      "shortSha": "f6a03b1",
       "message": "fix: gate admin desktop build button",
       "author": "Doc Cowles",
       "committedAt": "2026-03-21T18:42:46-06:00"
     },
     {
       "sha": "1061d7efdb53f8dd3d0de0b7ece440557380f596",
-      "shortSha": "1061d7ef",
+      "shortSha": "1061d7e",
       "message": "fix: enforce strict admin runtime modes",
       "author": "Doc Cowles",
       "committedAt": "2026-03-21T18:36:04-06:00"
     },
     {
       "sha": "b3667c6db9fe2999e163c594d1f667435dd4e711",
-      "shortSha": "b3667c6d",
+      "shortSha": "b3667c6",
       "message": "fix: restore deployed admin publish fallbacks",
       "author": "Doc Cowles",
       "committedAt": "2026-03-21T18:29:18-06:00"
     },
     {
       "sha": "13bffeed9383e69f46305331a7fa48fc90e90b28",
-      "shortSha": "13bffeed",
+      "shortSha": "13bffee",
       "message": "chore: sync latest builds and deployables",
       "author": "Doc Cowles",
       "committedAt": "2026-03-21T18:17:47-06:00"
     },
     {
       "sha": "898ee99c1e344376c950aa6d6de06d4793f73ce5",
-      "shortSha": "898ee99c",
+      "shortSha": "898ee99",
       "message": "build: publish desktop app 1.0.225",
       "author": "Doc Cowles",
       "committedAt": "2026-03-21T11:47:29-06:00"
     },
     {
       "sha": "b2c85bcb874897bc45d9b4c7790e7996702d1968",
-      "shortSha": "b2c85bcb",
+      "shortSha": "b2c85bc",
       "message": "fix: stabilize live d1 routes and admin runtime",
       "author": "Doc Cowles",
       "committedAt": "2026-03-21T11:40:14-06:00"
     },
     {
       "sha": "8c5d3961b2f481fc97c6f84f49089f1be9c92737",
-      "shortSha": "8c5d3961",
+      "shortSha": "8c5d396",
       "message": "Port app runtime to Cloudflare D1",
       "author": "Doc Cowles",
       "committedAt": "2026-03-19T22:27:50-06:00"
     },
     {
       "sha": "2637305817ba47dd368ddf201af3b76752026658",
-      "shortSha": "26373058",
+      "shortSha": "2637305",
       "message": "Fix Cloudflare DB URL fallback and publish 1.0.274",
       "author": "Doc Cowles",
       "committedAt": "2026-03-19T19:59:56-06:00"
     },
     {
       "sha": "5d846af9e0278f89d5799b3790a37e02903eda34",
-      "shortSha": "5d846af9",
+      "shortSha": "5d846af",
       "message": "Merge pull request #5 from GARD-Realms-LLC/update_worker_name_to_inaccord",
       "author": "Doc Cowles",
       "committedAt": "2026-03-19T19:47:13-06:00"
-    },
-    {
-      "sha": "0dced5223f90b0da618efbb37ab730d2bda5af31",
-      "shortSha": "0dced522",
-      "message": "Update wrangler config name to inaccord",
-      "author": "cloudflare-workers-and-pages[bot]",
-      "committedAt": "2026-03-20T01:45:50Z"
     }
   ]
 }
