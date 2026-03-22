@@ -123,6 +123,7 @@ const reactionSummary = (items: PostEmoteItem[]) =>
 type RuntimeNotificationPreferences = {
   mentionsEnabled: boolean;
   enableDesktopNotifications: boolean;
+  notifyOnServerMessages: boolean;
   notifyOnDirectMessages: boolean;
   notifyOnReplies: boolean;
 };
@@ -154,6 +155,7 @@ type RuntimeEmojiPreferences = {
 const defaultRuntimeNotificationPreferences: RuntimeNotificationPreferences = {
   mentionsEnabled: true,
   enableDesktopNotifications: true,
+  notifyOnServerMessages: true,
   notifyOnDirectMessages: true,
   notifyOnReplies: true,
 };
@@ -226,6 +228,7 @@ const normalizeRuntimeNotificationPreferences = (value: unknown): RuntimeNotific
     mentionsEnabled?: unknown;
     notifications?: {
       enableDesktopNotifications?: unknown;
+      notifyOnServerMessages?: unknown;
       notifyOnDirectMessages?: unknown;
       notifyOnReplies?: unknown;
     };
@@ -242,6 +245,10 @@ const normalizeRuntimeNotificationPreferences = (value: unknown): RuntimeNotific
       typeof notifications.enableDesktopNotifications === "boolean"
         ? notifications.enableDesktopNotifications
         : defaultRuntimeNotificationPreferences.enableDesktopNotifications,
+    notifyOnServerMessages:
+      typeof notifications.notifyOnServerMessages === "boolean"
+        ? notifications.notifyOnServerMessages
+        : defaultRuntimeNotificationPreferences.notifyOnServerMessages,
     notifyOnDirectMessages:
       typeof notifications.notifyOnDirectMessages === "boolean"
         ? notifications.notifyOnDirectMessages
@@ -1706,6 +1713,7 @@ export const ChatItem = ({
         const next = {
           ...current,
           enableDesktopNotifications: normalized.enableDesktopNotifications,
+          notifyOnServerMessages: normalized.notifyOnServerMessages,
           notifyOnDirectMessages: normalized.notifyOnDirectMessages,
           notifyOnReplies: normalized.notifyOnReplies,
         };
@@ -1794,7 +1802,10 @@ export const ChatItem = ({
     }
 
     const isDirectMessage = reactionScope === "direct";
-    const shouldNotifyMention = isMentioningCurrentUser && runtimeNotificationPreferences.mentionsEnabled;
+    const shouldNotifyMention =
+      isMentioningCurrentUser &&
+      runtimeNotificationPreferences.mentionsEnabled &&
+      runtimeNotificationPreferences.notifyOnServerMessages;
     const shouldNotifyReply = isReplyToCurrentUser && runtimeNotificationPreferences.notifyOnReplies;
     const shouldNotifyDirectMessage =
       isDirectMessage && runtimeNotificationPreferences.notifyOnDirectMessages;
@@ -1875,6 +1886,7 @@ export const ChatItem = ({
     reactionScope,
     runtimeNotificationPreferences.enableDesktopNotifications,
     runtimeNotificationPreferences.mentionsEnabled,
+    runtimeNotificationPreferences.notifyOnServerMessages,
     runtimeNotificationPreferences.notifyOnDirectMessages,
     runtimeNotificationPreferences.notifyOnReplies,
   ]);
@@ -1935,7 +1947,7 @@ export const ChatItem = ({
 
   if (deleted) {
     const deletedByName = String(displayName ?? "").trim() || "Deleted User";
-    const canHardDeleteDeletedMessage = canPurgeDeletedMessage && reactionScope === "channel";
+    const canHardDeleteDeletedMessage = canPurgeDeletedMessage;
     const deletedTimestampLabel = String(timestamp ?? "").trim();
 
     return (

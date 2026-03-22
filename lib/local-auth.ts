@@ -1,8 +1,7 @@
 import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-
-let schemaReady = false;
+import { ensureSchemaInitialized } from "@/lib/schema-init-state";
 
 const readExistsFlag = (value: unknown) =>
   value === true || value === 1 || value === "1";
@@ -43,23 +42,18 @@ export const hasLegacyUserPasswordHashColumn = async () => {
 };
 
 export const ensureLocalAuthSchema = async () => {
-  if (schemaReady) {
-    return;
-  }
+  await ensureSchemaInitialized("local-auth-schema", async () => {
+    if (await hasLocalAuthSchema()) {
+      return;
+    }
 
-  if (await hasLocalAuthSchema()) {
-    schemaReady = true;
-    return;
-  }
-
-  await db.execute(sql`
-    create table if not exists "LocalCredential" (
-      "userId" varchar(191) primary key,
-      "passwordHash" varchar(255) not null,
-      "createdAt" timestamp not null,
-      "updatedAt" timestamp not null
-    )
-  `);
-
-  schemaReady = true;
+    await db.execute(sql`
+      create table if not exists "LocalCredential" (
+        "userId" varchar(191) primary key,
+        "passwordHash" varchar(255) not null,
+        "createdAt" timestamp not null,
+        "updatedAt" timestamp not null
+      )
+    `);
+  });
 };

@@ -6,6 +6,7 @@ import { promisify } from "util";
 
 import { currentProfile } from "@/lib/current-profile";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
+import { resolveAdminGitRuntime } from "@/lib/admin-git-runtime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -60,10 +61,10 @@ const readResponse = (
     { status },
   );
 
-const runNpm = async (args: string[]) => {
+const runNpm = async (cwd: string, args: string[]) => {
   try {
     const { stdout, stderr } = await execFileAsync(NPM_EXECUTABLE, args, {
-      cwd: process.cwd(),
+      cwd,
       env: process.env,
       windowsHide: true,
       maxBuffer: 1024 * 1024 * 64,
@@ -85,8 +86,8 @@ const runNpm = async (args: string[]) => {
   }
 };
 
-const readPackageVersions = async () => {
-  const packageJsonPath = path.join(process.cwd(), "package.json");
+const readPackageVersions = async (repoRoot: string) => {
+  const packageJsonPath = path.join(repoRoot, "package.json");
   const packageJsonContent = await readFile(packageJsonPath, "utf8");
   const packageJson = JSON.parse(packageJsonContent) as PackageJsonShape;
 
@@ -97,21 +98,11 @@ const readPackageVersions = async () => {
   };
 };
 
-const hasLocalGitWorkspace = async () => {
-  try {
-    const gitHeadPath = path.join(process.cwd(), ".git", "HEAD");
-    const gitHead = await readFile(gitHeadPath, "utf8");
-    return Boolean(String(gitHead ?? "").trim());
-  } catch {
-    return false;
-  }
-};
+const runDesktopBuildPublish = async (repoRoot: string): Promise<BuildPublishResult> => {
+  await runNpm(repoRoot, ["run", "version:bump:patch"]);
+  await runNpm(repoRoot, ["run", "app:dist:win"]);
 
-const runDesktopBuildPublish = async (): Promise<BuildPublishResult> => {
-  await runNpm(["run", "version:bump:patch"]);
-  await runNpm(["run", "app:dist:win"]);
-
-  const versions = await readPackageVersions();
+  const versions = await readPackageVersions(repoRoot);
   const updateFeed =
     String(process.env.INACCORD_DESKTOP_UPDATE_URL ?? "").trim() || null;
 
@@ -132,10 +123,19 @@ export async function POST() {
       return auth.response;
     }
 
-    if (!(await hasLocalGitWorkspace())) {
+    const gitRuntime = await resolveAdminGitRuntime();
+
+    if (!gitRuntime.workTreeAvailable || !gitRuntime.repoRoot) {
       return readResponse(
-        "Desktop build publishing is unavailable in the deployed website runtime. Run it from the local repo workspace.",
+        gitRuntime.reason === "git-binary-missing"
+          ? "Desktop build publishing is unavailable because Git is not installed in this runtime."
+          : gitRuntime.reason === "git-command-failed"
+            ? gitRuntime.message
+            : "Desktop build publishing is unavailable in the deployed website runtime. Run it from the local repo workspace.",
         409,
+        {
+          gitRuntime,
+        },
       );
     }
 
@@ -146,12 +146,13 @@ export async function POST() {
       );
     }
 
-    activeDesktopBuildPublish = runDesktopBuildPublish();
+    activeDesktopBuildPublish = runDesktopBuildPublish(gitRuntime.repoRoot);
     const result = await activeDesktopBuildPublish;
 
     return NextResponse.json({
       ok: true,
       ...result,
+      repoRoot: gitRuntime.repoRoot,
     });
   } catch (error) {
     console.error("[ADMIN_DESKTOP_BUILD_PUBLISH_POST]", error);

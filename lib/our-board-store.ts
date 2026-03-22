@@ -635,3 +635,17 @@ export const recordOurBoardBump = async ({
     cooldownMsRemaining: 0,
   };
 };
+
+export const deleteOurBoardEntriesOwnedByProfileId = async (profileId: string) => {
+  const normalizedProfileId = normalizeString(profileId, 191);
+  if (!normalizedProfileId) {
+    return;
+  }
+
+  await ensureOurBoardSchema();
+
+  await db.execute(sql`
+    delete from "InAboardEntry"
+    where "ownerProfileId" = ${normalizedProfileId}
+  `);
+};

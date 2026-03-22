@@ -1,20 +1,13 @@
-import { execFile } from "child_process";
-import { promisify } from "util";
 import { NextResponse } from "next/server";
 
+import { resolveAdminGitRuntime, runAdminGit } from "@/lib/admin-git-runtime";
 import { currentProfile } from "@/lib/current-profile";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const execFileAsync = promisify(execFile);
 const ADMIN_GIT_STAGE_CHUNK_SIZE = 200;
-
-type GitCommandResult = {
-  stdout: string;
-  stderr: string;
-};
 
 const isExcludedPushPath = (value: string) =>
   value === ".tmp-asar-inspect" ||
@@ -44,33 +37,9 @@ const ensureAdmin = async () => {
   return { ok: true as const, profile };
 };
 
-const formatGitError = (args: string[], stdout: string, stderr: string) => {
-  const detail = stderr || stdout || "Git command failed.";
-  return `git ${args.join(" ")}: ${detail}`;
-};
-
-const runGit = async (args: string[]): Promise<GitCommandResult> => {
+const runGitSafe = async (repoRoot: string, args: string[]) => {
   try {
-    const { stdout, stderr } = await execFileAsync("git", args, {
-      cwd: process.cwd(),
-      windowsHide: true,
-      maxBuffer: 1024 * 1024 * 16,
-    });
-
-    return {
-      stdout: String(stdout ?? "").trim(),
-      stderr: String(stderr ?? "").trim(),
-    };
-  } catch (error) {
-    const stdout = String((error as { stdout?: string | Buffer | null })?.stdout ?? "").trim();
-    const stderr = String((error as { stderr?: string | Buffer | null })?.stderr ?? "").trim();
-    throw new Error(formatGitError(args, stdout, stderr));
-  }
-};
-
-const runGitSafe = async (args: string[]) => {
-  try {
-    const result = await runGit(args);
+    const result = await runAdminGit(repoRoot, args);
     return {
       ok: true as const,
       stdout: result.stdout,
@@ -87,11 +56,11 @@ const runGitSafe = async (args: string[]) => {
   }
 };
 
-const getPushCandidatePaths = async () => {
+const getPushCandidatePaths = async (repoRoot: string) => {
   const [cachedDiff, workingTreeDiff, untrackedFiles] = await Promise.all([
-    runGit(["diff", "--name-only", "--cached", "--relative"]),
-    runGit(["diff", "--name-only", "--relative"]),
-    runGit(["ls-files", "--others", "--exclude-standard"]),
+    runAdminGit(repoRoot, ["diff", "--name-only", "--cached", "--relative"]),
+    runAdminGit(repoRoot, ["diff", "--name-only", "--relative"]),
+    runAdminGit(repoRoot, ["ls-files", "--others", "--exclude-standard"]),
   ]);
 
   return Array.from(
@@ -103,14 +72,14 @@ const getPushCandidatePaths = async () => {
   );
 };
 
-const stagePushCandidateChanges = async (paths: string[]) => {
+const stagePushCandidateChanges = async (repoRoot: string, paths: string[]) => {
   for (let index = 0; index < paths.length; index += ADMIN_GIT_STAGE_CHUNK_SIZE) {
     const chunk = paths.slice(index, index + ADMIN_GIT_STAGE_CHUNK_SIZE);
     if (!chunk.length) {
       continue;
     }
 
-    await runGit(["add", "-A", "--", ...chunk]);
+    await runAdminGit(repoRoot, ["add", "-A", "--", ...chunk]);
   }
 };
 
@@ -131,33 +100,42 @@ export async function POST() {
       return auth.response;
     }
 
-    await runGit(["rev-parse", "--is-inside-work-tree"]);
+    const gitRuntime = await resolveAdminGitRuntime();
+    if (!gitRuntime.workTreeAvailable || !gitRuntime.repoRoot) {
+      return readResponse(gitRuntime.message, 409, {
+        reason: gitRuntime.reason,
+        mode: gitRuntime.mode,
+        repoRoot: gitRuntime.repoRoot,
+      });
+    }
 
-    const currentBranch = await runGit(["branch", "--show-current"]);
+    await runAdminGit(gitRuntime.repoRoot, ["rev-parse", "--is-inside-work-tree"]);
+
+    const currentBranch = await runAdminGit(gitRuntime.repoRoot, ["branch", "--show-current"]);
     const branch = currentBranch.stdout || "unknown";
-    const localHead = await runGit(["rev-parse", "HEAD"]);
+    const localHead = await runAdminGit(gitRuntime.repoRoot, ["rev-parse", "HEAD"]);
 
-    const remoteBeforeResult = await runGitSafe(["rev-parse", "origin/main"]);
+    const remoteBeforeResult = await runGitSafe(gitRuntime.repoRoot, ["rev-parse", "origin/main"]);
     const remoteBefore = remoteBeforeResult.ok ? remoteBeforeResult.stdout : null;
 
-    const pushCandidatePaths = await getPushCandidatePaths();
+    const pushCandidatePaths = await getPushCandidatePaths(gitRuntime.repoRoot);
     const hasLocalChanges = pushCandidatePaths.length > 0;
 
     let committed = false;
     if (hasLocalChanges) {
-      await stagePushCandidateChanges(pushCandidatePaths);
+      await stagePushCandidateChanges(gitRuntime.repoRoot, pushCandidatePaths);
 
       const commitMessage = `chore: admin push ${new Date().toISOString()}`;
-      const firstCommitAttempt = await runGitSafe(["commit", "-m", commitMessage]);
+      const firstCommitAttempt = await runGitSafe(gitRuntime.repoRoot, ["commit", "-m", commitMessage]);
 
       if (!firstCommitAttempt.ok) {
         const adminName = String((auth.profile as { name?: string | null }).name ?? "").trim() || "In-Accord Admin";
         const adminEmail = String((auth.profile as { email?: string | null }).email ?? "").trim() || "admin@local.in-accord";
 
-        await runGit(["config", "user.name", adminName]);
-        await runGit(["config", "user.email", adminEmail]);
+        await runAdminGit(gitRuntime.repoRoot, ["config", "user.name", adminName]);
+        await runAdminGit(gitRuntime.repoRoot, ["config", "user.email", adminEmail]);
 
-        const secondCommitAttempt = await runGitSafe(["commit", "-m", commitMessage]);
+        const secondCommitAttempt = await runGitSafe(gitRuntime.repoRoot, ["commit", "-m", commitMessage]);
         if (!secondCommitAttempt.ok) {
           throw secondCommitAttempt.error instanceof Error
             ? secondCommitAttempt.error
@@ -178,15 +156,16 @@ export async function POST() {
       });
     }
 
-    await runGit(["push", "origin", "HEAD:main", "--force"]);
+    await runAdminGit(gitRuntime.repoRoot, ["push", "origin", "HEAD:main", "--force"]);
 
-    const remoteAfter = await runGit(["rev-parse", "origin/main"]);
+    const remoteAfter = await runAdminGit(gitRuntime.repoRoot, ["rev-parse", "origin/main"]);
 
     return NextResponse.json({
       ok: true,
       branch,
       committed,
       hadLocalChanges: hasLocalChanges,
+      repoRoot: gitRuntime.repoRoot,
       localHead: localHead.stdout || null,
       remoteBefore,
       remoteAfter: remoteAfter.stdout || null,

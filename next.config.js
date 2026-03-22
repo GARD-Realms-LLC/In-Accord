@@ -7,6 +7,39 @@ const serverOnlyExternalPackages = new Set([
   "split2",
 ]);
 
+const normalizeConfiguredSiteImagePattern = (value) => {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    const hostname = String(parsed.hostname || "").trim().toLowerCase();
+
+    if (
+      (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+      !hostname ||
+      hostname === "localhost" ||
+      hostname === "::1" ||
+      hostname.startsWith("127.")
+    ) {
+      return null;
+    }
+
+    return {
+      protocol: parsed.protocol.replace(":", ""),
+      hostname: parsed.hostname,
+      port: parsed.port || "",
+      pathname: "/api/r2/object/**",
+    };
+  } catch {
+    return null;
+  }
+};
+
+const configuredSiteImagePattern = normalizeConfiguredSiteImagePattern(process.env.NEXT_PUBLIC_SITE_URL);
+
 const nextConfig = {
   distDir: process.env.NEXT_DIST_DIR || ".next",
   output: process.env.NEXT_OUTPUT_MODE === "standalone" ? "standalone" : undefined,
@@ -30,30 +63,7 @@ const nextConfig = {
       },
     ],
     remotePatterns: [
-      {
-        protocol: "http",
-        hostname: "localhost",
-        port: "3000",
-        pathname: "/api/r2/object/**",
-      },
-      {
-        protocol: "https",
-        hostname: "localhost",
-        port: "3000",
-        pathname: "/api/r2/object/**",
-      },
-      {
-        protocol: "http",
-        hostname: "127.0.0.1",
-        port: "3000",
-        pathname: "/api/r2/object/**",
-      },
-      {
-        protocol: "https",
-        hostname: "127.0.0.1",
-        port: "3000",
-        pathname: "/api/r2/object/**",
-      },
+      ...(configuredSiteImagePattern ? [configuredSiteImagePattern] : []),
       {
         protocol: "https",
         hostname: "uploadthing.com",

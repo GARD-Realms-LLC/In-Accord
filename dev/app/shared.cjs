@@ -3,7 +3,6 @@ const path = require("path");
 const { spawn } = require("child_process");
 
 const ROOT_DIR = path.resolve(__dirname, "..", "..");
-const DEFAULT_DEV_URL = "http://127.0.0.1:3000";
 const PACKAGED_PORT = Number.parseInt(process.env.INACCORD_DESKTOP_PORT || "3210", 10);
 
 const getNpmCommand = () => (process.platform === "win32" ? "npm.cmd" : "npm");
@@ -21,6 +20,46 @@ const wait = (ms) =>
   new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+
+const normalizeConfiguredHttpOrigin = (value) => {
+  const normalized = String(value || "").trim().replace(/\/$/, "");
+  if (!normalized) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    const hostname = String(parsed.hostname || "").trim().toLowerCase();
+
+    if (
+      (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+      !hostname ||
+      hostname === "localhost" ||
+      hostname === "::1" ||
+      hostname.startsWith("127.")
+    ) {
+      return null;
+    }
+
+    return parsed.origin;
+  } catch {
+    return null;
+  }
+};
+
+const resolveConfiguredDesktopStartUrl = (env = process.env) => {
+  const configuredOrigin =
+    normalizeConfiguredHttpOrigin(env.INACCORD_DESKTOP_START_URL) ||
+    normalizeConfiguredHttpOrigin(env.NEXT_PUBLIC_SITE_URL);
+
+  if (!configuredOrigin) {
+    throw new Error(
+      "Desktop start URL is not configured. Set INACCORD_DESKTOP_START_URL or NEXT_PUBLIC_SITE_URL to a non-loopback absolute http(s) origin.",
+    );
+  }
+
+  return configuredOrigin;
+};
 
 const waitForUrl = async (url, { timeoutMs = 180_000, intervalMs = 500 } = {}) => {
   const startedAt = Date.now();
@@ -99,10 +138,10 @@ const normalizeInAppPath = (value, fallback = "/") => {
 
 module.exports = {
   ROOT_DIR,
-  DEFAULT_DEV_URL,
   PACKAGED_PORT,
   getNpmCommand,
   pathExists,
+  resolveConfiguredDesktopStartUrl,
   waitForUrl,
   runCommand,
   copyDirectory,

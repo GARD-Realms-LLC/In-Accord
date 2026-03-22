@@ -630,10 +630,10 @@ class InAccord {
     });
   }
 
-  signUp({ name, email, password, phoneNumber, dateOfBirth }) {
+  signUp({ name, email, password, confirmPassword, phoneNumber, dateOfBirth, accountType }) {
     return this.request("/api/auth/sign-up", {
       method: "POST",
-      body: { name, email, password, phoneNumber, dateOfBirth },
+      body: { name, email, password, confirmPassword, phoneNumber, dateOfBirth, accountType },
     });
   }
 

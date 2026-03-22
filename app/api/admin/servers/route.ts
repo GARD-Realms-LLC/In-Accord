@@ -6,6 +6,10 @@ import { resolveAvatarUrl, resolveBannerUrl } from "@/lib/asset-url";
 import { db } from "@/lib/db";
 import { getServerBannerConfig } from "@/lib/server-banner-store";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
+import {
+  getServerNameBlacklistEntries,
+  replaceServerNameBlacklistEntries,
+} from "@/lib/server-name-blacklist";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -90,9 +94,46 @@ export async function GET() {
       })
     );
 
-    return NextResponse.json({ servers });
+    const blacklistEntries = await getServerNameBlacklistEntries();
+
+    return NextResponse.json({
+      servers,
+      blacklistNames: blacklistEntries.map((entry) => entry.name),
+    });
   } catch (error) {
     console.error("[ADMIN_SERVERS_GET]", error);
+    return new NextResponse("Internal Error", { status: 500 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const profile = await currentProfile();
+
+    if (!profile) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
+
+    if (!hasInAccordAdministrativeAccess(profile.role)) {
+      return new NextResponse("Forbidden", { status: 403 });
+    }
+
+    const body = (await request.json().catch(() => ({}))) as {
+      blacklistNames?: unknown;
+      blacklistText?: unknown;
+    };
+
+    const entries = await replaceServerNameBlacklistEntries(
+      body.blacklistNames ?? body.blacklistText,
+      profile.id
+    );
+
+    return NextResponse.json({
+      ok: true,
+      blacklistNames: entries.map((entry) => entry.name),
+    });
+  } catch (error) {
+    console.error("[ADMIN_SERVERS_PATCH]", error);
     return new NextResponse("Internal Error", { status: 500 });
   }
 }

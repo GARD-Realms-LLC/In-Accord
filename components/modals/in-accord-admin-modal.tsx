@@ -783,6 +783,26 @@ const readAdminJsonOrText = async <TPayload extends Record<string, unknown>>(
   return { message } as TPayload & { message?: string };
 };
 
+const normalizeServerNameBlacklistDraft = (value: string) => {
+  const deduped = new Map<string, string>();
+
+  for (const line of String(value ?? "").split(/\r?\n/)) {
+    const name = line.trim().replace(/\s+/g, " ").slice(0, 80);
+    if (!name) {
+      continue;
+    }
+
+    const normalized = name.toLowerCase();
+    if (deduped.has(normalized)) {
+      continue;
+    }
+
+    deduped.set(normalized, name);
+  }
+
+  return Array.from(deduped.values());
+};
+
 export const InAccordAdminModal = () => {
   const { isOpen, onClose, type, data } = useModal();
   const router = useRouter();
@@ -800,6 +820,11 @@ export const InAccordAdminModal = () => {
   const [servers, setServers] = useState<AdminServer[]>([]);
   const [isLoadingServers, setIsLoadingServers] = useState(false);
   const [serversError, setServersError] = useState<string | null>(null);
+  const [serverNameBlacklist, setServerNameBlacklist] = useState<string[]>([]);
+  const [serverBlacklistDraft, setServerBlacklistDraft] = useState("");
+  const [isSavingServerBlacklist, setIsSavingServerBlacklist] = useState(false);
+  const [serverBlacklistError, setServerBlacklistError] = useState<string | null>(null);
+  const [serverBlacklistSuccess, setServerBlacklistSuccess] = useState<string | null>(null);
   const [ourBoardEntries, setOurBoardEntries] = useState<AdminOurBoardEntry[]>([]);
   const [ourBoardSummary, setOurBoardSummary] = useState<AdminOurBoardSummary | null>(null);
   const [isLoadingOurBoard, setIsLoadingOurBoard] = useState(false);
@@ -2476,18 +2501,61 @@ export const InAccordAdminModal = () => {
         throw new Error(`Failed to load servers (${response.status})`);
       }
 
-      const payload = (await response.json()) as { servers?: AdminServer[] };
+      const payload = (await response.json()) as {
+        servers?: AdminServer[];
+        blacklistNames?: string[];
+      };
       setServers(payload.servers ?? []);
+      const blacklistNames = Array.isArray(payload.blacklistNames) ? payload.blacklistNames : [];
+      setServerNameBlacklist(blacklistNames);
+      setServerBlacklistDraft(blacklistNames.join("\n"));
       notifyAdminTotalsRefresh();
     } catch (error) {
       console.error("[IN_ACCORD_ADMIN_SERVERS_LOAD]", error);
       setServersError("Unable to load servers right now.");
       setServers([]);
+      setServerNameBlacklist([]);
+      setServerBlacklistDraft("");
       notifyAdminTotalsRefresh();
     } finally {
       setIsLoadingServers(false);
     }
   }, [notifyAdminTotalsRefresh]);
+
+  const onSaveServerBlacklist = useCallback(async () => {
+    try {
+      setIsSavingServerBlacklist(true);
+      setServerBlacklistError(null);
+      setServerBlacklistSuccess(null);
+
+      const blacklistNames = normalizeServerNameBlacklistDraft(serverBlacklistDraft);
+      const response = await fetch("/api/admin/servers", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ blacklistNames }),
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || `Failed to save server blacklist (${response.status})`;
+        throw new Error(message);
+      }
+
+      const payload = (await response.json()) as { blacklistNames?: string[] };
+      const nextNames = Array.isArray(payload.blacklistNames) ? payload.blacklistNames : blacklistNames;
+      setServerNameBlacklist(nextNames);
+      setServerBlacklistDraft(nextNames.join("\n"));
+      setServerBlacklistSuccess("Server blacklist updated.");
+    } catch (error) {
+      console.error("[IN_ACCORD_ADMIN_SERVER_BLACKLIST_SAVE]", error);
+      setServerBlacklistError(
+        error instanceof Error ? error.message : "Unable to save the server blacklist right now."
+      );
+    } finally {
+      setIsSavingServerBlacklist(false);
+    }
+  }, [serverBlacklistDraft]);
 
   const loadOurBoard = useCallback(async () => {
     try {
@@ -4285,6 +4353,11 @@ export const InAccordAdminModal = () => {
       return ownerMatches && haystack.includes(query);
     });
   }, [serverOwnerFilter, serverSearch, servers]);
+
+  const normalizedServerBlacklistDraft = useMemo(
+    () => normalizeServerNameBlacklistDraft(serverBlacklistDraft),
+    [serverBlacklistDraft]
+  );
 
   const hasActiveServerFilters = serverSearch.trim().length > 0 || serverOwnerFilter !== "ALL";
 
@@ -7091,6 +7164,53 @@ export const InAccordAdminModal = () => {
                   <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-xs font-medium text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200">
                     {filteredServers.length}
                   </span>
+                </div>
+
+                <div className="mb-4 rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-700 dark:text-zinc-200">Server blacklist</p>
+                      <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                        One blocked server name per line. Users cannot create or rename a server to a blacklisted name.
+                      </p>
+                    </div>
+                    <span className="rounded-full border border-zinc-300 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-600 dark:border-zinc-600 dark:text-zinc-300">
+                      {normalizedServerBlacklistDraft.length} blocked
+                    </span>
+                  </div>
+
+                  <textarea
+                    value={serverBlacklistDraft}
+                    onChange={(event) => setServerBlacklistDraft(event.target.value)}
+                    rows={6}
+                    className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-xs leading-5 text-zinc-800 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                    placeholder={"Forbidden Name\nAnother Blocked Server\nTemplate Farm"}
+                  />
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void onSaveServerBlacklist()}
+                      disabled={isSavingServerBlacklist}
+                      className="h-8 rounded-md border border-indigo-500/35 bg-indigo-500/15 px-3 text-xs font-medium text-indigo-700 transition hover:bg-indigo-500/25 disabled:cursor-not-allowed disabled:opacity-60 dark:text-indigo-200"
+                    >
+                      {isSavingServerBlacklist ? "Saving..." : "Save blacklist"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setServerBlacklistDraft(serverNameBlacklist.join("\n"));
+                        setServerBlacklistError(null);
+                        setServerBlacklistSuccess(null);
+                      }}
+                      disabled={isSavingServerBlacklist}
+                      className="h-8 rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                    >
+                      Reset draft
+                    </button>
+                    {serverBlacklistError ? <p className="text-xs text-rose-500">{serverBlacklistError}</p> : null}
+                    {serverBlacklistSuccess ? <p className="text-xs text-emerald-500">{serverBlacklistSuccess}</p> : null}
+                  </div>
                 </div>
 
                 <div className="mb-4 grid gap-2 sm:grid-cols-[1fr_220px_auto]">
@@ -10487,7 +10607,7 @@ export const InAccordAdminModal = () => {
                         <p>Bot: {templateMeRuntimeState?.botTag || templateMeRuntimeState?.botName || selectedTemplateMeRuntimeTargetLabel || "Template Me Bot"}</p>
                         <p>Application ID: {templateMeRuntimeState?.applicationId || primaryTemplateMeBotConfig?.applicationId || "Not set"}</p>
                         <p>Guilds connected: {templateMeRuntimeState?.guildCount ?? 0}</p>
-                        <p>Control port: {templateMeRuntimeState?.controlPort ?? 3030}</p>
+                        <p>Control port: {templateMeRuntimeState?.controlPort ?? "Disabled"}</p>
                         <p>Control endpoint: {templateMeRuntimeState?.controlUrl || "Not active"}</p>
                         <p>Started: {formatDateTime(templateMeRuntimeState?.startedAt ?? null)}</p>
                         <p>Updated: {formatDateTime(templateMeRuntimeState?.updatedAt ?? null)}</p>
@@ -10554,7 +10674,7 @@ export const InAccordAdminModal = () => {
                         </div>
 
                         <p className="mt-2 text-[10px] text-zinc-400">
-                          Stream: <span className="text-zinc-200">{templateMeTerminalStatus}</span> · Runtime: <span className="text-zinc-200">{templateMeRuntimeState?.status ?? "stopped"}</span> · Control port: <span className="text-zinc-200">{templateMeRuntimeState?.controlPort ?? 3030}</span>
+                          Stream: <span className="text-zinc-200">{templateMeTerminalStatus}</span> · Runtime: <span className="text-zinc-200">{templateMeRuntimeState?.status ?? "stopped"}</span> · Control port: <span className="text-zinc-200">{templateMeRuntimeState?.controlPort ?? "Disabled"}</span>
                           {templateMeTerminalLastExitCode !== null ? (
                             <>
                               {" "}· Exit: <span className="text-zinc-200">{templateMeTerminalLastExitCode}</span>

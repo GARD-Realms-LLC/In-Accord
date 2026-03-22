@@ -68,6 +68,27 @@ Optional:
 - `SLASH_COMMAND_LIMIT_NON_IN_ACCORD` (default `100`)
 - `SLASH_COMMAND_LIMIT_IN_ACCORD` (default `200`)
 
+Required for email notifications in Cloudflare Worker deployments:
+
+- `SMTP_FROM_EMAIL`
+
+Optional for Cloudflare Worker email notifications:
+
+- `SMTP_FROM_NAME` (defaults to `In-Accord`)
+
+Required for SMTP email notifications in Node/server runtimes:
+
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_SECURE`
+- `SMTP_USER`
+- `SMTP_PASS`
+- `SMTP_FROM_EMAIL`
+
+Optional for SMTP email notifications:
+
+- `SMTP_FROM_NAME` (defaults to `In-Accord`)
+
 ## Install
 
 ```bash

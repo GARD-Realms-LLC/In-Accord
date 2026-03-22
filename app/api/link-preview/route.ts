@@ -17,25 +17,99 @@ type PreviewPayload = {
 const requestTimeoutMs = 5000;
 const maxContentLength = 2 * 1024 * 1024;
 
-const parseMetaContent = (html: string, attr: "property" | "name", key: string) => {
-  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const pattern = new RegExp(
-    `<meta[^>]*(?:${attr}=["']${escapedKey}["'][^>]*content=["']([^"']+)["']|content=["']([^"']+)["'][^>]*${attr}=["']${escapedKey}["'])[^>]*>`,
-    "i"
-  );
+const htmlEntityMap: Record<string, string> = {
+  amp: "&",
+  quot: '"',
+  apos: "'",
+  lt: "<",
+  gt: ">",
+  nbsp: " ",
+};
 
-  const matched = html.match(pattern);
-  return (matched?.[1] ?? matched?.[2] ?? "").trim() || null;
+const decodeHtmlEntities = (value: string) =>
+  value.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (match, entity) => {
+    const normalizedEntity = String(entity ?? "").toLowerCase();
+
+    if (normalizedEntity.startsWith("#x")) {
+      const codePoint = Number.parseInt(normalizedEntity.slice(2), 16);
+      return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : match;
+    }
+
+    if (normalizedEntity.startsWith("#")) {
+      const codePoint = Number.parseInt(normalizedEntity.slice(1), 10);
+      return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : match;
+    }
+
+    return htmlEntityMap[normalizedEntity] ?? match;
+  });
+
+const parseAttributes = (rawTag: string) => {
+  const attributes = new Map<string, string>();
+  const attributePattern = /([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g;
+
+  let match: RegExpExecArray | null;
+  while ((match = attributePattern.exec(rawTag)) !== null) {
+    const name = String(match[1] ?? "").trim().toLowerCase();
+    const value = decodeHtmlEntities(String(match[3] ?? match[4] ?? match[5] ?? "").trim());
+
+    if (name) {
+      attributes.set(name, value);
+    }
+  }
+
+  return attributes;
+};
+
+const findTagAttributes = (html: string, tagName: string) => {
+  const tagPattern = new RegExp(`<${tagName}\\b[^>]*>`, "gi");
+  const matches = html.match(tagPattern) ?? [];
+  return matches.map((tag) => parseAttributes(tag));
+};
+
+const parseMetaContent = (html: string, attr: "property" | "name", key: string) => {
+  const normalizedKey = key.trim().toLowerCase();
+  const metaTags = findTagAttributes(html, "meta");
+
+  for (const attributes of metaTags) {
+    if (attributes.get(attr)?.trim().toLowerCase() !== normalizedKey) {
+      continue;
+    }
+
+    const content = attributes.get("content")?.trim();
+    if (content) {
+      return content;
+    }
+  }
+
+  return null;
 };
 
 const parseTitle = (html: string) => {
   const matched = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  return matched?.[1]?.replace(/\s+/g, " ").trim() || null;
+  const value = matched?.[1]?.replace(/\s+/g, " ").trim() ?? "";
+  return decodeHtmlEntities(value) || null;
 };
 
 const parseCanonical = (html: string) => {
-  const matched = html.match(/<link[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["'][^>]*>/i);
-  return matched?.[1]?.trim() || null;
+  const linkTags = findTagAttributes(html, "link");
+
+  for (const attributes of linkTags) {
+    const relValues = String(attributes.get("rel") ?? "")
+      .split(/\s+/)
+      .map((part) => part.trim().toLowerCase())
+      .filter(Boolean);
+
+    if (!relValues.includes("canonical")) {
+      continue;
+    }
+
+    const href = attributes.get("href")?.trim();
+    if (href) {
+      return href;
+    }
+  }
+
+  return null;
 };
 
 const normalizeString = (value: string | null, maxLen = 280) => {
@@ -43,15 +117,12 @@ const normalizeString = (value: string | null, maxLen = 280) => {
     return null;
   }
 
-  const normalized = value
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/\s+/g, " ")
-    .trim();
+  const normalized = decodeHtmlEntities(
+    value
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+  ).trim();
 
   if (!normalized) {
     return null;
@@ -78,6 +149,21 @@ const toAbsoluteUrl = (candidate: string | null, base: URL) => {
   } catch {
     return null;
   }
+};
+
+const parseFirstImage = (html: string, base: URL) => {
+  const imageTags = findTagAttributes(html, "img");
+
+  for (const attributes of imageTags) {
+    const src = attributes.get("src")?.trim() ?? attributes.get("data-src")?.trim() ?? "";
+    const absoluteUrl = toAbsoluteUrl(src, base);
+
+    if (absoluteUrl) {
+      return absoluteUrl;
+    }
+  }
+
+  return null;
 };
 
 const isPrivateIp = (value: string) => {
@@ -137,21 +223,33 @@ const assertSafeTarget = async (target: URL) => {
   }
 };
 
+const buildPreviewFallback = (target: URL, overrides?: Partial<PreviewPayload>): PreviewPayload => ({
+  url: target.toString(),
+  siteName: normalizeString(target.hostname, 80) ?? target.hostname,
+  title:
+    normalizeString(overrides?.title ?? target.hostname.replace(/^www\./i, ""), 180) ??
+    "Link",
+  description: overrides?.description ?? null,
+  imageUrl: overrides?.imageUrl ?? null,
+  canonicalUrl: overrides?.canonicalUrl ?? target.toString(),
+});
+
 export async function GET(req: Request) {
+  const profile = await currentProfile();
+  if (!profile) {
+    return new NextResponse("Unauthorized", { status: 401 });
+  }
+
+  const { searchParams } = new URL(req.url);
+  const rawUrl = String(searchParams.get("url") ?? "").trim();
+
+  if (!rawUrl) {
+    return new NextResponse("url is required", { status: 400 });
+  }
+
+  const target = new URL(rawUrl);
+
   try {
-    const profile = await currentProfile();
-    if (!profile) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
-
-    const { searchParams } = new URL(req.url);
-    const rawUrl = String(searchParams.get("url") ?? "").trim();
-
-    if (!rawUrl) {
-      return new NextResponse("url is required", { status: 400 });
-    }
-
-    const target = new URL(rawUrl);
     await assertSafeTarget(target);
 
     const controller = new AbortController();
@@ -165,7 +263,7 @@ export async function GET(req: Request) {
         signal: controller.signal,
         headers: {
           "user-agent": "In-Accord-LinkPreview/1.0",
-          accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+          accept: "text/html,application/xhtml+xml,image/*;q=0.9,*/*;q=0.8",
         },
       });
     } finally {
@@ -173,25 +271,77 @@ export async function GET(req: Request) {
     }
 
     if (!response.ok) {
-      return new NextResponse("Failed to fetch URL", { status: 422 });
+      return NextResponse.json(
+        { preview: buildPreviewFallback(target) },
+        {
+          status: 200,
+          headers: {
+            "cache-control": "private, max-age=300",
+          },
+        }
+      );
     }
 
+    const fetchedUrl = new URL(response.url || target.toString());
     const contentType = response.headers.get("content-type") ?? "";
+
+    if (/^image\//i.test(contentType)) {
+      const fileName = fetchedUrl.pathname.split("/").filter(Boolean).pop() ?? fetchedUrl.hostname;
+
+      return NextResponse.json(
+        {
+          preview: buildPreviewFallback(target, {
+            title: fileName,
+            imageUrl: fetchedUrl.toString(),
+            canonicalUrl: fetchedUrl.toString(),
+          }),
+        },
+        {
+          status: 200,
+          headers: {
+            "cache-control": "private, max-age=300",
+          },
+        }
+      );
+    }
+
     if (!/text\/html|application\/xhtml\+xml/i.test(contentType)) {
-      return NextResponse.json({ preview: null }, { status: 200 });
+      return NextResponse.json(
+        { preview: buildPreviewFallback(target, { canonicalUrl: fetchedUrl.toString() }) },
+        {
+          status: 200,
+          headers: {
+            "cache-control": "private, max-age=300",
+          },
+        }
+      );
     }
 
     const contentLength = Number(response.headers.get("content-length") ?? "0");
     if (contentLength > maxContentLength) {
-      return NextResponse.json({ preview: null }, { status: 200 });
+      return NextResponse.json(
+        { preview: buildPreviewFallback(target, { canonicalUrl: fetchedUrl.toString() }) },
+        {
+          status: 200,
+          headers: {
+            "cache-control": "private, max-age=300",
+          },
+        }
+      );
     }
 
     const html = await response.text();
     if (html.length > maxContentLength) {
-      return NextResponse.json({ preview: null }, { status: 200 });
+      return NextResponse.json(
+        { preview: buildPreviewFallback(target, { canonicalUrl: fetchedUrl.toString() }) },
+        {
+          status: 200,
+          headers: {
+            "cache-control": "private, max-age=300",
+          },
+        }
+      );
     }
-
-    const fetchedUrl = new URL(response.url || target.toString());
 
     const title =
       normalizeString(parseMetaContent(html, "property", "og:title"), 180) ??
@@ -212,7 +362,10 @@ export async function GET(req: Request) {
 
     const imageUrl =
       toAbsoluteUrl(parseMetaContent(html, "property", "og:image"), fetchedUrl) ??
+      toAbsoluteUrl(parseMetaContent(html, "property", "og:image:secure_url"), fetchedUrl) ??
       toAbsoluteUrl(parseMetaContent(html, "name", "twitter:image"), fetchedUrl) ??
+      toAbsoluteUrl(parseMetaContent(html, "name", "twitter:image:src"), fetchedUrl) ??
+      parseFirstImage(html, fetchedUrl) ??
       null;
 
     const canonicalUrl =
@@ -240,6 +393,14 @@ export async function GET(req: Request) {
     );
   } catch (error) {
     console.error("[LINK_PREVIEW_GET]", error);
-    return NextResponse.json({ preview: null }, { status: 200 });
+    return NextResponse.json(
+      { preview: buildPreviewFallback(target) },
+      {
+        status: 200,
+        headers: {
+          "cache-control": "private, max-age=300",
+        },
+      }
+    );
   }
 }

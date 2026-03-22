@@ -1967,7 +1967,11 @@ export const SettingsModal = () => {
   const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferences>({
     ...defaultNotificationPreferences,
   });
+  const [savedNotificationPreferences, setSavedNotificationPreferences] = useState<NotificationPreferences>({
+    ...defaultNotificationPreferences,
+  });
   const [isSavingNotificationPreferences, setIsSavingNotificationPreferences] = useState(false);
+  const [isSendingNotificationTestEmail, setIsSendingNotificationTestEmail] = useState(false);
   const [notificationStatus, setNotificationStatus] = useState<string | null>(null);
   const [textImagesPreferences, setTextImagesPreferences] = useState<TextImagesPreferences>({
     ...defaultTextImagesPreferences,
@@ -2276,6 +2280,14 @@ export const SettingsModal = () => {
   const installedPluginsCountLabel = useMemo(
     () => installedPluginsCount.toString().padStart(2, "0"),
     [installedPluginsCount]
+  );
+  const notificationRecipientEmail = useMemo(
+    () => String(data.profileEmail ?? "").trim(),
+    [data.profileEmail]
+  );
+  const hasUnsavedNotificationChanges = useMemo(
+    () => JSON.stringify(notificationPreferences) !== JSON.stringify(savedNotificationPreferences),
+    [notificationPreferences, savedNotificationPreferences]
   );
 
   const hasFamilyCenterAccess = useMemo(() => {
@@ -2682,6 +2694,7 @@ export const SettingsModal = () => {
         setManualGameDescriptionInput("");
         setManualGameThumbnailInput("");
         setNotificationPreferences(hydratedNotifications);
+        setSavedNotificationPreferences(hydratedNotifications);
         setNotificationStatus(null);
         setTextImagesPreferences(hydratedTextImages);
         setTextImagesStatus(null);
@@ -2765,6 +2778,7 @@ export const SettingsModal = () => {
         setManualGameDescriptionInput("");
         setManualGameThumbnailInput("");
         setNotificationPreferences({ ...defaultNotificationPreferences });
+        setSavedNotificationPreferences({ ...defaultNotificationPreferences });
         setNotificationStatus(null);
         setTextImagesPreferences({ ...defaultTextImagesPreferences });
         setTextImagesStatus(null);
@@ -3488,28 +3502,89 @@ export const SettingsModal = () => {
     setRegisteredGamesStatus(`Added running app: ${name}.`);
   };
 
-  const onSaveNotificationPreferences = async () => {
+  const persistNotificationPreferences = async ({
+    silent = false,
+  }: {
+    silent?: boolean;
+  } = {}) => {
     try {
       setIsSavingNotificationPreferences(true);
-      setNotificationStatus(null);
+      if (!silent) {
+        setNotificationStatus(null);
+      }
 
-      await axios.patch("/api/profile/preferences", {
+      const response = await axios.patch("/api/profile/preferences", {
         notifications: notificationPreferences,
       });
+
+      const persistedNotifications = normalizeNotificationPreferences(
+        response.data?.notifications ?? notificationPreferences
+      );
+
+      setNotificationPreferences(persistedNotifications);
+      setSavedNotificationPreferences(persistedNotifications);
 
       window.dispatchEvent(
         new CustomEvent("inaccord:notification-preferences-updated", {
           detail: {
-            notifications: notificationPreferences,
+            notifications: persistedNotifications,
           },
         })
       );
 
-      setNotificationStatus("Notification preferences saved.");
+      if (!silent) {
+        setNotificationStatus("Notification preferences saved.");
+      }
+
+      return true;
     } catch {
       setNotificationStatus("Could not save notification preferences.");
+      return false;
     } finally {
       setIsSavingNotificationPreferences(false);
+    }
+  };
+
+  const onSaveNotificationPreferences = async () => {
+    await persistNotificationPreferences();
+  };
+
+  const onSendNotificationTestEmail = async () => {
+    if (!notificationPreferences.emailNotifications) {
+      setNotificationStatus("Enable Email Notifications before sending a test email.");
+      return;
+    }
+
+    try {
+      setIsSendingNotificationTestEmail(true);
+      setNotificationStatus(null);
+
+      if (hasUnsavedNotificationChanges) {
+        const saved = await persistNotificationPreferences({ silent: true });
+        if (!saved) {
+          return;
+        }
+      }
+
+      const response = await axios.post("/api/profile/preferences/test-email");
+      const recipientEmail = String(response.data?.recipientEmail ?? "").trim();
+
+      setNotificationStatus(
+        recipientEmail
+          ? `Test email sent to ${recipientEmail}.`
+          : "Test email sent."
+      );
+    } catch (error) {
+      const message =
+        axios.isAxiosError(error) && typeof error.response?.data?.error === "string"
+          ? error.response.data.error
+          : axios.isAxiosError(error) && typeof error.response?.data === "string"
+            ? error.response.data
+            : "Could not send the test email.";
+
+      setNotificationStatus(message);
+    } finally {
+      setIsSendingNotificationTestEmail(false);
     }
   };
 
@@ -9663,19 +9738,56 @@ export const SettingsModal = () => {
               </div>
             </div>
 
-            <div className="mt-3 flex items-center justify-between gap-2">
-              <p className="rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
-                @Mentions: <span className="font-semibold text-white">{mentionsEnabled ? "On" : "Off"}</span>
-              </p>
-              <Button
-                type="button"
-                onClick={() => void onSaveNotificationPreferences()}
-                disabled={isSavingNotificationPreferences}
-                className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {isSavingNotificationPreferences ? "Saving..." : "Save Notifications"}
-              </Button>
+            <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+                    Notification Test Delivery
+                  </p>
+                  <p className="mt-1 text-sm font-medium text-white">
+                    Send a live test email to confirm alert delivery.
+                  </p>
+                  <p className="mt-1 text-[11px] text-[#949ba4]">
+                    Recipient: <span className="font-semibold text-white">{notificationRecipientEmail || "No email on account"}</span>
+                  </p>
+                </div>
+
+                <Button
+                  type="button"
+                  onClick={() => void onSendNotificationTestEmail()}
+                  disabled={
+                    isSendingNotificationTestEmail ||
+                    isSavingNotificationPreferences ||
+                    !notificationRecipientEmail
+                  }
+                  className="h-8 border border-white/20 bg-transparent px-3 text-xs text-white hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSendingNotificationTestEmail ? "Sending Test..." : "Send Test Email"}
+                </Button>
+              </div>
             </div>
+
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+              <p className="rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">
+                {hasUnsavedNotificationChanges
+                  ? "You have unsaved notification changes."
+                  : `@Mentions: ${mentionsEnabled ? "On" : "Off"}`}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  onClick={() => void onSaveNotificationPreferences()}
+                  disabled={isSavingNotificationPreferences || isSendingNotificationTestEmail}
+                  className="h-8 bg-[#5865f2] px-3 text-xs text-white hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSavingNotificationPreferences ? "Saving..." : "Save Notifications"}
+                </Button>
+              </div>
+            </div>
+
+            <p className="mt-3 text-[11px] text-[#949ba4]">
+              Test emails are sent to your account email after <span className="font-semibold text-white">Email Notifications</span> is enabled.
+            </p>
 
             {notificationStatus ? (
               <p className="mt-3 rounded-md border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-[#b5bac1]">

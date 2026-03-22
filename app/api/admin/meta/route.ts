@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import packageJson from "../../../../package.json";
 
+import { resolveAdminGitRuntime } from "@/lib/admin-git-runtime";
 import { currentProfile } from "@/lib/current-profile";
+import { getInAccordSdkSourceHash } from "@/lib/inaccord-sdk-runtime";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 
 type PackageJsonShape = {
@@ -16,7 +18,6 @@ type PackageJsonShape = {
 };
 
 const DEFAULT_GITHUB_REPO_URL = "https://github.com/GARD-Realms-LLC/In-Accord";
-const SDK_SOURCE_FILE = "In-Accord.js";
 const SDK_BASE_VERSION = "1.0.0.1";
 
 declare global {
@@ -127,18 +128,10 @@ const bumpSdkVersion = (value: string) => {
 
 const getSdkVersion = async () => {
   try {
-    const pathModule = getBuiltinModule<typeof import("path")>("path");
-    const fsModule = getBuiltinModule<typeof import("fs/promises")>("fs/promises");
-    const cryptoModule = getBuiltinModule<typeof import("crypto")>("crypto");
-
-    if (!pathModule || !fsModule || !cryptoModule) {
+    const sourceHash = await getInAccordSdkSourceHash();
+    if (!sourceHash) {
       return globalThis.inAccordSdkVersionCache?.version ?? SDK_BASE_VERSION;
     }
-
-    const root = process.cwd();
-    const sdkSourcePath = pathModule.join(root, SDK_SOURCE_FILE);
-    const sdkSourceContent = await fsModule.readFile(sdkSourcePath, "utf8");
-    const sourceHash = cryptoModule.createHash("sha256").update(sdkSourceContent).digest("hex");
 
     if (globalThis.inAccordSdkVersionCache?.sourceHash === sourceHash) {
       return globalThis.inAccordSdkVersionCache.version;
@@ -331,9 +324,8 @@ export async function GET() {
       process.env.INACCORD_DEFAULT_BRANCH ||
       "main";
 
-    const localGitWorkspaceAvailable =
-      Boolean(getBuiltinModule<typeof import("child_process")>("child_process")) &&
-      Boolean(getBuiltinModule<typeof import("util")>("util"));
+    const gitRuntime = await resolveAdminGitRuntime();
+    const localGitWorkspaceAvailable = gitRuntime.workTreeAvailable;
     const localDesktopBuildAvailable = localGitWorkspaceAvailable;
 
     const commits = await getRecentCommitLog();
@@ -371,6 +363,12 @@ export async function GET() {
         documentStorageConfigured: storageConfigured,
         provider: "Cloudflare R2",
         applicationsPath: "Client/Applications/",
+      },
+      gitRuntime: {
+        mode: gitRuntime.mode,
+        reason: gitRuntime.reason,
+        repoRoot: gitRuntime.repoRoot,
+        message: gitRuntime.message,
       },
       localGitWorkspaceAvailable,
       localDesktopBuildAvailable,

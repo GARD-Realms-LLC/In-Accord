@@ -14,6 +14,7 @@ import {
 } from "@/lib/server-counting";
 import { computeChannelPermissionForMember, resolveMemberContext } from "@/lib/channel-permissions";
 import { emitChannelWebhookEvent, getChannelFeatureSettings } from "@/lib/channel-feature-settings";
+import { sendChannelEmailNotifications } from "@/lib/email-notifications";
 import { addMessageReaction, ensureMessageReactionSchema } from "@/lib/message-reactions";
 import { executeServerSlashCommand } from "@/lib/slash-commands";
 import { parseMentionSegments } from "@/lib/mentions";
@@ -393,7 +394,7 @@ export async function GET(req: Request) {
               u."name" as "profileName",
               u."email" as "profileEmail",
               coalesce(u."avatarUrl", u."avatar", u."icon") as "profileImageUrl",
-              u.[account.created] as "profileCreatedAt",
+              u."createdAt" as "profileCreatedAt",
               u."lastLogin" as "profileUpdatedAt",
               u."role" as "profileRole"
             from "Message" msg
@@ -418,7 +419,7 @@ export async function GET(req: Request) {
               u."name" as "profileName",
               u."email" as "profileEmail",
               coalesce(u."avatarUrl", u."avatar", u."icon") as "profileImageUrl",
-              u.[account.created] as "profileCreatedAt",
+              u."createdAt" as "profileCreatedAt",
               u."lastLogin" as "profileUpdatedAt",
               u."role" as "profileRole"
             from "Message" msg
@@ -765,6 +766,19 @@ export async function POST(req: Request) {
       );
     } catch (realtimeError) {
       console.error("[SOCKET_MESSAGES_POST_REALTIME_EMERGENCY]", realtimeError);
+    }
+
+    try {
+      await sendChannelEmailNotifications({
+        serverId: liveServerId,
+        channelName: String(liveChannel.name ?? "").trim(),
+        senderProfileId: liveProfile.id,
+        senderDisplayName: String(liveProfile.name ?? liveProfile.email ?? "User").trim() || "User",
+        content: liveStoredContent,
+        fileUrl: liveFileUrl,
+      });
+    } catch (emailError) {
+      console.error("[SOCKET_MESSAGES_POST_EMAIL]", emailError);
     }
 
     return NextResponse.json(

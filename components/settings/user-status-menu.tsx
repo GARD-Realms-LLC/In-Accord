@@ -18,10 +18,12 @@ import { UserAvatar } from "@/components/user-avatar";
 import { useModal } from "@/hooks/use-modal-store";
 import { hasInAccordAdministrativeAccess, isInAccordAdministrator, isInAccordDeveloper, isInAccordModerator } from "@/lib/in-accord-admin";
 import { resolveBannerUrl } from "@/lib/asset-url";
+import { INACCORD_BUILD_NUMBER, INACCORD_VERSION_LABEL } from "@/lib/build-version";
 import { resolveProfileIcons, type ProfileIcon } from "@/lib/profile-icons";
 import { PresenceStatus, formatPresenceStatusLabel, normalizePresenceStatus, presenceStatusLabelMap, presenceStatusValues } from "@/lib/presence-status";
 import { getStreamSummaryText } from "@/lib/streaming-display";
 import { getCachedVoiceState, VOICE_STATE_SYNC_EVENT, type VoiceStateSyncDetail } from "@/lib/voice-state-sync";
+import { DesktopUpdateButton } from "@/components/settings/desktop-update-button";
 
 const VOICE_TOGGLE_MUTE_EVENT = "inaccord:voice-toggle-mute";
 const VOICE_TOGGLE_DEAFEN_EVENT = "inaccord:voice-toggle-deafen";
@@ -985,6 +987,17 @@ export const UserStatusMenu = ({
             <LogOut className="h-4 w-4" />
             {isLoggingOut ? "Logging off..." : "Logoff"}
           </button>
+
+          <div className="rounded-md border border-white/10 bg-[#15161a] px-2 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">Build</p>
+              <p className="text-[10px] text-[#949ba4]">#{INACCORD_BUILD_NUMBER}</p>
+            </div>
+            <p className="mt-1 text-[11px] text-[#dbdee1]">Version {INACCORD_VERSION_LABEL}</p>
+            <div className="mt-2">
+              <DesktopUpdateButton expanded className="w-full justify-center" />
+            </div>
+          </div>
         </div>
       </PopoverContent>
 

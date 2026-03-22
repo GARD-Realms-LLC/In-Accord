@@ -1,8 +1,15 @@
 {
-  "buildTimestamp": "2026-03-21T17:41:31.623Z",
+  "buildTimestamp": "2026-03-22T00:14:48.491Z",
   "branch": "main",
-  "commitSha": "b2c85bcb874897bc45d9b4c7790e7996702d1968",
+  "commitSha": "898ee99c1e344376c950aa6d6de06d4793f73ce5",
   "commits": [
+    {
+      "sha": "898ee99c1e344376c950aa6d6de06d4793f73ce5",
+      "shortSha": "898ee99c",
+      "message": "build: publish desktop app 1.0.225",
+      "author": "Doc Cowles",
+      "committedAt": "2026-03-21T11:47:29-06:00"
+    },
     {
       "sha": "b2c85bcb874897bc45d9b4c7790e7996702d1968",
       "shortSha": "b2c85bcb",
@@ -79,13 +86,6 @@
       "message": "Try local and legacy password hashes on sign-in",
       "author": "Doc Cowles",
       "committedAt": "2026-03-19T17:25:08-06:00"
-    },
-    {
-      "sha": "3ea0edf0c15486c1b044e1d5c7037525c383edc3",
-      "shortSha": "3ea0edf0",
-      "message": "Read DB URL from Cloudflare worker bindings",
-      "author": "Doc Cowles",
-      "committedAt": "2026-03-19T17:13:29-06:00"
     }
   ]
 }

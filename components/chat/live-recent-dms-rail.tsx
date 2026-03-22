@@ -42,6 +42,11 @@ const getRecentDmSortTime = (item: RecentDmRailItem) => {
 const sortRecentDmItems = (items: RecentDmRailItem[]) =>
   [...items].sort((left, right) => getRecentDmSortTime(right) - getRecentDmSortTime(left));
 
+const BACKGROUND_REFRESH_HEADERS = {
+  "X-InAccord-Background-Refresh": "1",
+  "X-InAccord-Silent-Loading": "1",
+};
+
 type LiveRecentDmsRailProps = {
   initialItems: RecentDmRailItem[];
   profileId: string;
@@ -98,7 +103,12 @@ export const LiveRecentDmsRail = ({
       return fetchInFlightRef.current;
     }
 
-    const request = fetch(requestUrl, { method: "GET", cache: "no-store", credentials: "include" })
+    const request = fetch(requestUrl, {
+      method: "GET",
+      cache: "no-store",
+      credentials: "include",
+      headers: BACKGROUND_REFRESH_HEADERS,
+    })
       .then(async (response) => {
         if (!response.ok) {
           throw new Error(await response.text());
@@ -133,7 +143,7 @@ export const LiveRecentDmsRail = ({
 
     refreshIfVisible();
 
-    const intervalId = window.setInterval(refreshIfVisible, 2000);
+    const intervalId = window.setInterval(refreshIfVisible, 15000);
     window.addEventListener("focus", refreshIfVisible);
     document.addEventListener("visibilitychange", refreshIfVisible);
 

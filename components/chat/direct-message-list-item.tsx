@@ -33,7 +33,7 @@ export const DirectMessageListItem = ({
   unreadCount,
   isActive,
 }: DirectMessageListItemProps) => {
-  const href = `/users?serverId=${encodeURIComponent(serverId)}&memberId=${encodeURIComponent(memberId)}&pmRequest=1`;
+  const href = `/users?serverId=${encodeURIComponent(serverId)}&memberId=${encodeURIComponent(memberId)}`;
 
   return (
     <Link

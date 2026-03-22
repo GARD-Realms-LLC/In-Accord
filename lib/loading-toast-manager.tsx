@@ -62,6 +62,24 @@ export function beginTrackedLoading(): RequestHandle {
   return handle;
 }
 
+export function shouldTrackLoadingRequest(input: RequestInfo | URL, init?: RequestInit) {
+  const request = input instanceof Request ? input : null;
+  const method = String(init?.method ?? request?.method ?? "GET").trim().toUpperCase();
+  const headers = new Headers(init?.headers ?? request?.headers ?? undefined);
+  const backgroundRefresh = headers.get("X-InAccord-Background-Refresh");
+
+  if (backgroundRefresh === "1") {
+    return false;
+  }
+
+  // Keep background GET polling silent so passive refresh loops do not spam the global loader.
+  if (method === "GET" && headers.get("X-InAccord-Silent-Loading") === "1") {
+    return false;
+  }
+
+  return true;
+}
+
 export function endTrackedLoading(handle: RequestHandle | undefined | null) {
   if (!handle) {
     return;

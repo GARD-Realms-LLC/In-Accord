@@ -71,7 +71,7 @@ export const SupportHelpControls = ({
           <CircleHelp className="h-4 w-4" suppressHydrationWarning />
         </button>
 
-        {showInvisibleBoxes ? <DesktopUpdateButton /> : null}
+        <DesktopUpdateButton />
 
         <NavigationBetaBugRow
           showBugReportsIcon={true}

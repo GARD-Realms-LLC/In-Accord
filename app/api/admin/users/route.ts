@@ -20,6 +20,11 @@ import { isInAccordProtectedServer } from "@/lib/server-security";
 import { removeServerFromAllProfileServerTabs } from "@/lib/profile-server-tabs";
 import { removeServerFromServerRailFolders } from "@/lib/server-rail-layout";
 import { hardDeleteServerScopedData } from "@/lib/server-hard-delete";
+import { ensureChannelThreadSchema } from "@/lib/channel-threads";
+import { ensureChannelReadStateSchema } from "@/lib/channel-read-state";
+import { ensureFriendRelationsSchema } from "@/lib/friend-relations";
+import { ensurePrivateMessageCallSchema } from "@/lib/private-message-calls";
+import { deleteOurBoardEntriesOwnedByProfileId } from "@/lib/our-board-store";
 
 type UserRow = {
   userId: string;
@@ -105,6 +110,199 @@ const normalizeManagedUserRole = (role: unknown) => normalizeRoleKey(role);
 const resolveAllowedRoleSet = async () => {
   const roles = await getInAccordRoles();
   return new Set(roles.map((role) => role.roleKey));
+};
+
+const SQL_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+const quoteIdentifier = (identifier: string) => {
+  if (!SQL_IDENTIFIER.test(identifier)) {
+    throw new Error(`Unsafe SQL identifier: ${identifier}`);
+  }
+
+  return `"${identifier}"`;
+};
+
+const normalizeUniqueIds = (values: Array<string | null | undefined>) =>
+  Array.from(new Set(values.map((value) => String(value ?? "").trim()).filter(Boolean)));
+
+const selectIds = async ({
+  tableName,
+  idColumn,
+  whereClause,
+}: {
+  tableName: string;
+  idColumn: string;
+  whereClause: ReturnType<typeof sql>;
+}) => {
+  const result = await db.execute(sql`
+    select ${sql.raw(quoteIdentifier(idColumn))} as "id"
+    from ${sql.raw(quoteIdentifier(tableName))}
+    where ${whereClause}
+  `);
+
+  return normalizeUniqueIds(
+    ((result as unknown as { rows?: Array<{ id: string | null }> }).rows ?? []).map((row) => row.id)
+  );
+};
+
+const deleteByIds = async ({
+  tableName,
+  columnName,
+  ids,
+}: {
+  tableName: string;
+  columnName: string;
+  ids: string[];
+}) => {
+  if (ids.length === 0) {
+    return;
+  }
+
+  await db.execute(sql`
+    delete from ${sql.raw(quoteIdentifier(tableName))}
+    where ${sql.raw(quoteIdentifier(columnName))} in (${sql.join(
+      ids.map((id) => sql`${id}`),
+      sql`, `
+    )})
+  `);
+};
+
+const purgeDeletedUserContent = async ({
+  userId,
+  memberIds,
+}: {
+  userId: string;
+  memberIds: string[];
+}) => {
+  const normalizedUserId = String(userId ?? "").trim();
+  const normalizedMemberIds = normalizeUniqueIds(memberIds);
+
+  if (!normalizedUserId) {
+    return;
+  }
+
+  await ensureChannelThreadSchema();
+  await ensureChannelReadStateSchema();
+  await ensureFriendRelationsSchema();
+  await ensurePrivateMessageCallSchema();
+
+  if (normalizedMemberIds.length > 0) {
+    const authoredMessageIds = await selectIds({
+      tableName: "Message",
+      idColumn: "id",
+      whereClause: sql`"memberId" in (${sql.join(
+        normalizedMemberIds.map((id) => sql`${id}`),
+        sql`, `
+      )})`,
+    });
+
+    const starterThreadIds = authoredMessageIds.length
+      ? await selectIds({
+          tableName: "ChannelThread",
+          idColumn: "id",
+          whereClause: sql`"sourceMessageId" in (${sql.join(
+            authoredMessageIds.map((id) => sql`${id}`),
+            sql`, `
+          )})`,
+        })
+      : [];
+
+    const threadReplyIds = starterThreadIds.length
+      ? await selectIds({
+          tableName: "Message",
+          idColumn: "id",
+          whereClause: sql`"threadId" in (${sql.join(
+            starterThreadIds.map((id) => sql`${id}`),
+            sql`, `
+          )})`,
+        })
+      : [];
+
+    const allMessageIdsToDelete = normalizeUniqueIds([...authoredMessageIds, ...threadReplyIds]);
+
+    await deleteByIds({
+      tableName: "MessageReaction",
+      columnName: "messageId",
+      ids: allMessageIdsToDelete,
+    });
+
+    await deleteByIds({
+      tableName: "ThreadReadState",
+      columnName: "threadId",
+      ids: starterThreadIds,
+    });
+
+    await deleteByIds({
+      tableName: "ChannelThread",
+      columnName: "id",
+      ids: starterThreadIds,
+    });
+
+    await deleteByIds({
+      tableName: "Message",
+      columnName: "id",
+      ids: allMessageIdsToDelete,
+    });
+
+    const conversationIds = await selectIds({
+      tableName: "Conversation",
+      idColumn: "id",
+      whereClause: sql`"memberOneId" in (${sql.join(
+        normalizedMemberIds.map((id) => sql`${id}`),
+        sql`, `
+      )}) or "memberTwoId" in (${sql.join(
+        normalizedMemberIds.map((id) => sql`${id}`),
+        sql`, `
+      )})`,
+    });
+
+    await deleteByIds({
+      tableName: "PrivateMessageCall",
+      columnName: "conversationId",
+      ids: conversationIds,
+    });
+
+    await deleteByIds({
+      tableName: "DirectMessage",
+      columnName: "conversationId",
+      ids: conversationIds,
+    });
+
+    await deleteByIds({
+      tableName: "Conversation",
+      columnName: "id",
+      ids: conversationIds,
+    });
+  }
+
+  await db.execute(sql`
+    delete from "FriendRequest"
+    where "requesterProfileId" = ${normalizedUserId}
+       or "recipientProfileId" = ${normalizedUserId}
+  `);
+
+  await db.execute(sql`
+    delete from "BlockedProfile"
+    where "profileId" = ${normalizedUserId}
+       or "blockedProfileId" = ${normalizedUserId}
+  `);
+
+  await db.execute(sql`
+    delete from "ChannelReadState"
+    where "profileId" = ${normalizedUserId}
+  `);
+
+  await db.execute(sql`
+    delete from "ThreadReadState"
+    where "profileId" = ${normalizedUserId}
+  `);
+
+  await db.execute(sql`
+    delete from "ServerInviteHistoryUse"
+    where "profileId" = ${normalizedUserId}
+  `);
+
+  await deleteOurBoardEntriesOwnedByProfileId(normalizedUserId);
 };
 
 export async function GET() {
@@ -579,6 +777,12 @@ export async function DELETE(request: Request) {
       rows?: Array<{ id: string | null; name: string | null }>;
     }).rows ?? [];
 
+    const memberIds = await selectIds({
+      tableName: "Member",
+      idColumn: "id",
+      whereClause: sql`"profileId" = ${userId}`,
+    });
+
     for (const ownedServer of ownedServers) {
       const ownedServerId = String(ownedServer.id ?? "").trim();
       if (!ownedServerId) {
@@ -597,10 +801,10 @@ export async function DELETE(request: Request) {
       }
     }
 
-    await db.execute(sql`
-      delete from "Member"
-      where "profileId" = ${userId}
-    `);
+    await purgeDeletedUserContent({
+      userId,
+      memberIds,
+    });
 
     for (const ownedServer of ownedServers) {
       const ownedServerId = String(ownedServer.id ?? "").trim();
@@ -618,6 +822,11 @@ export async function DELETE(request: Request) {
           and "profileId" = ${userId}
       `);
     }
+
+    await db.execute(sql`
+      delete from "Member"
+      where "profileId" = ${userId}
+    `);
 
     await db.execute(sql`
       delete from "LocalCredential"

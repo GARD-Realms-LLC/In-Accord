@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { headers } from "next/headers";
 
 import { db } from "@/lib/db";
 
@@ -38,6 +39,11 @@ export type RuntimeSiteUrlConfig = {
 
 let runtimeSiteUrlSchemaReady = false;
 
+const isLoopbackHostname = (hostname: string) => {
+  const normalized = hostname.trim().toLowerCase();
+  return normalized === "localhost" || normalized === "::1" || normalized.startsWith("127.");
+};
+
 const normalizeSiteUrl = (value: unknown): string | null => {
   const normalized = String(value ?? "").trim();
   if (!normalized) {
@@ -55,6 +61,10 @@ const normalizeSiteUrl = (value: unknown): string | null => {
     return null;
   }
 
+  if (isLoopbackHostname(parsed.hostname)) {
+    return null;
+  }
+
   const origin = parsed.origin.trim();
   return origin.endsWith("/") ? origin.slice(0, -1) : origin;
 };
@@ -67,7 +77,33 @@ const normalizeOriginFallback = (value: unknown): string | null => {
 
   try {
     const parsed = new URL(normalized);
+    if (isLoopbackHostname(parsed.hostname)) {
+      return null;
+    }
+
     return parsed.origin;
+  } catch {
+    return null;
+  }
+};
+
+const getRequestHeadersOrigin = async (): Promise<string | null> => {
+  try {
+    const headerStore = await headers();
+    const originHeader = normalizeOriginFallback(headerStore.get("origin"));
+    if (originHeader) {
+      return originHeader;
+    }
+
+    const forwardedHost = String(headerStore.get("x-forwarded-host") ?? "").trim();
+    const host = forwardedHost || String(headerStore.get("host") ?? "").trim();
+    if (!host) {
+      return null;
+    }
+
+    const forwardedProto = String(headerStore.get("x-forwarded-proto") ?? "").trim().toLowerCase();
+    const protocol = forwardedProto === "http" || forwardedProto === "https" ? forwardedProto : "https";
+    return normalizeOriginFallback(`${protocol}://${host}`);
   } catch {
     return null;
   }
@@ -177,8 +213,16 @@ export const getEffectiveSiteUrl = async (requestOrigin?: string | null): Promis
   const runtimeConfig = await getRuntimeSiteUrlConfig();
   const envSiteUrl = normalizeSiteUrl(process.env.NEXT_PUBLIC_SITE_URL);
   const normalizedRequestOrigin = normalizeOriginFallback(requestOrigin);
+  const headerDerivedOrigin = await getRequestHeadersOrigin();
 
-  return runtimeConfig.appBaseUrl ?? envSiteUrl ?? normalizedRequestOrigin ?? "http://localhost:3000";
+  const resolvedSiteUrl = runtimeConfig.appBaseUrl ?? envSiteUrl ?? normalizedRequestOrigin ?? headerDerivedOrigin;
+  if (!resolvedSiteUrl) {
+    throw new Error(
+      "In-Accord app origin is not configured. Set a non-loopback app base URL in admin settings or NEXT_PUBLIC_SITE_URL.",
+    );
+  }
+
+  return resolvedSiteUrl;
 };
 
 export const updateRuntimeSiteUrlConfig = async (updates: {

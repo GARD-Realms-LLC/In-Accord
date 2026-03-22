@@ -342,7 +342,7 @@ export async function DELETE(
       return new NextResponse("Forbidden", { status: 403 });
     }
 
-    if (currentMessage.deleted && (isServerOwner || isAdministrator || isInAccordStaff)) {
+    if (currentMessage.deleted && canModerate) {
       const threadStarterRow = await db.execute(sql`
         select "id"
         from "ChannelThread"

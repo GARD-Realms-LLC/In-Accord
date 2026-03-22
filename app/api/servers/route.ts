@@ -12,6 +12,7 @@ import { getServerBannerConfig, setServerBannerConfig } from "@/lib/server-banne
 import { appendServerInviteHistory } from "@/lib/server-invite-store";
 import { upsertOurBoardEntry } from "@/lib/our-board-store";
 import { createServerScheduledEvent } from "@/lib/server-scheduled-events-store";
+import { findBlockedServerNameEntry } from "@/lib/server-name-blacklist";
 import {
   ensureRulesChannelForServer,
   ensureStageChannelForServer,
@@ -22,12 +23,24 @@ export async function POST(req: Request) {
   try {
     const { name, imageUrl, bannerUrl, bannerFit, bannerScale } = await req.json();
     const profile = await currentProfile();
+    const normalizedName = String(name ?? "").trim().replace(/\s+/g, " ");
 
     const normalizedImageUrl = normalizeOptionalCloudflareObjectPointer(imageUrl);
     const normalizedBannerUrl = normalizeOptionalCloudflareObjectPointer(bannerUrl);
 
     if (!profile) {
       return new NextResponse("Unauthorize", { status: 401 });
+    }
+
+    if (!normalizedName) {
+      return new NextResponse("Server name is required", { status: 400 });
+    }
+
+    const blockedEntry = await findBlockedServerNameEntry(normalizedName);
+    if (blockedEntry) {
+      return new NextResponse(`Server name \"${blockedEntry.name}\" is blacklisted and cannot be created.`, {
+        status: 400,
+      });
     }
 
     if (imageUrl !== null && imageUrl !== undefined && normalizedImageUrl === null) {
@@ -54,7 +67,7 @@ export async function POST(req: Request) {
       await tx.insert(server).values({
         id: serverId,
         profileId: profile.id,
-        name,
+        name: normalizedName,
         imageUrl: resolvedImageUrl,
         inviteCode,
         createdAt: now,
@@ -181,7 +194,7 @@ export async function POST(req: Request) {
 
     await upsertOurBoardEntry({
       serverId,
-      serverName: String(createdServer?.name ?? name ?? "Untitled Server"),
+      serverName: String(createdServer?.name ?? normalizedName ?? "Untitled Server"),
       imageUrl: String(createdServer?.imageUrl ?? imageUrl ?? "").trim() || "/in-accord-steampunk-logo.png",
       ownerProfileId: profile.id,
       ownerDisplayName: String(profile.name ?? profile.email ?? profile.id),

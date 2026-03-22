@@ -25,7 +25,7 @@ const getServerWithMembers = async (serverId: string) => {
       u."name" as "name",
       u."email" as "email",
       coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
-        u.[account.created] as "accountCreated",
+      u."createdAt" as "accountCreated",
       u."lastLogin" as "lastLogin"
     from "Member" m
     left join "Users" u on u."userId" = m."profileId"

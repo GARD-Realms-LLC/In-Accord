@@ -29,11 +29,15 @@ const resolveElectronApi = () =>
 
 type DesktopUpdateButtonProps = {
   className?: string;
+  expanded?: boolean;
 };
 
-export const DesktopUpdateButton = ({ className }: DesktopUpdateButtonProps) => {
+let desktopReadyPopupShownForVersion: string | null = null;
+
+export const DesktopUpdateButton = ({ className, expanded = false }: DesktopUpdateButtonProps) => {
   const [updaterState, setUpdaterState] = useState<DesktopUpdaterState | null>(null);
   const [isActionPending, setIsActionPending] = useState(false);
+  const [isReadyPopupOpen, setIsReadyPopupOpen] = useState(false);
   const isMountedRef = useRef(false);
 
   useEffect(() => {
@@ -42,6 +46,24 @@ export const DesktopUpdateButton = ({ className }: DesktopUpdateButtonProps) => 
       isMountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (expanded) {
+      return;
+    }
+
+    const nextVersionKey = String(updaterState?.nextVersion ?? updaterState?.currentVersion ?? "").trim();
+    if (updaterState?.status !== "ready" || !nextVersionKey) {
+      return;
+    }
+
+    if (desktopReadyPopupShownForVersion === nextVersionKey) {
+      return;
+    }
+
+    desktopReadyPopupShownForVersion = nextVersionKey;
+    setIsReadyPopupOpen(true);
+  }, [expanded, updaterState?.currentVersion, updaterState?.nextVersion, updaterState?.status]);
 
   useEffect(() => {
     const electronApi = resolveElectronApi();
@@ -189,30 +211,91 @@ export const DesktopUpdateButton = ({ className }: DesktopUpdateButtonProps) => 
     }
   };
 
+  const buttonLabel =
+    updaterState?.status === "ready"
+      ? "OK update"
+      : updaterState?.status === "checking"
+        ? "Checking"
+        : updaterState?.status === "downloading"
+          ? "Downloading"
+          : updaterState?.status === "error"
+            ? "Retry update"
+            : "Check updates";
+
   return (
-    <TooltipProvider delayDuration={150}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            title={presentation.title}
-            onClick={() => {
-              void onClick();
-            }}
-            disabled={presentation.disabled || isActionPending}
-            className={cn(
-              "inline-flex h-8 w-8 items-center justify-center rounded-md border transition disabled:cursor-default disabled:opacity-80",
-              presentation.className,
-              className
-            )}
-          >
-            {presentation.icon}
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-64 text-xs">
-          {presentation.description}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <>
+      <TooltipProvider delayDuration={150}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              title={presentation.title}
+              onClick={() => {
+                void onClick();
+              }}
+              disabled={presentation.disabled || isActionPending}
+              className={cn(
+                expanded
+                  ? "inline-flex h-8 items-center justify-center gap-2 rounded-md border px-3 text-xs font-medium transition disabled:cursor-default disabled:opacity-80"
+                  : "inline-flex h-8 w-8 items-center justify-center rounded-md border transition disabled:cursor-default disabled:opacity-80",
+                presentation.className,
+                className
+              )}
+            >
+              {presentation.icon}
+              {expanded ? <span>{buttonLabel}</span> : null}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-64 text-xs">
+            {presentation.description}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+
+      {!expanded && isReadyPopupOpen && updaterState?.status === "ready" ? (
+        <div className="fixed bottom-5 right-5 z-[80] w-[min(24rem,calc(100vw-1.5rem))] rounded-xl border border-emerald-400/45 bg-[#102417]/95 p-4 text-emerald-50 shadow-2xl shadow-black/45 backdrop-blur-md">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">Desktop update ready</p>
+              <p className="mt-1 text-xs text-emerald-100/90">
+                {updaterState.nextVersion
+                  ? `Version ${updaterState.nextVersion} is downloaded and ready to install.`
+                  : "A downloaded desktop update is ready to install."}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsReadyPopupOpen(false)}
+              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-emerald-300/30 bg-emerald-500/10 text-emerald-100 transition hover:bg-emerald-500/20"
+              aria-label="Dismiss update popup"
+              title="Dismiss update popup"
+            >
+              ×
+            </button>
+          </div>
+
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                void onClick();
+              }}
+              className="inline-flex h-8 items-center justify-center rounded-md border border-emerald-300/40 bg-emerald-500/20 px-3 text-xs font-semibold text-emerald-50 transition hover:bg-emerald-500/30"
+            >
+              OK update
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsReadyPopupOpen(false)}
+              className="inline-flex h-8 items-center justify-center rounded-md border border-white/10 bg-white/5 px-3 text-xs font-semibold text-emerald-50/90 transition hover:bg-white/10"
+            >
+              Later
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 };

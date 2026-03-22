@@ -96,15 +96,16 @@ export const getGlobalRecentDmsForProfile = async ({
       where c."memberOneId" in (select "id" from self_members)
          or c."memberTwoId" in (select "id" from self_members)
     ),
-    inbound_conversations as (
-      select distinct
-        cwo."conversationId" as "conversationId"
-      from conversations_with_other cwo
-      inner join "DirectMessage" inbound_dm
-        on inbound_dm."conversationId" = cwo."conversationId"
-       and inbound_dm."memberId" = cwo."otherMemberId"
-       and inbound_dm."deleted" = false
-       and inbound_dm."createdAt" >= ${recentCutoff}
+    recent_conversations as (
+      select
+        dm."conversationId" as "conversationId",
+        max(dm."createdAt") as "lastMessageAt"
+      from "DirectMessage" dm
+      inner join conversations_with_other cwo
+        on cwo."conversationId" = dm."conversationId"
+      where dm."deleted" = false
+        and dm."createdAt" >= ${recentCutoff}
+      group by dm."conversationId"
     )
     select
       cwo."conversationId" as "conversationId",
@@ -114,25 +115,26 @@ export const getGlobalRecentDmsForProfile = async ({
       coalesce(nullif(trim(up."profileName"), ''), u."name", u."email", 'User') as "displayName",
       coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
       up."avatarDecorationUrl" as "avatarDecorationUrl",
-        u.[account.created] as "profileCreatedAt",
-      coalesce(max(dm."createdAt"), now()) as "lastMessageAt",
+      coalesce(up."createdAt", u."account.created") as "profileCreatedAt",
+      rc."lastMessageAt" as "lastMessageAt",
       0 as "unreadCount"
     from conversations_with_other cwo
-    inner join inbound_conversations ic on ic."conversationId" = cwo."conversationId"
+    inner join recent_conversations rc on rc."conversationId" = cwo."conversationId"
     inner join "Member" om on om."id" = cwo."otherMemberId"
     left join "Users" u on u."userId" = om."profileId"
     left join "UserProfile" up on up."userId" = om."profileId"
-    left join "DirectMessage" dm on dm."conversationId" = cwo."conversationId"
     where 1 = 1
       ${normalizedSelectedServerId ? sql`and om."serverId" = ${normalizedSelectedServerId}` : sql``}
     group by
       cwo."conversationId",
       om."serverId",
       om."id",
+      om."profileId",
       coalesce(nullif(trim(up."profileName"), ''), u."name", u."email", 'User'),
       coalesce(u."avatarUrl", u."avatar", u."icon"),
       up."avatarDecorationUrl",
-        u.[account.created]
+      coalesce(up."createdAt", u."account.created"),
+      rc."lastMessageAt"
     order by "lastMessageAt" desc
     limit 50
   `);

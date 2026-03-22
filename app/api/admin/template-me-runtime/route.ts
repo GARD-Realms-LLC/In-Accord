@@ -53,7 +53,24 @@ export async function GET() {
     }
 
     const manager = getTemplateMeBotRuntimeManager();
-    const state = manager.getState();
+    const userId = String(auth.profile.userId ?? "").trim();
+    const configuredBot = userId ? await ensureTemplateMeBotConfigForUser(userId) : null;
+    const preferences = userId ? await getUserPreferences(userId) : null;
+    const matchedConfiguredBot =
+      configuredBot && preferences
+        ? preferences.OtherBots.find(
+            (item) => item.id === configuredBot.id && isTemplateMeBotName(item.name)
+          ) ?? configuredBot
+        : configuredBot;
+    const runtimeState = manager.getState();
+    const state = {
+      ...runtimeState,
+      userId: runtimeState.userId || userId || null,
+      botId: runtimeState.botId || matchedConfiguredBot?.id || null,
+      botName: runtimeState.botName || matchedConfiguredBot?.name || null,
+      applicationId: runtimeState.applicationId || matchedConfiguredBot?.applicationId || null,
+      botUserId: runtimeState.botUserId || matchedConfiguredBot?.botUserId || null,
+    };
 
     return NextResponse.json({
       state,

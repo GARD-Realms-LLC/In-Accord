@@ -145,7 +145,7 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
       nullif(trim(up."currentGame"), '') as "currentGame",
       u."email" as "email",
       coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
-        u.[account.created] as "joinedAt",
+      u."createdAt" as "joinedAt",
       u."lastLogin" as "lastLogonAt"
     from "Member" m
     left join "Users" u on u."userId" = m."profileId"

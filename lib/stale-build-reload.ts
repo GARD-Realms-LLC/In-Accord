@@ -35,20 +35,6 @@ export const hardReloadForStaleBuild = () => {
 export const getStaleBuildBootstrapScript = () =>
   `(() => {
     const pattern = ${STALE_BUILD_ERROR_PATTERN.toString()};
-    const key = ${JSON.stringify(STALE_BUILD_SESSION_KEY)};
-    const cooldownMs = ${String(STALE_BUILD_RELOAD_COOLDOWN_MS)};
-    const shouldReload = () => {
-      try {
-        const now = Date.now();
-        const lastReloadAt = Number(window.sessionStorage.getItem(key) || "0");
-        if (Number.isFinite(lastReloadAt) && now - lastReloadAt < cooldownMs) {
-          return false;
-        }
-        window.sessionStorage.setItem(key, String(now));
-      } catch {}
-      window.location.reload();
-      return true;
-    };
     const readMessage = (value) => {
       if (typeof value === "string") {
         return value;
@@ -61,13 +47,13 @@ export const getStaleBuildBootstrapScript = () =>
     window.addEventListener("error", (event) => {
       const message = readMessage(event && (event.message || (event.error && event.error.message)));
       if (pattern.test(message)) {
-        shouldReload();
+        window.__inAccordStaleBuildDetected = true;
       }
     });
     window.addEventListener("unhandledrejection", (event) => {
       const message = readMessage(event && event.reason);
       if (pattern.test(message)) {
-        shouldReload();
+        window.__inAccordStaleBuildDetected = true;
       }
     });
   })();`;

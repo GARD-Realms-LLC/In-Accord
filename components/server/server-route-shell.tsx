@@ -189,7 +189,7 @@ export const ServerRouteShell = ({
   const USER_BOX_HEIGHT = 84;
   const USER_BOX_BOTTOM_GAP = 2;
   const CHANNELS_TO_USERBOX_GAP = 10;
-  const MAX_PERSISTED_TABS = 30;
+  const MAX_PERSISTED_TABS = 1;
   const MAX_SERVER_NAME_LENGTH = 80;
   const [channelsRailWidth, setChannelsRailWidth] = useState(CHANNELS_RAIL_DEFAULT_WIDTH);
   const [isResizingChannelsRail, setIsResizingChannelsRail] = useState(false);
@@ -251,24 +251,25 @@ export const ServerRouteShell = ({
       const now = Date.now();
 
       if (existingIndex >= 0) {
-        const next = [...baseTabs];
-        next[existingIndex] = {
-          ...next[existingIndex],
+        const nextTab: ServerTabItem = {
+          ...baseTabs[existingIndex],
           serverName: droppedServerName,
+          defaultChannelId:
+            droppedServerId === serverId
+              ? defaultChannelId
+              : baseTabs[existingIndex]?.defaultChannelId ?? null,
           lastVisitedAt: now,
         };
-        return next;
+
+        return [nextTab];
       }
 
-      return [
-        ...baseTabs,
-        {
-          serverId: droppedServerId,
-          serverName: droppedServerName,
-          defaultChannelId: droppedServerId === serverId ? defaultChannelId : null,
-          lastVisitedAt: now,
-        },
-      ];
+      return [{
+        serverId: droppedServerId,
+        serverName: droppedServerName,
+        defaultChannelId: droppedServerId === serverId ? defaultChannelId : null,
+        lastVisitedAt: now,
+      }];
     });
 
     router.push(
@@ -568,31 +569,12 @@ export const ServerRouteShell = ({
 
     const currentName = serverName.trim().slice(0, MAX_SERVER_NAME_LENGTH);
 
-    mutateTabsAndPersist((baseTabs) => {
-      const existingIndex = baseTabs.findIndex((tab) => tab.serverId === serverId);
-      const now = Date.now();
-
-      if (existingIndex >= 0) {
-        const next = [...baseTabs];
-        next[existingIndex] = {
-          ...next[existingIndex],
-          serverName: currentName,
-          defaultChannelId,
-          lastVisitedAt: now,
-        };
-        return next;
-      }
-
-      return [
-        ...baseTabs,
-        {
-          serverId,
-          serverName: currentName,
-          defaultChannelId,
-          lastVisitedAt: now,
-        },
-      ];
-    });
+    mutateTabsAndPersist(() => [{
+      serverId,
+      serverName: currentName,
+      defaultChannelId,
+      lastVisitedAt: Date.now(),
+    }]);
   }, [defaultChannelId, hasLoadedTabsFromStorage, isHydrated, serverId, serverName]);
 
   const roleIconMap = {

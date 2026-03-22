@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
-import { and, asc, eq } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
-import { channel, ChannelType, db, member, server } from "@/lib/db";
+import { db } from "@/lib/db";
+import { ChannelType } from "@/lib/db/types";
 import { resolveMemberContext, visibleChannelIdsForMember } from "@/lib/channel-permissions";
 import { resolveServerRouteContext } from "@/lib/route-slug-resolver";
 import { buildChannelPath } from "@/lib/route-slugs";
@@ -15,17 +16,35 @@ interface ServerIdPageProps {
 }
 
 type ServerChannelRow = {
-  id: string;
-  name: string;
-  type: ChannelType;
-  createdAt: Date;
+  id: string | null;
+  name: string | null;
+  type: ChannelType | null;
+  createdAt: Date | string | null;
 };
+
+const normalizeChannelRows = (rows: ServerChannelRow[]) =>
+  rows
+    .map((row) => ({
+      id: String(row.id ?? "").trim(),
+      name: String(row.name ?? "").trim(),
+      type: row.type,
+      createdAt: row.createdAt ? new Date(row.createdAt) : new Date(0),
+    }))
+    .filter(
+      (
+        row,
+      ): row is {
+        id: string;
+        name: string;
+        type: ChannelType;
+        createdAt: Date;
+      } => Boolean(row.id) && Boolean(row.type),
+    );
 
 const ServerIdPage = async ({ params }: ServerIdPageProps) => {
   const { serverId: serverParam } = await params;
 
   const profile = await currentProfile();
-
   if (!profile) {
     return redirect("/sign-in");
   }
@@ -33,75 +52,75 @@ const ServerIdPage = async ({ params }: ServerIdPageProps) => {
   const resolvedServer = await resolveServerRouteContext({
     profileId: profile.id,
     serverParam,
+    profileRole: profile.role,
   });
 
   if (!resolvedServer) {
-    return redirect("/");
+    return redirect("/servers");
   }
 
   const serverId = resolvedServer.id;
 
-  const access = await db
-    .select({ id: server.id })
-    .from(server)
-    .innerJoin(
-      member,
-      and(
-        eq(member.serverId, server.id),
-        eq(member.profileId, profile.id),
-        eq(server.id, serverId)
-      )
-    )
-    .limit(1);
+  const memberRows = await db.execute(sql`
+    select
+      m."id" as "id"
+    from "Member" m
+    where trim(m."serverId") = trim(${serverId})
+      and trim(m."profileId") = trim(${profile.id})
+    limit 1
+  `);
 
-  if (!access[0]) {
-    return redirect("/");
+  const memberRow = ((memberRows as unknown as {
+    rows?: Array<{ id: string | null }>;
+  }).rows ?? [])[0];
+
+  if (!memberRow?.id) {
+    return redirect("/servers");
   }
 
-  const currentMember = await db
-    .select({ role: member.role })
-    .from(member)
-    .where(and(eq(member.serverId, serverId), eq(member.profileId, profile.id)))
-    .limit(1);
+  const memberContext = await resolveMemberContext({
+    profileId: profile.id,
+    serverId,
+  });
 
-  if (!currentMember[0]) {
-    return redirect("/");
-  }
+  const channelRowsResult = await db.execute(sql`
+    select
+      c."id" as "id",
+      c."name" as "name",
+      c."type" as "type",
+      c."createdAt" as "createdAt"
+    from "Channel" c
+    where trim(c."serverId") = trim(${serverId})
+    order by c."createdAt" asc, c."id" asc
+  `);
 
-  const serverOwner = await db
-    .select({ id: server.id })
-    .from(server)
-    .where(and(eq(server.id, serverId), eq(server.profileId, profile.id)))
-    .limit(1);
-  const memberContext = await resolveMemberContext({ profileId: profile.id, serverId });
-
-  const serverChannels: ServerChannelRow[] = await db
-    .select({ id: channel.id, name: channel.name, type: channel.type, createdAt: channel.createdAt })
-    .from(channel)
-    .where(eq(channel.serverId, serverId))
-    .orderBy(asc(channel.createdAt));
+  const allChannels = normalizeChannelRows(
+    ((channelRowsResult as unknown as {
+      rows?: ServerChannelRow[];
+    }).rows ?? []),
+  );
 
   const visibleIds = memberContext
     ? await visibleChannelIdsForMember({
         serverId,
         memberContext,
-        channelIds: serverChannels.map((item) => item.id),
+        channelIds: allChannels.map((item) => item.id),
       })
-    : new Set(serverChannels.map((item) => item.id));
+    : new Set(allChannels.map((item) => item.id));
 
-  const visibleChannels = serverChannels.filter((item) => visibleIds.has(item.id));
+  const visibleChannels = allChannels.filter((item) => visibleIds.has(item.id));
   const initialChannel = pickDefaultServerChannel(visibleChannels);
 
   if (!initialChannel?.id) {
-    return redirect("/");
+    return redirect("/servers");
   }
 
   return redirect(
     buildChannelPath({
       server: { id: serverId, name: resolvedServer.name },
       channel: { id: initialChannel.id, name: initialChannel.name },
-    })
+    }),
   );
-}
- 
+};
+
 export default ServerIdPage;

@@ -14,6 +14,7 @@ import { getServerProfileSettings, setServerProfileSettings } from "@/lib/server
 import { removeServerFromServerRailFolders } from "@/lib/server-rail-layout";
 import { hardDeleteServerScopedData } from "@/lib/server-hard-delete";
 import { isInAccordProtectedServer } from "@/lib/server-security";
+import { findBlockedServerNameEntry } from "@/lib/server-name-blacklist";
 import { upsertOurBoardEntry } from "@/lib/our-board-store";
 
 const normalizeUnchangedLegacyAsset = ({
@@ -216,7 +217,8 @@ export async function PATCH(
     const currentBannerRawUrl = currentBannerConfig?.url ?? null;
     const currentBannerResolvedUrl = resolveBannerUrl(currentBannerRawUrl);
 
-    const resolvedName = typeof name === "string" ? name : target.name;
+    const resolvedName =
+      typeof name === "string" ? name.trim().replace(/\s+/g, " ") : String(target.name ?? "").trim();
     const normalizedImageUrl =
       imageUrl === undefined
         ? target.imageUrl
@@ -242,6 +244,19 @@ export async function PATCH(
 
     if (bannerUrl !== undefined && bannerUrl !== null && normalizedBannerUrl === null) {
       return new NextResponse("Server banner must be a Cloudflare object pointer", { status: 400 });
+    }
+
+    if (!resolvedName) {
+      return new NextResponse("Server name is required", { status: 400 });
+    }
+
+    if (resolvedName !== String(target.name ?? "").trim()) {
+      const blockedEntry = await findBlockedServerNameEntry(resolvedName);
+      if (blockedEntry) {
+        return new NextResponse(`Server name \"${blockedEntry.name}\" is blacklisted and cannot be used.`, {
+          status: 400,
+        });
+      }
     }
 
     const resolvedImageUrl = normalizedImageUrl ?? target.imageUrl ?? "/in-accord-steampunk-logo.png";

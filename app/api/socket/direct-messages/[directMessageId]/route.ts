@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, or, sql } from "drizzle-orm";
 
 import { currentProfile } from "@/lib/current-profile";
 import { conversation, db, directMessage, member, MemberRole } from "@/lib/db";
@@ -248,6 +248,45 @@ export async function DELETE(req: Request, { params }: { params: Promise<RoutePa
 
     if (!isOwner && !canModerate) {
       return new NextResponse("Forbidden", { status: 403 });
+    }
+
+    if (currentDirectMessage.deleted && (isOwner || canModerate)) {
+      await db.execute(sql`
+        delete from "MessageReaction"
+        where "scope" = 'direct'
+          and "messageId" = ${directMessageId}
+      `);
+
+      await db
+        .delete(directMessage)
+        .where(
+          and(
+            eq(directMessage.id, directMessageId),
+            eq(directMessage.conversationId, conversationId)
+          )
+        );
+
+      const participantProfileIds = await getConversationProfileIds(conversationId);
+
+      await publishRealtimeEvent(
+        REALTIME_DIRECT_MESSAGE_DELETED_EVENT,
+        {
+          conversationId,
+        },
+        {
+          entity: "direct-message",
+          action: "deleted",
+          hardDelete: true,
+          messageId: directMessageId,
+        }
+      );
+
+      await publishDirectMessageRailSync({
+        conversationId,
+        participantProfileIds,
+      });
+
+      return NextResponse.json({ ok: true, hardDeleted: true });
     }
 
     const updated = await db

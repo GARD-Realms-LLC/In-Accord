@@ -1509,7 +1509,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                           return (
                             <Link
                               key={`friend-${friend.profileId}`}
-                              href={`/users?serverId=${encodeURIComponent(friend.serverId!)}&memberId=${encodeURIComponent(friend.memberId!)}&pmRequest=1`}
+                              href={`/users?serverId=${encodeURIComponent(friend.serverId!)}&memberId=${encodeURIComponent(friend.memberId!)}`}
                               className="flex items-center gap-2 rounded-md px-2 py-2 hover:bg-[#3f4248]"
                             >
                               {rowContent}
@@ -1582,7 +1582,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                   const baseHref = `/users?serverId=${encodeURIComponent(request.serverId)}&memberId=${encodeURIComponent(request.callerMemberId)}&source=incoming-calls`;
                   const acceptHref = `${baseHref}&pmCallAction=accept&pmCallId=${encodeURIComponent(request.id)}`;
                   const denyHref = `${baseHref}&pmCallAction=deny&pmCallId=${encodeURIComponent(request.id)}`;
-                  const openDmHref = `${baseHref}&pmRequest=1`;
+                  const openDmHref = baseHref;
                   const callTypeLabel = request.callType === "VIDEO" ? "Video" : "Audio";
                   const requestAgeSeconds = Math.max(
                     0,
@@ -1709,7 +1709,7 @@ const UsersPage = async ({ searchParams }: UsersPageProps) => {
                   return (
                     <Link
                       key={`online-rail-${friend.profileId}`}
-                      href={`/users?serverId=${encodeURIComponent(friend.serverId!)}&memberId=${encodeURIComponent(friend.memberId!)}&pmRequest=1`}
+                      href={`/users?serverId=${encodeURIComponent(friend.serverId!)}&memberId=${encodeURIComponent(friend.memberId!)}`}
                       className="flex items-center gap-2 rounded-md px-2 py-1.5 text-foreground transition hover:bg-accent"
                       aria-label={`Open PM with ${friend.displayName}`}
                     >

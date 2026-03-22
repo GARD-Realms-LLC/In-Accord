@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from "uuid";
 import { currentProfile } from "@/lib/current-profile";
 import { conversation, db, directMessage, member } from "@/lib/db";
 import { getRecentDmRailItemForProfile } from "@/lib/direct-messages";
+import { sendDirectMessageEmailNotifications } from "@/lib/email-notifications";
 import { publishRealtimeEvent } from "@/lib/realtime-events-server";
 import {
   REALTIME_DIRECT_MESSAGE_CREATED_EVENT,
@@ -370,6 +371,18 @@ export async function POST(req: Request) {
       });
     } catch (railRefreshError) {
       console.error("[SOCKET_DIRECT_MESSAGES_POST_RAIL]", railRefreshError);
+    }
+
+    try {
+      await sendDirectMessageEmailNotifications({
+        conversationId,
+        senderProfileId: profile.id,
+        senderDisplayName: String(profile.name ?? profile.email ?? "User").trim() || "User",
+        content: normalizedContent || "[attachment]",
+        fileUrl: normalizedFileUrl || null,
+      });
+    } catch (emailError) {
+      console.error("[SOCKET_DIRECT_MESSAGES_POST_EMAIL]", emailError);
     }
 
     const serializedInserted = await getSerializedDirectMessageById(inserted[0].id);

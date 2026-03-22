@@ -332,7 +332,7 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
       u."name" as "profileName",
       u."email" as "profileEmail",
       coalesce(u."avatarUrl", u."avatar", u."icon") as "profileImageUrl",
-      u.[account.created] as "profileCreatedAt",
+      u."createdAt" as "profileCreatedAt",
       u."lastLogin" as "profileUpdatedAt"
     from "Message" msg
     left join "Member" m on m."id" = msg."memberId"
@@ -454,7 +454,7 @@ const ChannelIdPage = async ({ params, searchParams }: ChannelIdPageProps) => {
       u."name" as "profileName",
       u."email" as "profileEmail",
       coalesce(u."avatarUrl", u."avatar", u."icon") as "profileImageUrl",
-      u.[account.created] as "profileCreatedAt",
+      u."createdAt" as "profileCreatedAt",
       u."lastLogin" as "profileUpdatedAt"
     from "Member" m
     left join "Users" u on u."userId" = m."profileId"

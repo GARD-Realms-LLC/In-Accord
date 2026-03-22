@@ -3,6 +3,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
+import { ensureSchemaInitialized } from "@/lib/schema-init-state";
 
 type CryptoModule = typeof import("crypto");
 
@@ -421,8 +422,6 @@ export type OtherBotConfig = {
   enabled: boolean;
   createdAt: string;
 };
-
-let userPreferencesSchemaReady = false;
 
 const normalizeStringArray = (values: unknown, max = 100): string[] => {
   if (!Array.isArray(values)) {
@@ -1634,11 +1633,8 @@ const normalizeOtherBots = (value: unknown): OtherBotConfig[] => {
 };
 
 export const ensureUserPreferencesSchema = async () => {
-  if (userPreferencesSchemaReady) {
-    return;
-  }
-
-  await db.execute(sql`
+  await ensureSchemaInitialized("user-preferences-schema", async () => {
+    await db.execute(sql`
     create table if not exists "UserPreference" (
       "userId" varchar(191) primary key,
       "mentionsEnabled" boolean not null default true,
@@ -1677,149 +1673,148 @@ export const ensureUserPreferencesSchema = async () => {
       "createdAt" timestamp not null,
       "updatedAt" timestamp not null
     )
-  `);
+    `);
 
-  await db.execute(sql`
+    await db.execute(sql`
     create index if not exists "UserPreference_updatedAt_idx"
     on "UserPreference" ("updatedAt")
-  `);
+    `);
 
-  await db.execute(sql`
+    await db.execute(sql`
     alter table "UserPreference"
     add column if not exists "notificationsJson" text not null default '{}'
-  `);
+    `);
 
-  await db.execute(sql`
+    await db.execute(sql`
     alter table "UserPreference"
     add column if not exists "textImagesJson" text not null default '{}'
-  `);
+    `);
 
-  await db.execute(sql`
+    await db.execute(sql`
     alter table "UserPreference"
     add column if not exists "accessibilityJson" text not null default '{}'
-  `);
+    `);
 
-  await db.execute(sql`
+    await db.execute(sql`
     alter table "UserPreference"
     add column if not exists "emojiJson" text not null default '{}'
-  `);
+    `);
 
-  await db.execute(sql`
+    await db.execute(sql`
     alter table "UserPreference"
     add column if not exists "stickersJson" text not null default '{}'
-  `);
+    `);
 
-  await db.execute(sql`
+    await db.execute(sql`
     alter table "UserPreference"
     add column if not exists "keybindsJson" text not null default '{}'
-  `);
+    `);
 
-  await db.execute(sql`
+    await db.execute(sql`
     alter table "UserPreference"
     add column if not exists "advancedJson" text not null default '{}'
-  `);
+    `);
 
-  await db.execute(sql`
+    await db.execute(sql`
     alter table "UserPreference"
     add column if not exists "streamerModeJson" text not null default '{}'
-  `);
+    `);
 
-  await db.execute(sql`
+    await db.execute(sql`
     alter table "UserPreference"
     add column if not exists "gameOverlayJson" text not null default '{}'
-  `);
+    `);
 
-  await db.execute(sql`
+    await db.execute(sql`
     alter table "UserPreference"
     add column if not exists "botGhostJson" text not null default '{}'
-  `);
+    `);
 
-  await db.execute(sql`
+    await db.execute(sql`
     alter table "UserPreference"
     add column if not exists "languagePreference" text not null default 'system'
-  `);
+    `);
 
-  await db.execute(sql`
+    await db.execute(sql`
     alter table "UserPreference"
     add column if not exists "connectedAccountsJson" text not null default '[]'
-  `);
+    `);
 
-  await db.execute(sql`
+    await db.execute(sql`
     alter table "UserPreference"
     add column if not exists "contentSocialJson" text not null default '{}'
-  `);
+    `);
 
-  await db.execute(sql`
+    await db.execute(sql`
     alter table "UserPreference"
     add column if not exists "dataPrivacyJson" text not null default '{}'
-  `);
+    `);
 
-  await db.execute(sql`
+    await db.execute(sql`
     alter table "UserPreference"
     add column if not exists "activityPrivacyJson" text not null default '{}'
-  `);
+    `);
 
-  await db.execute(sql`
+    await db.execute(sql`
     alter table "UserPreference"
     add column if not exists "registeredGamesJson" text not null default '{}'
-  `);
+    `);
 
-  await db.execute(sql`
+    await db.execute(sql`
     alter table "UserPreference"
     add column if not exists "familyCenterJson" text not null default '{}'
-  `);
+    `);
 
-  await db.execute(sql`
+    await db.execute(sql`
     alter table "UserPreference"
     add column if not exists "businessCenterJson" text not null default '{}'
-  `);
+    `);
 
-  await db.execute(sql`
+    await db.execute(sql`
     alter table "UserPreference"
     add column if not exists "schoolCenterJson" text not null default '{}'
-  `);
+    `);
 
-  await db.execute(sql`
+    await db.execute(sql`
     alter table "UserPreference"
     add column if not exists "serverTagsJson" text not null default '[]'
-  `);
+    `);
 
-  await db.execute(sql`
+    await db.execute(sql`
     alter table "UserPreference"
     add column if not exists "selectedServerTagServerId" text
-  `);
+    `);
 
-  await db.execute(sql`
+    await db.execute(sql`
     alter table "UserPreference"
     add column if not exists "bannerUploadsJson" text not null default '[]'
-  `);
+    `);
 
-  await db.execute(sql`
+    await db.execute(sql`
     alter table "UserPreference"
     add column if not exists "avatarUploadsJson" text not null default '[]'
-  `);
+    `);
 
-  await db.execute(sql`
+    await db.execute(sql`
     alter table "UserPreference"
     add column if not exists "OtherAppsJson" text not null default '[]'
-  `);
+    `);
 
-  await db.execute(sql`
+    await db.execute(sql`
     alter table "UserPreference"
     add column if not exists "OtherBotsJson" text not null default '[]'
-  `);
+    `);
 
-  await db.execute(sql`
+    await db.execute(sql`
     alter table "UserPreference"
     add column if not exists "OtherBotTokenSecretsJson" text not null default '{}'
-  `);
+    `);
 
-  await db.execute(sql`
+    await db.execute(sql`
     alter table "UserPreference"
     add column if not exists "OtherBotAutoImportOnSave" boolean not null default true
-  `);
-
-  userPreferencesSchemaReady = true;
+    `);
+  });
 };
 
 const ensureUserPreferenceRow = async (userId: string) => {

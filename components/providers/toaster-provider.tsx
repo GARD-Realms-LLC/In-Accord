@@ -8,6 +8,7 @@ import {
   beginTrackedLoading,
   endTrackedLoading,
   resetTrackedLoading,
+  shouldTrackLoadingRequest,
 } from "@/lib/loading-toast-manager";
 
 type AxiosConfigWithLoadingId = {
@@ -18,7 +19,11 @@ export const ToasterProvider = () => {
   useEffect(() => {
     const requestInterceptor = axios.interceptors.request.use((config) => {
       const trackedConfig = config as typeof config & AxiosConfigWithLoadingId;
-      trackedConfig.__loadingToastRequestId = beginTrackedLoading();
+      const headers = new Headers(config.headers as HeadersInit | undefined);
+      trackedConfig.__loadingToastRequestId =
+        headers.get("X-InAccord-Background-Refresh") === "1" || headers.get("X-InAccord-Silent-Loading") === "1"
+          ? undefined
+          : beginTrackedLoading();
       return trackedConfig;
     });
 
@@ -38,7 +43,7 @@ export const ToasterProvider = () => {
     const originalFetch = window.fetch.bind(window);
 
     window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const requestId = beginTrackedLoading();
+      const requestId = shouldTrackLoadingRequest(input, init) ? beginTrackedLoading() : undefined;
 
       try {
         return await originalFetch(input, init);

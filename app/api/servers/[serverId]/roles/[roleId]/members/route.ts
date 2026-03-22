@@ -92,7 +92,7 @@ export async function GET(_req: Request, { params }: Params) {
         u."email" as "email",
         coalesce(u."avatarUrl", u."avatar", u."icon") as "imageUrl",
         m."createdAt" as "memberSince",
-        u.[account.created] as "joinedInAccord",
+        u."createdAt" as "joinedInAccord",
         case
           when m."profileId" = s."profileId" then 'Owner Created Server'
           else 'Invite'

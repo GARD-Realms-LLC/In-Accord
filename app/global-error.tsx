@@ -21,8 +21,6 @@ export default function GlobalError({
     if (!isStaleBuildError) {
       return;
     }
-
-    hardReloadForStaleBuild();
   }, [isStaleBuildError]);
 
   const onCopyCrashReport = async () => {

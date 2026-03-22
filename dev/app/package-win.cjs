@@ -1,5 +1,6 @@
 const fs = require("fs/promises");
 const path = require("path");
+const crypto = require("crypto");
 
 const electronPackager = require("@electron/packager");
 
@@ -47,6 +48,14 @@ const UPDATE_CHECK_DELAY_MS = 5_000;
 const UPDATE_FIRST_RUN_DELAY_MS = 15_000;
 const UPDATE_INTERVAL_MS = 5 * 60 * 1_000;
 const BUILD_METADATA_FILENAME = "build-metadata.json";
+const ENCRYPTED_SDK_FILENAME = "In-Accord.sdk.enc";
+const FORBIDDEN_PACKAGED_FILENAMES = new Set(["in-accord.js", "1.txt"]);
+const SDK_KEY_MATERIAL = [
+  73, 110, 65, 99, 99, 111, 114, 100, 68, 101, 115, 107, 116, 111, 112, 83, 100,
+  107, 69, 110, 99, 114, 121, 112, 116, 105, 111, 110, 86, 49,
+]
+  .map((value) => String.fromCharCode(value))
+  .join("");
 
 const buildDesktopEnv = {
   ...process.env,
@@ -399,6 +408,52 @@ const copyIfPresent = async (sourcePath, targetPath) => {
   await fs.copyFile(sourcePath, targetPath);
 };
 
+const deriveDesktopSdkKey = () =>
+  crypto.createHash("sha256").update(SDK_KEY_MATERIAL).digest();
+
+const writeEncryptedDesktopSdk = async (targetDirectory) => {
+  const sdkSourcePath = path.join(ROOT_DIR, "In-Accord.js");
+  const sdkSource = await fs.readFile(sdkSourcePath, "utf8");
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", deriveDesktopSdkKey(), iv);
+  const encrypted = Buffer.concat([
+    cipher.update(Buffer.from(sdkSource, "utf8")),
+    cipher.final(),
+  ]);
+  const payload = {
+    iv: iv.toString("base64"),
+    tag: cipher.getAuthTag().toString("base64"),
+    data: encrypted.toString("base64"),
+  };
+
+  await fs.writeFile(
+    path.join(targetDirectory, ENCRYPTED_SDK_FILENAME),
+    `${JSON.stringify(payload)}\n`,
+    "utf8",
+  );
+};
+
+const verifyNoForbiddenLooseArtifacts = async (rootDirectory) => {
+  const queue = [rootDirectory];
+
+  while (queue.length > 0) {
+    const currentDirectory = queue.shift();
+    const entries = await fs.readdir(currentDirectory, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const entryPath = path.join(currentDirectory, entry.name);
+      if (entry.isDirectory()) {
+        queue.push(entryPath);
+        continue;
+      }
+
+      if (FORBIDDEN_PACKAGED_FILENAMES.has(entry.name.trim().toLowerCase())) {
+        throw new Error(`Forbidden readable packaged artifact detected: ${entryPath}`);
+      }
+    }
+  }
+};
+
 const stageDesktopAppSource = async (updateFeed, appOrigin) => {
   const stagedDesktopDir = path.join(APP_SOURCE_DIR, "dev", "app");
   const stagedStandaloneDir = path.join(
@@ -445,10 +500,7 @@ const stageDesktopAppSource = async (updateFeed, appOrigin) => {
     path.join(NEXT_STANDALONE_DIR, ".env"),
     path.join(stagedStandaloneDir, ".env"),
   );
-  await copyIfPresent(
-    path.join(NEXT_STANDALONE_DIR, "In-Accord.js"),
-    path.join(stagedStandaloneDir, "In-Accord.js"),
-  );
+  await writeEncryptedDesktopSdk(stagedStandaloneDir);
   await copyIfPresent(
     path.join(ROOT_DIR, BUILD_METADATA_FILENAME),
     path.join(stagedStandaloneDir, BUILD_METADATA_FILENAME),
@@ -498,7 +550,9 @@ const packageDesktopApp = async () => {
     out: PACKAGED_APP_DIR,
     overwrite: true,
     prune: false,
-    asar: false,
+    asar: {
+      unpack: "**/*.{node,dll,exe,so,dylib}",
+    },
     electronVersion,
     icon: path.join(ROOT_DIR, "fav.ico"),
     appVersion: packageJson.version,
@@ -532,6 +586,8 @@ const persistDesktopArtifacts = async (appDirectory) => {
 
   await copyDirectory(appDirectory, finalPackagedAppDirectory);
   await copyDirectory(INSTALLER_DIR, FINAL_INSTALLER_DIR);
+  await verifyNoForbiddenLooseArtifacts(finalPackagedAppDirectory);
+  await verifyNoForbiddenLooseArtifacts(FINAL_INSTALLER_DIR);
 
   return {
     packagedAppDirectory: finalPackagedAppDirectory,

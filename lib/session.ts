@@ -3,6 +3,7 @@ import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
+import { ensureSchemaInitialized } from "@/lib/schema-init-state";
 
 export const SESSION_COOKIE_NAME = "inaccord_session_user_id";
 const PERSISTENT_SESSION_TTL_SECONDS = 60 * 60 * 24 * 5;
@@ -43,8 +44,6 @@ export type UserSessionEntry = {
   lastSeenAt: string;
   expiresAt: string;
 };
-
-let sessionSchemaReady = false;
 
 const resolveSessionCookieSecure = async (request?: Request) => {
   const requestUrl = String(request?.url || "").trim();
@@ -111,34 +110,30 @@ const signPayload = (payload: string) => {
 };
 
 const ensureSessionSchema = async () => {
-  if (sessionSchemaReady) {
-    return;
-  }
+  await ensureSchemaInitialized("session-schema", async () => {
+    await db.execute(sql`
+      create table if not exists "InAccordSession" (
+        "sessionId" varchar(128) primary key,
+        "userId" varchar(191) not null,
+        "userAgent" text,
+        "ipAddress" varchar(191),
+        "createdAt" timestamp(3) not null default now(),
+        "lastSeenAt" timestamp(3) not null default now(),
+        "expiresAt" timestamp(3) not null,
+        "revokedAt" timestamp(3)
+      )
+    `);
 
-  await db.execute(sql`
-    create table if not exists "InAccordSession" (
-      "sessionId" varchar(128) primary key,
-      "userId" varchar(191) not null,
-      "userAgent" text,
-      "ipAddress" varchar(191),
-      "createdAt" timestamp(3) not null default now(),
-      "lastSeenAt" timestamp(3) not null default now(),
-      "expiresAt" timestamp(3) not null,
-      "revokedAt" timestamp(3)
-    )
-  `);
+    await db.execute(sql`
+      create index if not exists "InAccordSession_userId_idx"
+      on "InAccordSession" ("userId")
+    `);
 
-  await db.execute(sql`
-    create index if not exists "InAccordSession_userId_idx"
-    on "InAccordSession" ("userId")
-  `);
-
-  await db.execute(sql`
-    create index if not exists "InAccordSession_expiresAt_idx"
-    on "InAccordSession" ("expiresAt")
-  `);
-
-  sessionSchemaReady = true;
+    await db.execute(sql`
+      create index if not exists "InAccordSession_expiresAt_idx"
+      on "InAccordSession" ("expiresAt")
+    `);
+  });
 };
 
 const createSessionToken = (userId: string, sessionId: string, issuedAt = Math.floor(Date.now() / 1000)) => {

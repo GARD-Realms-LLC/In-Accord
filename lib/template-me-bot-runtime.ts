@@ -1,7 +1,28 @@
-type TemplateMeRuntimeStatus = "stopped" | "starting" | "running" | "stopping" | "error";
+import { loadInAccordSdkModule } from "@/lib/inaccord-sdk-runtime";
 
-type HttpModule = typeof import("http");
-type HttpServer = import("http").Server;
+const TEMPLATE_ME_CONTROL_HOST = "127.0.0.1";
+const TEMPLATE_ME_CONTROL_PORT = 3030;
+const TEMPLATE_ME_CONTROL_URL = `http://${TEMPLATE_ME_CONTROL_HOST}:${TEMPLATE_ME_CONTROL_PORT}/health`;
+
+type ControlServerLike = {
+  close: (callback: () => void) => void;
+  once: (event: string, listener: (...args: unknown[]) => void) => void;
+  removeListener: (event: string, listener: (...args: unknown[]) => void) => void;
+  listen: (port: number, host: string, callback: () => void) => void;
+};
+
+type HttpModuleLike = {
+  createServer: (
+    listener: (
+      req: { url?: string | null },
+      res: { writeHead: (statusCode: number, headers: Record<string, string>) => void; end: (body: string) => void }
+    ) => void
+  ) => ControlServerLike;
+};
+
+let cachedHttpModule: HttpModuleLike | null = null;
+
+type TemplateMeRuntimeStatus = "stopped" | "starting" | "running" | "stopping" | "error";
 
 export type TemplateMeRuntimeState = {
   status: TemplateMeRuntimeStatus;
@@ -57,24 +78,8 @@ const toTemplateMeRuntimeErrorMessage = (error: unknown, fallback: string) => {
 
 class TemplateMeBotRuntimeManager {
   private client: ExternalBotClientLike | null = null;
-  private controlServer: HttpServer | null = null;
-  private readonly controlHost = "127.0.0.1";
-  private readonly fixedControlPort = 3030;
 
-  private getHttpModule(): HttpModule {
-    const builtinLoader = (process as typeof process & {
-      getBuiltinModule?: (moduleName: string) => HttpModule | undefined;
-    }).getBuiltinModule;
-
-    if (typeof builtinLoader === "function") {
-      const loaded = builtinLoader("http");
-      if (loaded) {
-        return loaded;
-      }
-    }
-
-    throw new Error("Builtin module 'http' is unavailable in this runtime.");
-  }
+  private controlServer: ControlServerLike | null = null;
 
   private state: TemplateMeRuntimeState = {
     status: "stopped",
@@ -105,6 +110,28 @@ class TemplateMeBotRuntimeManager {
     };
   }
 
+  private getHttpModule(): HttpModuleLike {
+    if (cachedHttpModule) {
+      return cachedHttpModule;
+    }
+
+    const builtinLoader = (process as typeof process & {
+      getBuiltinModule?: (moduleName: string) => HttpModuleLike | undefined;
+    }).getBuiltinModule;
+
+    if (typeof builtinLoader !== "function") {
+      throw new Error("Builtin module 'http' is unavailable in this runtime.");
+    }
+
+    const loaded = builtinLoader("http");
+    if (!loaded) {
+      throw new Error("Builtin module 'http' is unavailable in this runtime.");
+    }
+
+    cachedHttpModule = loaded;
+    return cachedHttpModule;
+  }
+
   private bindClient(client: ExternalBotClientLike) {
     client.once("ready", () => {
       const guildCount = Number(client.guilds?.cache?.size ?? 0);
@@ -118,8 +145,8 @@ class TemplateMeBotRuntimeManager {
         guildCount,
         botUserId,
         botTag,
-        controlPort: this.fixedControlPort,
-        controlUrl: `http://${this.controlHost}:${this.fixedControlPort}/health`,
+        controlPort: TEMPLATE_ME_CONTROL_PORT,
+        controlUrl: TEMPLATE_ME_CONTROL_URL,
         lastError: null,
       });
     });
@@ -141,73 +168,87 @@ class TemplateMeBotRuntimeManager {
       }
 
       this.client = null;
-      this.setState({
-        status: "stopped",
-        stoppedAt: new Date().toISOString(),
-        guildCount: 0,
-        controlPort: null,
-        controlUrl: null,
+      void this.closeControlServer().finally(() => {
+        this.setState({
+          status: "stopped",
+          stoppedAt: new Date().toISOString(),
+          guildCount: 0,
+          controlPort: null,
+          controlUrl: null,
+        });
       });
     });
   }
 
   private async ensureControlServer() {
     if (this.controlServer) {
+      this.setState({
+        controlPort: TEMPLATE_ME_CONTROL_PORT,
+        controlUrl: TEMPLATE_ME_CONTROL_URL,
+      });
       return;
     }
 
     const { createServer } = this.getHttpModule();
     const server = createServer((req, res) => {
-      const requestUrl = String(req.url ?? "").trim().toLowerCase();
-
-      if (requestUrl === "/health") {
-        const payload = {
-          status: this.state.status,
-          botId: this.state.botId,
-          botName: this.state.botName,
-          guildCount: this.state.guildCount,
-          updatedAt: this.state.updatedAt,
-        };
-
-        res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify(payload));
+      if (String(req.url ?? "").toLowerCase() !== "/health") {
+        res.writeHead(404, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "Not found" }));
         return;
       }
 
-      res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
-      res.end(JSON.stringify({ error: "Not found" }));
+      const state = this.getState();
+      const ok = state.status === "running";
+
+      res.writeHead(ok ? 200 : 503, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          status: state.status,
+          botId: state.botId,
+          botName: state.botName,
+          botTag: state.botTag,
+          guildCount: state.guildCount,
+          applicationId: state.applicationId,
+          updatedAt: state.updatedAt,
+          lastError: state.lastError,
+        })
+      );
     });
 
     await new Promise<void>((resolve, reject) => {
-      server.once("error", (error) => {
-        reject(error);
-      });
-
-      server.listen(this.fixedControlPort, this.controlHost, () => {
-        server.removeAllListeners("error");
+      server.once("error", reject);
+      server.listen(TEMPLATE_ME_CONTROL_PORT, TEMPLATE_ME_CONTROL_HOST, () => {
+        server.removeListener("error", reject);
         resolve();
       });
-    }).catch((error) => {
-      const message =
-        error instanceof Error
-          ? error.message
-          : `Unable to bind Template Me control endpoint to ${this.controlHost}:${this.fixedControlPort}.`;
-      throw new Error(`Template Me control port 3030 failed: ${message}`);
     });
 
     this.controlServer = server;
+    this.setState({
+      controlPort: TEMPLATE_ME_CONTROL_PORT,
+      controlUrl: TEMPLATE_ME_CONTROL_URL,
+    });
   }
 
-  private async stopControlServer() {
-    if (!this.controlServer) {
+  private async closeControlServer() {
+    const currentServer = this.controlServer;
+    if (!currentServer) {
+      this.setState({
+        controlPort: null,
+        controlUrl: null,
+      });
       return;
     }
 
-    const server = this.controlServer;
     this.controlServer = null;
 
     await new Promise<void>((resolve) => {
-      server.close(() => resolve());
+      currentServer.close(() => resolve());
+    });
+
+    this.setState({
+      controlPort: null,
+      controlUrl: null,
     });
   }
 
@@ -238,7 +279,11 @@ class TemplateMeBotRuntimeManager {
     });
 
     try {
-      const upstreamSdkModule = await import("@/In-Accord.js");
+      const upstreamSdkModule = await loadInAccordSdkModule<{
+        Client?: ExternalBotSdkLike["Client"];
+        GatewayIntentBits?: ExternalBotSdkLike["GatewayIntentBits"];
+        default?: unknown;
+      }>();
       const upstreamSdk = ((
         typeof upstreamSdkModule.Client === "function"
           ? upstreamSdkModule
@@ -255,9 +300,9 @@ class TemplateMeBotRuntimeManager {
       });
 
       this.bindClient(client);
+      await this.ensureControlServer();
       this.client = client;
       await client.login(token);
-      await this.ensureControlServer();
 
       if (this.state.status === "starting") {
         this.setState({
@@ -267,18 +312,17 @@ class TemplateMeBotRuntimeManager {
           guildCount: Number(client.guilds?.cache?.size ?? 0),
           botUserId: String(client.user?.id ?? "").trim() || null,
           botTag: String(client.user?.tag ?? client.user?.username ?? "").trim() || null,
-          controlPort: this.fixedControlPort,
-          controlUrl: `http://${this.controlHost}:${this.fixedControlPort}/health`,
+          controlPort: TEMPLATE_ME_CONTROL_PORT,
+          controlUrl: TEMPLATE_ME_CONTROL_URL,
         });
       }
     } catch (error) {
       this.client = null;
-      await this.stopControlServer();
       this.setState({
         status: "error",
         stoppedAt: new Date().toISOString(),
-        controlPort: null,
-        controlUrl: null,
+        controlPort: this.controlServer ? TEMPLATE_ME_CONTROL_PORT : null,
+        controlUrl: this.controlServer ? TEMPLATE_ME_CONTROL_URL : null,
         lastError: toTemplateMeRuntimeErrorMessage(error, "Failed to start Template Me bot runtime."),
       });
       throw error;
@@ -302,7 +346,7 @@ class TemplateMeBotRuntimeManager {
     }
 
     this.client = null;
-    await this.stopControlServer();
+    await this.closeControlServer();
     this.setState({
       status: "stopped",
       stoppedAt: new Date().toISOString(),

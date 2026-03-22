@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -11,6 +11,30 @@ import { INACCORD_BUILD_NUMBER, INACCORD_VERSION_LABEL } from "@/lib/build-versi
 
 type AccountType = "NORMAL" | "BUSINESS" | "SCHOOL" | "FAMILY";
 
+const getPasswordStrength = (value: string) => {
+  let score = 0;
+
+  if (value.length >= 8) score += 1;
+  if (/[a-z]/.test(value) && /[A-Z]/.test(value)) score += 1;
+  if (/\d/.test(value)) score += 1;
+  if (/[^A-Za-z0-9]/.test(value)) score += 1;
+  if (value.length >= 12) score += 1;
+
+  if (score <= 1) {
+    return { score, label: "Weak", accent: "bg-rose-500", text: "text-rose-300" };
+  }
+
+  if (score === 2) {
+    return { score, label: "Fair", accent: "bg-amber-500", text: "text-amber-300" };
+  }
+
+  if (score === 3) {
+    return { score, label: "Good", accent: "bg-cyan-500", text: "text-cyan-300" };
+  }
+
+  return { score, label: "Strong", accent: "bg-emerald-500", text: "text-emerald-300" };
+};
+
 export default function Page() {
   const router = useRouter();
   const [name, setName] = useState("");
@@ -18,11 +42,15 @@ export default function Page() {
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [accountType, setAccountType] = useState<AccountType>("NORMAL");
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isAgeModalOpen, setIsAgeModalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const passwordStrength = useMemo(() => getPasswordStrength(password), [password]);
+  const passwordsMatch = confirmPassword.length === 0 || password === confirmPassword;
 
   const getAgeFromDate = (value: string) => {
     if (!value) {
@@ -74,13 +102,18 @@ export default function Page() {
       return;
     }
 
+    if (password !== confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+
     setLoading(true);
 
     try {
       const response = await fetch("/api/auth/sign-up", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phoneNumber, dateOfBirth, email, password, accountType }),
+        body: JSON.stringify({ name, phoneNumber, dateOfBirth, email, password, confirmPassword, accountType }),
       });
 
       if (!response.ok) {
@@ -215,6 +248,46 @@ export default function Page() {
               {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
+          <div className="space-y-2 rounded-2xl border border-white/10 bg-white/4 px-4 py-3 shadow-[0_16px_34px_rgba(0,0,0,0.22)]">
+            <div className="flex items-center justify-between gap-3 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-300">
+              <span>Password strength</span>
+              <span className={passwordStrength.text}>{password.length > 0 ? passwordStrength.label : "Not set"}</span>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {[0, 1, 2, 3].map((segment) => (
+                <div
+                  key={`password-strength-${segment}`}
+                  className={`h-2 rounded-full ${segment < Math.min(4, passwordStrength.score) ? passwordStrength.accent : "bg-white/10"}`}
+                />
+              ))}
+            </div>
+            <p className="text-xs text-zinc-400">
+              Use at least 8 characters with a mix of upper/lowercase letters, numbers, and symbols.
+            </p>
+          </div>
+          <div className="relative rounded-[1.4rem] border border-white/10 bg-[#14161c] p-1 shadow-[0_24px_48px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.04)]">
+            <input
+              className="w-full rounded-[1.1rem] border border-white/8 bg-[linear-gradient(180deg,#1b1e26,#12141a)] px-4 py-3.5 pr-12 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06),inset_0_-1px_0_rgba(0,0,0,0.25)] outline-none placeholder:text-zinc-500"
+              placeholder="Confirm Password"
+              type={showConfirmPassword ? "text" : "password"}
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setShowConfirmPassword((current) => !current)}
+              className="absolute inset-y-0 right-2 inline-flex w-10 items-center justify-center rounded-xl text-zinc-300 transition hover:bg-white/5 hover:text-white"
+              aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+              title={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+            >
+              {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+          {!passwordsMatch && confirmPassword.length > 0 ? (
+            <p className="text-sm text-rose-400">Passwords do not match.</p>
+          ) : null}
           {error ? <p className="text-sm text-rose-400">{error}</p> : null}
           <button disabled={loading} className="w-full rounded-[1.35rem] border border-indigo-300/30 bg-[linear-gradient(180deg,#818cf8,#4f46e5)] px-4 py-3.5 font-semibold text-white shadow-[0_24px_44px_rgba(79,70,229,0.35),inset_0_1px_0_rgba(255,255,255,0.25),inset_0_-2px_0_rgba(0,0,0,0.18)] transition hover:-translate-y-0.5 hover:brightness-110 disabled:opacity-60">
             {loading ? "Creating..." : "Sign up"}

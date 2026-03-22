@@ -3,6 +3,7 @@ import { Crown, Wrench } from "lucide-react";
 
 import { ModeratorLineIcon } from "@/components/moderator-line-icon";
 import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
+import { SettingsNotificationsPanel } from "@/components/settings/settings-notifications-panel";
 import { currentProfile } from "@/lib/current-profile";
 import { isInAccordAdministrator, isInAccordDeveloper, isInAccordModerator } from "@/lib/in-accord-admin";
 
@@ -61,6 +62,8 @@ const SettingsPage = async () => {
             </p>
           </div>
         </div>
+
+        <SettingsNotificationsPanel recipientEmail={profile.email ?? ""} />
       </div>
     </div>
   );

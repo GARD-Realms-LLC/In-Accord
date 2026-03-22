@@ -4,7 +4,7 @@ const { spawn } = require("child_process");
 const { app, BrowserWindow, ipcMain, shell } = require("electron");
 
 const {
-  DEFAULT_DEV_URL,
+  resolveConfiguredDesktopStartUrl,
   waitForUrl,
   normalizeInAppPath,
 } = require("./shared.cjs");
@@ -100,11 +100,7 @@ app.setAppUserModelId("com.inaccord.desktop");
 
 const isDevDesktop =
   !app.isPackaged || process.env.INACCORD_DESKTOP_DEV === "1";
-const devServerOrigin = String(
-  process.env.INACCORD_DESKTOP_START_URL || DEFAULT_DEV_URL,
-)
-  .trim()
-  .replace(/\/$/, "");
+const devServerOrigin = isDevDesktop ? resolveConfiguredDesktopStartUrl(process.env) : null;
 
 const normalizeHttpOrigin = (value) => {
   const rawValue = String(value || "").trim().replace(/\/$/, "");
@@ -200,6 +196,8 @@ let nextUpdateVersion = null;
 let lastUpdateCheckedAt = null;
 let updaterErrorMessage = null;
 const windowTargetPaths = new Map();
+let desktopUpdateInitialTimeout = null;
+let desktopUpdateIntervalHandle = null;
 
 const readJsonFileSafe = (targetPath) => {
   try {
@@ -380,6 +378,44 @@ const updateDesktopUpdaterState = (nextState) => {
 
   broadcastDesktopUpdaterState();
   return getDesktopUpdaterState();
+};
+
+const clearDesktopUpdaterSchedule = () => {
+  if (desktopUpdateInitialTimeout) {
+    clearTimeout(desktopUpdateInitialTimeout);
+    desktopUpdateInitialTimeout = null;
+  }
+
+  if (desktopUpdateIntervalHandle) {
+    clearInterval(desktopUpdateIntervalHandle);
+    desktopUpdateIntervalHandle = null;
+  }
+};
+
+const scheduleDesktopUpdaterChecks = () => {
+  if (!packagedUpdateConfig || desktopUpdateInitialTimeout || desktopUpdateIntervalHandle) {
+    return;
+  }
+
+  const initialDelayMs = isSquirrelFirstRun
+    ? packagedUpdateConfig.firstRunDelayMs
+    : packagedUpdateConfig.initialDelayMs;
+
+  const runScheduledCheck = () => {
+    void runSquirrelUpdateCycle();
+  };
+
+  desktopUpdateInitialTimeout = setTimeout(() => {
+    desktopUpdateInitialTimeout = null;
+    runScheduledCheck();
+
+    if (!desktopUpdateIntervalHandle) {
+      desktopUpdateIntervalHandle = setInterval(
+        runScheduledCheck,
+        packagedUpdateConfig.intervalMs,
+      );
+    }
+  }, initialDelayMs);
 };
 
 const spawnSquirrelUpdateCommand = async (args) => {
@@ -1097,6 +1133,7 @@ app.on("before-quit", () => {
       getExecutableName(),
     ]);
   }
+  clearDesktopUpdaterSchedule();
   clearWindowConnectRetry(mainWindow);
   for (const targetWindow of meetingWindows) {
     clearWindowConnectRetry(targetWindow);
@@ -1115,6 +1152,7 @@ if (!isHandlingSquirrelEvent) {
     .then(async () => {
       purgeTransientDesktopCachesForVersionChange();
       await createMainWindow();
+      scheduleDesktopUpdaterChecks();
     })
     .catch((error) => {
       console.error("[INACCORD_DESKTOP_BOOT]", error);

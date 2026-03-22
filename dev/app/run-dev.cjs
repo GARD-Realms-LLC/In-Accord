@@ -5,8 +5,8 @@ const electronBinary = require("electron");
 
 const {
   ROOT_DIR,
-  DEFAULT_DEV_URL,
   getNpmCommand,
+  resolveConfiguredDesktopStartUrl,
   waitForUrl,
 } = require("./shared.cjs");
 
@@ -20,6 +20,7 @@ const sharedEnv = {
 let shuttingDown = false;
 let webServerProcess = null;
 let electronProcess = null;
+const desktopStartUrl = resolveConfiguredDesktopStartUrl(sharedEnv);
 
 const terminateChild = (child) => {
   if (!child || child.killed) {
@@ -75,14 +76,14 @@ const startWebServer = () => {
 };
 
 const startElectron = async () => {
-  await waitForUrl(`${DEFAULT_DEV_URL}/api/auth/session?diagnostics=1`);
+  await waitForUrl(`${desktopStartUrl}/api/auth/session?diagnostics=1`);
 
   electronProcess = spawn(electronBinary, [path.join(ROOT_DIR, "dev", "app", "main.cjs")], {
     cwd: ROOT_DIR,
     env: {
       ...sharedEnv,
       INACCORD_DESKTOP_DEV: "1",
-      INACCORD_DESKTOP_START_URL: DEFAULT_DEV_URL,
+      INACCORD_DESKTOP_START_URL: desktopStartUrl,
     },
     stdio: "inherit",
     shell: false,
@@ -101,7 +102,7 @@ const startElectron = async () => {
 
 const canReuseRunningServer = async () => {
   try {
-    await waitForUrl(`${DEFAULT_DEV_URL}/api/auth/session?diagnostics=1`, {
+    await waitForUrl(`${desktopStartUrl}/api/auth/session?diagnostics=1`, {
       timeoutMs: 2_500,
       intervalMs: 250,
     });

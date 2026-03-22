@@ -149,6 +149,11 @@ const normalizeCurrentProfile = (profile: SerializedCurrentProfile): ChatRendera
   updatedAt: normalizeDate(profile.updatedAt),
 });
 
+const BACKGROUND_REFRESH_HEADERS = {
+  "X-InAccord-Background-Refresh": "1",
+  "X-InAccord-Silent-Loading": "1",
+};
+
 const mergeFetchedWithOptimistic = (
   currentMessages: LiveChannelMessage[],
   fetchedMessages: SerializedChannelMessage[]
@@ -320,6 +325,7 @@ export const LiveChannelMessagesPane = ({
       method: "GET",
       cache: "no-store",
       credentials: "include",
+      headers: BACKGROUND_REFRESH_HEADERS,
     })
       .then(async (response) => {
         if (!response.ok) {
@@ -357,7 +363,7 @@ export const LiveChannelMessagesPane = ({
 
     refreshIfVisible();
 
-    const intervalId = window.setInterval(refreshIfVisible, 2000);
+    const intervalId = window.setInterval(refreshIfVisible, 15000);
     window.addEventListener("focus", refreshIfVisible);
     document.addEventListener("visibilitychange", refreshIfVisible);
 

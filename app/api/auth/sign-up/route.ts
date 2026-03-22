@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { ensureLocalAuthSchema } from "@/lib/local-auth";
 import { hashPassword } from "@/lib/password";
 import { setSessionUserId } from "@/lib/session";
+import { ensureUserAccountCoreSchema } from "@/lib/user-account-core-schema";
 import { getNextIncrementalUserId } from "@/lib/user-id";
 import { ensureUserProfileSchema } from "@/lib/user-profile";
 
@@ -16,6 +17,7 @@ export async function POST(request: Request) {
     const dateOfBirthInput = String(body?.dateOfBirth || "").trim();
     const email = String(body?.email || "").trim().toLowerCase();
     const password = String(body?.password || "");
+    const confirmPassword = String(body?.confirmPassword || "");
 
     if (!name || !email || !password) {
       return new NextResponse("Name, email and password are required", { status: 400 });
@@ -23,6 +25,10 @@ export async function POST(request: Request) {
 
     if (password.length < 8) {
       return new NextResponse("Password must be at least 8 characters", { status: 400 });
+    }
+
+    if (confirmPassword && confirmPassword !== password) {
+      return new NextResponse("Passwords do not match", { status: 400 });
     }
 
     if (phoneNumberInput.length > 32) {
@@ -55,6 +61,7 @@ export async function POST(request: Request) {
 
     const normalizedPhoneNumber = phoneNumberInput.length > 0 ? phoneNumberInput : null;
 
+    await ensureUserAccountCoreSchema();
     await ensureLocalAuthSchema();
 
     const existingResult = await db.execute(sql`
@@ -74,16 +81,6 @@ export async function POST(request: Request) {
     const now = new Date();
 
     await db.execute(sql`
-      alter table "Users"
-      add column if not exists "phone" varchar(32)
-    `);
-
-    await db.execute(sql`
-      alter table "Users"
-      add column if not exists "dob" date
-    `);
-
-    await db.execute(sql`
       insert into "Users" (
         "userId",
         "name",
@@ -97,7 +94,7 @@ export async function POST(request: Request) {
       )
       values (
         ${userId},
-        ${null},
+        ${name},
         ${email},
         ${normalizedPhoneNumber},
         ${normalizedDateOfBirth},
