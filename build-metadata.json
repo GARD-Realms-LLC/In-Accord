@@ -1,8 +1,15 @@
 {
-  "buildTimestamp": "2026-03-22T00:33:14.081Z",
+  "buildTimestamp": "2026-03-22T00:40:00.006Z",
   "branch": "main",
-  "commitSha": "b3667c6db9fe2999e163c594d1f667435dd4e711",
+  "commitSha": "1061d7efdb53f8dd3d0de0b7ece440557380f596",
   "commits": [
+    {
+      "sha": "1061d7efdb53f8dd3d0de0b7ece440557380f596",
+      "shortSha": "1061d7ef",
+      "message": "fix: enforce strict admin runtime modes",
+      "author": "Doc Cowles",
+      "committedAt": "2026-03-21T18:36:04-06:00"
+    },
     {
       "sha": "b3667c6db9fe2999e163c594d1f667435dd4e711",
       "shortSha": "b3667c6d",
@@ -79,13 +86,6 @@
       "message": "Merge pull request #4 from GARD-Realms-LLC/update_worker_name_to_inaccord",
       "author": "Doc Cowles",
       "committedAt": "2026-03-19T17:59:22-06:00"
-    },
-    {
-      "sha": "a18540110c93789c69a2a76ca1dc99b4721af6b9",
-      "shortSha": "a1854011",
-      "message": "Update wrangler config name to inaccord",
-      "author": "cloudflare-workers-and-pages[bot]",
-      "committedAt": "2026-03-19T23:51:49Z"
     }
   ]
 }

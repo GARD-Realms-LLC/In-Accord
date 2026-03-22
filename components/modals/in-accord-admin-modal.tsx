@@ -622,6 +622,9 @@ type AdminMetaInfo = {
   };
   localGitWorkspaceAvailable?: boolean;
   localDesktopBuildAvailable?: boolean;
+  remoteDesktopBuildAvailable?: boolean;
+  remoteGitHubRepositoryConfigured?: boolean;
+  remoteGitHubTokenConfigured?: boolean;
   commits: Array<{
     sha: string;
     shortSha: string;
@@ -781,6 +784,30 @@ const readAdminJsonOrText = async <TPayload extends Record<string, unknown>>(
 
   const message = String(await response.text().catch(() => "")).trim();
   return { message } as TPayload & { message?: string };
+};
+
+const getDesktopBuildUnavailableReason = (metaInfo: AdminMetaInfo | null) => {
+  if (!metaInfo) {
+    return "Build availability is still loading.";
+  }
+
+  if (metaInfo.localDesktopBuildAvailable) {
+    return null;
+  }
+
+  if (metaInfo.localGitWorkspaceAvailable) {
+    return "Desktop updater build is unavailable even though a local Git workspace was detected.";
+  }
+
+  if (!metaInfo.remoteGitHubRepositoryConfigured) {
+    return "Desktop updater publishing requires INACCORD_GITHUB_REPO_URL in deployed runtime.";
+  }
+
+  if (!metaInfo.remoteGitHubTokenConfigured) {
+    return "Desktop updater publishing requires INACCORD_GITHUB_TOKEN (or GITHUB_TOKEN) in deployed runtime.";
+  }
+
+  return "Desktop updater publishing is unavailable in this runtime.";
 };
 
 const normalizeServerNameBlacklistDraft = (value: string) => {
@@ -1219,6 +1246,13 @@ export const InAccordAdminModal = () => {
 
   const onDesktopBuildPublish = useCallback(async () => {
     try {
+      const unavailableReason = getDesktopBuildUnavailableReason(metaInfo);
+      if (unavailableReason) {
+        setDesktopBuildSuccess(null);
+        setDesktopBuildError(unavailableReason);
+        return;
+      }
+
       setIsDesktopBuilding(true);
       setDesktopBuildError(null);
       setDesktopBuildSuccess(null);
@@ -1253,7 +1287,7 @@ export const InAccordAdminModal = () => {
     } finally {
       setIsDesktopBuilding(false);
     }
-  }, [loadMetaInfo]);
+  }, [loadMetaInfo, metaInfo]);
 
   const loadManagedRoles = async () => {
     try {
@@ -6114,6 +6148,11 @@ export const InAccordAdminModal = () => {
                     <p className="mt-2 text-xs text-rose-500">{metaInfoError}</p>
                   ) : metaInfo ? (
                     <div className="mt-2 flex min-h-0 flex-1 flex-col gap-3">
+                      {(() => {
+                        const desktopBuildUnavailableReason = getDesktopBuildUnavailableReason(metaInfo);
+                        const desktopBuildAvailable = !desktopBuildUnavailableReason;
+
+                        return (
                       <div className="grid gap-3 md:grid-cols-2">
                         <div className="rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
                           <div className="mb-1 flex items-center justify-between gap-2">
@@ -6122,9 +6161,9 @@ export const InAccordAdminModal = () => {
                               <button
                                 type="button"
                                 onClick={() => void onDesktopBuildPublish()}
-                                disabled={isDesktopBuilding}
+                                disabled={isDesktopBuilding || !desktopBuildAvailable}
                                 className="h-7 rounded-md border border-sky-500/45 bg-sky-500/15 px-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-sky-700 transition hover:bg-sky-500/25 disabled:cursor-not-allowed disabled:opacity-60 dark:text-sky-200"
-                                title="Build and publish the desktop updater"
+                                title={desktopBuildUnavailableReason || "Build and publish the desktop updater"}
                               >
                                 {isDesktopBuilding ? "Building..." : "BUILD"}
                               </button>
@@ -6146,6 +6185,20 @@ export const InAccordAdminModal = () => {
                           <p>Environment: {metaInfo.build.nodeEnv}</p>
                           <p>Built: {formatDateTime(metaInfo.build.buildTimestamp)}</p>
                           <p>Branch: {metaInfo.build.branch || "N/A"}</p>
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <span className="text-xs">Desktop Build:</span>
+                            <span
+                              className={cn(
+                                "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]",
+                                desktopBuildAvailable
+                                  ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-200"
+                                  : "border-rose-500/45 bg-rose-500/15 text-rose-700 dark:text-rose-200"
+                              )}
+                              title={desktopBuildUnavailableReason || "Desktop updater publishing is available."}
+                            >
+                              {desktopBuildAvailable ? "Available" : "Unavailable"}
+                            </span>
+                          </div>
                           <div className="mt-2 flex flex-wrap items-center gap-2">
                             <span className="text-xs">Document Storage:</span>
                             <span
@@ -6203,6 +6256,8 @@ export const InAccordAdminModal = () => {
                           <p className="truncate" title={metaInfo.github.issuesUrl || "N/A"}>Issues: {metaInfo.github.issuesUrl || "N/A"}</p>
                         </div>
                       </div>
+                        );
+                      })()}
 
                       <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-zinc-300 bg-white/80 p-3 dark:border-zinc-700 dark:bg-zinc-900/45">
                         <div className="mb-1 flex items-center justify-between gap-2">
