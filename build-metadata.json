@@ -1,8 +1,15 @@
 {
-  "buildTimestamp": "2026-03-22T00:25:53.251Z",
+  "buildTimestamp": "2026-03-22T00:33:14.081Z",
   "branch": "main",
-  "commitSha": "13bffeed9383e69f46305331a7fa48fc90e90b28",
+  "commitSha": "b3667c6db9fe2999e163c594d1f667435dd4e711",
   "commits": [
+    {
+      "sha": "b3667c6db9fe2999e163c594d1f667435dd4e711",
+      "shortSha": "b3667c6d",
+      "message": "fix: restore deployed admin publish fallbacks",
+      "author": "Doc Cowles",
+      "committedAt": "2026-03-21T18:29:18-06:00"
+    },
     {
       "sha": "13bffeed9383e69f46305331a7fa48fc90e90b28",
       "shortSha": "13bffeed",
@@ -79,13 +86,6 @@
       "message": "Update wrangler config name to inaccord",
       "author": "cloudflare-workers-and-pages[bot]",
       "committedAt": "2026-03-19T23:51:49Z"
-    },
-    {
-      "sha": "e0093e56af790635b7fa9282fc49cc87b009036f",
-      "shortSha": "e0093e56",
-      "message": "Point wrangler config back at the live worker",
-      "author": "Doc Cowles",
-      "committedAt": "2026-03-19T17:49:03-06:00"
     }
   ]
 }

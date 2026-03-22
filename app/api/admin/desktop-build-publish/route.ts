@@ -10,6 +10,8 @@ import { resolveAdminGitRuntime } from "@/lib/admin-git-runtime";
 import {
   dispatchAdminGitHubWorkflow,
   getAdminGitHubBranchHead,
+  resolveAdminGitHubRepository,
+  resolveAdminGitHubToken,
 } from "@/lib/admin-github-runtime";
 
 export const runtime = "nodejs";
@@ -29,6 +31,8 @@ type BuildPublishResult = {
   updateFeed: string | null;
   message: string;
 };
+
+type DesktopPublishMode = "local-git" | "github-actions";
 
 const REMOTE_DESKTOP_BUILD_WORKFLOW_ID = "desktop-updater-release.yml";
 
@@ -155,6 +159,46 @@ const queueRemoteDesktopBuildPublish = async (profile: {
   };
 };
 
+const resolveDesktopPublishMode = (gitRuntime: Awaited<ReturnType<typeof resolveAdminGitRuntime>>) => {
+  if (gitRuntime.workTreeAvailable && gitRuntime.repoRoot) {
+    return { ok: true as const, mode: "local-git" as DesktopPublishMode };
+  }
+
+  const repository = resolveAdminGitHubRepository();
+  const token = resolveAdminGitHubToken();
+
+  if (!repository) {
+    return {
+      ok: false as const,
+      response: readResponse(
+        "Desktop updater publishing in deployed runtime requires INACCORD_GITHUB_REPO_URL to point at the GitHub repository that owns the workflow.",
+        409,
+        {
+          gitRuntime,
+          missing: "INACCORD_GITHUB_REPO_URL",
+        },
+      ),
+    };
+  }
+
+  if (!token) {
+    return {
+      ok: false as const,
+      response: readResponse(
+        "Desktop updater publishing in deployed runtime requires INACCORD_GITHUB_TOKEN (or GITHUB_TOKEN). It is not configured in this runtime.",
+        409,
+        {
+          gitRuntime,
+          repositoryUrl: repository.repositoryUrl,
+          missing: "INACCORD_GITHUB_TOKEN",
+        },
+      ),
+    };
+  }
+
+  return { ok: true as const, mode: "github-actions" as DesktopPublishMode };
+};
+
 export async function POST() {
   try {
     const auth = await ensureAdmin();
@@ -171,8 +215,13 @@ export async function POST() {
       );
     }
 
+    const publishMode = resolveDesktopPublishMode(gitRuntime);
+    if (!publishMode.ok) {
+      return publishMode.response;
+    }
+
     activeDesktopBuildPublish =
-      gitRuntime.workTreeAvailable && gitRuntime.repoRoot
+      publishMode.mode === "local-git" && gitRuntime.repoRoot
         ? runDesktopBuildPublish(gitRuntime.repoRoot)
         : queueRemoteDesktopBuildPublish(auth.profile);
     const result = await activeDesktopBuildPublish;
@@ -181,10 +230,7 @@ export async function POST() {
       ok: true,
       ...result,
       repoRoot: gitRuntime.repoRoot,
-      mode:
-        gitRuntime.workTreeAvailable && gitRuntime.repoRoot
-          ? "local-git"
-          : "github-actions",
+      mode: publishMode.mode,
     });
   } catch (error) {
     console.error("[ADMIN_DESKTOP_BUILD_PUBLISH_POST]", error);
