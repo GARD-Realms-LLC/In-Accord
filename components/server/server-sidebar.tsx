@@ -61,6 +61,19 @@ const iconMap = {
   [ChannelType.VIDEO]: <Video className="mr-2 h-4 w-4" />,
 };
 
+const toSafeDate = (value: Date | string | null | undefined, fallbackMs = 0) => {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? new Date(fallbackMs) : value;
+  }
+
+  if (!value) {
+    return new Date(fallbackMs);
+  }
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? new Date(fallbackMs) : parsed;
+};
+
 export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
   const profile = await currentProfile();
 
@@ -90,8 +103,8 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
         imageUrl: String(currentServerRow.imageUrl ?? "").trim(),
         inviteCode: String(currentServerRow.inviteCode ?? "").trim(),
         profileId: String(currentServerRow.profileId ?? "").trim(),
-        createdAt: currentServerRow.createdAt ? new Date(currentServerRow.createdAt) : new Date(0),
-        updatedAt: currentServerRow.updatedAt ? new Date(currentServerRow.updatedAt) : new Date(0),
+        createdAt: toSafeDate(currentServerRow.createdAt),
+        updatedAt: toSafeDate(currentServerRow.updatedAt),
       }
     : null;
   const bannerConfig = currentServer ? await getServerBannerConfig(currentServer.id) : null;
@@ -144,8 +157,8 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
     serverId: item.serverId,
     channelGroupId: item.channelGroupId,
     sortOrder: Number(item.sortOrder ?? 0),
-    createdAt: item.createdAt instanceof Date ? item.createdAt : new Date(item.createdAt),
-    updatedAt: item.updatedAt instanceof Date ? item.updatedAt : new Date(item.updatedAt),
+    createdAt: toSafeDate(item.createdAt),
+    updatedAt: toSafeDate(item.updatedAt),
   }));
 
   const membersResult = await db.execute(sql`
@@ -194,16 +207,16 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
     profileId: row.profileId,
     presenceStatus: row.presenceStatus ?? "ONLINE",
     serverId: row.serverId,
-    createdAt: new Date(row.createdAt),
-    updatedAt: new Date(row.updatedAt),
+    createdAt: toSafeDate(row.createdAt),
+    updatedAt: toSafeDate(row.updatedAt),
     profile: {
       id: row.userId ?? row.profileId,
       userId: row.userId ?? row.profileId,
       name: row.name ?? row.email ?? "User",
       email: row.email ?? "",
       imageUrl: row.imageUrl ?? "/in-accord-steampunk-logo.png",
-      createdAt: row.accountCreated ? new Date(row.accountCreated) : new Date(0),
-      updatedAt: row.lastLogin ? new Date(row.lastLogin) : new Date(0),
+      createdAt: toSafeDate(row.accountCreated),
+      updatedAt: toSafeDate(row.lastLogin),
     },
   }));
 
@@ -258,7 +271,7 @@ export const ServerSidebar = async ({ serverId }: ServerSidebarProps) => {
   const channelsCount = visibleChannelsWithoutSpecial.length;
 
   const channelGroupById = new Map(channelGroups.map((group) => [group.id, group]));
-  const toEpoch = (value: Date | string) => (value instanceof Date ? value.getTime() : new Date(value).getTime());
+  const toEpoch = (value: Date | string) => toSafeDate(value).getTime();
   const sortChannelsForDisplay = (left: (typeof visibleChannelsWithoutSpecial)[number], right: (typeof visibleChannelsWithoutSpecial)[number]) => {
     const leftOrder = Number(left.sortOrder ?? 0);
     const rightOrder = Number(right.sortOrder ?? 0);
