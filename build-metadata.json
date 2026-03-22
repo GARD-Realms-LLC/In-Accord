@@ -1,8 +1,29 @@
 {
-  "buildTimestamp": "2026-03-22T00:40:00.006Z",
+  "buildTimestamp": "2026-03-22T04:40:53.709Z",
   "branch": "main",
-  "commitSha": "1061d7efdb53f8dd3d0de0b7ece440557380f596",
+  "commitSha": "037bf325efc626ad9e573f7ab5473cfe0096d474",
   "commits": [
+    {
+      "sha": "037bf325efc626ad9e573f7ab5473cfe0096d474",
+      "shortSha": "037bf325",
+      "message": "fix: rebuild and reload stale cloudflare chunks",
+      "author": "Doc Cowles",
+      "committedAt": "2026-03-21T22:36:28-06:00"
+    },
+    {
+      "sha": "262752ccff1aaa57a97ec791c94701b445799829",
+      "shortSha": "262752cc",
+      "message": "fix: auto-reload stale chunk failures",
+      "author": "Doc Cowles",
+      "committedAt": "2026-03-21T22:31:57-06:00"
+    },
+    {
+      "sha": "f6a03b176ea41794a6c618dbbfa292a105222b17",
+      "shortSha": "f6a03b17",
+      "message": "fix: gate admin desktop build button",
+      "author": "Doc Cowles",
+      "committedAt": "2026-03-21T18:42:46-06:00"
+    },
     {
       "sha": "1061d7efdb53f8dd3d0de0b7ece440557380f596",
       "shortSha": "1061d7ef",
@@ -65,27 +86,6 @@
       "message": "Update wrangler config name to inaccord",
       "author": "cloudflare-workers-and-pages[bot]",
       "committedAt": "2026-03-20T01:45:50Z"
-    },
-    {
-      "sha": "44fb08b667686882a155acb3c6975f3b4174c25c",
-      "shortSha": "44fb08b6",
-      "message": "Fix live worker name and publish 1.0.273",
-      "author": "Doc Cowles",
-      "committedAt": "2026-03-19T19:41:58-06:00"
-    },
-    {
-      "sha": "fd0a128e37aabcbffecadfc66e27b0260a0d21a2",
-      "shortSha": "fd0a128e",
-      "message": "Align live worker source with repo",
-      "author": "Doc Cowles",
-      "committedAt": "2026-03-19T19:31:59-06:00"
-    },
-    {
-      "sha": "fadaa33849c1c71a93aca193d226111b78076d22",
-      "shortSha": "fadaa338",
-      "message": "Merge pull request #4 from GARD-Realms-LLC/update_worker_name_to_inaccord",
-      "author": "Doc Cowles",
-      "committedAt": "2026-03-19T17:59:22-06:00"
     }
   ]
 }
