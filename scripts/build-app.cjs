@@ -51,6 +51,7 @@ try {
 
   if (shouldCompileOpenNext) {
     runNode(path.join(rootDir, "scripts", "patch-opennext-windows-output.cjs"));
+    runNode(path.join(rootDir, "scripts", "patch-opennext-compile-config.cjs"));
     runNode(path.join(rootDir, "scripts", "patch-opennext-env-files.cjs"));
     runNode(path.join(rootDir, "scripts", "patch-opennext-prefetch-hints.cjs"));
     runNode(openNextCliPath, ["build", "--skipBuild", "--config", "wrangler.jsonc", "--skipWranglerConfigCheck"]);
