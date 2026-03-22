@@ -1,8 +1,15 @@
 {
-  "buildTimestamp": "2026-03-22T00:14:48.491Z",
+  "buildTimestamp": "2026-03-22T00:25:53.251Z",
   "branch": "main",
-  "commitSha": "898ee99c1e344376c950aa6d6de06d4793f73ce5",
+  "commitSha": "13bffeed9383e69f46305331a7fa48fc90e90b28",
   "commits": [
+    {
+      "sha": "13bffeed9383e69f46305331a7fa48fc90e90b28",
+      "shortSha": "13bffeed",
+      "message": "chore: sync latest builds and deployables",
+      "author": "Doc Cowles",
+      "committedAt": "2026-03-21T18:17:47-06:00"
+    },
     {
       "sha": "898ee99c1e344376c950aa6d6de06d4793f73ce5",
       "shortSha": "898ee99c",
@@ -79,13 +86,6 @@
       "message": "Point wrangler config back at the live worker",
       "author": "Doc Cowles",
       "committedAt": "2026-03-19T17:49:03-06:00"
-    },
-    {
-      "sha": "a58e70a95866aaefecd70eb3a8b9fce197a2bd31",
-      "shortSha": "a58e70a9",
-      "message": "Try local and legacy password hashes on sign-in",
-      "author": "Doc Cowles",
-      "committedAt": "2026-03-19T17:25:08-06:00"
     }
   ]
 }

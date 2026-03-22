@@ -7,6 +7,10 @@ import { promisify } from "util";
 import { currentProfile } from "@/lib/current-profile";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 import { resolveAdminGitRuntime } from "@/lib/admin-git-runtime";
+import {
+  dispatchAdminGitHubWorkflow,
+  getAdminGitHubBranchHead,
+} from "@/lib/admin-github-runtime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +29,8 @@ type BuildPublishResult = {
   updateFeed: string | null;
   message: string;
 };
+
+const REMOTE_DESKTOP_BUILD_WORKFLOW_ID = "desktop-updater-release.yml";
 
 let activeDesktopBuildPublish: Promise<BuildPublishResult> | null = null;
 
@@ -116,6 +122,39 @@ const runDesktopBuildPublish = async (repoRoot: string): Promise<BuildPublishRes
   };
 };
 
+const queueRemoteDesktopBuildPublish = async (profile: {
+  name?: string | null;
+  email?: string | null;
+}): Promise<BuildPublishResult> => {
+  const branch =
+    String(process.env.INACCORD_DEFAULT_BRANCH ?? "").trim() ||
+    String(process.env.VERCEL_GIT_COMMIT_REF ?? "").trim() ||
+    String(process.env.GITHUB_REF_NAME ?? "").trim() ||
+    "main";
+
+  const branchHead = await getAdminGitHubBranchHead(branch);
+  const dispatched = await dispatchAdminGitHubWorkflow({
+    workflowId: REMOTE_DESKTOP_BUILD_WORKFLOW_ID,
+    ref: branch,
+    inputs: {
+      requested_by: String(profile.name ?? "").trim() || "In-Accord Admin",
+      requested_email: String(profile.email ?? "").trim(),
+      source_branch: branch,
+      source_commit: branchHead?.sha ?? "",
+    },
+  });
+
+  const updateFeed =
+    String(process.env.INACCORD_DESKTOP_UPDATE_URL ?? "").trim() || null;
+
+  return {
+    appVersion: null,
+    displayVersion: null,
+    updateFeed,
+    message: `Desktop updater build queued through GitHub Actions for ${dispatched.owner}/${dispatched.repo}@${branch}.`,
+  };
+};
+
 export async function POST() {
   try {
     const auth = await ensureAdmin();
@@ -125,20 +164,6 @@ export async function POST() {
 
     const gitRuntime = await resolveAdminGitRuntime();
 
-    if (!gitRuntime.workTreeAvailable || !gitRuntime.repoRoot) {
-      return readResponse(
-        gitRuntime.reason === "git-binary-missing"
-          ? "Desktop build publishing is unavailable because Git is not installed in this runtime."
-          : gitRuntime.reason === "git-command-failed"
-            ? gitRuntime.message
-            : "Desktop build publishing is unavailable in the deployed website runtime. Run it from the local repo workspace.",
-        409,
-        {
-          gitRuntime,
-        },
-      );
-    }
-
     if (activeDesktopBuildPublish) {
       return readResponse(
         "A desktop build and updater push is already running.",
@@ -146,13 +171,20 @@ export async function POST() {
       );
     }
 
-    activeDesktopBuildPublish = runDesktopBuildPublish(gitRuntime.repoRoot);
+    activeDesktopBuildPublish =
+      gitRuntime.workTreeAvailable && gitRuntime.repoRoot
+        ? runDesktopBuildPublish(gitRuntime.repoRoot)
+        : queueRemoteDesktopBuildPublish(auth.profile);
     const result = await activeDesktopBuildPublish;
 
     return NextResponse.json({
       ok: true,
       ...result,
       repoRoot: gitRuntime.repoRoot,
+      mode:
+        gitRuntime.workTreeAvailable && gitRuntime.repoRoot
+          ? "local-git"
+          : "github-actions",
     });
   } catch (error) {
     console.error("[ADMIN_DESKTOP_BUILD_PUBLISH_POST]", error);

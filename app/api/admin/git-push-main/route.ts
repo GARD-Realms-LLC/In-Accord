@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { resolveAdminGitRuntime, runAdminGit } from "@/lib/admin-git-runtime";
+import { getAdminGitHubBranchHead } from "@/lib/admin-github-runtime";
 import { currentProfile } from "@/lib/current-profile";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 
@@ -93,6 +94,31 @@ const readResponse = (message: string, status = 500, extra?: Record<string, unkn
     { status }
   );
 
+const buildRemoteGitHubFallbackResponse = async (branch: string) => {
+  const remoteHead = await getAdminGitHubBranchHead(branch);
+  if (!remoteHead) {
+    return readResponse(
+      "This runtime has no local Git workspace and no GitHub repository fallback is configured.",
+      409,
+      {
+        branch,
+      }
+    );
+  }
+
+  return NextResponse.json({
+    ok: true,
+    branch: remoteHead.branch,
+    committed: false,
+    hadLocalChanges: false,
+    localHead: null,
+    remoteBefore: remoteHead.sha,
+    remoteAfter: remoteHead.sha,
+    commitUrl: remoteHead.commitUrl,
+    message: `This deployed runtime has no local Git worktree. GitHub ${remoteHead.branch} is already authoritative at ${remoteHead.shortSha}; there is nothing to push from the deployed site.`,
+  });
+};
+
 export async function POST() {
   try {
     const auth = await ensureAdmin();
@@ -100,16 +126,16 @@ export async function POST() {
       return auth.response;
     }
 
+    const branchHint =
+      String(process.env.INACCORD_DEFAULT_BRANCH ?? "").trim() ||
+      String(process.env.VERCEL_GIT_COMMIT_REF ?? "").trim() ||
+      String(process.env.GITHUB_REF_NAME ?? "").trim() ||
+      "main";
+
     const gitRuntime = await resolveAdminGitRuntime();
     if (!gitRuntime.workTreeAvailable || !gitRuntime.repoRoot) {
-      return readResponse(gitRuntime.message, 409, {
-        reason: gitRuntime.reason,
-        mode: gitRuntime.mode,
-        repoRoot: gitRuntime.repoRoot,
-      });
+      return await buildRemoteGitHubFallbackResponse(branchHint);
     }
-
-    await runAdminGit(gitRuntime.repoRoot, ["rev-parse", "--is-inside-work-tree"]);
 
     const currentBranch = await runAdminGit(gitRuntime.repoRoot, ["branch", "--show-current"]);
     const branch = currentBranch.stdout || "unknown";

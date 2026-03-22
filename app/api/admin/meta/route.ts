@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import packageJson from "../../../../package.json";
 
 import { resolveAdminGitRuntime } from "@/lib/admin-git-runtime";
+import {
+  resolveAdminGitHubRepository,
+  resolveAdminGitHubToken,
+} from "@/lib/admin-github-runtime";
 import { currentProfile } from "@/lib/current-profile";
 import { getInAccordSdkSourceHash } from "@/lib/inaccord-sdk-runtime";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
@@ -326,7 +330,13 @@ export async function GET() {
 
     const gitRuntime = await resolveAdminGitRuntime();
     const localGitWorkspaceAvailable = gitRuntime.workTreeAvailable;
-    const localDesktopBuildAvailable = localGitWorkspaceAvailable;
+    const remoteGitHubRepository = resolveAdminGitHubRepository();
+    const remoteGitHubTokenConfigured = Boolean(resolveAdminGitHubToken());
+    const remoteDesktopBuildAvailable = Boolean(
+      remoteGitHubRepository && remoteGitHubTokenConfigured,
+    );
+    const localDesktopBuildAvailable =
+      localGitWorkspaceAvailable || remoteDesktopBuildAvailable;
 
     const commits = await getRecentCommitLog();
     const githubMainCommits = await getRecentGitHubCommits(repositoryUrl, "main");
@@ -372,6 +382,9 @@ export async function GET() {
       },
       localGitWorkspaceAvailable,
       localDesktopBuildAvailable,
+      remoteDesktopBuildAvailable,
+      remoteGitHubRepositoryConfigured: Boolean(remoteGitHubRepository),
+      remoteGitHubTokenConfigured,
       commits,
       githubMainCommits,
     });

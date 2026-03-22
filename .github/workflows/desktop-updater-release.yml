@@ -1,0 +1,134 @@
+name: Desktop updater release
+
+on:
+  workflow_dispatch:
+    inputs:
+      requested_by:
+        description: Admin display name that queued the build
+        required: false
+        type: string
+      requested_email:
+        description: Admin email that queued the build
+        required: false
+        type: string
+      source_branch:
+        description: Branch to build and push version updates from
+        required: false
+        default: main
+        type: string
+      source_commit:
+        description: Commit SHA visible in the deployed runtime when the build was queued
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.source_branch || 'main' }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Restore runtime environment file
+        shell: pwsh
+        env:
+          INACCORD_ENV_FILE: ${{ secrets.INACCORD_ENV_FILE }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:INACCORD_ENV_FILE)) {
+            throw "GitHub secret INACCORD_ENV_FILE is required for the remote desktop updater workflow."
+          }
+
+          [System.IO.File]::WriteAllText((Join-Path $PWD ".env"), $env:INACCORD_ENV_FILE)
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install clerk-react dependencies
+        shell: pwsh
+        run: |
+          if (Test-Path "clerk-react/package-lock.json") {
+            Push-Location "clerk-react"
+            npm ci
+            Pop-Location
+          }
+
+      - name: Build clerk-react
+        working-directory: clerk-react
+        run: npm run build
+
+      - name: Bump desktop updater version
+        run: npm run version:bump:patch
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Build desktop updater package
+        run: npm run app:dist:win
+
+      - name: Publish updater feed assets to GitHub release
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "desktop-updater-latest"
+          $installerFiles = Get-ChildItem -LiteralPath "Desktop/win64/installer" -File
+
+          if ($installerFiles.Count -eq 0) {
+            throw "Desktop installer output was empty."
+          }
+
+          gh release view $tag --repo "$env:GITHUB_REPOSITORY" *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --repo "$env:GITHUB_REPOSITORY" --title "Desktop Updater Latest" --notes "Latest In-Accord desktop updater feed assets."
+          }
+
+          $paths = $installerFiles | ForEach-Object { $_.FullName }
+          gh release upload $tag @paths --repo "$env:GITHUB_REPOSITORY" --clobber
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-updater-win64
+          path: |
+            Desktop/win64/installer/**
+            Desktop/win64/package/**
+            build-metadata.json
+          if-no-files-found: error
+
+      - name: Commit version bump and build metadata
+        shell: pwsh
+        run: |
+          $targetBranch = "${{ inputs.source_branch || 'main' }}"
+          $packageVersion = node -p "require('./package.json').version"
+
+          if ([string]::IsNullOrWhiteSpace((git status --porcelain))) {
+            Write-Host "No versioned files changed after the remote desktop build."
+            exit 0
+          }
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json build-metadata.json
+
+          if (Test-Path "yarn.lock") {
+            git add yarn.lock
+          }
+
+          if ([string]::IsNullOrWhiteSpace((git diff --cached --name-only))) {
+            Write-Host "No tracked version files changed after staging."
+            exit 0
+          }
+
+          git commit -m "build: publish desktop app $packageVersion"
+          git push origin "HEAD:$targetBranch"
