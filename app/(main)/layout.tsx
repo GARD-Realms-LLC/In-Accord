@@ -8,6 +8,15 @@ import { UserActivityPopup } from "@/components/settings/user-activity-popup";
 import { UserLocalTime } from "@/components/server/user-local-time";
 import { GlobalUserStatusDock } from "@/components/settings/global-user-status-dock";
 
+const toIsoOrNull = (value: Date | string | null | undefined) => {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+};
+
 const MainLayout = async ({ children }: { children: React.ReactNode }) => {
   const profile = await currentProfile();
 
@@ -44,8 +53,8 @@ const MainLayout = async ({ children }: { children: React.ReactNode }) => {
         profileBannerUrl={profile.bannerUrl ?? null}
         profilePresenceStatus={profile.presenceStatus ?? "ONLINE"}
         profileCurrentGame={profile.currentGame ?? null}
-        profileJoinedAt={profile.createdAt ? profile.createdAt.toISOString() : null}
-        profileLastLogonAt={profile.updatedAt ? profile.updatedAt.toISOString() : null}
+        profileJoinedAt={toIsoOrNull(profile.createdAt)}
+        profileLastLogonAt={toIsoOrNull(profile.updatedAt)}
       />
       <aside className="fixed bottom-2 right-0 z-30 flex h-21 w-72 items-center justify-center px-2 pb-2">
         <UserLocalTime />

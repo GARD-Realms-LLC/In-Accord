@@ -18,6 +18,19 @@ import { NavigationInAboardButton } from "@/components/navigation/navigation-in-
 import { NavigationServersCollection } from "@/components/navigation/navigation-servers-collection";
 import { AdminTotalsButtons } from "@/components/navigation/admin-totals-buttons";
 
+const toSafeDate = (value: Date | string | null | undefined, fallbackMs = 0) => {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? new Date(fallbackMs) : value;
+  }
+
+  if (!value) {
+    return new Date(fallbackMs);
+  }
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? new Date(fallbackMs) : parsed;
+};
+
 export const NavigationSidebar = async () => {
   const profile = await currentProfile();
 
@@ -60,7 +73,11 @@ export const NavigationSidebar = async () => {
         updatedAt?: Date | string;
       }>;
     }
-  ).rows;
+  ).rows.map((row) => ({
+    ...row,
+    createdAt: toSafeDate(row.createdAt),
+    updatedAt: toSafeDate(row.updatedAt),
+  }));
 
   const myServers = servers.filter((item) => item.profileId === profile.id);
   const joinedServers = servers.filter((item) => item.profileId !== profile.id);
