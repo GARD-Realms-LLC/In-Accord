@@ -24,6 +24,7 @@
 .tmp-asar-inspect*/
 .tmp-electron-*/
 .tmp-electron-*.log
+.tmp-cdp-profile*/
 /Desktop/win64/
 /Desktop/Win Dev/
 /Win-64/
@@ -43,6 +44,12 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+desktop-build-debug.log
+git-push-run.log
+package-win-cmd.log
+package-win-debug.log
+push-all-remaining-local-state.log
+push-remaining-local-changes.log
 
 # local env files
 .env*.local
