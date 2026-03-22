@@ -1,8 +1,22 @@
 {
-  "buildTimestamp": "2026-03-22T01:00:40.334Z",
+  "buildTimestamp": "2026-03-22T02:21:17.293Z",
   "branch": "main",
-  "commitSha": "f6a03b176ea41794a6c618dbbfa292a105222b17",
+  "commitSha": "712b0589dd635bd897d9b96f63106fd67e6c2643",
   "commits": [
+    {
+      "sha": "712b0589dd635bd897d9b96f63106fd67e6c2643",
+      "shortSha": "712b0589",
+      "message": "fix: treat naive timestamps as local clock time",
+      "author": "Doc Cowles",
+      "committedAt": "2026-03-21T20:07:17-06:00"
+    },
+    {
+      "sha": "2fd41abb358e85f2bb6e78cdcb85ede0ee052367",
+      "shortSha": "2fd41abb",
+      "message": "fix: render user-local timestamps in chat and menu",
+      "author": "Doc Cowles",
+      "committedAt": "2026-03-21T20:01:54-06:00"
+    },
     {
       "sha": "f6a03b176ea41794a6c618dbbfa292a105222b17",
       "shortSha": "f6a03b17",
@@ -72,20 +86,6 @@
       "message": "Update wrangler config name to inaccord",
       "author": "cloudflare-workers-and-pages[bot]",
       "committedAt": "2026-03-20T01:45:50Z"
-    },
-    {
-      "sha": "44fb08b667686882a155acb3c6975f3b4174c25c",
-      "shortSha": "44fb08b6",
-      "message": "Fix live worker name and publish 1.0.273",
-      "author": "Doc Cowles",
-      "committedAt": "2026-03-19T19:41:58-06:00"
-    },
-    {
-      "sha": "fd0a128e37aabcbffecadfc66e27b0260a0d21a2",
-      "shortSha": "fd0a128e",
-      "message": "Align live worker source with repo",
-      "author": "Doc Cowles",
-      "committedAt": "2026-03-19T19:31:59-06:00"
     }
   ]
 }

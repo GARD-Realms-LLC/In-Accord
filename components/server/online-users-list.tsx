@@ -23,6 +23,7 @@ import { MemberRole } from "@/lib/db/types";
 import { isInAccordAdministrator, isInAccordDeveloper, isInAccordModerator } from "@/lib/in-accord-admin";
 import { isBotUser } from "@/lib/is-bot-user";
 import { resolveBannerUrl } from "@/lib/asset-url";
+import { formatDateTimeForUser } from "@/lib/date-time-format";
 import { resolveProfileIcons, type ProfileIcon } from "@/lib/profile-icons";
 import { formatPresenceStatusLabel, normalizePresenceStatus, presenceStatusDotClassMap } from "@/lib/presence-status";
 
@@ -107,16 +108,7 @@ interface OnlineUsersListProps {
 const BOT_COMMANDS_CACHE_LIMIT = 300;
 
 const formatDate = (value: string | null) => {
-  if (!value) {
-    return "Unknown";
-  }
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return "Unknown";
-  }
-
-  return parsed.toLocaleString();
+  return formatDateTimeForUser(value, undefined, "Unknown");
 };
 
 export const OnlineUsersList = ({

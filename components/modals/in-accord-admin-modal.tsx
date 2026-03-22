@@ -30,6 +30,7 @@ import { ADMINISTRATOR_ROLE_KEY, IMMUTABLE_ACCOUNT_USER_ID } from "@/lib/account
 import { isBotUser } from "@/lib/is-bot-user";
 import { formatPresenceStatusLabel, normalizePresenceStatus } from "@/lib/presence-status";
 import { cn } from "@/lib/utils";
+import { formatDateTimeForUser } from "@/lib/date-time-format";
 
 type AdminSection =
   | "general"
@@ -5258,16 +5259,7 @@ export const InAccordAdminModal = () => {
     );
 
   const formatDateTime = (value: string | null) => {
-    if (!value) {
-      return "N/A";
-    }
-
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) {
-      return "N/A";
-    }
-
-    return parsed.toLocaleString();
+    return formatDateTimeForUser(value, undefined, "N/A");
   };
 
   const renderOtherConfigTable = (

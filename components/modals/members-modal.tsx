@@ -55,6 +55,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { UserAvatar } from "@/components/user-avatar";
 import { MemberRole } from "@/lib/db/types";
 import { isBotUser } from "@/lib/is-bot-user";
+import { formatDateTimeForUser } from "@/lib/date-time-format";
 
 type MembersMutualServer = {
   id: string;
@@ -378,20 +379,15 @@ export const MembersModal = () => {
   };
 
   const formatDate = (value: string | Date | null | undefined) => {
-    if (!value) {
-      return "Unknown";
-    }
-
-    const parsed = value instanceof Date ? value : new Date(value);
-    if (Number.isNaN(parsed.getTime())) {
-      return "Unknown";
-    }
-
-    return parsed.toLocaleString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
+    return formatDateTimeForUser(
+      value,
+      {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      },
+      "Unknown"
+    );
   };
 
   const memberCount = members.length || server?.members?.length || 0;
@@ -946,22 +942,26 @@ export const MembersModal = () => {
   };
 
   const onProfileDialogChange = (open: boolean) => {
-    if (!open) {
-      profileCardRequestSequenceRef.current += 1;
-      setOpenMutualDetails(null);
-      setOpenProfileMemberId(null);
-      setSelectedProfileCardData(null);
-      setLoadingProfileMemberId(null);
-      setSelectedProfileCardLoadError(null);
-    }
-  };
-
-  const onOpenMutualDetails = (type: "servers" | "friends") => {
-    if (!selectedProfileMember) {
+    if (open) {
       return;
     }
 
-    setOpenMutualDetails({ type, memberId: selectedProfileMember.id });
+    setOpenProfileMemberId(null);
+    setSelectedProfileCardData(null);
+    setSelectedProfileCardLoadError(null);
+    setLoadingProfileMemberId(null);
+    setOpenMutualDetails(null);
+  };
+
+  const onOpenMutualDetails = (type: NonNullable<MutualDetailsModalState>["type"]) => {
+    if (!selectedProfileMember?.id) {
+      return;
+    }
+
+    setOpenMutualDetails({
+      type,
+      memberId: selectedProfileMember.id,
+    });
   };
 
   return (

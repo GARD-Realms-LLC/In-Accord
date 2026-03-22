@@ -100,6 +100,7 @@ import { formatPresenceStatusLabel, normalizePresenceStatus, presenceStatusLabel
 import { resolveProfileIcons } from "@/lib/profile-icons";
 import { resolveBannerUrl } from "@/lib/asset-url";
 import { getCachedVoiceState, VOICE_STATE_SYNC_EVENT, type VoiceStateSyncDetail } from "@/lib/voice-state-sync";
+import { formatDateTimeForUser } from "@/lib/date-time-format";
 import type {
   AdvancedPreferences,
   ActivityPrivacyPreferences,
@@ -6947,28 +6948,29 @@ export const SettingsModal = () => {
   };
 
   const joinedDateValue = data.profileJoinedAt ? new Date(data.profileJoinedAt) : null;
-  const joinedDisplay =
-    joinedDateValue && !Number.isNaN(joinedDateValue.getTime())
-      ? joinedDateValue.toLocaleString(undefined, {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-          hour: "numeric",
-          minute: "2-digit",
-        })
-      : "Unknown";
+  const joinedDisplay = formatDateTimeForUser(
+    data.profileJoinedAt,
+    {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    },
+    "Unknown"
+  );
 
-  const lastLogonDateValue = data.profileLastLogonAt ? new Date(data.profileLastLogonAt) : null;
-  const lastLogonDisplay =
-    lastLogonDateValue && !Number.isNaN(lastLogonDateValue.getTime())
-      ? lastLogonDateValue.toLocaleString(undefined, {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-          hour: "numeric",
-          minute: "2-digit",
-        })
-      : "Unknown";
+  const lastLogonDisplay = formatDateTimeForUser(
+    data.profileLastLogonAt,
+    {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    },
+    "Unknown"
+  );
 
   const hasAdminCrown = isInAccordAdministrator(profileRole ?? data.profileRole);
   const hasDeveloperWrench = isInAccordDeveloper(profileRole ?? data.profileRole);
@@ -7003,16 +7005,7 @@ export const SettingsModal = () => {
 
   const renderSectionContent = () => {
     const formatBlockedAt = (value: string | null) => {
-      if (!value) {
-        return "Unknown";
-      }
-
-      const parsed = new Date(value);
-      if (Number.isNaN(parsed.getTime())) {
-        return "Unknown";
-      }
-
-      return parsed.toLocaleString();
+      return formatDateTimeForUser(value, undefined, "Unknown");
     };
 
     if (displaySection === "myAccount") {
