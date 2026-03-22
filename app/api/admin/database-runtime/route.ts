@@ -9,7 +9,6 @@ import {
   setDatabaseRuntimeTarget,
   updateDatabaseRuntimeD1Info,
 } from "@/lib/database-runtime-control";
-import { syncPostgresSnapshotToD1 } from "@/lib/d1-snapshot-sync";
 import { hasInAccordAdministrativeAccess } from "@/lib/in-accord-admin";
 
 export const runtime = "nodejs";
@@ -24,7 +23,14 @@ let activeD1Sync:
   | Promise<{
       message: string;
       setup: ReturnType<typeof getDatabaseRuntimeSetup>;
-      sync: Awaited<ReturnType<typeof syncPostgresSnapshotToD1>>;
+      sync: {
+        databaseName: string;
+        tableCount: number;
+        queryCount: number;
+        rowCount: number;
+        rowsWritten: number | null;
+        databaseSizeMb: string | null;
+      };
     }>
   | null = null;
 
@@ -160,6 +166,7 @@ export async function POST(req: Request) {
       }
 
       activeD1Sync = (async () => {
+        const { syncPostgresSnapshotToD1 } = await import("@/lib/d1-snapshot-sync");
         const setup = getDatabaseRuntimeSetup();
         if (!setup.d1.databaseName) {
           throw new Error("Set a D1 database name before syncing.");

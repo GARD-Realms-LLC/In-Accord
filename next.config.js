@@ -1,7 +1,9 @@
 /** @type {import('next').NextConfig} */
 const { initOpenNextCloudflareForDev } = require("@opennextjs/cloudflare");
 
-initOpenNextCloudflareForDev();
+if (process.env.NODE_ENV !== "production") {
+  initOpenNextCloudflareForDev();
+}
 
 const serverOnlyExternalPackages = new Set([
   "pg",

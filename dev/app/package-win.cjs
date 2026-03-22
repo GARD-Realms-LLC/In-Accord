@@ -52,6 +52,7 @@ const buildDesktopEnv = {
   ...process.env,
   NEXT_OUTPUT_MODE: "standalone",
   NEXT_DIST_DIR: DESKTOP_DIST_DIR_NAME,
+  INACCORD_SKIP_OPENNEXT_COMPILE: "1",
   INACCORD_DISABLE_FILE_DATA: "1",
   NEXT_PUBLIC_INACCORD_DISABLE_CLIENT_PERSISTENCE: "1",
   USERPROFILE: DESKTOP_PROFILE_DIR,
@@ -62,6 +63,11 @@ const buildDesktopEnv = {
   TEMP: DESKTOP_TEMP_DIR,
   TMP: DESKTOP_TEMP_DIR,
   TMPDIR: DESKTOP_TEMP_DIR,
+};
+
+const buildCloudflareEnv = {
+  ...process.env,
+  INACCORD_DISABLE_FILE_DATA: "1",
 };
 
 const packager =
@@ -309,6 +315,13 @@ const writeBuildMetadata = async () => {
   );
 };
 
+const runProjectBuild = async (env) => {
+  await runCommand(getNpmCommand(), ["run", "build"], {
+    cwd: ROOT_DIR,
+    env,
+  });
+};
+
 const writeDesktopPackageJson = async () => {
   const desktopPackageJson = {
     name: "in-accord-desktop",
@@ -444,10 +457,8 @@ const buildStandaloneApp = async (updateFeed, appOrigin) => {
   await fs.mkdir(DESKTOP_TEMP_DIR, { recursive: true });
 
   await writeBuildMetadata();
-  await runCommand(getNpmCommand(), ["run", "build"], {
-    cwd: ROOT_DIR,
-    env: buildDesktopEnv,
-  });
+  await runProjectBuild(buildCloudflareEnv);
+  await runProjectBuild(buildDesktopEnv);
 
   await prepareStandaloneAssets();
   await stageDesktopAppSource(updateFeed, appOrigin);

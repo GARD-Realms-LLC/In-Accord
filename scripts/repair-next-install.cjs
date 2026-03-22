@@ -2,13 +2,29 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const ROOT_DIR = process.cwd();
-const TARGET_FILE = path.join(
+const NEXT_PICOCOLORS_FILE = path.join(
   ROOT_DIR,
   "node_modules",
   "next",
   "dist",
   "lib",
   "picocolors.js"
+);
+const MINIMATCH_ESM_FILE = path.join(
+  ROOT_DIR,
+  "node_modules",
+  "minimatch",
+  "dist",
+  "esm",
+  "index.js"
+);
+const MINIMATCH_LEGACY_BRACE_EXPANSION_FILE = path.join(
+  ROOT_DIR,
+  "node_modules",
+  "minimatch",
+  "node_modules",
+  "brace-expansion",
+  "index.js"
 );
 
 const PICOCOLORS_SOURCE = `"use strict";
@@ -78,15 +94,101 @@ Object.defineProperty(api, "__esModule", { value: true });
 module.exports = api;
 `;
 
-const repairNextInstall = () => {
-  if (fs.existsSync(TARGET_FILE)) {
+const MINIMATCH_IMPORT_SENTINEL = "brace-expansion expand helper is unavailable";
+const MINIMATCH_IMPORT_TARGET = `import * as braceExpansion from 'brace-expansion';
+const expand = typeof braceExpansion.expand === 'function'
+  ? braceExpansion.expand
+  : typeof braceExpansion.default === 'function'
+    ? braceExpansion.default
+    : typeof braceExpansion.default?.expand === 'function'
+      ? braceExpansion.default.expand
+      : (() => {
+          throw new TypeError('brace-expansion expand helper is unavailable');
+        });`;
+const MINIMATCH_IMPORT_LEGACY_PATCHES = [
+  "import { expand } from 'brace-expansion';",
+  `import * as braceExpansion from 'brace-expansion';\nconst { expand } = braceExpansion;`,
+];
+const BALANCED_MATCH_SENTINEL = "balanced-match helper is unavailable";
+const BALANCED_MATCH_REQUIRE_TARGET = "var balanced = require('balanced-match');";
+const BALANCED_MATCH_REQUIRE_REPLACEMENT = `var balancedMatch = require('balanced-match');
+var balanced = typeof balancedMatch === 'function'
+  ? balancedMatch
+  : typeof balancedMatch.balanced === 'function'
+    ? balancedMatch.balanced
+    : typeof balancedMatch.default === 'function'
+      ? balancedMatch.default
+      : typeof balancedMatch.default?.balanced === 'function'
+        ? balancedMatch.default.balanced
+        : function () {
+            throw new TypeError('balanced-match helper is unavailable');
+          };`;
+
+const repairNextPicocolors = () => {
+  if (fs.existsSync(NEXT_PICOCOLORS_FILE)) {
     console.log("[repair-next-install] next picocolors helper is present.");
     return;
   }
 
-  fs.mkdirSync(path.dirname(TARGET_FILE), { recursive: true });
-  fs.writeFileSync(TARGET_FILE, PICOCOLORS_SOURCE, "utf8");
+  fs.mkdirSync(path.dirname(NEXT_PICOCOLORS_FILE), { recursive: true });
+  fs.writeFileSync(NEXT_PICOCOLORS_FILE, PICOCOLORS_SOURCE, "utf8");
   console.log("[repair-next-install] restored next/dist/lib/picocolors.js");
 };
 
-repairNextInstall();
+const repairMinimatchEsmImport = () => {
+  if (!fs.existsSync(MINIMATCH_ESM_FILE)) {
+    console.log("[repair-next-install] minimatch ESM entry not found, skipping import patch.");
+    return;
+  }
+
+  const source = fs.readFileSync(MINIMATCH_ESM_FILE, "utf8");
+  if (source.includes(MINIMATCH_IMPORT_SENTINEL)) {
+    console.log("[repair-next-install] minimatch ESM import already correct.");
+    return;
+  }
+
+  const legacyPatch = MINIMATCH_IMPORT_LEGACY_PATCHES.find((candidate) =>
+    source.includes(candidate)
+  );
+
+  if (!legacyPatch) {
+    console.log("[repair-next-install] minimatch ESM import target not found, skipping.");
+    return;
+  }
+
+  fs.writeFileSync(
+    MINIMATCH_ESM_FILE,
+    source.replace(legacyPatch, MINIMATCH_IMPORT_TARGET),
+    "utf8"
+  );
+  console.log("[repair-next-install] patched minimatch ESM brace-expansion compatibility shim.");
+};
+
+const repairNestedBraceExpansionBalancedMatch = () => {
+  if (!fs.existsSync(MINIMATCH_LEGACY_BRACE_EXPANSION_FILE)) {
+    console.log("[repair-next-install] nested brace-expansion entry not found, skipping balanced-match patch.");
+    return;
+  }
+
+  const source = fs.readFileSync(MINIMATCH_LEGACY_BRACE_EXPANSION_FILE, "utf8");
+  if (source.includes(BALANCED_MATCH_SENTINEL)) {
+    console.log("[repair-next-install] nested brace-expansion balanced-match shim already patched.");
+    return;
+  }
+
+  if (!source.includes(BALANCED_MATCH_REQUIRE_TARGET)) {
+    console.log("[repair-next-install] nested brace-expansion balanced-match target not found, skipping.");
+    return;
+  }
+
+  fs.writeFileSync(
+    MINIMATCH_LEGACY_BRACE_EXPANSION_FILE,
+    source.replace(BALANCED_MATCH_REQUIRE_TARGET, BALANCED_MATCH_REQUIRE_REPLACEMENT),
+    "utf8"
+  );
+  console.log("[repair-next-install] patched nested brace-expansion balanced-match compatibility shim.");
+};
+
+repairNextPicocolors();
+repairMinimatchEsmImport();
+repairNestedBraceExpansionBalancedMatch();

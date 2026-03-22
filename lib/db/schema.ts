@@ -1,14 +1,24 @@
 import { relations } from "drizzle-orm";
 import {
-  boolean,
-  pgEnum,
-  pgTable,
-  text,
-  timestamp,
-  varchar,
+  customType,
   index,
+  integer,
+  sqliteTable,
+  text,
   uniqueIndex,
-} from "drizzle-orm/pg-core";
+} from "drizzle-orm/sqlite-core";
+
+const isoTimestamp = customType<{ data: Date; driverData: string }>({
+  dataType() {
+    return "text";
+  },
+  toDriver(value) {
+    return value.toISOString();
+  },
+  fromDriver(value) {
+    return new Date(value);
+  },
+});
 
 export enum MemberRole {
   ADMIN = "ADMIN",
@@ -35,112 +45,114 @@ export const channelTypeValues = [
   ChannelType.ANNOUNCEMENT,
 ] as const;
 
-export const memberRoleEnum = pgEnum("MemberRole", memberRoleValues);
-export const channelTypeEnum = pgEnum("ChannelType", channelTypeValues);
+export const memberRoleEnum = () =>
+  text({ enum: memberRoleValues }).$type<MemberRole>();
+export const channelTypeEnum = () =>
+  text({ enum: channelTypeValues }).$type<ChannelType>();
 
-export const profile = pgTable("Users", {
+export const profile = sqliteTable("Users", {
   // Map profile.id used across the app to Users.userId in the shared live DB.
-  id: varchar("userId", { length: 191 }).primaryKey(),
+  id: text("userId").primaryKey(),
   // Keep legacy accessor shape available for existing code paths.
-  userId: varchar("userId", { length: 191 }),
-  name: varchar("name", { length: 191 }),
+  userId: text("userId"),
+  name: text("name"),
   imageUrl: text("avatarUrl"),
-  email: varchar("email", { length: 191 }),
-  createdAt: timestamp("account.created", { mode: "date" }),
-  updatedAt: timestamp("lastLogin", { mode: "date" }),
-}, (t) => ({
-  userIdUnique: uniqueIndex("Users_userId_key").on(t.id),
-}));
+  email: text("email"),
+  createdAt: isoTimestamp("account.created"),
+  updatedAt: isoTimestamp("lastLogin"),
+}, (t) => [
+  uniqueIndex("Users_userId_key").on(t.id),
+]);
 
-export const localCredential = pgTable("LocalCredential", {
-  userId: varchar("userId", { length: 191 }).primaryKey(),
+export const localCredential = sqliteTable("LocalCredential", {
+  userId: text("userId").primaryKey(),
   passwordHash: text("passwordHash").notNull(),
-  createdAt: timestamp("createdAt", { mode: "date" }).notNull(),
-  updatedAt: timestamp("updatedAt", { mode: "date" }).notNull(),
-}, (t) => ({
-  userIdIdx: index("LocalCredential_userId_idx").on(t.userId),
-}));
+  createdAt: isoTimestamp("createdAt").notNull(),
+  updatedAt: isoTimestamp("updatedAt").notNull(),
+}, (t) => [
+  index("LocalCredential_userId_idx").on(t.userId),
+]);
 
-export const server = pgTable("Server", {
-  id: varchar("id", { length: 191 }).primaryKey(),
-  name: varchar("name", { length: 191 }).notNull(),
+export const server = sqliteTable("Server", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
   imageUrl: text("imageUrl").notNull(),
-  inviteCode: varchar("inviteCode", { length: 191 }).notNull(),
-  profileId: varchar("profileId", { length: 191 }).notNull(),
-  createdAt: timestamp("createdAt", { mode: "date" }).notNull(),
-  updatedAt: timestamp("updatedAt", { mode: "date" }).notNull(),
-}, (t) => ({
-  inviteCodeUnique: uniqueIndex("Server_inviteCode_key").on(t.inviteCode),
-  profileIdIdx: index("Server_profileId_idx").on(t.profileId),
-}));
+  inviteCode: text("inviteCode").notNull(),
+  profileId: text("profileId").notNull(),
+  createdAt: isoTimestamp("createdAt").notNull(),
+  updatedAt: isoTimestamp("updatedAt").notNull(),
+}, (t) => [
+  uniqueIndex("Server_inviteCode_key").on(t.inviteCode),
+  index("Server_profileId_idx").on(t.profileId),
+]);
 
-export const member = pgTable("Member", {
-  id: varchar("id", { length: 191 }).primaryKey(),
-  role: memberRoleEnum("role").notNull(),
-  profileId: varchar("profileId", { length: 191 }).notNull(),
-  serverId: varchar("serverId", { length: 191 }).notNull(),
-  createdAt: timestamp("createdAt", { mode: "date" }).notNull(),
-  updatedAt: timestamp("updatedAt", { mode: "date" }).notNull(),
-}, (t) => ({
-  profileIdIdx: index("Member_profileId_idx").on(t.profileId),
-  serverIdIdx: index("Member_serverId_idx").on(t.serverId),
-}));
+export const member = sqliteTable("Member", {
+  id: text("id").primaryKey(),
+  role: text("role", { enum: memberRoleValues }).$type<MemberRole>().notNull(),
+  profileId: text("profileId").notNull(),
+  serverId: text("serverId").notNull(),
+  createdAt: isoTimestamp("createdAt").notNull(),
+  updatedAt: isoTimestamp("updatedAt").notNull(),
+}, (t) => [
+  index("Member_profileId_idx").on(t.profileId),
+  index("Member_serverId_idx").on(t.serverId),
+]);
 
-export const channel = pgTable("Channel", {
-  id: varchar("id", { length: 191 }).primaryKey(),
-  name: varchar("name", { length: 191 }).notNull(),
-  icon: varchar("icon", { length: 32 }),
-  type: channelTypeEnum("type").notNull(),
-  profileId: varchar("profileId", { length: 191 }).notNull(),
-  serverId: varchar("serverId", { length: 191 }).notNull(),
-  createdAt: timestamp("createdAt", { mode: "date" }).notNull(),
-  updatedAt: timestamp("updatedAt", { mode: "date" }).notNull(),
-}, (t) => ({
-  profileIdIdx: index("Channel_profileId_idx").on(t.profileId),
-  serverIdIdx: index("Channel_serverId_idx").on(t.serverId),
-}));
+export const channel = sqliteTable("Channel", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  icon: text("icon"),
+  type: text("type", { enum: channelTypeValues }).$type<ChannelType>().notNull(),
+  profileId: text("profileId").notNull(),
+  serverId: text("serverId").notNull(),
+  createdAt: isoTimestamp("createdAt").notNull(),
+  updatedAt: isoTimestamp("updatedAt").notNull(),
+}, (t) => [
+  index("Channel_profileId_idx").on(t.profileId),
+  index("Channel_serverId_idx").on(t.serverId),
+]);
 
-export const message = pgTable("Message", {
-  id: varchar("id", { length: 191 }).primaryKey(),
+export const message = sqliteTable("Message", {
+  id: text("id").primaryKey(),
   content: text("content").notNull(),
   fileUrl: text("fileUrl"),
-  memberId: varchar("memberId", { length: 191 }).notNull(),
-  channelId: varchar("channelId", { length: 191 }).notNull(),
-  threadId: varchar("threadId", { length: 191 }),
-  deleted: boolean("deleted").notNull(),
-  createdAt: timestamp("createdAt", { mode: "date" }).notNull(),
-  updatedAt: timestamp("updatedAt", { mode: "date" }).notNull(),
-}, (t) => ({
-  memberIdIdx: index("Message_memberId_idx").on(t.memberId),
-  channelIdIdx: index("Message_channelId_idx").on(t.channelId),
-  threadIdIdx: index("Message_threadId_idx").on(t.threadId),
-}));
+  memberId: text("memberId").notNull(),
+  channelId: text("channelId").notNull(),
+  threadId: text("threadId"),
+  deleted: integer("deleted", { mode: "boolean" }).notNull(),
+  createdAt: isoTimestamp("createdAt").notNull(),
+  updatedAt: isoTimestamp("updatedAt").notNull(),
+}, (t) => [
+  index("Message_memberId_idx").on(t.memberId),
+  index("Message_channelId_idx").on(t.channelId),
+  index("Message_threadId_idx").on(t.threadId),
+]);
 
-export const conversation = pgTable("Conversation", {
-  id: varchar("id", { length: 191 }).primaryKey(),
-  memberOneId: varchar("memberOneId", { length: 191 }).notNull(),
-  memberTwoId: varchar("memberTwoId", { length: 191 }).notNull(),
-}, (t) => ({
-  uniqueMembers: uniqueIndex("Conversation_memberOneId_memberTwoId_key").on(
+export const conversation = sqliteTable("Conversation", {
+  id: text("id").primaryKey(),
+  memberOneId: text("memberOneId").notNull(),
+  memberTwoId: text("memberTwoId").notNull(),
+}, (t) => [
+  uniqueIndex("Conversation_memberOneId_memberTwoId_key").on(
     t.memberOneId,
-    t.memberTwoId
+    t.memberTwoId,
   ),
-  memberTwoIdIdx: index("Conversation_memberTwoId_idx").on(t.memberTwoId),
-}));
+  index("Conversation_memberTwoId_idx").on(t.memberTwoId),
+]);
 
-export const directMessage = pgTable("DirectMessage", {
-  id: varchar("id", { length: 191 }).primaryKey(),
+export const directMessage = sqliteTable("DirectMessage", {
+  id: text("id").primaryKey(),
   content: text("content").notNull(),
   fileUrl: text("fileUrl"),
-  memberId: varchar("memberId", { length: 191 }).notNull(),
-  conversationId: varchar("conversationId", { length: 191 }).notNull(),
-  deleted: boolean("deleted").notNull(),
-  createdAt: timestamp("createdAt", { mode: "date" }).notNull(),
-  updatedAt: timestamp("updatedAt", { mode: "date" }).notNull(),
-}, (t) => ({
-  memberIdIdx: index("DirectMessage_memberId_idx").on(t.memberId),
-  conversationIdIdx: index("DirectMessage_conversationId_idx").on(t.conversationId),
-}));
+  memberId: text("memberId").notNull(),
+  conversationId: text("conversationId").notNull(),
+  deleted: integer("deleted", { mode: "boolean" }).notNull(),
+  createdAt: isoTimestamp("createdAt").notNull(),
+  updatedAt: isoTimestamp("updatedAt").notNull(),
+}, (t) => [
+  index("DirectMessage_memberId_idx").on(t.memberId),
+  index("DirectMessage_conversationId_idx").on(t.conversationId),
+]);
 
 export const profileRelations = relations(profile, ({ many }) => ({
   servers: many(server),

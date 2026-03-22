@@ -33,6 +33,9 @@ const runNode = (scriptPath, args = []) => {
 
 try {
   runNode(path.join(rootDir, "scripts", "repair-next-install.cjs"));
+  runNode(path.join(rootDir, "scripts", "patch-opennext-compile-config.cjs"));
+  runNode(path.join(rootDir, "scripts", "patch-opennext-env-files.cjs"));
+  runNode(path.join(rootDir, "scripts", "patch-opennext-windows-output.cjs"));
   runNode(nextCliPath, ["build", "--webpack"]);
   runNode(path.join(rootDir, "scripts", "sanitize-cloudflare-traces.cjs"));
 

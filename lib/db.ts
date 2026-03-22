@@ -1,101 +1,148 @@
 import "server-only";
 
-import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
+import type { SQLWrapper } from "drizzle-orm";
+import type { AsyncRemoteCallback } from "drizzle-orm/sqlite-proxy";
+import { drizzle } from "drizzle-orm/sqlite-proxy";
 
 import "@/lib/silence-server-console";
 
-import {
-  getEffectiveDatabaseConnectionString,
-} from "@/lib/database-runtime-control";
+import { executeD1Query } from "@/lib/d1-runtime";
 import * as schema from "@/lib/db/schema";
 
 declare global {
   // eslint-disable-next-line no-var
-  var pgPool: Pool | undefined;
-  // eslint-disable-next-line no-var
-  var pgPoolConnectionString: string | undefined;
+  var inAccordRawD1Db: DrizzleDbInstance | undefined;
 }
 
-const createDb = (pool: Pool) => drizzle(pool, { schema });
+const remoteCallback: AsyncRemoteCallback = (query, params, method) =>
+  executeD1Query(query, params, method) as unknown as Promise<{ rows: any[] }>;
 
-type DbInstance = ReturnType<typeof createDb>;
+const createDb = () => drizzle(remoteCallback, { schema });
 
-let cachedPool: Pool | null = null;
-let cachedDb: DbInstance | null = null;
-let cachedConnectionString: string | null = null;
-
-const getConnectionString = () => {
-  return getEffectiveDatabaseConnectionString();
+type DrizzleDbInstance = ReturnType<typeof createDb>;
+type DrizzleTransactionInstance = DrizzleDbInstance extends {
+  transaction: (callback: (tx: infer TTransaction) => Promise<unknown>, config?: infer TConfig) => Promise<unknown>;
+}
+  ? TTransaction
+  : never;
+type DrizzleTransactionConfig = Parameters<DrizzleDbInstance["transaction"]>[1];
+type DbExecuteResult<TRow extends Record<string, unknown> = Record<string, unknown>> = {
+  rows: TRow[];
+};
+type ExecuteCompat = <TRow extends Record<string, unknown> = Record<string, unknown>>(
+  query: SQLWrapper | string,
+) => Promise<DbExecuteResult<TRow>>;
+type DbTransactionInstance = Omit<DrizzleTransactionInstance, "transaction"> & {
+  execute: ExecuteCompat;
+  transaction: <TResult>(
+    callback: (tx: DbTransactionInstance) => Promise<TResult>,
+    config?: DrizzleTransactionConfig,
+  ) => Promise<TResult>;
+};
+type DbInstance = Omit<DrizzleDbInstance, "transaction"> & {
+  execute: ExecuteCompat;
+  transaction: <TResult>(
+    callback: (tx: DbTransactionInstance) => Promise<TResult>,
+    config?: DrizzleTransactionConfig,
+  ) => Promise<TResult>;
 };
 
-const getPool = () => {
-  const connectionString = getConnectionString();
-
-  if (cachedPool && cachedConnectionString === connectionString) {
-    return cachedPool;
-  }
-
-  if (
-    globalThis.pgPool &&
-    globalThis.pgPoolConnectionString === connectionString
-  ) {
-    cachedPool = globalThis.pgPool;
-    cachedConnectionString = connectionString;
-    return cachedPool;
-  }
-
-  const previousPool =
-    cachedPool ??
-    (globalThis.pgPoolConnectionString !== connectionString
-      ? globalThis.pgPool
-      : null);
-  const pooled = new Pool({
-    connectionString,
-    max: 10,
-  });
-
-  if (process.env.NODE_ENV !== "production") {
-    globalThis.pgPool = pooled;
-    globalThis.pgPoolConnectionString = connectionString;
-  }
-
-  cachedPool = pooled;
-  cachedDb = null;
-  cachedConnectionString = connectionString;
-
-  if (previousPool && previousPool !== pooled) {
-    const closablePool = previousPool as unknown as {
-      end?: () => Promise<void> | void;
-    };
-    const endResult = closablePool.end?.();
-    if (endResult && typeof (endResult as Promise<void>).catch === "function") {
-      void (endResult as Promise<void>).catch(() => undefined);
-    }
-  }
-
-  return cachedPool;
-};
+let cachedDb: DrizzleDbInstance | null = null;
 
 const getDb = () => {
   if (cachedDb) {
     return cachedDb;
   }
 
-  cachedDb = createDb(getPool());
+  if (globalThis.inAccordRawD1Db) {
+    cachedDb = globalThis.inAccordRawD1Db;
+    return cachedDb;
+  }
+
+  cachedDb = createDb();
+
+  if (process.env.NODE_ENV !== "production") {
+    globalThis.inAccordRawD1Db = cachedDb;
+  }
+
   return cachedDb;
 };
 
-export const pool = new Proxy({} as Pool, {
-  get(_target, property, receiver) {
-    const target = getPool() as unknown as Record<PropertyKey, unknown>;
-    const value = Reflect.get(target, property, receiver);
-    return typeof value === "function" ? value.bind(target) : value;
-  },
-}) as Pool;
+const isQueryExpectedToReturnRows = (query: SQLWrapper | string) => {
+  const rawSql =
+    typeof query === "string"
+      ? query
+      : ((getDb() as unknown as {
+          dialect?: {
+            sqlToQuery?: (value: ReturnType<SQLWrapper["getSQL"]>) => {
+              sql?: string;
+            };
+          };
+        }).dialect?.sqlToQuery?.(query.getSQL()).sql ?? "");
+  const normalized = rawSql.trim().toLowerCase();
+
+  return (
+    /^(select|with|pragma|explain)\b/.test(normalized) ||
+    /\breturning\b/.test(normalized)
+  );
+};
+
+const executeCompatQueryAgainst = async <TRow extends Record<string, unknown> = Record<string, unknown>>(
+  target: Pick<DrizzleDbInstance, "all" | "run">,
+  query: SQLWrapper | string,
+): Promise<DbExecuteResult<TRow>> => {
+  if (isQueryExpectedToReturnRows(query)) {
+    return {
+      rows: (await target.all(query)) as TRow[],
+    };
+  }
+
+  await target.run(query);
+  return { rows: [] };
+};
+
+const executeCompatQuery: ExecuteCompat = (query) =>
+  executeCompatQueryAgainst(getDb() as DrizzleDbInstance, query);
+
+const wrapTransaction = (transaction: DrizzleTransactionInstance): DbTransactionInstance =>
+  new Proxy(transaction as unknown as DbTransactionInstance, {
+    get(target, property, receiver) {
+      if (property === "execute") {
+        return (query: SQLWrapper | string) => executeCompatQueryAgainst(target, query);
+      }
+
+      if (property === "transaction") {
+        return async <TResult>(
+          callback: (tx: DbTransactionInstance) => Promise<TResult>,
+          config?: DrizzleTransactionConfig,
+        ) =>
+          (target as unknown as DrizzleTransactionInstance).transaction(
+            (nestedTransaction) => callback(wrapTransaction(nestedTransaction)),
+            config,
+          );
+      }
+
+      const value = Reflect.get(target as unknown as Record<PropertyKey, unknown>, property, receiver);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
 
 export const db = new Proxy({} as DbInstance, {
   get(_target, property, receiver) {
+    if (property === "execute") {
+      return executeCompatQuery;
+    }
+
+    if (property === "transaction") {
+      return async <TResult>(
+        callback: (tx: DbTransactionInstance) => Promise<TResult>,
+        config?: DrizzleTransactionConfig,
+      ) => {
+        const target = getDb() as DrizzleDbInstance;
+        return target.transaction((transaction) => callback(wrapTransaction(transaction)), config);
+      };
+    }
+
     const target = getDb() as unknown as Record<PropertyKey, unknown>;
     const value = Reflect.get(target, property, receiver);
     return typeof value === "function" ? value.bind(target) : value;

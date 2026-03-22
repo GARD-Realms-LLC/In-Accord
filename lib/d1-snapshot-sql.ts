@@ -1,6 +1,6 @@
 import "server-only";
 
-import { Pool } from "pg";
+type ModuleBuiltin = typeof import("module");
 
 export type D1SnapshotSqlBuildResult = {
   sql: string;
@@ -32,6 +32,50 @@ type IndexRow = {
   tablename: string;
   indexname: string;
   indexdef: string;
+};
+
+type PgPoolInstance = {
+  query: (query: string) => Promise<{ rows: Array<Record<string, unknown>> }>;
+  end?: () => Promise<void> | void;
+};
+
+type PgPoolConstructor = new (config: {
+  connectionString: string;
+  max: number;
+}) => PgPoolInstance;
+
+const getBuiltinModule = <TModule,>(moduleName: string): TModule | null => {
+  const builtinLoader = (process as typeof process & {
+    getBuiltinModule?: (name: string) => TModule | undefined;
+  }).getBuiltinModule;
+
+  if (typeof builtinLoader !== "function") {
+    return null;
+  }
+
+  try {
+    return builtinLoader(moduleName) ?? null;
+  } catch {
+    return null;
+  }
+};
+
+const loadPgPoolConstructor = () => {
+  const moduleBuiltin = getBuiltinModule<ModuleBuiltin>("module");
+  const createRequire = moduleBuiltin?.createRequire;
+
+  if (typeof createRequire !== "function") {
+    throw new Error("The PostgreSQL snapshot tools require Node.js module loading support.");
+  }
+
+  const runtimeRequire = createRequire(import.meta.url);
+  const pgModule = runtimeRequire("pg") as { Pool?: PgPoolConstructor };
+
+  if (typeof pgModule?.Pool !== "function") {
+    throw new Error("The PostgreSQL driver is unavailable for snapshot export.");
+  }
+
+  return pgModule.Pool;
 };
 
 const quoteIdent = (value: string) => `"${String(value).replace(/"/g, '""')}"`;
@@ -173,7 +217,7 @@ const normalizeIndexDef = (indexDef: string) => {
 };
 
 const buildSnapshotSqlForPool = async (
-  pool: Pool,
+  pool: PgPoolInstance,
 ): Promise<D1SnapshotSqlBuildResult> => {
   const tablesResult = (await pool.query(`
     select table_name
@@ -359,6 +403,7 @@ export const buildPostgresSnapshotSql = async ({
 }: {
   connectionString: string;
 }): Promise<D1SnapshotSqlBuildResult> => {
+  const Pool = loadPgPoolConstructor();
   const pool = new Pool({ connectionString, max: 1 });
 
   try {

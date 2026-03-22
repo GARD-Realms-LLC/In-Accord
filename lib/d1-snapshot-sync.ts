@@ -6,7 +6,7 @@ import os from "os";
 import path from "path";
 import { promisify } from "util";
 
-import { Pool } from "pg";
+type ModuleBuiltin = typeof import("module");
 
 const execFileAsync = promisify(execFile);
 const NPX_EXECUTABLE = process.platform === "win32" ? "npx.cmd" : "npx";
@@ -34,6 +34,50 @@ type IndexRow = {
   tablename: string;
   indexname: string;
   indexdef: string;
+};
+
+type PgPoolInstance = {
+  query: (query: string) => Promise<{ rows: Array<Record<string, unknown>> }>;
+  end?: () => Promise<void> | void;
+};
+
+type PgPoolConstructor = new (config: {
+  connectionString: string;
+  max: number;
+}) => PgPoolInstance;
+
+const getBuiltinModule = <TModule,>(moduleName: string): TModule | null => {
+  const builtinLoader = (process as typeof process & {
+    getBuiltinModule?: (name: string) => TModule | undefined;
+  }).getBuiltinModule;
+
+  if (typeof builtinLoader !== "function") {
+    return null;
+  }
+
+  try {
+    return builtinLoader(moduleName) ?? null;
+  } catch {
+    return null;
+  }
+};
+
+const loadPgPoolConstructor = () => {
+  const moduleBuiltin = getBuiltinModule<ModuleBuiltin>("module");
+  const createRequire = moduleBuiltin?.createRequire;
+
+  if (typeof createRequire !== "function") {
+    throw new Error("The PostgreSQL snapshot tools require Node.js module loading support.");
+  }
+
+  const runtimeRequire = createRequire(import.meta.url);
+  const pgModule = runtimeRequire("pg") as { Pool?: PgPoolConstructor };
+
+  if (typeof pgModule?.Pool !== "function") {
+    throw new Error("The PostgreSQL driver is unavailable for D1 snapshot sync.");
+  }
+
+  return pgModule.Pool;
 };
 
 export type D1SnapshotSyncResult = {
@@ -207,7 +251,7 @@ const createTempSqlPath = () =>
   );
 
 const buildSnapshotSqlForPool = async (
-  pool: Pool,
+  pool: PgPoolInstance,
 ): Promise<D1SnapshotSqlBuildResult> => {
   const tablesResult = (await pool.query(`
     select table_name
@@ -393,6 +437,7 @@ export const buildPostgresSnapshotSql = async ({
 }: {
   connectionString: string;
 }): Promise<D1SnapshotSqlBuildResult> => {
+  const Pool = loadPgPoolConstructor();
   const pool = new Pool({ connectionString, max: 1 });
 
   try {

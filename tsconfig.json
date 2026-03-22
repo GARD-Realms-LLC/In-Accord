@@ -51,6 +51,7 @@
   "exclude": [
     "node_modules",
     "clerk-react/**",
-    "Desktop/**"
+    "Desktop/**",
+    "`types-pg.d (2).ts"
   ]
 }
