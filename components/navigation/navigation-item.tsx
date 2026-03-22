@@ -112,7 +112,12 @@ export const NavigationItem = ({
   const isFolderedAppearance = appearance === "foldered";
 
   const onClick = () => {
-    router.push(buildServerPath({ id, name }));
+    const targetPath = buildServerPath({ id, name });
+    if (typeof window !== "undefined") {
+      window.location.assign(targetPath);
+      return;
+    }
+    router.push(targetPath);
   };
 
   const clearCloseTimer = () => {

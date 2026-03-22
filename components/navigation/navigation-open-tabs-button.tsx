@@ -41,7 +41,7 @@ export const NavigationOpenTabsButton = ({ fallbackServerId }: NavigationOpenTab
           }
 
           if (fallbackServerId) {
-            router.push(`/servers/${fallbackServerId}#server-tabs-bar`);
+            window.location.assign(`/servers/${fallbackServerId}#server-tabs-bar`);
           }
         }}
         className="inline-flex h-6 w-full max-w-23 items-center justify-center rounded-md border border-zinc-300/80 bg-zinc-200/70 px-2 text-[9px] font-semibold uppercase tracking-[0.08em] text-zinc-700 transition hover:bg-zinc-300/80 dark:border-zinc-600/80 dark:bg-zinc-700/50 dark:text-zinc-200 dark:hover:bg-zinc-600/70"

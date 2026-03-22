@@ -215,13 +215,22 @@ export const ServerRouteShell = ({
     return fallback?.id ?? null;
   }, [announcementChannels, textChannels, videoChannels, voiceChannels]);
 
+  const navigateToServerRoot = (targetServerId: string, targetServerName: string) => {
+    const targetPath = buildServerPath({
+      id: targetServerId,
+      name: targetServerName,
+    });
+
+    if (typeof window !== "undefined") {
+      window.location.assign(targetPath);
+      return;
+    }
+
+    router.push(targetPath);
+  };
+
   const navigateToServerTab = (tab: ServerTabItem) => {
-    router.push(
-      buildServerPath({
-        id: tab.serverId,
-        name: tab.serverName,
-      })
-    );
+    navigateToServerRoot(tab.serverId, tab.serverName);
   };
 
   const reorderTabs = (tabs: ServerTabItem[], sourceId: string, targetId: string) => {
@@ -272,12 +281,7 @@ export const ServerRouteShell = ({
       }];
     });
 
-    router.push(
-      buildServerPath({
-        id: droppedServerId,
-        name: droppedServerName,
-      })
-    );
+    navigateToServerRoot(droppedServerId, droppedServerName);
   };
 
   const readServerTabDragPayload = (event: { dataTransfer?: DataTransfer | null }) => {

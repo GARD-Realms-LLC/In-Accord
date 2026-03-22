@@ -1034,7 +1034,7 @@ export const NavigationServersCollection = ({
                 onClick={() => {
                   const targetServer = allServerMap.get(railContextMenu.serverId);
                   if (targetServer) {
-                    router.push(`/servers/${encodeURIComponent(targetServer.id)}`);
+                    window.location.assign(`/servers/${encodeURIComponent(targetServer.id)}`);
                   }
                   setRailContextMenu(null);
                 }}

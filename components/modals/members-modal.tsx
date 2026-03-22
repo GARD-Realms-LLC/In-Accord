@@ -756,7 +756,7 @@ export const MembersModal = () => {
 
     setOpenMutualDetails(null);
     setOpenProfileMemberId(null);
-    router.push(`/servers/${encodeURIComponent(normalizedServerId)}`);
+    window.location.assign(`/servers/${encodeURIComponent(normalizedServerId)}`);
   };
 
   const onIgnoreMember = async (profileId: string) => {

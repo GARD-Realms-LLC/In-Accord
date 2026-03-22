@@ -34,6 +34,15 @@ export const ServerSearch = ({ serverId, serverName, data }: ServerSearchProps) 
   const [open, setOpen] = useState(false);
   const router = useRouter();
 
+  const navigateToServerRoot = (id: string, name: string) => {
+    const targetPath = buildServerPath({ id, name });
+    if (typeof window !== "undefined") {
+      window.location.assign(targetPath);
+      return;
+    }
+    router.push(targetPath);
+  };
+
   const onClick = ({
     id,
     type,
@@ -44,7 +53,7 @@ export const ServerSearch = ({ serverId, serverName, data }: ServerSearchProps) 
     setOpen(false);
 
     if (type === "server") {
-      return router.push(buildServerPath({ id, name: serverName }));
+      return navigateToServerRoot(id, serverName);
     }
 
     if (type === "member") {
@@ -58,7 +67,7 @@ export const ServerSearch = ({ serverId, serverName, data }: ServerSearchProps) 
         .find((item) => item.id === id);
 
       if (!channel) {
-        return router.push(buildServerPath({ id: serverId, name: serverName }));
+        return navigateToServerRoot(serverId, serverName);
       }
 
       return router.push(

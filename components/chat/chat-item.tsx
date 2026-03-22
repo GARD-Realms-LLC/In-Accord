@@ -1134,7 +1134,7 @@ export const ChatItem = ({
     }
 
     setOpenMutualDetails(null);
-    router.push(`/servers/${encodeURIComponent(normalizedServerId)}`);
+    window.location.assign(`/servers/${encodeURIComponent(normalizedServerId)}`);
   };
 
   const onOpenPrivateMessageByRoute = ({
