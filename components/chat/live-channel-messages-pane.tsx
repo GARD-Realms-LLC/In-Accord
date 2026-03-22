@@ -135,13 +135,7 @@ type LiveChannelMessagesPaneProps = {
 };
 
 const formatOptimisticTimestamp = () =>
-  new Date().toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  new Date().toISOString();
 
 const normalizeCurrentProfile = (profile: SerializedCurrentProfile): ChatRenderableProfile => ({
   ...profile,

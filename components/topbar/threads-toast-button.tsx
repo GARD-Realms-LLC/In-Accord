@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MessagesSquare } from "lucide-react";
 import { toast } from "sonner";
+import { UserLocalDateTime } from "@/components/ui/user-local-date-time";
 import { buildThreadPath } from "@/lib/route-slugs";
 import { CLIENT_PERSISTENCE_DISABLED } from "@/lib/client-persistence-policy";
 
@@ -136,7 +137,7 @@ const ThreadsToastContent = ({
                       </div>
                     </div>
                     <p className="mt-0.5 truncate text-[11px] text-zinc-500 dark:text-zinc-400">
-                      Last activity: {thread.lastActivityAt}
+                      Last activity: <UserLocalDateTime value={thread.lastActivityAt} />
                     </p>
                   </button>
                 ))}

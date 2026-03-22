@@ -1,8 +1,15 @@
 {
-  "buildTimestamp": "2026-03-22T00:40:00.006Z",
+  "buildTimestamp": "2026-03-22T01:00:40.334Z",
   "branch": "main",
-  "commitSha": "1061d7efdb53f8dd3d0de0b7ece440557380f596",
+  "commitSha": "f6a03b176ea41794a6c618dbbfa292a105222b17",
   "commits": [
+    {
+      "sha": "f6a03b176ea41794a6c618dbbfa292a105222b17",
+      "shortSha": "f6a03b17",
+      "message": "fix: gate admin desktop build button",
+      "author": "Doc Cowles",
+      "committedAt": "2026-03-21T18:42:46-06:00"
+    },
     {
       "sha": "1061d7efdb53f8dd3d0de0b7ece440557380f596",
       "shortSha": "1061d7ef",
@@ -79,13 +86,6 @@
       "message": "Align live worker source with repo",
       "author": "Doc Cowles",
       "committedAt": "2026-03-19T19:31:59-06:00"
-    },
-    {
-      "sha": "fadaa33849c1c71a93aca193d226111b78076d22",
-      "shortSha": "fadaa338",
-      "message": "Merge pull request #4 from GARD-Realms-LLC/update_worker_name_to_inaccord",
-      "author": "Doc Cowles",
-      "committedAt": "2026-03-19T17:59:22-06:00"
     }
   ]
 }

@@ -31,13 +31,7 @@ const formatTimestamp = (value: Date | string) => {
     return "";
   }
 
-  return parsed.toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return parsed.toISOString();
 };
 
 const normalizeIsoDate = (value: Date | string | null | undefined) => {

@@ -65,7 +65,7 @@ export async function GET() {
       channelName: row.channelName ?? "channel",
       archived: Boolean(row.archived),
       unreadCount: Number(row.unreadCount ?? 0),
-      lastActivityAt: new Date(row.lastActivityAt).toLocaleString(),
+      lastActivityAt: new Date(row.lastActivityAt).toISOString(),
     }));
 
     return NextResponse.json({ threads });

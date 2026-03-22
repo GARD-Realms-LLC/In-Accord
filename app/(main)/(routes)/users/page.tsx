@@ -49,13 +49,7 @@ const formatTimestamp = (value: Date) => {
     return "";
   }
 
-  return value.toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return value.toISOString();
 };
 
 interface UsersPageProps {

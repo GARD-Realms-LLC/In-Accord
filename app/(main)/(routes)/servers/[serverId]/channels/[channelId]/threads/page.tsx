@@ -11,6 +11,7 @@ import {
 } from "@/lib/channel-threads";
 import { resolveChannelRouteContext, resolveServerRouteContext } from "@/lib/route-slug-resolver";
 import { buildChannelPath, buildServerPath, buildThreadPath } from "@/lib/route-slugs";
+import { UserLocalDateTime } from "@/components/ui/user-local-date-time";
 
 type ThreadRow = {
   id: string;
@@ -157,8 +158,8 @@ const ChannelThreadsPage = async ({ params }: ChannelThreadsPageProps) => {
     sourceMessageId: row.sourceMessageId,
     archived: Boolean(row.archived),
     autoArchiveMinutes: Number(row.autoArchiveMinutes ?? 1440),
-    lastActivityAt: new Date(row.lastActivityAt).toLocaleString(),
-    createdAt: new Date(row.createdAt).toLocaleString(),
+    lastActivityAt: new Date(row.lastActivityAt).toISOString(),
+    createdAt: new Date(row.createdAt).toISOString(),
     replyCount: Number(row.replyCount ?? 0),
     participantCount: Number(row.participantCount ?? 0),
     unreadCount: Number(row.unreadCount ?? 0),
@@ -218,7 +219,7 @@ const ChannelThreadsPage = async ({ params }: ChannelThreadsPageProps) => {
                         ) : null}
                       </div>
                       <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                        Replies: {thread.replyCount} • Participants: {thread.participantCount} • Last activity: {thread.lastActivityAt}
+                        Replies: {thread.replyCount} • Participants: {thread.participantCount} • Last activity: <UserLocalDateTime value={thread.lastActivityAt} />
                       </p>
                     </Link>
                   ))
@@ -251,7 +252,7 @@ const ChannelThreadsPage = async ({ params }: ChannelThreadsPageProps) => {
                         </span>
                       </div>
                       <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                        Replies: {thread.replyCount} • Participants: {thread.participantCount} • Last activity: {thread.lastActivityAt}
+                        Replies: {thread.replyCount} • Participants: {thread.participantCount} • Last activity: <UserLocalDateTime value={thread.lastActivityAt} />
                       </p>
                     </Link>
                   ))

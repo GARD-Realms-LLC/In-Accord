@@ -24,6 +24,7 @@ import { PresenceStatus, formatPresenceStatusLabel, normalizePresenceStatus, pre
 import { getStreamSummaryText } from "@/lib/streaming-display";
 import { getCachedVoiceState, VOICE_STATE_SYNC_EVENT, type VoiceStateSyncDetail } from "@/lib/voice-state-sync";
 import { DesktopUpdateButton } from "@/components/settings/desktop-update-button";
+import { UserLocalDateTime } from "@/components/ui/user-local-date-time";
 
 const VOICE_TOGGLE_MUTE_EVENT = "inaccord:voice-toggle-mute";
 const VOICE_TOGGLE_DEAFEN_EVENT = "inaccord:voice-toggle-deafen";
@@ -685,21 +686,6 @@ export const UserStatusMenu = ({
     window.location.assign("/api/auth/clear-session?next=/sign-in");
   };
 
-  const formatDate = (value?: string | null) => {
-    if (!value) {
-      return "";
-    }
-
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) {
-      return "";
-    }
-
-    return parsed.toLocaleString();
-  };
-
-  const lastLogon = formatDate(profileLastLogonAt);
-  const created = formatDate(profileJoinedAt);
   const effectiveGlobalRole = menuProfileRole ?? profileRole;
   const hasAdministrativeAccess = hasInAccordAdministrativeAccess(effectiveGlobalRole);
   const isGlobalDeveloper = isInAccordDeveloper(effectiveGlobalRole);
@@ -807,8 +793,8 @@ export const UserStatusMenu = ({
               <p>Email: {profileEmail || ""}</p>
               <p>Status: {formatPresenceStatusLabel(menuPresenceStatus, { showGameIcon: showCurrentGameIcon })}</p>
               <p>Current Game: {effectiveCurrentGame || "Not in game"}</p>
-              <p>Last logon: {lastLogon}</p>
-              <p>Created: {created}</p>
+              <p>Last logon: <UserLocalDateTime value={profileLastLogonAt} /></p>
+              <p>Created: <UserLocalDateTime value={profileJoinedAt} /></p>
             </div>
 
             <div className="mt-3 rounded-md border border-white/10 bg-[#15161a] p-2">
@@ -988,12 +974,11 @@ export const UserStatusMenu = ({
             {isLoggingOut ? "Logging off..." : "Logoff"}
           </button>
 
-          <div className="rounded-md border border-white/10 bg-[#15161a] px-2 py-2">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">Build</p>
-              <p className="text-[10px] text-[#949ba4]">#{INACCORD_BUILD_NUMBER}</p>
-            </div>
-            <p className="mt-1 text-[11px] text-[#dbdee1]">Version {INACCORD_VERSION_LABEL}</p>
+          <div className="px-2 pb-1 pt-1 text-center">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">
+              Build #{INACCORD_BUILD_NUMBER}
+            </p>
+            <p className="mt-0.5 text-[11px] text-[#dbdee1]">Version {INACCORD_VERSION_LABEL}</p>
             <div className="mt-2">
               <DesktopUpdateButton expanded className="w-full justify-center" />
             </div>

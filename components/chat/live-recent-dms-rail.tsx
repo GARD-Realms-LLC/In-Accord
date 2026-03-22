@@ -239,6 +239,7 @@ export const LiveRecentDmsRail = ({
           avatarDecorationUrl={dm.avatarDecorationUrl}
           profileCreatedAt={dm.profileCreatedAt}
           timestampLabel={dm.timestampLabel}
+          lastMessageAt={dm.lastMessageAt}
           unreadCount={dm.unreadCount}
           isActive={selectedConversationId === dm.conversationId}
         />

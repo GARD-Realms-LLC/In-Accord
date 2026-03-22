@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { NewUserCloverBadge } from "@/components/new-user-clover-badge";
 import { ProfileNameWithServerTag } from "@/components/profile-name-with-server-tag";
+import { UserLocalDateTime } from "@/components/ui/user-local-date-time";
 import { UserAvatar } from "@/components/user-avatar";
 
 interface DirectMessageListItemProps {
@@ -29,7 +30,7 @@ export const DirectMessageListItem = ({
   avatarDecorationUrl,
   profileCreatedAt,
   timestampLabel,
-  lastMessageAt: _lastMessageAt,
+  lastMessageAt,
   unreadCount,
   isActive,
 }: DirectMessageListItemProps) => {
@@ -59,7 +60,11 @@ export const DirectMessageListItem = ({
           />
           <NewUserCloverBadge createdAt={profileCreatedAt} className="text-[11px]" />
         </p>
-        <p className="truncate text-[10px] text-[#949ba4]">{timestampLabel || "No messages yet"}</p>
+        <UserLocalDateTime
+          value={lastMessageAt}
+          fallback={lastMessageAt ? "" : timestampLabel || "No messages yet"}
+          className="block truncate text-[10px] text-[#949ba4]"
+        />
       </div>
       {unreadCount > 0 ? (
         <span className="rounded-full bg-[#5865f2] px-1.5 py-0.5 text-[10px] font-bold text-white">
