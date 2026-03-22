@@ -43,6 +43,18 @@ type TargetServerRow = {
   profileId: string;
 };
 
+const toIsoOrNull = (value: Date | string | null | undefined) => {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return new Date(value).toISOString();
+  } catch {
+    return null;
+  }
+};
+
 const normalizeMemberRole = (value: unknown): MemberRole => {
   const normalized = String(value ?? "").trim().toUpperCase();
   if (
@@ -263,8 +275,8 @@ export const ServerUserRolesRail = async ({ serverId }: ServerUserRolesRailProps
     displayName: row.realName || row.email || row.profileId,
     presenceStatus: String(row.presenceStatus ?? "ONLINE").toUpperCase(),
     currentGame: row.currentGame ?? null,
-    joinedAt: row.joinedAt ? new Date(row.joinedAt).toISOString() : null,
-    lastLogonAt: row.lastLogonAt ? new Date(row.lastLogonAt).toISOString() : null,
+    joinedAt: toIsoOrNull(row.joinedAt),
+    lastLogonAt: toIsoOrNull(row.lastLogonAt),
   }))
     .sort((a, b) => {
       const byRole = roleRank[a.role] - roleRank[b.role];
